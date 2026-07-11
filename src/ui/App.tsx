@@ -77,7 +77,12 @@ export default function App() {
       loadBranding();
       window.addEventListener("branding-changed", loadBranding);
       return () => window.removeEventListener("branding-changed", loadBranding);
-    }, []);
+      // Re-run when session token changes (login/logout) so that branding is
+      // reloaded after the user authenticates on startup — the initial mount
+      // call above may fail when the main-process session map is empty
+      // (cleared on restart) before the user has logged in.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [auth?.session?.sessionToken]);
 
     React.useEffect(() => {
       if (
