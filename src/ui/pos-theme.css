@@ -1,0 +1,442 @@
+/*
+ * POS Design System — Global tokens & utility classes
+ * All screens share these classes for a consistent "classy futuristic" look.
+ * Color brand: Amber (#f59e0b / #d97706) on clean white surfaces (#ffffff).
+ */
+
+/* ─── Design Tokens ──────────────────────────────────────────────────────────── */
+:root {
+  /* Brand */
+  --pos-brand: #f59e0b;
+  --pos-brand-deep: #d97706;
+  --pos-brand-dark: #92400e;
+  --pos-brand-light: #fef3c7;
+  --pos-brand-xlight: #fffbeb;
+  --pos-brand-border: #fcd34d;
+
+  /* Page */
+  --pos-bg: #ffffff; /* clean white — cards use borders/shadows for depth */
+  --pos-surface: #ffffff;
+
+  /* Borders */
+  --pos-border: #e5e7eb;
+  --pos-border-light: #f3f4f6;
+
+  /* Text */
+  --pos-tx: #111827;
+  --pos-tx-sec: #374151;
+  --pos-tx-sub: #6b7280;
+  --pos-muted: #9ca3af;
+
+  /* Semantic */
+  --pos-danger: #dc2626;
+  --pos-danger-light: #fee2e2;
+  --pos-success: #16a34a;
+  --pos-success-light: #dcfce7;
+  --pos-info: #0284c7;
+  --pos-info-light: #e0f2fe;
+
+  /* Radii */
+  --pos-r-card: 14px;
+  --pos-r-btn: 8px;
+  --pos-r-input: 8px;
+  --pos-r-badge: 99px;
+
+  /* Shadows — slightly stronger to maintain depth on white bg */
+  --pos-shadow-xs: 0 1px 4px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.04);
+  --pos-shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.09);
+  --pos-shadow-md: 0 4px 16px rgba(0, 0, 0, 0.1);
+  --pos-shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.13);
+}
+
+/* ─── Typography ─────────────────────────────────────────────────────────────── */
+body {
+  font-family:
+    "Inter",
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    "Roboto",
+    "Helvetica Neue",
+    Arial,
+    sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--pos-tx);
+  background: var(--pos-bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[role="button"]:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--pos-brand, #f59e0b);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.2);
+}
+
+/* ─── Page Layout ────────────────────────────────────────────────────────────── */
+
+/* Standard content wrapper — fills available width */
+.pos-page {
+  padding: 22px 28px;
+}
+.pos-page-lg {
+  padding: 22px 28px;
+}
+/* Narrow form pages (Settings, Customers) */
+.pos-page-sm {
+  padding: 22px 28px;
+}
+
+/* Page header row: title left, actions right */
+.pos-ph {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+.pos-ph-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--pos-tx);
+  letter-spacing: -0.3px;
+  line-height: 1.2;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.pos-ph-title::before {
+  content: "";
+  display: block;
+  width: 3px;
+  height: 22px;
+  background: linear-gradient(180deg, var(--pos-brand-deep, #d97706), var(--pos-brand, #f59e0b));
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.pos-ph-sub {
+  margin: 3px 0 0;
+  font-size: 13px;
+  color: var(--pos-tx-sub);
+  font-weight: 400;
+}
+.pos-ph-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* ─── Card ───────────────────────────────────────────────────────────────────── */
+.pos-card {
+  background: var(--pos-surface);
+  border: 1px solid var(--pos-border);
+  border-radius: var(--pos-r-card);
+  box-shadow: var(--pos-shadow-xs);
+}
+.pos-card-p {
+  padding: 20px 22px;
+}
+
+/* ─── Section label (uppercase overline) ────────────────────────────────────── */
+.pos-sect-label {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--pos-muted);
+  margin-bottom: 14px;
+}
+.pos-sect-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--pos-tx-sec);
+  margin-bottom: 12px;
+}
+
+/* ─── Divider ────────────────────────────────────────────────────────────────── */
+.pos-divider {
+  height: 1px;
+  background: var(--pos-border);
+  margin: 16px 0;
+}
+
+/* ─── Buttons ────────────────────────────────────────────────────────────────── */
+.pos-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 16px;
+  border-radius: var(--pos-r-btn);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition:
+    background 120ms,
+    border-color 120ms,
+    box-shadow 120ms,
+    opacity 120ms;
+  white-space: nowrap;
+  font-family: inherit;
+  text-decoration: none;
+  outline: none;
+}
+.pos-btn:focus-visible {
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.35);
+}
+.pos-btn:disabled,
+.pos-btn[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+.pos-btn-sm {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+.pos-btn-xs {
+  padding: 4px 9px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* Primary — amber */
+.pos-btn-primary {
+  background: var(--pos-brand-deep);
+  color: #fff;
+  border-color: var(--pos-brand-deep);
+  box-shadow: 0 2px 8px rgba(217, 119, 6, 0.28);
+}
+.pos-btn-primary:hover:not(:disabled) {
+  background: var(--pos-brand-dark);
+  border-color: var(--pos-brand-dark);
+  box-shadow: 0 4px 14px rgba(180, 83, 9, 0.35);
+}
+.pos-btn-primary:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+/* Secondary — white/gray */
+.pos-btn-secondary {
+  background: var(--pos-surface);
+  color: var(--pos-tx-sec);
+  border-color: var(--pos-border);
+}
+.pos-btn-secondary:hover:not(:disabled) {
+  background: #f9fafb;
+  border-color: #d1d5db;
+}
+
+/* Ghost — no border */
+.pos-btn-ghost {
+  background: transparent;
+  color: var(--pos-tx-sub);
+  border-color: transparent;
+}
+.pos-btn-ghost:hover:not(:disabled) {
+  background: var(--pos-bg);
+  color: var(--pos-tx-sec);
+}
+
+/* Danger */
+.pos-btn-danger {
+  background: var(--pos-surface);
+  color: var(--pos-danger);
+  border-color: #fca5a5;
+}
+.pos-btn-danger:hover:not(:disabled) {
+  background: var(--pos-danger-light);
+}
+
+/* Amber outline */
+.pos-btn-amber-outline {
+  background: var(--pos-brand-xlight);
+  color: var(--pos-brand-dark);
+  border-color: var(--pos-brand-border);
+}
+.pos-btn-amber-outline:hover:not(:disabled) {
+  background: var(--pos-brand-light);
+}
+
+/* ─── Form Controls ──────────────────────────────────────────────────────────── */
+.pos-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--pos-tx-sec);
+  margin-bottom: 6px;
+  letter-spacing: 0.02em;
+}
+.pos-input {
+  display: block;
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: var(--pos-r-input);
+  border: 1px solid var(--pos-border);
+  font-size: 13px;
+  color: var(--pos-tx);
+  background: var(--pos-surface);
+  outline: none;
+  transition:
+    border-color 120ms,
+    box-shadow 120ms;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+.pos-input:focus {
+  border-color: var(--pos-brand);
+  box-shadow: 0 0 0 2.5px rgba(245, 158, 11, 0.18);
+}
+.pos-input::placeholder {
+  color: var(--pos-muted);
+}
+.pos-input-error {
+  border-color: var(--pos-danger) !important;
+  box-shadow: 0 0 0 2.5px rgba(220, 38, 38, 0.12) !important;
+}
+.pos-field-error {
+  font-size: 11px;
+  color: var(--pos-danger);
+  margin-top: 4px;
+  font-weight: 500;
+}
+.pos-select {
+  display: block;
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: var(--pos-r-input);
+  border: 1px solid var(--pos-border);
+  font-size: 13px;
+  color: var(--pos-tx);
+  background: var(--pos-surface);
+  outline: none;
+  cursor: pointer;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+.pos-select:focus {
+  border-color: var(--pos-brand);
+  box-shadow: 0 0 0 2.5px rgba(245, 158, 11, 0.18);
+}
+
+/* ─── Badges ─────────────────────────────────────────────────────────────────── */
+.pos-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: var(--pos-r-badge);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.pos-badge-amber {
+  background: var(--pos-brand-light);
+  color: var(--pos-brand-dark);
+  border-color: var(--pos-brand-border);
+}
+.pos-badge-green {
+  background: var(--pos-success-light);
+  color: #065f46;
+  border-color: #6ee7b7;
+}
+.pos-badge-red {
+  background: var(--pos-danger-light);
+  color: #991b1b;
+  border-color: #fca5a5;
+}
+.pos-badge-blue {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-color: #bfdbfe;
+}
+.pos-badge-gray {
+  background: #f3f4f6;
+  color: #6b7280;
+  border-color: var(--pos-border);
+}
+.pos-badge-cyan {
+  background: #ecfeff;
+  color: #0e7490;
+  border-color: #a5f3fc;
+}
+.pos-badge-purple {
+  background: #f5f3ff;
+  color: #6d28d9;
+  border-color: #ddd6fe;
+}
+
+/* ─── Empty state ────────────────────────────────────────────────────────────── */
+.pos-empty {
+  text-align: center;
+  padding: 48px 24px;
+  color: var(--pos-muted);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* ─── Tables ─────────────────────────────────────────────────────────────────── */
+.pos-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.pos-table th {
+  text-align: left;
+  padding: 10px 14px;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--pos-muted);
+  border-bottom: 1px solid var(--pos-border);
+  white-space: nowrap;
+}
+.pos-table td {
+  padding: 12px 14px;
+  font-size: 13px;
+  color: var(--pos-tx-sub);
+  border-bottom: 1px solid var(--pos-border-light);
+  vertical-align: middle;
+}
+.pos-table tr:last-child td {
+  border-bottom: none;
+}
+.pos-table-hover tbody tr:hover td {
+  background: #fafafa;
+}
+
+/* ─── Responsive helpers ─────────────────────────────────────────────────────── */
+@media (max-width: 1100px) {
+  .pos-page,
+  .pos-page-lg,
+  .pos-page-sm {
+    padding: 18px 20px;
+  }
+}
+@media (max-width: 768px) {
+  .pos-page,
+  .pos-page-lg,
+  .pos-page-sm {
+    padding: 14px 14px;
+  }
+  .pos-ph {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .pos-ph-title {
+    font-size: 18px;
+  }
+}

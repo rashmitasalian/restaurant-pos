@@ -1,0 +1,126 @@
+.managerRoot {
+  display: grid;
+  grid-template-columns: 248px minmax(0, 1fr);
+  min-height: 100%;
+  background: var(--pos-bg, #fff);
+}
+
+.rail {
+  border-right: 1px solid var(--pos-border, #e5e7eb);
+  background: #fafafa;
+  padding: 18px 14px;
+  overflow: auto;
+}
+
+.railTitle {
+  margin: 0 0 4px;
+  font-size: 18px;
+  font-weight: 900;
+  color: var(--pos-tx, #111827);
+}
+
+.railSub {
+  margin: 0 0 18px;
+  font-size: 12px;
+  color: var(--pos-tx-sub, #6b7280);
+}
+
+.groupLabel {
+  margin: 18px 8px 8px;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pos-muted, #9ca3af);
+}
+
+.railButton {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--pos-tx-sec, #374151);
+  border-radius: 8px;
+  padding: 10px 11px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: left;
+}
+
+.railButton:hover {
+  background: #fff7ed;
+  border-color: #fed7aa;
+  color: #92400e;
+}
+
+.railButtonActive {
+  background: #fffbeb;
+  border-color: #fcd34d;
+  color: #92400e;
+  box-shadow: 0 1px 4px rgba(217, 119, 6, 0.12);
+}
+
+.sectionIcon {
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  color: #d97706;
+  font-size: 12px;
+  font-weight: 900;
+  flex: 0 0 auto;
+}
+
+.buttonMain {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.buttonText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.content {
+  min-width: 0;
+  overflow: auto;
+}
+
+@media (max-width: 900px) {
+  .managerRoot {
+    grid-template-columns: 1fr;
+  }
+
+  .rail {
+    border-right: none;
+    border-bottom: 1px solid var(--pos-border, #e5e7eb);
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 12px;
+  }
+
+  .railTitle,
+  .railSub,
+  .groupLabel {
+    display: none;
+  }
+
+  .railButton {
+    width: auto;
+    white-space: nowrap;
+    flex: 0 0 auto;
+  }
+}

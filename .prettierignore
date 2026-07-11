@@ -1,0 +1,11 @@
+node_modules
+dist
+build
+*.tgz
+*.zip
+.next
+out
+coverage
+.eslintcache
+package-lock.json
+yarn.lock

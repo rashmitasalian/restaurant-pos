@@ -1,0 +1,314 @@
+﻿/* Tables screen — uses pos-theme.css tokens */
+.page {
+  padding: 22px 28px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.content {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 22px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--pos-tx, #111827);
+  letter-spacing: -0.3px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.title::before {
+  content: "";
+  display: block;
+  width: 3px;
+  height: 22px;
+  background: linear-gradient(180deg, var(--pos-brand-deep, #d97706), var(--pos-brand, #f59e0b));
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.meta {
+  margin: 3px 0 0;
+  font-size: 13px;
+  color: var(--pos-tx-sub, #6b7280);
+}
+.controls {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.input {
+  padding: 9px 12px;
+  border-radius: var(--pos-r-input, 8px);
+  border: 1px solid var(--pos-border, #e5e7eb);
+  font-size: 13px;
+  width: min(220px, 40vw);
+  outline: none;
+  font-family: inherit;
+  transition:
+    border-color 120ms,
+    box-shadow 120ms;
+  background: var(--pos-surface, #fff);
+  color: var(--pos-tx, #111827);
+}
+.input:focus {
+  border-color: var(--pos-brand, #f59e0b);
+  box-shadow: 0 0 0 2.5px rgba(245, 158, 11, 0.18);
+}
+.input::placeholder {
+  color: var(--pos-muted, #9ca3af);
+}
+.btn {
+  padding: 9px 14px;
+  border-radius: var(--pos-r-btn, 8px);
+  border: 1px solid var(--pos-border, #e5e7eb);
+  background: var(--pos-surface, #fff);
+  color: var(--pos-tx-sec, #374151);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+  transition:
+    background 120ms,
+    border-color 120ms;
+}
+.btn:hover {
+  background: #f9fafb;
+  border-color: #d1d5db;
+}
+.btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.35);
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(162px, 1fr));
+  gap: 12px;
+}
+.card {
+  padding: 16px 14px;
+  border-radius: var(--pos-r-card, 14px);
+  background: var(--pos-surface, #fff);
+  box-shadow: var(--pos-shadow-xs, 0 1px 3px rgba(0, 0, 0, 0.05));
+  border: 1.5px solid var(--pos-border, #e5e7eb);
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 98px;
+  transition:
+    box-shadow 130ms,
+    border-color 130ms,
+    transform 80ms;
+  outline: none;
+}
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--pos-shadow-md, 0 4px 16px rgba(0, 0, 0, 0.09));
+  border-color: #d1d5db;
+}
+.card:focus-visible {
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.35);
+  outline: none;
+}
+.occupied {
+  border-color: #fca5a5;
+}
+.occupied:hover {
+  box-shadow: 0 4px 16px rgba(239, 68, 68, 0.12);
+}
+.headerInfo {
+  display: flex;
+  flex-direction: column;
+}
+.id {
+  font-size: 22px;
+  font-weight: 900;
+  color: var(--pos-tx, #111827);
+  line-height: 1;
+  letter-spacing: -0.5px;
+}
+.subtle {
+  color: var(--pos-muted, #9ca3af);
+  font-size: 12px;
+  margin-top: 3px;
+}
+.badge {
+  padding: 3px 10px;
+  border-radius: 99px;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1.5px solid transparent;
+  align-self: flex-start;
+}
+.badgeFree {
+  background: #dcfce7;
+  color: #065f46;
+  border-color: #6ee7b7;
+}
+.badgeOccupied {
+  background: #fee2e2;
+  color: #991b1b;
+  border-color: #fca5a5;
+}
+.orderSummary {
+  font-size: 12px;
+  color: var(--pos-muted, #9ca3af);
+}
+.orderSummaryOccupied {
+  font-size: 12px;
+  color: var(--pos-tx-sec, #374151);
+  font-weight: 600;
+}
+.noMatch {
+  margin-top: 48px;
+  text-align: center;
+  color: var(--pos-muted, #9ca3af);
+  font-size: 14px;
+}
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.modalDialog {
+  background: var(--pos-surface, #fff);
+  border-radius: var(--pos-r-card, 14px);
+  padding: 26px 28px;
+  width: 490px;
+  max-width: 95vw;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.14);
+  border: 1px solid var(--pos-border, #e5e7eb);
+}
+.modalClose {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--pos-muted, #9ca3af);
+  font-size: 22px;
+  line-height: 1;
+  border-radius: 6px;
+  padding: 2px;
+  transition: color 80ms;
+}
+.modalClose:hover {
+  color: var(--pos-tx, #111827);
+}
+.modalClose:focus-visible {
+  outline: 2px solid var(--pos-brand, #f59e0b);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.modalList {
+  max-height: 360px;
+  overflow: auto;
+  display: grid;
+  gap: 8px;
+}
+.modalItem {
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #f9fafb;
+  border: 1px solid var(--pos-border-light, #f3f4f6);
+  cursor: pointer;
+  transition:
+    background 80ms,
+    border-color 80ms;
+}
+.modalItem:hover {
+  background: var(--pos-brand-xlight, #fffbeb);
+  border-color: var(--pos-brand-border, #fcd34d);
+}
+.modalItem:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.4);
+}
+
+@media (min-width: 1400px) {
+  .page {
+    padding: 26px 32px;
+  }
+  .grid {
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 16px;
+  }
+  .card {
+    min-height: 108px;
+    padding: 18px 16px;
+  }
+  .id {
+    font-size: 26px;
+  }
+  .title {
+    font-size: 22px;
+  }
+}
+@media (max-width: 1099px) {
+  .page {
+    padding: 18px 20px;
+  }
+  .grid {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 11px;
+  }
+}
+@media (max-width: 991px) {
+  .page {
+    padding: 14px 16px;
+  }
+  .input {
+    width: min(200px, 36vw);
+  }
+  .grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 10px;
+  }
+  .card {
+    min-height: 88px;
+    padding: 12px 10px;
+  }
+  .title {
+    font-size: 18px;
+  }
+  .modalDialog {
+    width: 440px;
+    padding: 20px;
+  }
+}
+@media (max-width: 640px) {
+  .page {
+    padding: 10px 12px;
+  }
+  .grid {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 8px;
+  }
+  .header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .input {
+    width: 100%;
+  }
+  .btn {
+    width: 100%;
+    justify-content: center;
+  }
+}

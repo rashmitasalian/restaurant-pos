@@ -1,0 +1,21 @@
+node_modules
+.user-data/*
+data/perf/
+# Ignore common cache, build and temp files
+.cache/
+.vite/
+dist/
+dist-electron/
+build/
+release/
+coverage/
+.parcel-cache/
+.next/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+.env
+.env.local
+.vscode/

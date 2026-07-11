@@ -1,0 +1,579 @@
+.root {
+  padding: 22px 28px;
+  min-height: 100%;
+  background: var(--pos-bg, #fff);
+}
+
+.header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 900;
+  color: var(--pos-tx, #111827);
+}
+
+.subtitle {
+  margin: 4px 0 0;
+  color: var(--pos-tx-sub, #6b7280);
+  font-size: 13px;
+}
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px;
+  border: 1px solid var(--pos-border, #e5e7eb);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.tabButton {
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--pos-tx-sec, #374151);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  padding: 8px 11px;
+}
+
+.tabButton:hover {
+  background: #fff7ed;
+  color: #92400e;
+}
+
+.tabButton:focus-visible {
+  outline: 2px solid #f59e0b;
+  outline-offset: 2px;
+}
+
+.tabButtonActive {
+  background: #fffbeb;
+  border-color: #fcd34d;
+  color: #92400e;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.listPage {
+  display: grid;
+  gap: 16px;
+}
+
+.listCard,
+.templateCard {
+  min-width: 0;
+}
+
+.stack {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.formGridWide {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.span2 {
+  grid-column: span 2;
+}
+
+.span3 {
+  grid-column: span 3;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.status {
+  font-size: 12px;
+  color: var(--pos-tx-sub, #6b7280);
+  font-weight: 600;
+}
+
+.recordModePanel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--pos-border-light, #f3f4f6);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.recordModeTitle {
+  color: var(--pos-tx, #111827);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.recordModeHint {
+  margin-top: 2px;
+  color: var(--pos-tx-sub, #6b7280);
+  font-size: 12px;
+}
+
+.recordModeOptions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.recordModeButton {
+  border: 1px solid var(--pos-border, #e5e7eb);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--pos-tx-sec, #374151);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 900;
+  padding: 8px 10px;
+}
+
+.recordModeButton:hover:not(:disabled) {
+  border-color: #fcd34d;
+  background: #fff7ed;
+  color: #92400e;
+}
+
+.recordModeButton:focus-visible {
+  outline: 2px solid #f59e0b;
+  outline-offset: 2px;
+}
+
+.recordModeButtonActive {
+  border-color: #fcd34d;
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.recordModeButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.56;
+}
+
+.recordedTotal {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  background: #f0fdf4;
+  color: #166534;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.listLines {
+  display: grid;
+  gap: 8px;
+}
+
+.listLineHeader {
+  display: grid;
+  grid-template-columns: minmax(220px, 2fr) minmax(90px, 0.6fr) minmax(96px, 0.7fr) minmax(210px, 210px);
+  gap: 10px;
+  padding: 0 12px 2px;
+  color: var(--pos-muted, #9ca3af);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.lineFieldLabel {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.addItemPanel {
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid var(--pos-border-light, #f3f4f6);
+  border-radius: 8px;
+  background: #fffbeb;
+}
+
+.addItemFields {
+  display: grid;
+  gap: 10px;
+}
+
+.addItemHint {
+  margin-top: 6px;
+  color: var(--pos-tx-sub, #6b7280);
+  font-size: 12px;
+}
+
+.addItemCount {
+  color: var(--pos-tx-sub, #6b7280);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.addItemResults {
+  display: grid;
+  gap: 6px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.addItemExisting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid #fed7aa;
+  border-radius: 8px;
+  background: #fff7ed;
+  color: #92400e;
+  font-size: 13px;
+}
+
+.addItemResult {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid var(--pos-border-light, #f3f4f6);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--pos-tx, #111827);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.addItemResult:hover,
+.addItemResultActive {
+  border-color: #fcd34d;
+  background: #fff7ed;
+}
+
+.addItemName {
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.addItemMeta,
+.addItemEmpty {
+  color: var(--pos-tx-sub, #6b7280);
+  font-size: 12px;
+}
+
+.addItemEmpty {
+  padding: 10px;
+  border: 1px dashed var(--pos-border, #e5e7eb);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.addItemActions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.listLine {
+  display: grid;
+  grid-template-columns: minmax(220px, 2fr) minmax(90px, 0.6fr) minmax(96px, 0.7fr) minmax(210px, 210px);
+  gap: 10px;
+  align-items: end;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--pos-border-light, #f3f4f6);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.listLineActive {
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.18);
+}
+
+.listLine > * {
+  min-width: 0;
+}
+
+.listLineActions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: nowrap;
+  justify-content: flex-start;
+}
+
+.recordActionButton {
+  min-width: 104px;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+.listItemField {
+  min-width: 0;
+}
+
+.inlinePurchasePanel {
+  display: grid;
+  gap: 12px;
+  margin-top: -2px;
+  padding: 12px;
+  border: 1px solid #fed7aa;
+  border-radius: 8px;
+  background: #fff7ed;
+}
+
+.inlinePurchaseHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.inlinePurchaseTitle {
+  color: #92400e;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.inlinePurchaseSub {
+  margin-top: 3px;
+  color: var(--pos-tx-sub, #6b7280);
+  font-size: 12px;
+}
+
+.inlinePurchaseGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.inlineSpan2 {
+  grid-column: span 2;
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.kpiGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.kpi {
+  padding: 16px;
+  border: 1px solid var(--pos-border, #e5e7eb);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.kpiLabel {
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pos-muted, #9ca3af);
+}
+
+.kpiValue {
+  margin-top: 5px;
+  font-size: 22px;
+  font-weight: 900;
+  color: var(--pos-tx, #111827);
+  font-variant-numeric: tabular-nums;
+}
+
+.hint {
+  color: var(--pos-muted, #9ca3af);
+  font-size: 12px;
+}
+
+.dateControls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.presetBtn {
+  border: 1px solid var(--pos-border, #e5e7eb);
+  background: #fff;
+  color: var(--pos-tx-sec, #374151);
+  border-radius: 8px;
+  padding: 7px 10px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.presetActive {
+  background: #fffbeb;
+  border-color: #fcd34d;
+  color: #92400e;
+}
+
+@media (max-width: 1180px) {
+  .grid,
+  .kpiGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .listLine {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .listLineHeader {
+    display: none;
+  }
+
+  .lineFieldLabel {
+    position: static;
+    width: auto;
+    height: auto;
+    padding: 0;
+    margin: 0;
+    overflow: visible;
+    clip: auto;
+    clip-path: none;
+    white-space: normal;
+  }
+
+  .addItemActions {
+    justify-content: flex-start;
+  }
+
+  .addItemExisting {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .recordModePanel,
+  .recordedTotal {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .recordModeOptions {
+    justify-content: flex-start;
+  }
+
+  .listItemField {
+    grid-column: span 2;
+  }
+
+  .listLineActions {
+    justify-self: start;
+  }
+
+  .recordActionButton {
+    min-width: 96px;
+  }
+
+  .inlinePurchaseGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .formGrid,
+  .formGridWide {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .root {
+    padding: 14px;
+  }
+
+  .header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .tabs {
+    width: 100%;
+  }
+
+  .tabButton {
+    flex: 1 1 auto;
+  }
+
+  .formGrid,
+  .formGridWide,
+  .listLine {
+    grid-template-columns: 1fr;
+  }
+
+  .span2,
+  .span3,
+  .inlineSpan2 {
+    grid-column: auto;
+  }
+
+  .inlinePurchaseHeader {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .inlinePurchaseGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .listItemField {
+    grid-column: auto;
+  }
+
+  .listLine {
+    padding: 10px;
+  }
+
+  .listLineActions {
+    flex-wrap: wrap;
+  }
+}

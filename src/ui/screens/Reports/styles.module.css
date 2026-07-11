@@ -1,0 +1,19 @@
+/* Reports page styles - responsive layout */
+.reports-root {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px;
+}
+@media (max-width: 900px) {
+  .reports-root {
+    padding: 8px;
+    gap: 6px;
+  }
+}
+@media (max-width: 600px) {
+  .reports-root {
+    padding: 4px;
+    gap: 4px;
+  }
+}
