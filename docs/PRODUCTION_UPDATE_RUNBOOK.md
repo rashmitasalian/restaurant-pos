@@ -4,6 +4,133 @@ Use this runbook after Restaurant POS is already installed and a newer code rele
 
 Updates are started by an admin from `Settings -> Update & Support`. They are not silent or automatic.
 
+---
+
+## 0. Deploy The Current Working Version (Quick Steps)
+
+> **Repo:** `https://github.com/rashmitasalian/restaurant-pos`
+> **Current package version:** `0.1.0`
+> **Branch:** `main`
+
+All code changes are already committed and pushed to `origin/main`. Follow these steps in order.
+
+### 0.1 Confirm Working Tree Is Clean And Synced
+
+```powershell
+cd "C:\path\to\restaurant-pos"
+git status --short --branch
+git fetch origin
+git diff --stat HEAD origin/main
+```
+
+Expected: no uncommitted files, and no diff with `origin/main`. If there are local changes, commit and push them first.
+
+### 0.2 Bump The Version
+
+The update system requires a version higher than what is currently installed. Choose your next version (e.g. `0.2.0`):
+
+```powershell
+npm version 0.2.0 --no-git-tag-version
+```
+
+Commit and push the version bump:
+
+```powershell
+git add package.json package-lock.json
+git commit -m "chore: bump version to 0.2.0"
+git push origin main
+```
+
+### 0.3 Create A Git Release Tag
+
+```powershell
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+### 0.4 Install Dependencies And Build The Installer
+
+Run on a Windows machine with Node.js 22, Visual Studio Build Tools, and the Windows SDK installed:
+
+```powershell
+npm ci
+npm run build
+```
+
+Expected output file:
+
+```text
+release\Restaurant POS Setup 0.2.0.exe
+```
+
+If the build fails with a TLS error on corporate networks:
+
+```powershell
+$env:NODE_OPTIONS="--use-system-ca"
+npm run build
+```
+
+### 0.5 Create A GitHub Release And Upload The Installer
+
+1. Go to: `https://github.com/rashmitasalian/restaurant-pos/releases/new`
+2. Select tag `v0.2.0`.
+3. Set title: `v0.2.0`.
+4. Paste the release notes (see § 0.8 below for the current change list).
+5. Attach `release\Restaurant POS Setup 0.2.0.exe` as a release asset.
+6. Click **Publish release**.
+
+Copy the direct download URL for the uploaded `.exe` — you will need it in the next step.
+
+### 0.6 Compute SHA256 Hashes
+
+```powershell
+Get-FileHash "release\Restaurant POS Setup 0.2.0.exe" -Algorithm SHA256
+Get-FileHash "archive\Restaurant POS Setup 0.1.0.exe" -Algorithm SHA256
+```
+
+Note both hash values exactly. If you do not have the `0.1.0` installer archived, retrieve it from the previous GitHub release.
+
+### 0.7 Upload Installers To HTTPS Hosting And Publish The Manifest
+
+Upload both installers to your static HTTPS host, then create or replace `manifest.json`:
+
+```json
+{
+  "version": "0.2.0",
+  "installerUrl": "https://<your-host>/restaurant-pos/RestaurantPOS-0.2.0.exe",
+  "sha256": "<SHA256_OF_0.2.0_INSTALLER>",
+  "rollbackInstallerUrl": "https://<your-host>/restaurant-pos/RestaurantPOS-0.1.0.exe",
+  "rollbackSha256": "<SHA256_OF_0.1.0_INSTALLER>",
+  "installerSizeBytes": 0,
+  "rollbackInstallerSizeBytes": 0,
+  "notes": [
+    "Separate Print Bill and Pay buttons — bill can now be printed before payment",
+    "Pay button only records payment mode and clears the table",
+    "Print receipt checkbox on payment modal (unchecked by default)",
+    "Order item +/- buttons: keyboard accessible, disabled state at minimum quantity",
+    "Delivery bill button renamed to Print Bill for consistency"
+  ]
+}
+```
+
+Replace `<your-host>`, `<SHA256_OF_0.2.0_INSTALLER>`, `<SHA256_OF_0.1.0_INSTALLER>`, and `installerSizeBytes` values with actuals.
+Publish the manifest only after both installer URLs are publicly reachable via HTTPS.
+
+### 0.8 Run The Update At The Restaurant
+
+Follow **§ 3 Run The Update At The Restaurant** below.
+
+### 0.9 Archive This Release
+
+| Field | Value |
+|---|---|
+| Source commit | `23cf09d` (or run `git rev-parse HEAD`) |
+| Version | `0.2.0` |
+| GitHub release | `https://github.com/rashmitasalian/restaurant-pos/releases/tag/v0.2.0` |
+| Change summary | Print Bill / Pay separation, receipt print toggle, accessibility fixes |
+
+---
+
 ## 1. Prepare A New Code Release
 
 ### 1.1 Finish And Verify Code Changes
