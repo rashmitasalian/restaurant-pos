@@ -754,6 +754,10 @@
   outline: 2px solid #fbbf24;
   outline-offset: -2px;
 }
+.qtyBtn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
 .qtyInput {
   width: 44px;
   text-align: center;

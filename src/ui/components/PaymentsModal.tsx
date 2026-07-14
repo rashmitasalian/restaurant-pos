@@ -10,6 +10,7 @@ export interface PaymentConfirm {
   change?: number;
   txnRef?: string;
   splitBreakdown?: Array<{ method: SingleMethod; amount: number }>;
+  printReceipt: boolean;
 }
 
 interface SplitEntry {
@@ -39,6 +40,7 @@ export default function PaymentsModal({ open, onClose, amount, onConfirm, proces
   const [method, setMethod] = React.useState<PaymentMethod>("cash");
   const [cashReceived, setCashReceived] = React.useState<string>("");
   const [txnRef, setTxnRef] = React.useState<string>("");
+  const [shouldPrintReceipt, setShouldPrintReceipt] = React.useState(false);
   const [splits, setSplits] = React.useState<[SplitEntry, SplitEntry]>([
     { method: "cash", amount: "" },
     { method: "upi", amount: "" },
@@ -51,6 +53,7 @@ export default function PaymentsModal({ open, onClose, amount, onConfirm, proces
       setMethod("cash");
       setCashReceived(String(amount));
       setTxnRef("");
+      setShouldPrintReceipt(false);
       setSplits([
         { method: "cash", amount: String(amount) },
         { method: "upi", amount: "0" },
@@ -89,7 +92,7 @@ return null;
     if (processing) {
       return;
     }
-    onConfirm({ method: m, amountPaid: amount });
+    onConfirm({ method: m, amountPaid: amount, printReceipt: shouldPrintReceipt });
   };
 
   // ── Detailed confirm ───────────────────────────────────────────────────────
@@ -98,7 +101,7 @@ return null;
 return;
 }
     if (method === "cash") {
-      onConfirm({ method, amountPaid: numCash, change });
+      onConfirm({ method, amountPaid: numCash, change, printReceipt: shouldPrintReceipt });
     } else if (method === "split") {
       onConfirm({
         method,
@@ -107,9 +110,10 @@ return;
           method: e.method,
           amount: parseFloat(e.amount) || 0,
         })),
+        printReceipt: shouldPrintReceipt,
       });
     } else {
-      onConfirm({ method, amountPaid: amount, txnRef: txnRef.trim() || undefined });
+      onConfirm({ method, amountPaid: amount, txnRef: txnRef.trim() || undefined, printReceipt: shouldPrintReceipt });
     }
   };
 
@@ -329,8 +333,22 @@ handleConfirm();
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
+              flexWrap: "wrap",
+              gap: 8,
             }}
           >
+            <label
+              style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 13, color: "#374151", fontWeight: 600 }}
+            >
+              <input
+                type="checkbox"
+                checked={shouldPrintReceipt}
+                onChange={(e) => setShouldPrintReceipt(e.target.checked)}
+                disabled={processing}
+                style={{ width: 15, height: 15, cursor: processing ? "not-allowed" : "pointer" }}
+              />
+              Print receipt
+            </label>
             <button
               onClick={() => setExpanded(true)}
               disabled={processing}
@@ -748,6 +766,19 @@ handleConfirm();
             )}
 
             <div style={{ flex: 1 }} />
+
+            <label
+              style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 13, color: "#374151", fontWeight: 600 }}
+            >
+              <input
+                type="checkbox"
+                checked={shouldPrintReceipt}
+                onChange={(e) => setShouldPrintReceipt(e.target.checked)}
+                disabled={processing}
+                style={{ width: 15, height: 15, cursor: processing ? "not-allowed" : "pointer" }}
+              />
+              Print receipt
+            </label>
 
             <button
               onClick={handleConfirm}

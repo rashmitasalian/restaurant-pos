@@ -24,6 +24,17 @@ export default function OrderItem({
   removeLine,
   updateOrderQty,
 }: Props) {
+  // Disable − only when qty is already at minimum AND the item has never been
+  // KOT-sent (if it has been sent, − triggers the void workflow, so keep it enabled).
+  const kotSentQty = Math.max(0, Number(it.kotPrintedQty || 0));
+  const atMinQty = Number(it.qty || 1) <= 1;
+  const decreaseDisabled = atMinQty && kotSentQty === 0;
+
+  const startEditRate = () =>
+    setEditingRate((p: any) => ({ ...p, [it.id]: String(it.rate) }));
+  const startEditQty = () =>
+    setEditingQty((p: any) => ({ ...p, [it.id]: String(it.qty) }));
+
   return (
     <div
       className={styles.orderItem}
@@ -35,8 +46,9 @@ export default function OrderItem({
       }
     >
       <button
+        type="button"
         onClick={() => removeLine(it.id)}
-        aria-label="remove"
+        aria-label={`Remove ${it.name}`}
         className={styles.removeBtn}
       >
         ×
@@ -56,8 +68,8 @@ export default function OrderItem({
             }
             onKeyDown={(e) => {
               if (e.key === "Enter") {
-(e.target as HTMLInputElement).blur();
-}
+                (e.target as HTMLInputElement).blur();
+              }
             }}
             onBlur={() => commitRate(it.id)}
             className={styles.modalInputSmall}
@@ -66,9 +78,15 @@ export default function OrderItem({
           />
         ) : (
           <div
-            onClick={() =>
-              setEditingRate((p: any) => ({ ...p, [it.id]: String(it.rate) }))
-            }
+            role="button"
+            tabIndex={0}
+            onClick={startEditRate}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                startEditRate();
+              }
+            }}
             title="Click to edit rate"
             style={{
               color: "#9ca3af",
@@ -84,8 +102,10 @@ export default function OrderItem({
       </div>
       <div className={styles.itemQtyWrap}>
         <button
+          type="button"
           onClick={() => updateOrderQty(it.id, -1)}
-          aria-label="decrease"
+          disabled={decreaseDisabled}
+          aria-label={`Decrease quantity of ${it.name}`}
           className={styles.qtyBtn}
         >
           −
@@ -102,8 +122,8 @@ export default function OrderItem({
             }
             onKeyDown={(e) => {
               if (e.key === "Enter") {
-(e.target as HTMLInputElement).blur();
-}
+                (e.target as HTMLInputElement).blur();
+              }
             }}
             onBlur={() => commitQty(it.id)}
             min={1}
@@ -112,9 +132,16 @@ export default function OrderItem({
           />
         ) : (
           <div
-            onClick={() =>
-              setEditingQty((p: any) => ({ ...p, [it.id]: String(it.qty) }))
-            }
+            role="button"
+            tabIndex={0}
+            onClick={startEditQty}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                startEditQty();
+              }
+            }}
+            aria-label={`Quantity of ${it.name}: ${it.qty}. Press Enter to edit.`}
             style={{
               minWidth: 44,
               textAlign: "center",
@@ -129,8 +156,9 @@ export default function OrderItem({
           </div>
         )}
         <button
+          type="button"
           onClick={() => updateOrderQty(it.id, +1)}
-          aria-label="increase"
+          aria-label={`Increase quantity of ${it.name}`}
           className={styles.qtyBtn}
         >
           +

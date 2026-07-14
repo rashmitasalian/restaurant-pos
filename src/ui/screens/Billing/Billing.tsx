@@ -1067,7 +1067,11 @@ export default function Billing() {
           });
         }
       };
-      await attemptPrint();
+      if (payment.printReceipt) {
+        await attemptPrint();
+      } else {
+        finishTransaction();
+      }
     } finally {
       endBusyAction("payment");
     }
@@ -1316,7 +1320,6 @@ export default function Billing() {
     canStartCancel,
     canStartPayment,
     canPrintBill,
-    handlePrintBill,
     quickFavoriteShortcuts,
   ]);
 
