@@ -101,6 +101,7 @@ export function buildReceiptLines(
   totals: Partial<GstTotals> & { subtotal?: number; cgst?: number; sgst?: number; total: number },
   gstConfigInput?: Partial<GstConfig> | null,
   brandingInput?: ReceiptBranding | null,
+  options?: { preview?: boolean },
 ): string[] {
   const branding = getReceiptBranding(brandingInput);
   const gstConfig = normalizeGstConfig(
@@ -160,6 +161,7 @@ export function buildReceiptLines(
     ...(branding.email ? [`CENTER:${branding.email}`] : []),
     "SEP",
     `SUBHEADER:${orderTypeLabel}`,
+    ...(options?.preview ? ["SUBHEADER:*** BILL ***"] : []),
     ...(tableNum ? [`CENTER:Table No: ${tableNum}`] : []),
     ...(orderType === "delivery"
       ? [

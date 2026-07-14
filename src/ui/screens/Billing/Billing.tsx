@@ -84,7 +84,8 @@ type BillingBusyAction =
   | "assignRider"
   | "aggregatorPrint"
   | "creatingOrder"
-  | "receiptRetry";
+  | "receiptRetry"
+  | "printBill";
 
 function computeTotals(ord: any, discountPercent: number, gstConfig: Partial<GstConfig>) {
   return calculateGstTotals(ord?.items || [], discountPercent, getOrderGstConfig(ord, gstConfig));
@@ -338,6 +339,8 @@ export default function Billing() {
   const receiptRetrying = Boolean(busyActions.receiptRetry);
   const canStartPayment = canPay && !paymentProcessing && !payModalOpen;
   const canStartCancel = canCancel && !cancelProcessing;
+  const billPrinting = Boolean(busyActions.printBill);
+  const canPrintBill = hasItems && !isPaid && !billPrinting;
 
   // ── Data loading ────────────────────────────────────────────────────────
   const loadQueues = React.useCallback(async () => {
@@ -960,6 +963,33 @@ export default function Billing() {
     }
   };
 
+  const handlePrintBill = async () => {
+    if (!order || !hasItems) {
+      return;
+    }
+    if (!beginBusyAction("printBill")) {
+      return;
+    }
+    try {
+      const lines = buildReceiptLines(
+        order,
+        tableNum,
+        discountPercent,
+        totals,
+        undefined,
+        branding,
+        { preview: true },
+      );
+      await printReceipt({ lines });
+      showToast("Bill printed");
+    } catch (e: any) {
+      logger.error("Bill print failed", e);
+      showToast(e?.message || "Bill could not be printed. Please try again.", "error");
+    } finally {
+      endBusyAction("printBill");
+    }
+  };
+
   const handleConfirmPay = async (payment: PaymentConfirm) => {
     if (!order) {
       return;
@@ -1253,6 +1283,11 @@ export default function Billing() {
         if (canStartPayment) {
           setPayModalOpen(true);
         }
+      } else if (key === "b") {
+        e.preventDefault();
+        if (canPrintBill) {
+          handlePrintBill();
+        }
       } else if (key === "c") {
         e.preventDefault();
         if (canStartCancel) {
@@ -1280,6 +1315,8 @@ export default function Billing() {
     canKot,
     canStartCancel,
     canStartPayment,
+    canPrintBill,
+    handlePrintBill,
     quickFavoriteShortcuts,
   ]);
 
@@ -1361,12 +1398,21 @@ export default function Billing() {
             >
               {kotPrinting ? "Printing..." : "KOT"}
             </button>
+            <button
+              onClick={handlePrintBill}
+              disabled={!canPrintBill}
+              aria-disabled={!canPrintBill}
+              title="Print bill for customer to review (B)"
+              className={`${styles.actionBtn} ${styles.actionSecondary}`}
+            >
+              {billPrinting ? "Printing..." : "Print Bill"}
+            </button>
             {activeOrderType !== "delivery" && (
               <button
                 onClick={() => setPayModalOpen(true)}
                 disabled={!canStartPayment}
                 aria-disabled={!canStartPayment}
-                title="Pay (P)"
+                title="Record payment and clear table (P)"
                 className={`${styles.actionBtn} ${styles.actionPay}`}
               >
                 {paymentProcessing ? "Processing..." : "Pay"}
@@ -1423,10 +1469,10 @@ export default function Billing() {
                     <button
                       onClick={printAggregatorReceipt}
                       disabled={!order || aggregatorPrinting}
-                      title="Print customer bill"
+                      title="Print bill for delivery customer"
                       className={styles.actionSecondary}
                     >
-                      {aggregatorPrinting ? "Printing..." : "Customer Bill"}
+                      {aggregatorPrinting ? "Printing..." : "Print Bill"}
                     </button>
                   </>
                 )}
@@ -1621,7 +1667,7 @@ export default function Billing() {
             )}
 
             <div className={styles.keyboardHint}>
-              K — KOT &nbsp;·&nbsp; P — Pay &nbsp;·&nbsp; C — Cancel &nbsp;·&nbsp; U / Ctrl+Z — Undo
+              K — KOT &nbsp;·&nbsp; B — Print Bill &nbsp;·&nbsp; P — Pay &nbsp;·&nbsp; C — Cancel &nbsp;·&nbsp; U / Ctrl+Z — Undo
               &nbsp;·&nbsp; 1-6 - Quick add first favorites
             </div>
           </div>
