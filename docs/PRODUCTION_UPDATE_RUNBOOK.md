@@ -9,31 +9,76 @@ Updates are started by an admin from `Settings -> Update & Support`. They are no
 ## 0. Deploy The Current Working Version (Quick Steps)
 
 > **Repo:** `https://github.com/rashmitasalian/restaurant-pos`
-> **Current package version:** `0.1.0`
-> **Branch:** `main`
+> **Current package version:** `0.1.0` — must be bumped before building
+> **Branch:** `main` (HEAD: `fedfd39`)
+> **Git tags:** none yet — see notes below
 
-All code changes are already committed and pushed to `origin/main`. Follow these steps in order.
+### How the update system works (important)
 
-### 0.1 Confirm Working Tree Is Clean And Synced
+The update system compares the **version embedded in the installed `.exe`** against the **`version` field in `manifest.json`**. It does **not** use git tags. Git tags are only needed to create GitHub Releases and for human tracking/rollback reference.
+
+Because every commit currently has `"version": "0.1.0"` in `package.json`, you **must** bump the version before building — otherwise the new installer will also embed `0.1.0` and the update system will see installed = manifest and skip the update.
+
+---
+
+### Step 1 — Push any uncommitted changes
 
 ```powershell
 cd "C:\path\to\restaurant-pos"
 git status --short --branch
-git fetch origin
-git diff --stat HEAD origin/main
 ```
 
-Expected: no uncommitted files, and no diff with `origin/main`. If there are local changes, commit and push them first.
+If the tree is clean and already in sync with `origin/main`, skip ahead. Otherwise:
 
-### 0.2 Bump The Version
+```powershell
+git add .
+git commit -m "chore: finalise changes before 0.2.0 release"
+git push origin main
+```
 
-The update system requires a version higher than what is currently installed. Choose your next version (e.g. `0.2.0`):
+---
+
+### Step 2 — Retroactively tag the installed baseline as v0.1.0
+
+The restaurant machine has an app built from the July 11 commit `6ce2770` (last commit before the July 14 feature additions). Tag it now so you can track it and rebuild a rollback installer if needed:
+
+```powershell
+git tag v0.1.0 6ce2770
+git push origin v0.1.0
+```
+
+This does **not** change any code — it is a label only.
+
+---
+
+### Step 3 — Rebuild the v0.1.0 rollback installer (if you don't already have it)
+
+You need the rollback installer (the one matching what is currently on the restaurant machine) before publishing any update. If you kept the original `.exe` from the first installation, archive it and skip this step. Otherwise rebuild it:
+
+```powershell
+# Check out the 0.1.0 baseline — this is read-only, your main branch is untouched
+git checkout 6ce2770
+
+npm ci
+npm run build
+
+# Save the output before switching back
+mkdir -p archive
+Copy-Item "release\Restaurant POS Setup 0.1.0.exe" "archive\Restaurant POS Setup 0.1.0.exe"
+
+# Return to main
+git checkout main
+```
+
+---
+
+### Step 4 — Bump the version to 0.2.0
 
 ```powershell
 npm version 0.2.0 --no-git-tag-version
 ```
 
-Commit and push the version bump:
+This updates `package.json` and `package-lock.json` only. Commit and push:
 
 ```powershell
 git add package.json package-lock.json
@@ -41,58 +86,65 @@ git commit -m "chore: bump version to 0.2.0"
 git push origin main
 ```
 
-### 0.3 Create A Git Release Tag
+---
+
+### Step 5 — Tag v0.2.0
 
 ```powershell
 git tag v0.2.0
 git push origin v0.2.0
 ```
 
-### 0.4 Install Dependencies And Build The Installer
+---
 
-Run on a Windows machine with Node.js 22, Visual Studio Build Tools, and the Windows SDK installed:
+### Step 6 — Build the v0.2.0 installer
 
 ```powershell
 npm ci
 npm run build
 ```
 
-Expected output file:
+Expected output:
 
 ```text
 release\Restaurant POS Setup 0.2.0.exe
 ```
 
-If the build fails with a TLS error on corporate networks:
+If you get a TLS error on a corporate network:
 
 ```powershell
 $env:NODE_OPTIONS="--use-system-ca"
 npm run build
 ```
 
-### 0.5 Create A GitHub Release And Upload The Installer
+---
+
+### Step 7 — Create a GitHub Release and upload both installers
 
 1. Go to: `https://github.com/rashmitasalian/restaurant-pos/releases/new`
 2. Select tag `v0.2.0`.
-3. Set title: `v0.2.0`.
-4. Paste the release notes (see § 0.8 below for the current change list).
-5. Attach `release\Restaurant POS Setup 0.2.0.exe` as a release asset.
+3. Title: `v0.2.0`
+4. Paste release notes (see § 0.9).
+5. Attach `release\Restaurant POS Setup 0.2.0.exe`.
 6. Click **Publish release**.
+7. Repeat for `v0.1.0` — attach `archive\Restaurant POS Setup 0.1.0.exe` to that release (or just keep it available at an HTTPS URL).
 
-Copy the direct download URL for the uploaded `.exe` — you will need it in the next step.
+---
 
-### 0.6 Compute SHA256 Hashes
+### Step 8 — Compute SHA256 hashes
 
 ```powershell
 Get-FileHash "release\Restaurant POS Setup 0.2.0.exe" -Algorithm SHA256
 Get-FileHash "archive\Restaurant POS Setup 0.1.0.exe" -Algorithm SHA256
 ```
 
-Note both hash values exactly. If you do not have the `0.1.0` installer archived, retrieve it from the previous GitHub release.
+Copy both hash strings exactly.
 
-### 0.7 Upload Installers To HTTPS Hosting And Publish The Manifest
+---
 
-Upload both installers to your static HTTPS host, then create or replace `manifest.json`:
+### Step 9 — Publish the update manifest
+
+Upload both `.exe` files to static HTTPS hosting (GitHub Releases asset URLs work). Then publish `manifest.json` at your manifest host URL:
 
 ```json
 {
@@ -104,30 +156,35 @@ Upload both installers to your static HTTPS host, then create or replace `manife
   "installerSizeBytes": 0,
   "rollbackInstallerSizeBytes": 0,
   "notes": [
-    "Separate Print Bill and Pay buttons — bill can now be printed before payment",
+    "Separate Print Bill and Pay buttons — bill can now be printed before payment is recorded",
     "Pay button only records payment mode and clears the table",
     "Print receipt checkbox on payment modal (unchecked by default)",
-    "Order item +/- buttons: keyboard accessible, disabled state at minimum quantity",
+    "Order item +/- keyboard accessible; minus button disabled at minimum quantity",
     "Delivery bill button renamed to Print Bill for consistency"
   ]
 }
 ```
 
-Replace `<your-host>`, `<SHA256_OF_0.2.0_INSTALLER>`, `<SHA256_OF_0.1.0_INSTALLER>`, and `installerSizeBytes` values with actuals.
-Publish the manifest only after both installer URLs are publicly reachable via HTTPS.
+Replace all `<placeholder>` values. Publish the manifest only after both installer URLs return HTTP 200.
 
-### 0.8 Run The Update At The Restaurant
+> **Tip:** GitHub Release asset URLs are stable HTTPS URLs and can be used directly as `installerUrl` / `rollbackInstallerUrl`.
+
+---
+
+### Step 10 — Run the update at the restaurant
 
 Follow **§ 3 Run The Update At The Restaurant** below.
 
-### 0.9 Archive This Release
+---
+
+### Step 11 — Archive this release
 
 | Field | Value |
 |---|---|
-| Source commit | `23cf09d` (or run `git rev-parse HEAD`) |
-| Version | `0.2.0` |
+| Baseline commit (v0.1.0) | `6ce2770` |
+| Release commit (v0.2.0) | `fedfd39` (or run `git rev-parse v0.2.0`) |
 | GitHub release | `https://github.com/rashmitasalian/restaurant-pos/releases/tag/v0.2.0` |
-| Change summary | Print Bill / Pay separation, receipt print toggle, accessibility fixes |
+| Change summary | Print Bill / Pay separation, receipt print toggle, keyboard accessibility |
 
 ---
 
