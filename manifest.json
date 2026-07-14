@@ -1,11 +1,11 @@
 {
   "version": "0.2.0",
   "installerUrl": "https://github.com/rashmitasalian/restaurant-pos/releases/download/v0.2.0/RestoNiti.Setup.0.2.0.exe",
-  "sha256": "FILL_IN_0.2.0_SHA256",
+  "sha256": "5F9CEF2485ED9020045A65FCDE24A2B0104D8AA686798B08CE83E2D78B7FDE2B",
   "rollbackInstallerUrl": "https://github.com/rashmitasalian/restaurant-pos/releases/download/v0.1.0/RestoNiti.Setup.0.1.0.exe",
-  "rollbackSha256": "FILL_IN_0.1.0_SHA256",
-  "installerSizeBytes": 0,
-  "rollbackInstallerSizeBytes": 0,
+  "rollbackSha256": "3DB857131A49D7C1A6661D9CBD98D59EBEB7D4E7C6207155DD5CF4E58F149C36",
+  "installerSizeBytes": 109434008,
+  "rollbackInstallerSizeBytes": 109433668,
   "notes": [
     "Separate Print Bill and Pay buttons — bill can be printed before payment is recorded",
     "Pay button records payment mode and clears the table only",
