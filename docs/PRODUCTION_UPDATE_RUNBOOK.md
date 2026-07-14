@@ -1,109 +1,69 @@
 # Production Update Runbook
 
-Use this runbook after Restaurant POS is already installed and a newer code release needs to be redeployed through the admin-controlled update flow.
-
-Updates are started by an admin from `Settings -> Update & Support`. They are not silent or automatic.
-
----
-
-## 0. Deploy The Current Working Version (Quick Steps)
-
-> **Repo:** `https://github.com/rashmitasalian/restaurant-pos`
-> **Current package version:** `0.1.0` — must be bumped before building
-> **Branch:** `main` (HEAD: `fedfd39`)
-> **Git tags:** none yet — see notes below
-
-### How the update system works (important)
-
-The update system compares the **version embedded in the installed `.exe`** against the **`version` field in `manifest.json`**. It does **not** use git tags. Git tags are only needed to create GitHub Releases and for human tracking/rollback reference.
-
-Because every commit currently has `"version": "0.1.0"` in `package.json`, you **must** bump the version before building — otherwise the new installer will also embed `0.1.0` and the update system will see installed = manifest and skip the update.
+**Repo:** `https://github.com/rashmitasalian/restaurant-pos`  
+**Last updated:** 2026-07-14
 
 ---
 
-### Step 1 — Push any uncommitted changes
+## How the update system works
 
-```powershell
-cd "C:\path\to\restaurant-pos"
-git status --short --branch
-```
-
-If the tree is clean and already in sync with `origin/main`, skip ahead. Otherwise:
-
-```powershell
-git add .
-git commit -m "chore: finalise changes before 0.2.0 release"
-git push origin main
-```
+The POS app compares the **version embedded in the installed `.exe`** (set by `package.json` at build time) against the **`version` field in `manifest.json`**. If the manifest version is higher, the update is offered. Git tags play no role in this check — they are used only for GitHub Releases and human tracking.
 
 ---
 
-### Step 2 — Retroactively tag the installed baseline as v0.1.0
+## Part A — Deploy v0.2.0 (Current Release)
 
-The restaurant machine has an app built from the July 11 commit `6ce2770` (last commit before the July 14 feature additions). Tag it now so you can track it and rebuild a rollback installer if needed:
+### Current state at time of writing
 
-```powershell
-git tag v0.1.0 6ce2770
-git push origin v0.1.0
-```
-
-This does **not** change any code — it is a label only.
-
----
-
-### Step 3 — Rebuild the v0.1.0 rollback installer (if you don't already have it)
-
-You need the rollback installer (the one matching what is currently on the restaurant machine) before publishing any update. If you kept the original `.exe` from the first installation, skip to Step 4.
-
-> **⚠️ Never commit `.exe` installers to git.** Electron installers exceed 100 MB and GitHub will reject the push. The `archive/` folder is already in `.gitignore`. Store installers on GitHub Releases instead (supports up to 2 GB per file).
-
-Rebuild from the 0.1.0 baseline commit:
-
-```powershell
-# Check out the 0.1.0 baseline — read-only, your main branch is untouched
-git checkout 6ce2770
-
-npm ci
-npm run build
-
-# Save the output to a local archive folder (gitignored — do NOT git add this)
-New-Item -ItemType Directory -Force -Path archive
-Copy-Item "release\RestoNiti Setup 0.1.0.exe" "archive\RestoNiti Setup 0.1.0.exe"
-
-# Return to main
-git checkout main
-```
-
-Upload `archive\RestoNiti Setup 0.1.0.exe` as a GitHub Release asset for the `v0.1.0` tag (see Step 7).
+| Item | Status |
+|---|---|
+| All code changes committed and pushed | ✓ Done (`57793c9` on `origin/main`) |
+| `v0.1.0` git tag created and pushed | ✓ Done |
+| Rollback installer built | ✓ Done (`archive\RestoNiti Setup 0.1.0.exe`) |
+| `package.json` version bumped to `0.2.0` | ✗ Still needed |
+| `v0.2.0` git tag | ✗ Still needed |
+| `0.2.0` installer built | ✗ Still needed |
+| GitHub Releases created | ✗ Still needed |
+| `manifest.json` published | ✗ Still needed |
+| Update applied at restaurant | ✗ Still needed |
 
 ---
 
-### Step 4 — Bump the version to 0.2.0
+### Step 1 — Bump the version to 0.2.0
+
+Open PowerShell in the repo root:
 
 ```powershell
+cd "C:\Users\Rashmita.Salian\OneDrive - Wolters Kluwer\Pictures\restaurant-pos"
 npm version 0.2.0 --no-git-tag-version
-```
-
-This updates `package.json` and `package-lock.json` only. Commit and push:
-
-```powershell
 git add package.json package-lock.json
 git commit -m "chore: bump version to 0.2.0"
 git push origin main
 ```
 
+Verify:
+
+```powershell
+Get-Content package.json | Select-String '"version"'
+# Expected: "version": "0.2.0"
+```
+
 ---
 
-### Step 5 — Tag v0.2.0
+### Step 2 — Create and push the v0.2.0 git tag
 
 ```powershell
 git tag v0.2.0
 git push origin v0.2.0
 ```
 
+Verify on GitHub: `https://github.com/rashmitasalian/restaurant-pos/tags`
+
 ---
 
-### Step 6 — Build the v0.2.0 installer
+### Step 3 — Build the v0.2.0 installer
+
+> Run on a Windows machine with Node.js 22, Visual Studio 2022 Build Tools (C++ workload + MSVC + Windows SDK) installed.
 
 ```powershell
 npm ci
@@ -112,11 +72,11 @@ npm run build
 
 Expected output:
 
-```text
-release\Restaurant POS Setup 0.2.0.exe
+```
+release\RestoNiti Setup 0.2.0.exe
 ```
 
-If you get a TLS error on a corporate network:
+If you get a TLS error on a corporate network, prepend:
 
 ```powershell
 $env:NODE_OPTIONS="--use-system-ca"
@@ -125,87 +85,183 @@ npm run build
 
 ---
 
-### Step 7 — Create a GitHub Release and upload both installers
-
-1. Go to: `https://github.com/rashmitasalian/restaurant-pos/releases/new`
-2. Select tag `v0.2.0`.
-3. Title: `v0.2.0`
-4. Paste release notes (see § 0.9).
-5. Attach `release\Restaurant POS Setup 0.2.0.exe`.
-6. Click **Publish release**.
-7. Repeat for `v0.1.0` — attach `archive\Restaurant POS Setup 0.1.0.exe` to that release (or just keep it available at an HTTPS URL).
-
----
-
-### Step 8 — Compute SHA256 hashes
+### Step 4 — Compute SHA256 hashes for both installers
 
 ```powershell
-Get-FileHash "release\Restaurant POS Setup 0.2.0.exe" -Algorithm SHA256
-Get-FileHash "archive\Restaurant POS Setup 0.1.0.exe" -Algorithm SHA256
+Get-FileHash "release\RestoNiti Setup 0.2.0.exe"    -Algorithm SHA256 | Select-Object Hash
+Get-FileHash "archive\RestoNiti Setup 0.1.0.exe"    -Algorithm SHA256 | Select-Object Hash
 ```
 
-Copy both hash strings exactly.
+Note both values — you will need them in Steps 6 and 7.
+
+Also note the file sizes in bytes:
+
+```powershell
+(Get-Item "release\RestoNiti Setup 0.2.0.exe").Length
+(Get-Item "archive\RestoNiti Setup 0.1.0.exe").Length
+```
 
 ---
 
-### Step 9 — Publish the update manifest
+### Step 5 — Create GitHub Releases and upload the installers
 
-GitHub Release asset URLs are stable HTTPS direct-download links and satisfy the update system's HTTPS requirement. Use them directly — no separate hosting needed.
+> ⚠️ Do **not** commit `.exe` files to git. Electron installers exceed 100 MB. The `archive/` and `release/` folders are gitignored. GitHub Releases supports up to 2 GB per asset and serves files over HTTPS.
 
-GitHub Release asset URL format:
-```
-https://github.com/rashmitasalian/restaurant-pos/releases/download/<tag>/<filename>
-```
+**Create the v0.1.0 release (rollback installer):**
 
-Publish `manifest.json` at your manifest host URL:
+1. Go to `https://github.com/rashmitasalian/restaurant-pos/releases/new`
+2. Choose existing tag `v0.1.0`
+3. Title: `v0.1.0 — Initial production release`
+4. Attach `archive\RestoNiti Setup 0.1.0.exe`
+5. Click **Publish release**
+6. Click the uploaded asset and copy the download URL — it will look like:
+   ```
+   https://github.com/rashmitasalian/restaurant-pos/releases/download/v0.1.0/RestoNiti.Setup.0.1.0.exe
+   ```
+
+**Create the v0.2.0 release (new installer):**
+
+1. Go to `https://github.com/rashmitasalian/restaurant-pos/releases/new`
+2. Choose existing tag `v0.2.0`
+3. Title: `v0.2.0`
+4. Add release notes:
+   ```
+   - Separate Print Bill and Pay buttons — bill can be printed before payment is recorded
+   - Pay button records payment mode and clears the table only
+   - Print receipt checkbox on payment modal (unchecked by default)
+   - Order item +/- buttons are keyboard accessible; minus disabled at minimum quantity
+   - Delivery bill button renamed to Print Bill for consistency
+   ```
+5. Attach `release\RestoNiti Setup 0.2.0.exe`
+6. Click **Publish release**
+7. Click the uploaded asset and copy the download URL — it will look like:
+   ```
+   https://github.com/rashmitasalian/restaurant-pos/releases/download/v0.2.0/RestoNiti.Setup.0.2.0.exe
+   ```
+
+> **Note:** GitHub replaces spaces with `.` in asset download URLs. Always copy the URL by clicking the asset rather than constructing it manually.
+
+---
+
+### Step 6 — Publish the update manifest
+
+Create `manifest.json` with the values collected above and publish it at a stable HTTPS URL that the POS app is configured to check.
 
 ```json
 {
   "version": "0.2.0",
   "installerUrl": "https://github.com/rashmitasalian/restaurant-pos/releases/download/v0.2.0/RestoNiti.Setup.0.2.0.exe",
-  "sha256": "<SHA256_OF_0.2.0_INSTALLER>",
+  "sha256": "<PASTE_0.2.0_SHA256_HERE>",
   "rollbackInstallerUrl": "https://github.com/rashmitasalian/restaurant-pos/releases/download/v0.1.0/RestoNiti.Setup.0.1.0.exe",
-  "rollbackSha256": "<SHA256_OF_0.1.0_INSTALLER>",
-  "installerSizeBytes": 0,
-  "rollbackInstallerSizeBytes": 0,
+  "rollbackSha256": "<PASTE_0.1.0_SHA256_HERE>",
+  "installerSizeBytes": <PASTE_0.2.0_SIZE_IN_BYTES>,
+  "rollbackInstallerSizeBytes": <PASTE_0.1.0_SIZE_IN_BYTES>,
   "notes": [
-    "Separate Print Bill and Pay buttons — bill can now be printed before payment is recorded",
-    "Pay button only records payment mode and clears the table",
+    "Separate Print Bill and Pay buttons — bill can be printed before payment is recorded",
+    "Pay button records payment mode and clears the table only",
     "Print receipt checkbox on payment modal (unchecked by default)",
-    "Order item +/- keyboard accessible; minus button disabled at minimum quantity",
+    "Order item +/- buttons are keyboard accessible; minus disabled at minimum quantity",
     "Delivery bill button renamed to Print Bill for consistency"
   ]
 }
 ```
 
-> **Note on filename in the URL:** GitHub replaces spaces with `.` in asset download URLs. If your built file is named `RestoNiti Setup 0.2.0.exe`, the download URL will use `RestoNiti.Setup.0.2.0.exe`. Verify the exact URL by clicking the asset link on the Releases page.
+Before going to the restaurant, verify both installer URLs are reachable:
 
-Replace both `<SHA256_...>` placeholders and set `installerSizeBytes` to the actual file sizes in bytes. Publish the manifest only after both installer URLs return HTTP 200.
-
----
-
-### Step 10 — Run the update at the restaurant
-
-Follow **§ 3 Run The Update At The Restaurant** below.
+```powershell
+Invoke-WebRequest -Uri "https://github.com/rashmitasalian/restaurant-pos/releases/download/v0.2.0/RestoNiti.Setup.0.2.0.exe" -Method Head
+Invoke-WebRequest -Uri "https://github.com/rashmitasalian/restaurant-pos/releases/download/v0.1.0/RestoNiti.Setup.0.1.0.exe" -Method Head
+# Both must return StatusCode 200
+```
 
 ---
 
-### Step 11 — Archive this release
+### Step 7 — Apply the update at the restaurant
+
+Do this during a quiet period (after close or between service periods).
+
+**Before starting:**
+- [ ] Restaurant is closed or quiet — no active orders
+- [ ] Windows admin credentials available for UAC prompt
+- [ ] Machine has internet access to GitHub
+
+**At the POS machine:**
+
+1. Log in as **admin**
+2. Open **Settings → Update & Support**
+3. Click **Check for Updates** — confirm version `0.2.0` and the release notes appear
+4. Click **Prepare Update** — the app will:
+   - back up the database to `pre-update.sqlite`
+   - download and verify both installers
+   - verify SHA256 checksums
+5. Once preparation is complete and **Launch Installer** becomes active, click it
+6. Confirm the POS will close
+7. Approve the Windows UAC prompt
+8. Complete the installer wizard
+9. Reopen **Restaurant POS**
+
+Expected status after restart: **Update Successful** (or **Update Successful With Warnings** — warnings are non-critical, e.g. missing printer config)
+
+---
+
+### Step 8 — Smoke test
+
+1. Log in
+2. Open the Tables screen
+3. Add a test order to a table
+4. Send a KOT
+5. Click **Print Bill** — verify it prints without recording payment
+6. Click **Pay** → select a method → confirm — verify the table clears
+7. Check **History** — confirm the order appears
+8. Check **Reports** — confirm totals update
+9. Verify the printer queue is readable
+
+---
+
+### Step 9 — Record the release
 
 | Field | Value |
 |---|---|
-| Baseline commit (v0.1.0) | `6ce2770` |
-| Release commit (v0.2.0) | `fedfd39` (or run `git rev-parse v0.2.0`) |
+| Version | `0.2.0` |
+| Baseline (rollback) commit | `6ce2770` → tag `v0.1.0` |
+| Release commit | run `git rev-parse v0.2.0` after tagging |
 | GitHub release | `https://github.com/rashmitasalian/restaurant-pos/releases/tag/v0.2.0` |
-| Change summary | Print Bill / Pay separation, receipt print toggle, keyboard accessibility |
+| Deployed by | |
+| Deployed at | |
+| Smoke test result | |
 
 ---
 
-## 1. Prepare A New Code Release
+## Part B — Rollback
 
-### 1.1 Finish And Verify Code Changes
+Use rollback only if the updated app is not usable after installation. Rollback is one generation only.
 
-From the repo root:
+### Option 1 — Rollback from inside the app
+
+1. Log in as **admin**
+2. Open **Settings → Update & Support**
+3. Click **Roll Back Last Update**
+4. Review the warning about orders and payments created since the update
+5. Confirm only if losing those records is acceptable
+
+The app will restore `pre-update.sqlite`, launch `rollback-installer.exe`, and close. Complete the installer and restart.
+
+### Option 2 — Break-glass rollback (app will not start)
+
+1. Close the POS process completely
+2. Open `%LOCALAPPDATA%\RestaurantPOS\Updates`
+3. Open `ROLLBACK-INSTRUCTIONS.txt` and follow it exactly
+4. Critical order: **restore `pre-update.sqlite` before running `rollback-installer.exe`**
+5. Run `rollback-installer.exe`
+6. Restart the POS
+
+---
+
+## Part C — Future Releases
+
+For every subsequent release, follow this checklist:
+
+### C.1 Prepare code
 
 ```powershell
 git status --short --branch
@@ -216,290 +272,58 @@ npm run build:renderer
 
 Fix all failures before packaging.
 
-### 1.2 Bump The App Version
-
-The update system compares the manifest version against the installed app version. Every production release must have a higher version.
-
-Example:
+### C.2 Bump version, commit, tag
 
 ```powershell
-npm version 1.1.0 --no-git-tag-version
+npm version <NEW_VERSION> --no-git-tag-version
+git add package.json package-lock.json
+git commit -m "chore: bump version to <NEW_VERSION>"
+git push origin main
+git tag v<NEW_VERSION>
+git push origin v<NEW_VERSION>
 ```
 
-This updates `package.json` and `package-lock.json`.
-
-If your team tags releases in Git, create the tag after the build is accepted:
+### C.3 Build
 
 ```powershell
-git tag v1.1.0
-```
-
-### 1.3 Build The New Installer
-
-From the repo root:
-
-```powershell
+npm ci
 npm run build
 ```
 
-Expected output:
-
-```text
-release\Restaurant POS Setup 1.1.0.exe
-```
-
-Keep this installer permanently in the release archive.
-
-## 2. Prepare Update Artifacts
-
-### 2.1 Identify The Rollback Installer
-
-For version `1.1.0`, the rollback installer is the currently installed production version, for example:
-
-```text
-Restaurant POS Setup 1.0.0.exe
-```
-
-The rollback installer is mandatory. Do not publish the update manifest until both installers are available.
-
-### 2.2 Compute SHA256 Hashes
-
-Run:
+### C.4 Compute hashes
 
 ```powershell
-Get-FileHash "release\Restaurant POS Setup 1.1.0.exe" -Algorithm SHA256
-Get-FileHash "archive\Restaurant POS Setup 1.0.0.exe" -Algorithm SHA256
+Get-FileHash "release\RestoNiti Setup <NEW_VERSION>.exe" -Algorithm SHA256 | Select-Object Hash
+(Get-Item "release\RestoNiti Setup <NEW_VERSION>.exe").Length
 ```
 
-Copy the hash values exactly.
+### C.5 Create GitHub Release
 
-### 2.3 Upload Installers To HTTPS Hosting
+Upload `release\RestoNiti Setup <NEW_VERSION>.exe` as an asset on the new release. Keep the previous release and its installer for use as the rollback.
 
-> **Do not commit `.exe` files to git.** Electron installers are typically over 100 MB and GitHub rejects pushes above that limit. The `archive/` and `release/` folders are gitignored for this reason.
+### C.6 Publish manifest
 
-**Recommended: GitHub Releases (free, no extra infrastructure)**
+Update `manifest.json`:
+- `version` → new version
+- `installerUrl` → new installer GitHub asset URL
+- `sha256` → new installer hash
+- `rollbackInstallerUrl` → previous release's installer URL
+- `rollbackSha256` → previous release's installer hash
+- `notes` → what changed
 
-Upload both installers as release assets on their respective GitHub Release pages. GitHub serves them over HTTPS with stable URLs:
+### C.7 Deploy and smoke test
 
-```text
-https://github.com/rashmitasalian/restaurant-pos/releases/download/v1.1.0/RestoNiti.Setup.1.1.0.exe
-https://github.com/rashmitasalian/restaurant-pos/releases/download/v1.0.0/RestoNiti.Setup.1.0.0.exe
-```
+Follow **Part A Steps 7–9** above.
 
-> GitHub replaces spaces with `.` in asset download URLs. Verify the exact URL by clicking the asset on the Releases page.
+### C.8 Archive record
 
-**Alternative: any static HTTPS host** (AWS S3, Azure Blob, Cloudflare R2, etc.)
-
-```text
-https://updates.example.com/restaurant-pos/RestaurantPOS-1.1.0.exe
-https://updates.example.com/restaurant-pos/RestaurantPOS-1.0.0.exe
-```
-
-The app rejects non-HTTPS manifest and installer URLs.
-
-### 2.4 Publish The Manifest
-
-Create or replace:
-
-```text
-https://updates.example.com/restaurant-pos/manifest.json
-```
-
-Example:
-
-```json
-{
-  "version": "1.1.0",
-  "installerUrl": "https://updates.example.com/restaurant-pos/RestaurantPOS-1.1.0.exe",
-  "sha256": "NEW_INSTALLER_SHA256",
-  "rollbackInstallerUrl": "https://updates.example.com/restaurant-pos/RestaurantPOS-1.0.0.exe",
-  "rollbackSha256": "CURRENT_PRODUCTION_INSTALLER_SHA256",
-  "installerSizeBytes": 120000000,
-  "rollbackInstallerSizeBytes": 120000000,
-  "notes": [
-    "Improved printing reliability",
-    "Updated reports screen"
-  ]
-}
-```
-
-Rules:
-
-- `version` must be greater than the installed app version.
-- `installerUrl` must use HTTPS.
-- `rollbackInstallerUrl` must use HTTPS.
-- `sha256` must match the new installer bytes.
-- `rollbackSha256` must match the rollback installer bytes.
-- Publish the manifest only after both installer URLs are reachable.
-
-## 3. Run The Update At The Restaurant
-
-Perform this during a quiet operating window.
-
-### 3.1 Before Starting
-
-1. Confirm the restaurant has closed or is in a quiet period.
-2. Confirm there are no critical open orders.
-3. Confirm printers are online if possible.
-4. Confirm Windows admin/UAC approval is available.
-5. Confirm the machine has internet access to the HTTPS update host.
-
-### 3.2 Check And Prepare Update
-
-In the POS app:
-
-1. Log in as admin.
-2. Open `Settings -> Update & Support`.
-3. Click `Check for Updates`.
-4. Confirm the expected new version and release notes appear.
-5. Click `Prepare Update`.
-6. If business activity is detected, review:
-   - open orders;
-   - pending KOTs;
-   - pending print jobs;
-   - failed print jobs.
-7. Continue only if the restaurant accepts the operational risk.
-
-During prepare, the app:
-
-- validates free disk space;
-- creates `pre-update.sqlite`;
-- validates the backup using SQLite header and integrity check;
-- downloads or verifies `installer.exe`;
-- downloads or verifies `rollback-installer.exe`;
-- verifies SHA256 for both installers;
-- writes rollback instructions.
-
-Prepared files are stored under:
-
-```text
-%LOCALAPPDATA%\RestaurantPOS\Updates
-```
-
-Expected files:
-
-```text
-manifest.json
-installer.exe
-rollback-installer.exe
-pre-update.sqlite
-ROLLBACK-INSTRUCTIONS.txt
-state.json
-diagnostics\
-```
-
-`Launch Installer` remains disabled until the backup, new installer, and rollback installer are all verified.
-
-### 3.3 Launch And Complete Installer
-
-1. Click `Launch Installer`.
-2. Confirm the POS will close.
-3. Approve Windows UAC if prompted.
-4. Complete the installer.
-5. Reopen `Restaurant POS`.
-
-On startup, the app runs a lightweight health check:
-
-- SQLite opens;
-- `PRAGMA integrity_check` passes;
-- an active admin account exists;
-- required settings load;
-- `print_jobs` table can be queried;
-- pending/failed print job counts can be queried.
-
-Expected status in `Settings -> Update & Support`:
-
-```text
-Update Successful
-```
-
-or:
-
-```text
-Update Successful With Warnings
-```
-
-Warnings can include missing printer configuration or pending/failed print jobs.
-
-### 3.4 Post-Update Smoke Test
-
-After the update:
-
-1. Log in.
-2. Open tables.
-3. Create a small test order.
-4. Send KOT.
-5. Take payment.
-6. Print receipt.
-7. Verify history/reports.
-8. Confirm printer queue is readable.
-9. Create a fresh SQLite backup.
-
-## 4. Rollback
-
-Rollback is one-generation only and admin-only.
-
-Use rollback if the updated app is not usable after installation.
-
-### 4.1 Rollback From Inside The App
-
-1. Log in as admin.
-2. Open `Settings -> Update & Support`.
-3. Click `Roll Back Last Update`.
-4. Review the warning:
-   - orders created after the update;
-   - payments created after the update.
-5. Confirm only if losing post-update records is acceptable.
-
-The app then:
-
-- creates `emergency-backup.sqlite`;
-- closes SQLite;
-- restores `pre-update.sqlite`;
-- deletes active SQLite `-wal` and `-shm` files;
-- launches `rollback-installer.exe`;
-- closes POS.
-
-Complete the rollback installer and restart POS.
-
-### 4.2 Break-Glass Rollback If The App Cannot Start
-
-1. Close POS completely.
-2. Open:
-
-```text
-%LOCALAPPDATA%\RestaurantPOS\Updates
-```
-
-3. Open `ROLLBACK-INSTRUCTIONS.txt`.
-4. Follow the file-copy steps exactly.
-5. Run:
-
-```text
-rollback-installer.exe
-```
-
-6. Restart POS.
-
-Important order:
-
-```text
-Restore pre-update.sqlite before running rollback-installer.exe.
-```
-
-## 5. Release Archive Checklist
-
-For every production release, archive:
-
-- source commit SHA;
-- app version;
-- new installer;
-- rollback installer;
-- SHA256 hash for both installers;
-- published manifest;
-- release notes;
-- smoke-test result;
-- restaurant deployment date/time;
-- person who approved the update.
-
-This archive is required for support and rollback confidence.
+| Field | Value |
+|---|---|
+| Version | |
+| Release commit / tag | |
+| GitHub release URL | |
+| SHA256 (new installer) | |
+| SHA256 (rollback installer) | |
+| Deployed by | |
+| Deployed at | |
+| Smoke test result | |
