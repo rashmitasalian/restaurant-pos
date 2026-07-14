@@ -53,22 +53,28 @@ This does **not** change any code — it is a label only.
 
 ### Step 3 — Rebuild the v0.1.0 rollback installer (if you don't already have it)
 
-You need the rollback installer (the one matching what is currently on the restaurant machine) before publishing any update. If you kept the original `.exe` from the first installation, archive it and skip this step. Otherwise rebuild it:
+You need the rollback installer (the one matching what is currently on the restaurant machine) before publishing any update. If you kept the original `.exe` from the first installation, skip to Step 4.
+
+> **⚠️ Never commit `.exe` installers to git.** Electron installers exceed 100 MB and GitHub will reject the push. The `archive/` folder is already in `.gitignore`. Store installers on GitHub Releases instead (supports up to 2 GB per file).
+
+Rebuild from the 0.1.0 baseline commit:
 
 ```powershell
-# Check out the 0.1.0 baseline — this is read-only, your main branch is untouched
+# Check out the 0.1.0 baseline — read-only, your main branch is untouched
 git checkout 6ce2770
 
 npm ci
 npm run build
 
-# Save the output before switching back
-mkdir -p archive
-Copy-Item "release\Restaurant POS Setup 0.1.0.exe" "archive\Restaurant POS Setup 0.1.0.exe"
+# Save the output to a local archive folder (gitignored — do NOT git add this)
+New-Item -ItemType Directory -Force -Path archive
+Copy-Item "release\RestoNiti Setup 0.1.0.exe" "archive\RestoNiti Setup 0.1.0.exe"
 
 # Return to main
 git checkout main
 ```
+
+Upload `archive\RestoNiti Setup 0.1.0.exe` as a GitHub Release asset for the `v0.1.0` tag (see Step 7).
 
 ---
 
@@ -144,14 +150,21 @@ Copy both hash strings exactly.
 
 ### Step 9 — Publish the update manifest
 
-Upload both `.exe` files to static HTTPS hosting (GitHub Releases asset URLs work). Then publish `manifest.json` at your manifest host URL:
+GitHub Release asset URLs are stable HTTPS direct-download links and satisfy the update system's HTTPS requirement. Use them directly — no separate hosting needed.
+
+GitHub Release asset URL format:
+```
+https://github.com/rashmitasalian/restaurant-pos/releases/download/<tag>/<filename>
+```
+
+Publish `manifest.json` at your manifest host URL:
 
 ```json
 {
   "version": "0.2.0",
-  "installerUrl": "https://<your-host>/restaurant-pos/RestaurantPOS-0.2.0.exe",
+  "installerUrl": "https://github.com/rashmitasalian/restaurant-pos/releases/download/v0.2.0/RestoNiti.Setup.0.2.0.exe",
   "sha256": "<SHA256_OF_0.2.0_INSTALLER>",
-  "rollbackInstallerUrl": "https://<your-host>/restaurant-pos/RestaurantPOS-0.1.0.exe",
+  "rollbackInstallerUrl": "https://github.com/rashmitasalian/restaurant-pos/releases/download/v0.1.0/RestoNiti.Setup.0.1.0.exe",
   "rollbackSha256": "<SHA256_OF_0.1.0_INSTALLER>",
   "installerSizeBytes": 0,
   "rollbackInstallerSizeBytes": 0,
@@ -165,9 +178,9 @@ Upload both `.exe` files to static HTTPS hosting (GitHub Releases asset URLs wor
 }
 ```
 
-Replace all `<placeholder>` values. Publish the manifest only after both installer URLs return HTTP 200.
+> **Note on filename in the URL:** GitHub replaces spaces with `.` in asset download URLs. If your built file is named `RestoNiti Setup 0.2.0.exe`, the download URL will use `RestoNiti.Setup.0.2.0.exe`. Verify the exact URL by clicking the asset link on the Releases page.
 
-> **Tip:** GitHub Release asset URLs are stable HTTPS URLs and can be used directly as `installerUrl` / `rollbackInstallerUrl`.
+Replace both `<SHA256_...>` placeholders and set `installerSizeBytes` to the actual file sizes in bytes. Publish the manifest only after both installer URLs return HTTP 200.
 
 ---
 
@@ -262,7 +275,20 @@ Copy the hash values exactly.
 
 ### 2.3 Upload Installers To HTTPS Hosting
 
-Upload both installers to static HTTPS hosting:
+> **Do not commit `.exe` files to git.** Electron installers are typically over 100 MB and GitHub rejects pushes above that limit. The `archive/` and `release/` folders are gitignored for this reason.
+
+**Recommended: GitHub Releases (free, no extra infrastructure)**
+
+Upload both installers as release assets on their respective GitHub Release pages. GitHub serves them over HTTPS with stable URLs:
+
+```text
+https://github.com/rashmitasalian/restaurant-pos/releases/download/v1.1.0/RestoNiti.Setup.1.1.0.exe
+https://github.com/rashmitasalian/restaurant-pos/releases/download/v1.0.0/RestoNiti.Setup.1.0.0.exe
+```
+
+> GitHub replaces spaces with `.` in asset download URLs. Verify the exact URL by clicking the asset on the Releases page.
+
+**Alternative: any static HTTPS host** (AWS S3, Azure Blob, Cloudflare R2, etc.)
 
 ```text
 https://updates.example.com/restaurant-pos/RestaurantPOS-1.1.0.exe

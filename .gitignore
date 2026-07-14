@@ -19,4 +19,5 @@ yarn-error.log*
 .env
 .env.local
 .vscode/
-archive/RestoNiti Setup 0.1.0.exe
+# Installer archives — these are large binaries (>100 MB); store on GitHub Releases, not in git
+archive/
