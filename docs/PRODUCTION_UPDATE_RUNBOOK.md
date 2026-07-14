@@ -176,6 +176,31 @@ Invoke-WebRequest -Uri "https://github.com/rashmitasalian/restaurant-pos/release
 
 ---
 
+### Step 6b — Configure the update manifest URL on the restaurant machine
+
+> Do this **once** on the restaurant machine. It survives app reinstalls and future updates.
+
+Open PowerShell **as Administrator** on the restaurant machine and run:
+
+```powershell
+[System.Environment]::SetEnvironmentVariable(
+    "POS_UPDATE_MANIFEST_URL",
+    "https://raw.githubusercontent.com/rashmitasalian/restaurant-pos/main/manifest.json",
+    "Machine"
+)
+```
+
+Verify it was saved:
+
+```powershell
+[System.Environment]::GetEnvironmentVariable("POS_UPDATE_MANIFEST_URL", "Machine")
+# Expected: https://raw.githubusercontent.com/rashmitasalian/restaurant-pos/main/manifest.json
+```
+
+> ⚠️ **Restart the POS app** after setting this — environment variables set at Machine scope are only picked up when the process starts fresh.
+
+---
+
 ### Step 7 — Apply the update at the restaurant
 
 Do this during a quiet period (after close or between service periods).
@@ -184,6 +209,7 @@ Do this during a quiet period (after close or between service periods).
 - [ ] Restaurant is closed or quiet — no active orders
 - [ ] Windows admin credentials available for UAC prompt
 - [ ] Machine has internet access to GitHub
+- [ ] Step 6b completed — `POS_UPDATE_MANIFEST_URL` is set
 
 **At the POS machine:**
 
