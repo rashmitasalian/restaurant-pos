@@ -1415,10 +1415,10 @@ export default function Billing() {
                 onClick={() => setPayModalOpen(true)}
                 disabled={!canStartPayment}
                 aria-disabled={!canStartPayment}
-                title="Record payment and clear table (P)"
+                title="Settle bill and clear table (P)"
                 className={`${styles.actionBtn} ${styles.actionPay}`}
               >
-                {paymentProcessing ? "Processing..." : "Pay"}
+                {paymentProcessing ? "Processing..." : "Settle"}
               </button>
             )}
             <button

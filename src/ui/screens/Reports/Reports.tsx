@@ -137,6 +137,7 @@ function escapeHtml(value: unknown) {
 export default function Reports() {
   const [sales, setSales] = React.useState(0);
   const [subtotalSales, setSubtotalSales] = React.useState(0);
+  const [discountTotal, setDiscountTotal] = React.useState(0);
   const [orders, setOrders] = React.useState(0);
   const [gst, setGst] = React.useState(0);
   const [cashAmount, setCashAmount] = React.useState(0);
@@ -238,6 +239,7 @@ export default function Reports() {
 
         setSales(totalSales);
         setSubtotalSales(subtotal);
+        setDiscountTotal(Number(summary.discountTotal || 0));
         setOrders(ordersCount);
         setGst(gstAmount);
         setCashAmount(cash);
@@ -440,6 +442,11 @@ export default function Reports() {
     ${
       hasGst
         ? `<div class="card"><div class="card-label">GST Collected</div><div class="card-value">${formatCurrency(displayedGst)}</div><div class="card-sub">CGST: ${formatCurrency(cgst)} + SGST: ${formatCurrency(sgst)}</div></div>`
+        : ""
+    }
+    ${
+      discountTotal > 0
+        ? `<div class="card" style="border-color:#fca5a5"><div class="card-label">Discounts Given</div><div class="card-value" style="color:#dc2626">${formatCurrency(discountTotal)}</div><div class="card-sub">Total discount deducted</div></div>`
         : ""
     }
     <div class="card"><div class="card-label">Cash</div><div class="card-value">${formatCurrency(cashAmount)}</div><div class="card-sub">${cashPercent}% of sales</div></div>
@@ -841,6 +848,30 @@ setToTs(d.getTime());
               {loading
                 ? "Loading…"
                 : `${gstRateLabel} GST · CGST ${formatCurrency(cgst)} + SGST ${formatCurrency(sgst)}`}
+            </div>
+          </div>
+          )}
+
+          {/* Discounts */}
+          {(loading || discountTotal > 0) && (
+          <div
+            className="rpt-card"
+            style={{
+              ["--accent" as string]: "#dc2626",
+              ["--glow" as string]: "rgba(220,38,38,0.07)",
+            }}
+          >
+            <div className="rpt-card-accent" />
+            <div className="rpt-card-glow" />
+            <div className="rpt-kpi-label">Discounts Given</div>
+            <div
+              className={`rpt-kpi-value${loading ? " rpt-shimmer" : ""}`}
+              style={{ color: loading ? "#e5e7eb" : "#dc2626" }}
+            >
+              {loading ? "———" : formatCurrency(discountTotal)}
+            </div>
+            <div className="rpt-kpi-sub">
+              {loading ? "Loading…" : "Total discount deducted from orders"}
             </div>
           </div>
           )}

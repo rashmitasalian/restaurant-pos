@@ -88,6 +88,8 @@ type UIOrder = {
   orderType: string;
   orderLabel: string; // "Table 3" | "Takeaway" | "Delivery #ABC"
   total: number;
+  discountPercent: number;
+  discountTotal: number;
   items: number;
   method: string;
   time: number;
@@ -254,6 +256,8 @@ export default function History() {
         orderType: ot,
         orderLabel,
         total,
+        discountPercent: Number(d.discountPercent || 0),
+        discountTotal: Number(d.discountTotal || 0),
         items: (d.items || []).length,
         method,
         time: d.paidAt || d.updatedAt || d.createdAt || Date.now(),
@@ -706,18 +710,20 @@ export default function History() {
       return;
     }
     const grandTotal = allItems.reduce((s, o) => s + o.total, 0);
+    const grandDiscount = allItems.reduce((s, o) => s + (o.discountTotal || 0), 0);
     const fmt = (v: number) =>
       `₹${v.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
     const rows = allItems
       .map(
         (o, i) =>
-          `<tr>
+          `<tr${o.discountPercent > 0 ? ' style="background:#fff5f5"' : ''}>
         <td>${i + 1}</td>
         <td>${o.orderLabel}</td>
         <td>${new Date(o.time).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</td>
         <td style="text-align:center">${o.items}</td>
         <td style="text-align:center">${o.method}</td>
+        <td style="text-align:center;color:${o.discountPercent > 0 ? '#dc2626' : '#aaa'}">${o.discountPercent > 0 ? `${o.discountPercent}% (−${fmt(o.discountTotal)})` : '—'}</td>
         <td style="text-align:right">${fmt(o.total)}</td>
       </tr>`,
       )
@@ -747,12 +753,13 @@ export default function History() {
   <p class="sub">${label} &middot; ${allItems.length} order${allItems.length !== 1 ? "s" : ""}</p>
   <table>
     <thead>
-      <tr><th>#</th><th>Order</th><th>Time</th><th style="text-align:center">Items</th><th style="text-align:center">Method</th><th style="text-align:right">Total</th></tr>
+      <tr><th>#</th><th>Order</th><th>Time</th><th style="text-align:center">Items</th><th style="text-align:center">Method</th><th style="text-align:center">Discount</th><th style="text-align:right">Total</th></tr>
     </thead>
     <tbody>
       ${rows}
       <tr class="total-row">
         <td colspan="5">Total</td>
+        <td style="text-align:center;color:#dc2626">${grandDiscount > 0 ? `−${fmt(grandDiscount)}` : '—'}</td>
         <td style="text-align:right">${fmt(grandTotal)}</td>
       </tr>
     </tbody>
@@ -959,7 +966,26 @@ loadFirstPage(pageSize, search, fromTs, toTs);
               {rowIdx + 1}
             </span>
             {/* Order label */}
-            <div style={{ fontWeight: 700, fontSize: 14, color: "#111827" }}>{s.orderLabel}</div>
+            <div style={{ fontWeight: 700, fontSize: 14, color: "#111827", display: "flex", alignItems: "center", gap: 6 }}>
+              {s.orderLabel}
+              {s.discountPercent > 0 && (
+                <span
+                  title={`${s.discountPercent}% discount applied (−₹${s.discountTotal.toLocaleString("en-IN")})`}
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    padding: "2px 6px",
+                    borderRadius: 10,
+                    background: "#fef2f2",
+                    color: "#dc2626",
+                    border: "1px solid #fca5a5",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {s.discountPercent}% off
+                </span>
+              )}
+            </div>
             {/* Time */}
             <span style={{ fontSize: 12, color: "#6b7280" }}>
               {new Date(s.time).toLocaleString("en-IN", {

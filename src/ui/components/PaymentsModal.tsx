@@ -202,7 +202,7 @@ handleConfirm();
           ref={quickPayDialogRef}
           role="dialog"
           aria-modal="true"
-          aria-label="Collect Payment"
+          aria-label="Settle Bill"
           tabIndex={-1}
           style={{
             width: 440,
@@ -277,7 +277,7 @@ handleConfirm();
                 letterSpacing: 0.5,
               }}
             >
-              Tap to pay full amount
+              Tap to settle full amount
             </div>
             <div
               style={{
@@ -406,7 +406,7 @@ handleConfirm();
         ref={detailedPayDialogRef}
         role="dialog"
         aria-modal="true"
-        aria-label="Collect Payment"
+        aria-label="Settle Bill"
         tabIndex={-1}
         style={{
           width: 660,
@@ -446,7 +446,7 @@ handleConfirm();
               ←
             </button>
             <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: "#111827" }}>
-              Collect Payment
+              Settle Bill
             </h3>
           </div>
           <button
@@ -795,7 +795,7 @@ handleConfirm();
                 transition: "background 0.15s",
               }}
             >
-              {processing ? "Processing..." : "✓ Confirm"}
+              {processing ? "Processing..." : "✓ Settle"}
             </button>
 
             <button
