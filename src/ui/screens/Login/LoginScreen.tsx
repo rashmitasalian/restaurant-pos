@@ -20,6 +20,7 @@ export default function LoginScreen() {
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [lockedSeconds, setLockedSeconds] = React.useState(0);
   const [showRecovery, setShowRecovery] = React.useState(false);
+  const [showPassword, setShowPassword] = React.useState(false);
   const submittingRef = React.useRef(false);
 
   React.useEffect(() => {
@@ -182,14 +183,39 @@ export default function LoginScreen() {
 
         <label style={{ display: "block", marginBottom: 20 }}>
           <span style={labelStyle}>Password</span>
-          <input
-            type="password"
-            value={password}
-            autoComplete="current-password"
-            onChange={(event) => setPassword(event.target.value)}
-            disabled={isSubmitting || isLocked}
-            style={inputStyle(isLocked)}
-          />
+          <div style={{ position: "relative" }}>
+            <input
+              type={showPassword ? "text" : "password"}
+              value={password}
+              autoComplete="current-password"
+              onChange={(event) => setPassword(event.target.value)}
+              disabled={isSubmitting || isLocked}
+              style={{ ...inputStyle(isLocked), paddingRight: 38 }}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((v) => !v)}
+              disabled={isSubmitting || isLocked}
+              aria-label={showPassword ? "Hide password" : "Show password"}
+              tabIndex={-1}
+              style={{
+                position: "absolute",
+                right: 8,
+                top: "50%",
+                transform: "translateY(-50%)",
+                background: "none",
+                border: "none",
+                cursor: isSubmitting || isLocked ? "not-allowed" : "pointer",
+                padding: 0,
+                lineHeight: 1,
+                fontSize: 16,
+                color: "#9ca3af",
+                userSelect: "none",
+              }}
+            >
+              {showPassword ? "🙈" : "👁"}
+            </button>
+          </div>
         </label>
 
         {error && <Message tone="error">{error}</Message>}
