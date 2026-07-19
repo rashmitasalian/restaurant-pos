@@ -1,16 +1,13 @@
 {
-  "version": "0.2.0",
-  "installerUrl": "https://github.com/rashmitasalian/restaurant-pos/releases/download/v0.2.0/RestoNiti.Setup.0.2.0.exe",
-  "sha256": "5F9CEF2485ED9020045A65FCDE24A2B0104D8AA686798B08CE83E2D78B7FDE2B",
+  "version": "0.3.0",
+  "installerUrl": "https://github.com/rashmitasalian/restaurant-pos/releases/download/v0.3.0/RestoNiti.Setup.0.3.0.exe",
+  "sha256": "053479257E87B3FD51EEE1711E2D8031F8ED4F93C85517EE5F02934449FF85B1",
   "rollbackInstallerUrl": "https://github.com/rashmitasalian/restaurant-pos/releases/download/v0.1.0/RestoNiti.Setup.0.1.0.exe",
   "rollbackSha256": "3DB857131A49D7C1A6661D9CBD98D59EBEB7D4E7C6207155DD5CF4E58F149C36",
-  "installerSizeBytes": 109434008,
+  "installerSizeBytes": 109434309,
   "rollbackInstallerSizeBytes": 109433668,
   "notes": [
-    "Separate Print Bill and Pay buttons — bill can be printed before payment is recorded",
-    "Pay button records payment mode and clears the table only",
-    "Print receipt checkbox on payment modal (unchecked by default)",
-    "Order item +/- buttons are keyboard accessible; minus disabled at minimum quantity",
-    "Delivery bill button renamed to Print Bill for consistency"
+    "settlement button",
+    "view password"
   ]
 }
