@@ -937,27 +937,45 @@ export default function Billing() {
         },
         branding,
       );
-      await printKOTDirect({ lines, printer: await resolveKitchenPrinter() });
-      const updated = await voidOrderKotLine(order._id, {
-        lineId: line.id,
-        finalQty,
-        reason: cleanReason,
-      });
-      setOrder(updated);
-      setKotVoidRequest(null);
-      setEditingQty((prev) => {
-        const next = { ...prev };
-        delete next[line.id];
-        return next;
-      });
-      if (lastAddedId === line.id && finalQty === 0) {
-        setLastAddedId(null);
+
+      // Step 1: Print first — bill is only changed after successful print
+      try {
+        await printKOTDirect({ lines, printer: await resolveKitchenPrinter() });
+      } catch (e: any) {
+        logger.error("Void KOT print failed", e);
+        showToast(
+          e?.message || "Void KOT could not be sent to the printer. Bill was not changed.",
+          "error",
+        );
+        return;
       }
-      window.dispatchEvent(new Event("orders-changed"));
-      showToast("Void KOT printed and bill updated");
-    } catch (e: any) {
-      logger.error("Failed to void KOT item", e);
-      showToast(e?.message || "Void KOT could not be printed. Bill was not changed.", "error");
+
+      // Step 2: Update the bill (print already happened)
+      try {
+        const updated = await voidOrderKotLine(order._id, {
+          lineId: line.id,
+          finalQty,
+          reason: cleanReason,
+        });
+        setOrder(updated);
+        setKotVoidRequest(null);
+        setEditingQty((prev) => {
+          const next = { ...prev };
+          delete next[line.id];
+          return next;
+        });
+        if (lastAddedId === line.id && finalQty === 0) {
+          setLastAddedId(null);
+        }
+        window.dispatchEvent(new Event("orders-changed"));
+        showToast("Void KOT printed and bill updated");
+      } catch (e: any) {
+        logger.error("Void KOT printed but bill update failed", e);
+        showToast(
+          validationMessage(e, "Void KOT was printed but the bill could not be updated. Please refresh."),
+          "error",
+        );
+      }
     } finally {
       endBusyAction("voidKot");
     }
