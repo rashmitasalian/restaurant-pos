@@ -245,22 +245,18 @@ app.whenReady().then(async () => {
   configureStableUserDataPath();
   try {
     await initializeDatabase();
+    posService.ensureReady();
+    updateService.processStartupState();
+    registerPosIpc(() => mainWindow);
+    await createWindow();
   } catch (err: any) {
-    writeLogToFile("fatal", `Database failed to initialize: ${err?.stack || err}`);
+    writeLogToFile("fatal", `Startup failed: ${err?.stack || err}`);
     dialog.showErrorBox(
-      "Database Error",
-      `The application database could not be opened.\n\n${err?.message || err}\n\nPlease check disk space and file permissions, then restart the app.`,
+      "Startup Error",
+      `The application could not start properly.\n\n${err?.message || err}\n\nPlease check disk space and file permissions, then restart the app.`,
     );
     app.quit();
-    return;
   }
-  posService.ensureReady();
-  updateService.processStartupState();
-  registerPosIpc(() => mainWindow);
-  await createWindow();
-}).catch((err: any) => {
-  writeLogToFile("fatal", `Startup failed: ${err?.stack || err}`);
-  console.error("[FATAL] Startup failed:", err);
 });
 
 app.on("window-all-closed", () => {
