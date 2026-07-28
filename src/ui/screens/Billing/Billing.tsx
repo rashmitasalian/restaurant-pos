@@ -59,7 +59,6 @@ import {
   NewDeliveryModal,
   AssignRiderModal,
   PrintFailedModal,
-  AdminOverrideModal,
 } from "./components/BillingModals";
 import { buildReceiptLines, buildKotLines, buildKotVoidLines } from "./utils/receiptBuilder";
 import type { ReceiptBranding } from "./utils/receiptBuilder";
@@ -270,14 +269,6 @@ export default function Billing() {
     retry: () => void;
     finish: () => void;
   } | null>(null);
-
-  // ── Bill-printed fraud guard ────────────────────────────────────────────
-  // Tracks which order ID had its bill printed. Any removal/reduction after
-  // bill print requires manager credentials.
-  const billPrintedOrderRef = React.useRef<string | null>(null);
-  const [adminOverrideOpen, setAdminOverrideOpen] = React.useState(false);
-  const [adminOverrideDesc, setAdminOverrideDesc] = React.useState("");
-  const pendingOverrideRef = React.useRef<(() => Promise<void>) | null>(null);
 
   const [busyActions, setBusyActions] = React.useState<Partial<Record<BillingBusyAction, boolean>>>(
     {},
@@ -587,29 +578,6 @@ export default function Billing() {
     return true;
   };
 
-  // If the bill has been printed for this order, intercept remove/reduce actions
-  // and require manager credentials before proceeding.
-  const requireBillPrintedOverride = (description: string, action: () => Promise<void>): boolean => {
-    if (billPrintedOrderRef.current !== order?._id || !order) {
-      return false; // not intercepted, caller should proceed normally
-    }
-    pendingOverrideRef.current = action;
-    setAdminOverrideDesc(description);
-    setAdminOverrideOpen(true);
-    return true; // intercepted — waiting for manager approval
-  };
-
-  const handleAdminOverrideConfirm = async (adminUsername: string, adminPassword: string) => {
-    // throws on bad credentials — AdminOverrideModal catches and shows the error
-    await (window as any).pos?.auth?.verifyAdmin?.(adminUsername, adminPassword);
-    setAdminOverrideOpen(false);
-    const action = pendingOverrideRef.current;
-    pendingOverrideRef.current = null;
-    if (action) {
-      await action();
-    }
-  };
-
   const removeLine = async (lineId: string) => {
     if (!order) {
       return false;
@@ -631,9 +599,6 @@ export default function Billing() {
         showToast(e?.message || "Failed to remove item", "error");
       }
     };
-    if (requireBillPrintedOverride(`Remove: ${line?.name || "item"}`, doRemove)) {
-      return false;
-    }
     await doRemove();
     return true;
   };
@@ -664,12 +629,6 @@ export default function Billing() {
         showToast(e?.message || "Failed to update quantity", "error");
       }
     };
-    if (delta < 0 && requireBillPrintedOverride(
-      `Reduce: ${line.name} (qty ${Number(line.qty || 1)} → ${nextQty})`,
-      doUpdate,
-    )) {
-      return;
-    }
     await doUpdate();
   };
 
@@ -705,13 +664,6 @@ export default function Billing() {
         showToast(e?.message || "Failed to save quantity", "error");
       }
     };
-    const prevQty = Number(line?.qty || 1);
-    if (rawQty < prevQty && requireBillPrintedOverride(
-      `Reduce: ${line?.name || "item"} (qty ${prevQty} → ${rawQty})`,
-      doCommit,
-    )) {
-      return;
-    }
     await doCommit();
   };
 
@@ -1073,7 +1025,6 @@ export default function Billing() {
         { preview: true },
       );
       await printReceipt({ lines });
-      billPrintedOrderRef.current = order._id;
       showToast("Bill printed");
     } catch (e: any) {
       logger.error("Bill print failed", e);
@@ -1876,17 +1827,6 @@ export default function Billing() {
           />
         )}
 
-        {/* Manager approval required when removing/reducing items after bill print */}
-        {adminOverrideOpen && (
-          <AdminOverrideModal
-            description={adminOverrideDesc}
-            onClose={() => {
-              setAdminOverrideOpen(false);
-              pendingOverrideRef.current = null;
-            }}
-            onConfirm={handleAdminOverrideConfirm}
-          />
-        )}
       </div>
 
       <PaymentsModal
