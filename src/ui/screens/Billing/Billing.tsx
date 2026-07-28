@@ -59,6 +59,7 @@ import {
   NewDeliveryModal,
   AssignRiderModal,
   PrintFailedModal,
+  AdminOverrideModal,
 } from "./components/BillingModals";
 import { buildReceiptLines, buildKotLines, buildKotVoidLines } from "./utils/receiptBuilder";
 import type { ReceiptBranding } from "./utils/receiptBuilder";
@@ -269,6 +270,15 @@ export default function Billing() {
     retry: () => void;
     finish: () => void;
   } | null>(null);
+
+  // ── Bill-printed fraud guard ────────────────────────────────────────────
+  // Tracks which order ID had its bill printed. Any removal/reduction after
+  // bill print requires manager credentials.
+  const billPrintedOrderRef = React.useRef<string | null>(null);
+  const [adminOverrideOpen, setAdminOverrideOpen] = React.useState(false);
+  const [adminOverrideDesc, setAdminOverrideDesc] = React.useState("");
+  const pendingOverrideRef = React.useRef<(() => Promise<void>) | null>(null);
+
   const [busyActions, setBusyActions] = React.useState<Partial<Record<BillingBusyAction, boolean>>>(
     {},
   );
@@ -297,6 +307,9 @@ export default function Billing() {
   const [editingRate, setEditingRate] = React.useState<Record<string, string>>({});
 
   const searchRef = React.useRef<HTMLInputElement | null>(null);
+  // Always holds the latest loadTable so the select-table event listener
+  // (registered once on mount) never calls a stale closure.
+  const loadTableRef = React.useRef<(tn: number) => Promise<void>>(async () => {});
 
   // ── Derived values ──────────────────────────────────────────────────────
   const activeOrderType = deriveOrderType(order, tableNum);
@@ -449,32 +462,43 @@ export default function Billing() {
 
   React.useEffect(() => {
     (async () => {
-      // Load items first so favorites render immediately alongside the order
-      await seedItems();
-      setItems(await getItems());
-      setTableCount(await getConfiguredTableCount());
+      try {
+        // Load items first so favorites render immediately alongside the order
+        await seedItems();
+        setItems(await getItems());
+        setTableCount(await getConfiguredTableCount());
+      } catch (e) {
+        logger.error("Billing: failed to load items/config on mount", e as Error);
+      }
 
       const tableStr = window.localStorage.getItem("currentTable");
       const orderId = window.localStorage.getItem("currentOrderId");
-      if (orderId) {
-        const o = await getOrderById(orderId);
-        if (o && o.status === "paid") {
-          // Payment succeeded previously (even if it appeared to fail).
-          // Clear stale session references so Billing starts fresh.
-          window.localStorage.removeItem("currentOrderId");
-          window.localStorage.removeItem("currentTable");
-        } else {
-          setOrder(o);
-          if (tableStr) {
-            setTableNum(parseInt(tableStr, 10));
+      try {
+        if (orderId) {
+          const o = await getOrderById(orderId);
+          if (o && o.status === "paid") {
+            // Payment succeeded previously (even if it appeared to fail).
+            // Clear stale session references so Billing starts fresh.
+            window.localStorage.removeItem("currentOrderId");
+            window.localStorage.removeItem("currentTable");
+          } else {
+            setOrder(o);
+            if (tableStr) {
+              setTableNum(parseInt(tableStr, 10));
+            }
           }
+        } else if (tableStr) {
+          const tn = parseInt(tableStr, 10);
+          const o = await getOrCreateOrderForTable(tn);
+          setOrder(o);
+          setTableNum(tn);
+          window.localStorage.setItem("currentOrderId", o._id);
         }
-      } else if (tableStr) {
-        const tn = parseInt(tableStr, 10);
-        const o = await getOrCreateOrderForTable(tn);
-        setOrder(o);
-        setTableNum(tn);
-        window.localStorage.setItem("currentOrderId", o._id);
+      } catch (e) {
+        logger.error("Billing: failed to restore session order on mount", e as Error);
+        // Clear stale references so Billing starts fresh rather than staying stuck.
+        window.localStorage.removeItem("currentOrderId");
+        window.localStorage.removeItem("currentTable");
       }
     })();
   }, []);
@@ -484,7 +508,7 @@ export default function Billing() {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent)?.detail;
       if (detail?.table) {
-        loadTable(detail.table);
+        loadTableRef.current(detail.table);
       }
     };
     window.addEventListener("select-table", handler);
@@ -514,6 +538,9 @@ export default function Billing() {
       logger.error("Failed to load table", error as Error, { tableNumber: tn });
     }
   };
+  // Keep the ref in sync so the select-table event handler always calls
+  // the latest version (which closes over the current loadTableStatuses).
+  loadTableRef.current = loadTable;
 
   const addToOrder = async (item: any, quantity = 1, refocus = true) => {
     if (!order) {
@@ -560,6 +587,29 @@ export default function Billing() {
     return true;
   };
 
+  // If the bill has been printed for this order, intercept remove/reduce actions
+  // and require manager credentials before proceeding.
+  const requireBillPrintedOverride = (description: string, action: () => Promise<void>): boolean => {
+    if (billPrintedOrderRef.current !== order?._id || !order) {
+      return false; // not intercepted, caller should proceed normally
+    }
+    pendingOverrideRef.current = action;
+    setAdminOverrideDesc(description);
+    setAdminOverrideOpen(true);
+    return true; // intercepted — waiting for manager approval
+  };
+
+  const handleAdminOverrideConfirm = async (adminUsername: string, adminPassword: string) => {
+    // throws on bad credentials — AdminOverrideModal catches and shows the error
+    await (window as any).pos?.auth?.verifyAdmin?.(adminUsername, adminPassword);
+    setAdminOverrideOpen(false);
+    const action = pendingOverrideRef.current;
+    pendingOverrideRef.current = null;
+    if (action) {
+      await action();
+    }
+  };
+
   const removeLine = async (lineId: string) => {
     if (!order) {
       return false;
@@ -568,19 +618,24 @@ export default function Billing() {
     if (line && openKotVoidRequest(line, 0)) {
       return false;
     }
-    try {
-      const updated = await updateOrderLines(
-        order._id,
-        order.items.filter((l: any) => l.id !== lineId),
-      );
-      setOrder(updated);
-      window.dispatchEvent(new Event("orders-changed"));
-      return true;
-    } catch (e: any) {
-      logger.error("Failed to remove order line", e);
-      showToast(e?.message || "Failed to remove item", "error");
+    const doRemove = async () => {
+      try {
+        const updated = await updateOrderLines(
+          order._id,
+          order.items.filter((l: any) => l.id !== lineId),
+        );
+        setOrder(updated);
+        window.dispatchEvent(new Event("orders-changed"));
+      } catch (e: any) {
+        logger.error("Failed to remove order line", e);
+        showToast(e?.message || "Failed to remove item", "error");
+      }
+    };
+    if (requireBillPrintedOverride(`Remove: ${line?.name || "item"}`, doRemove)) {
       return false;
     }
+    await doRemove();
+    return true;
   };
 
   const updateOrderQty = async (id: string, delta: number) => {
@@ -595,18 +650,27 @@ export default function Billing() {
     if (delta < 0 && openKotVoidRequest(line, nextQty)) {
       return;
     }
-    try {
-      const updated = await updateOrderLines(
-        order._id,
-        order.items.map((l: any) => (l.id === id ? { ...l, qty: nextQty } : l)),
-      );
-      setOrder(updated);
-      window.dispatchEvent(new Event("orders-changed"));
-      setTimeout(() => searchRef.current?.focus(), 10);
-    } catch (e: any) {
-      logger.error("Failed to update order quantity", e);
-      showToast(e?.message || "Failed to update quantity", "error");
+    const doUpdate = async () => {
+      try {
+        const updated = await updateOrderLines(
+          order._id,
+          order.items.map((l: any) => (l.id === id ? { ...l, qty: nextQty } : l)),
+        );
+        setOrder(updated);
+        window.dispatchEvent(new Event("orders-changed"));
+        setTimeout(() => searchRef.current?.focus(), 10);
+      } catch (e: any) {
+        logger.error("Failed to update order quantity", e);
+        showToast(e?.message || "Failed to update quantity", "error");
+      }
+    };
+    if (delta < 0 && requireBillPrintedOverride(
+      `Reduce: ${line.name} (qty ${Number(line.qty || 1)} → ${nextQty})`,
+      doUpdate,
+    )) {
+      return;
     }
+    await doUpdate();
   };
 
   const commitQty = async (id: string) => {
@@ -622,23 +686,33 @@ export default function Billing() {
     if (line && openKotVoidRequest(line, rawQty)) {
       return;
     }
-    try {
-      const updated = await updateOrderLines(
-        order._id,
-        order.items.map((l: any) => (l.id === id ? { ...l, qty: rawQty } : l)),
-      );
-      setOrder(updated);
-      setEditingQty((prev) => {
-        const c = { ...prev };
-        delete c[id];
-        return c;
-      });
-      window.dispatchEvent(new Event("orders-changed"));
-      setTimeout(() => searchRef.current?.focus(), 10);
-    } catch (e: any) {
-      logger.error("Failed to save order quantity", e);
-      showToast(e?.message || "Failed to save quantity", "error");
+    const doCommit = async () => {
+      try {
+        const updated = await updateOrderLines(
+          order._id,
+          order.items.map((l: any) => (l.id === id ? { ...l, qty: rawQty } : l)),
+        );
+        setOrder(updated);
+        setEditingQty((prev) => {
+          const c = { ...prev };
+          delete c[id];
+          return c;
+        });
+        window.dispatchEvent(new Event("orders-changed"));
+        setTimeout(() => searchRef.current?.focus(), 10);
+      } catch (e: any) {
+        logger.error("Failed to save order quantity", e);
+        showToast(e?.message || "Failed to save quantity", "error");
+      }
+    };
+    const prevQty = Number(line?.qty || 1);
+    if (rawQty < prevQty && requireBillPrintedOverride(
+      `Reduce: ${line?.name || "item"} (qty ${prevQty} → ${rawQty})`,
+      doCommit,
+    )) {
+      return;
     }
+    await doCommit();
   };
 
   const commitRate = async (id: string) => {
@@ -999,6 +1073,7 @@ export default function Billing() {
         { preview: true },
       );
       await printReceipt({ lines });
+      billPrintedOrderRef.current = order._id;
       showToast("Bill printed");
     } catch (e: any) {
       logger.error("Bill print failed", e);
@@ -1007,6 +1082,7 @@ export default function Billing() {
       endBusyAction("printBill");
     }
   };
+
 
   const handleConfirmPay = async (payment: PaymentConfirm) => {
     if (!order) {
@@ -1797,6 +1873,18 @@ export default function Billing() {
               }
             }}
             processing={receiptRetrying}
+          />
+        )}
+
+        {/* Manager approval required when removing/reducing items after bill print */}
+        {adminOverrideOpen && (
+          <AdminOverrideModal
+            description={adminOverrideDesc}
+            onClose={() => {
+              setAdminOverrideOpen(false);
+              pendingOverrideRef.current = null;
+            }}
+            onConfirm={handleAdminOverrideConfirm}
           />
         )}
       </div>

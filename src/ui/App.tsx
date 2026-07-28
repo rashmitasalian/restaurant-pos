@@ -30,28 +30,13 @@ import restoNitiMark from "./assets/restoniti-icon.png";
 
 type Page = "tables" | "billing" | "kot" | "reports" | "customers" | "manager";
 
-export default function App() {
-  // Track whether the DB has any users (null = still loading)
-  const [hasUsers, setHasUsers] = React.useState<boolean | null>(null);
-
-  // Run DB migrations and check for existing users on first render.
-  React.useEffect(() => {
-    (async () => {
-      try {
-        await ensureIndexes();
-      } catch (e) {
-        console.error("[indexes] failed:", e);
-      }
-      // Public setup-state check. User listing is admin-only and cannot be used pre-login.
-      try {
-        setHasUsers(await hasExistingUsers());
-      } catch (e) {
-        setHasUsers(false);
-      }
-    })();
-  }, []);
-
-  const MainContent: React.FC = () => {
+function MainContent({
+  hasUsers,
+  onSetupComplete,
+}: {
+  hasUsers: boolean | null;
+  onSetupComplete: () => void;
+}) {
     const auth = React.useContext(AuthContext);
     const maintenanceRanRef = React.useRef(false);
     const [branding, setBranding] = React.useState({
@@ -297,7 +282,7 @@ export default function App() {
     if (!auth?.session) {
       // First-run: no users exist, so show setup wizard instead of login.
       if (hasUsers === false) {
-        return <SetupScreen onComplete={() => setHasUsers(true)} />;
+        return <SetupScreen onComplete={onSetupComplete} />;
       }
       return <LoginScreen />;
     }
@@ -835,13 +820,33 @@ export default function App() {
         )}
       </div>
     );
-  };
+}
+
+export default function App() {
+  const [hasUsers, setHasUsers] = React.useState<boolean | null>(null);
+
+  // Run DB migrations and check for existing users on first render.
+  React.useEffect(() => {
+    (async () => {
+      try {
+        await ensureIndexes();
+      } catch (e) {
+        console.error("[indexes] failed:", e);
+      }
+      // Public setup-state check. User listing is admin-only and cannot be used pre-login.
+      try {
+        setHasUsers(await hasExistingUsers());
+      } catch (e) {
+        setHasUsers(false);
+      }
+    })();
+  }, []);
 
   return (
     <ErrorBoundary>
       <ToastProvider>
         <AuthProvider>
-          <MainContent />
+          <MainContent hasUsers={hasUsers} onSetupComplete={() => setHasUsers(true)} />
         </AuthProvider>
       </ToastProvider>
     </ErrorBoundary>
