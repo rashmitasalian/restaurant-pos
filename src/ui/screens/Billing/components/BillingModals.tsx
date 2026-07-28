@@ -38,6 +38,48 @@ function DialogShell({
   );
 }
 
+interface VariantPickerModalProps {
+  itemName: string;
+  variants: Array<{ id?: string; name: string; price: number }>;
+  onClose: () => void;
+  onSelect: (variant: { id?: string; name: string; price: number }) => void;
+}
+
+export function VariantPickerModal({ itemName, variants, onClose, onSelect }: VariantPickerModalProps) {
+  return (
+    <DialogShell
+      ariaLabel="Select item variant"
+      className={styles.modalDialogMedium}
+      onClose={onClose}
+    >
+      <h3 className={styles.modalTitle}>Choose Variant</h3>
+      <p className={styles.modalPara} style={{ marginTop: 6, marginBottom: 12 }}>
+        {itemName}
+      </p>
+      <div className={styles.kotList}>
+        {variants.map((variant, index) => (
+          <button
+            key={`${variant.id || variant.name}-${index}`}
+            onClick={() => onSelect(variant)}
+            className={styles.orderButton}
+            style={{ marginBottom: 8 }}
+          >
+            <div className={styles.orderRowTop}>
+              <span className={styles.itemTitle}>{variant.name}</span>
+              <span className={styles.headerValue}>₹{variant.price}</span>
+            </div>
+          </button>
+        ))}
+      </div>
+      <div className={styles.modalFooter}>
+        <button onClick={onClose} className={styles.btn}>
+          Cancel
+        </button>
+      </div>
+    </DialogShell>
+  );
+}
+
 // ── Confirm Pay Modal ───────────────────────────────────────────────────────
 
 interface ConfirmPayProps {

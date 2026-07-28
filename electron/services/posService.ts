@@ -23,6 +23,7 @@ import type {
   GroceryPurchaseLineDto,
   GroceryUnit,
   MenuItemDto,
+  MenuItemVariantDto,
   OrderDto,
   OrderLineDto,
   OrderStatus,
@@ -106,6 +107,90 @@ function assertUniqueActiveSku(database: Database.Database, sku: string, exclude
   if (row) {
     throw new Error("item-sku-duplicate");
   }
+}
+
+function normalizeMenuVariants(input: unknown): MenuItemVariantDto[] {
+  if (!Array.isArray(input) || input.length === 0) {
+    return [];
+  }
+  const seen = new Set<string>();
+  return input.map((raw, index) => {
+    const name = normalizeText((raw as any)?.name);
+    if (!name) {
+      throw new Error("item-variant-name-required");
+    }
+    const key = name.toLowerCase();
+    if (seen.has(key)) {
+      throw new Error("item-variant-duplicate");
+    }
+    seen.add(key);
+    const price = parsePositiveMoney((raw as any)?.price);
+    if (price === null) {
+      throw new Error("item-variant-price-invalid");
+    }
+    const sortOrderRaw = Number((raw as any)?.sortOrder);
+    return {
+      id: String((raw as any)?.id || `item-variant:${randomUUID()}`),
+      name,
+      price,
+      sortOrder: Number.isFinite(sortOrderRaw) ? Math.trunc(sortOrderRaw) : index,
+    };
+  });
+}
+
+function getItemVariantsMap(database: Database.Database, itemIds: string[]) {
+  const map = new Map<string, MenuItemVariantDto[]>();
+  if (!itemIds.length) {
+    return map;
+  }
+  const placeholders = itemIds.map(() => "?").join(",");
+  const rows = database
+    .prepare(
+      `SELECT id, menu_item_id, name, price_paise, sort_order
+       FROM menu_item_variants
+       WHERE menu_item_id IN (${placeholders})
+       ORDER BY menu_item_id ASC, sort_order ASC, name COLLATE NOCASE ASC`,
+    )
+    .all(...itemIds) as any[];
+  for (const row of rows) {
+    const list = map.get(row.menu_item_id) || [];
+    list.push({
+      id: row.id,
+      name: row.name,
+      price: paiseToRupees(row.price_paise),
+      sortOrder: Number(row.sort_order || 0),
+    });
+    map.set(row.menu_item_id, list);
+  }
+  return map;
+}
+
+function writeItemVariants(
+  database: Database.Database,
+  menuItemId: string,
+  variants: MenuItemVariantDto[],
+) {
+  database.prepare("DELETE FROM menu_item_variants WHERE menu_item_id = ?").run(menuItemId);
+  if (!variants.length) {
+    return;
+  }
+  const insert = database.prepare(`
+    INSERT INTO menu_item_variants (
+      id, menu_item_id, name, price_paise, sort_order, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+  `);
+  const at = now();
+  variants.forEach((variant, index) => {
+    insert.run(
+      variant.id,
+      menuItemId,
+      variant.name,
+      rupeesToPaise(variant.price),
+      Number.isFinite(Number(variant.sortOrder)) ? Math.trunc(Number(variant.sortOrder)) : index,
+      at,
+      at,
+    );
+  });
 }
 
 function assertUniqueActiveCustomerPhone(
@@ -456,7 +541,7 @@ function tableFromRow(row: any): TableDto {
   };
 }
 
-function itemFromRow(row: any): MenuItemDto {
+function itemFromRow(row: any, variants: MenuItemVariantDto[] = []): MenuItemDto {
   return {
     _id: row.id,
     type: "item",
@@ -467,6 +552,7 @@ function itemFromRow(row: any): MenuItemDto {
     available: Boolean(row.available),
     favorite: Boolean(row.favorite),
     taxRateBps: row.tax_rate_bps,
+    variants,
   };
 }
 
@@ -1561,19 +1647,25 @@ export const posService = {
   },
 
   getItems(): MenuItemDto[] {
-    return getDb()
+    const database = getDb();
+    const rows = database
       .prepare(
         `SELECT mi.*, mc.name AS category_name
          FROM menu_items mi
          LEFT JOIN menu_categories mc ON mc.id = mi.category_id
          ORDER BY mi.name COLLATE NOCASE ASC`,
       )
-      .all()
-      .map(itemFromRow);
+      .all() as any[];
+    const variantsByItem = getItemVariantsMap(
+      database,
+      rows.map((row) => String(row.id)),
+    );
+    return rows.map((row) => itemFromRow(row, variantsByItem.get(String(row.id)) || []));
   },
 
   getItemById(id: string): MenuItemDto | null {
-    const row = getDb()
+    const database = getDb();
+    const row = database
       .prepare(
         `SELECT mi.*, mc.name AS category_name
          FROM menu_items mi
@@ -1581,7 +1673,11 @@ export const posService = {
          WHERE mi.id = ?`,
       )
       .get(id);
-    return row ? itemFromRow(row) : null;
+    if (!row) {
+      return null;
+    }
+    const variantsByItem = getItemVariantsMap(database, [id]);
+    return itemFromRow(row, variantsByItem.get(id) || []);
   },
 
   createItem(
@@ -1593,6 +1689,7 @@ export const posService = {
       available?: boolean;
       favorite?: boolean;
       taxRateBps?: number;
+      variants?: unknown;
     },
     actor?: string | null,
   ) {
@@ -1600,6 +1697,7 @@ export const posService = {
     const sku = normalizeSku(input.sku);
     const price = parsePositiveMoney(input.price);
     const category = normalizeCategoryName(input.category);
+    const variants = normalizeMenuVariants(input.variants);
     if (!name) {
       throw new Error("item-name-required");
     }
@@ -1629,6 +1727,7 @@ export const posService = {
           at,
           at,
         );
+      writeItemVariants(database, id, variants);
       createAuditRow(database, "menu.item.created", "item", id, actor || null, { name });
       return this.getItemById(id)!;
     });
@@ -1639,6 +1738,7 @@ export const posService = {
     const sku = normalizeSku(item.sku);
     const price = parsePositiveMoney(item.price);
     const category = normalizeCategoryName(item.category);
+    const variants = normalizeMenuVariants((item as any).variants);
     if (!name) {
       throw new Error("item-name-required");
     }
@@ -1670,6 +1770,7 @@ export const posService = {
           now(),
           item._id,
         );
+      writeItemVariants(database, item._id, variants);
       createAuditRow(database, "menu.item.updated", "item", item._id, actor || null, {});
       return this.getItemById(item._id)!;
     });
@@ -1718,6 +1819,41 @@ export const posService = {
       );
       return { ok: true };
     });
+  },
+
+  getVariantOptions(): string[] {
+    const cfg = this.getSetting("config:menu-variant-options") as any;
+    const options = Array.isArray(cfg?.options) ? cfg.options : [];
+    return options
+      .map((value: unknown) => normalizeText(value))
+      .filter((value: string) => Boolean(value));
+  },
+
+  setVariantOptions(options: string[], actor?: string | null) {
+    const normalized: string[] = [];
+    const seen = new Set<string>();
+    for (const option of options || []) {
+      const name = normalizeText(option);
+      if (!name) {
+        continue;
+      }
+      const key = name.toLowerCase();
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      normalized.push(name);
+    }
+    this.setSetting("config:menu-variant-options", { options: normalized }, actor);
+    createAuditRow(
+      getDb(),
+      "menu.variant-options.updated",
+      "config",
+      "config:menu-variant-options",
+      actor || null,
+      { count: normalized.length },
+    );
+    return { ok: true };
   },
 
   createOrder(

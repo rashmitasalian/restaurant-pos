@@ -66,6 +66,8 @@ declare global {
         deleteItem: (id: string) => Promise<any>;
         listCategories: () => Promise<string[]>;
         setCategories: (categories: string[]) => Promise<any>;
+        listVariantOptions: () => Promise<string[]>;
+        setVariantOptions: (options: string[]) => Promise<any>;
       };
       orders?: {
         create: (payload: any) => Promise<any>;

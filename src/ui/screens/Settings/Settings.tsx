@@ -8,7 +8,9 @@ import {
   setConfigTables,
   seedTables,
   getConfigCategories,
+  getConfigMenuVariantOptions,
   setConfigCategories,
+  setConfigMenuVariantOptions,
   getConfigAudit,
   setConfigAudit,
   getConfigHistory,
@@ -112,6 +114,10 @@ export default function Settings() {
   const [newCategory, setNewCategory] = React.useState("");
   const [categoryStatus, setCategoryStatus] = React.useState<string | null>(null);
   const [savingCategories, setSavingCategories] = React.useState(false);
+  const [menuVariantOptions, setMenuVariantOptions] = React.useState<string[]>([]);
+  const [newMenuVariantOption, setNewMenuVariantOption] = React.useState("");
+  const [menuVariantStatus, setMenuVariantStatus] = React.useState<string | null>(null);
+  const [savingMenuVariantOptions, setSavingMenuVariantOptions] = React.useState(false);
   const actionInFlightRef = React.useRef<Record<string, boolean>>({});
 
   const beginAction = React.useCallback((key: string) => {
@@ -194,6 +200,9 @@ export default function Settings() {
       } catch (e) {}
       try {
         setCategories(await getConfigCategories());
+      } catch (e) {}
+      try {
+        setMenuVariantOptions(await getConfigMenuVariantOptions());
       } catch (e) {}
       try {
         const auditCfg = await getConfigAudit();
@@ -737,6 +746,63 @@ export default function Settings() {
     }
     setSavingCategories(false);
     endAction("categories.save");
+  };
+
+  const addMenuVariantOption = () => {
+    const trimmed = normalizeCategoryName(newMenuVariantOption);
+    if (!trimmed) {
+      setMenuVariantStatus(validationMessage("category-name-required"));
+      setTimeout(() => setMenuVariantStatus(null), 2500);
+      return;
+    }
+    if (menuVariantOptions.some((c) => c.toLowerCase() === trimmed.toLowerCase())) {
+      setMenuVariantStatus(validationMessage("category-name-duplicate"));
+      setTimeout(() => setMenuVariantStatus(null), 2500);
+      return;
+    }
+    setMenuVariantOptions((prev) => [...prev, trimmed]);
+    setNewMenuVariantOption("");
+  };
+
+  const menuVariantOptionsIncludingDraft = () => {
+    const trimmed = normalizeCategoryName(newMenuVariantOption);
+    if (!trimmed) {
+      return menuVariantOptions;
+    }
+    if (menuVariantOptions.some((c) => c.toLowerCase() === trimmed.toLowerCase())) {
+      return null;
+    }
+    return [...menuVariantOptions, trimmed];
+  };
+
+  const removeMenuVariantOption = (option: string) => {
+    setMenuVariantOptions((prev) => prev.filter((entry) => entry !== option));
+  };
+
+  const saveMenuVariantOptions = async () => {
+    if (!beginAction("menuVariantOptions.save")) {
+      return;
+    }
+    const nextOptions = menuVariantOptionsIncludingDraft();
+    if (!nextOptions) {
+      endAction("menuVariantOptions.save");
+      setMenuVariantStatus(validationMessage("category-name-duplicate"));
+      setTimeout(() => setMenuVariantStatus(null), 2500);
+      return;
+    }
+    setSavingMenuVariantOptions(true);
+    setMenuVariantStatus(null);
+    try {
+      await setConfigMenuVariantOptions(nextOptions);
+      setMenuVariantOptions(nextOptions);
+      setNewMenuVariantOption("");
+      setMenuVariantStatus("Saved ✓");
+      setTimeout(() => setMenuVariantStatus(null), 3000);
+    } catch (e: any) {
+      setMenuVariantStatus("Save failed: " + (e?.message || String(e)));
+    }
+    setSavingMenuVariantOptions(false);
+    endAction("menuVariantOptions.save");
   };
 
   const saveAuditConfig = async () => {
@@ -2071,6 +2137,131 @@ export default function Settings() {
               }}
             >
               {categoryStatus}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Menu Variant Options Section ───────────────────────────────── */}
+      <div className="pos-card pos-card-p" style={{ marginTop: 24 }}>
+        <div
+          style={{
+            fontSize: 11,
+            fontWeight: 800,
+            color: "var(--pos-muted,#9ca3af)",
+            marginBottom: 20,
+            textTransform: "uppercase",
+            letterSpacing: "0.1em",
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
+          <span style={{ fontSize: 15 }}>📏</span>
+          Menu Variant Options
+        </div>
+
+        <p
+          style={{
+            fontSize: 13,
+            color: "var(--pos-tx-sub,#6b7280)",
+            marginBottom: 16,
+            marginTop: 0,
+          }}
+        >
+          These options appear in menu variant dropdowns (for example: Half, Full, Quarter).
+        </p>
+
+        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+          <input
+            className="pos-input"
+            placeholder="e.g. Half, Full, Family Pack…"
+            value={newMenuVariantOption}
+            onChange={(e) => setNewMenuVariantOption(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && addMenuVariantOption()}
+            style={{ flex: 1 }}
+          />
+          <button
+            onClick={addMenuVariantOption}
+            disabled={!normalizeCategoryName(newMenuVariantOption)}
+            className="pos-btn pos-btn-primary"
+          >
+            + Add
+          </button>
+        </div>
+
+        {menuVariantOptions.length === 0 ? (
+          <div style={{ fontSize: 13, color: "#d1d5db", padding: "12px 0" }}>
+            No variant options yet — add one above.
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 20 }}>
+            {menuVariantOptions.map((option) => (
+              <div
+                key={option}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "5px 12px 5px 14px",
+                  borderRadius: 20,
+                  background: "#ecfeff",
+                  border: "1.5px solid #67e8f9",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: "#155e75",
+                }}
+              >
+                {option}
+                <button
+                  onClick={() => removeMenuVariantOption(option)}
+                  title={`Remove "${option}"`}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    color: "#0e7490",
+                    fontSize: 15,
+                    lineHeight: 1,
+                    padding: "0 2px",
+                    borderRadius: 4,
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div
+          style={{
+            display: "flex",
+            gap: 10,
+            alignItems: "center",
+            paddingTop: 14,
+            borderTop: "1px solid var(--pos-border,#e5e7eb)",
+          }}
+        >
+          <button
+            onClick={saveMenuVariantOptions}
+            disabled={savingMenuVariantOptions}
+            className="pos-btn pos-btn-primary"
+          >
+            {savingMenuVariantOptions ? "Saving…" : "Save Variant Options"}
+          </button>
+          {menuVariantStatus && (
+            <div
+              style={{
+                padding: "8px 12px",
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 600,
+                background: menuVariantStatus.includes("✓") ? "#dcfce7" : "#fee2e2",
+                color: menuVariantStatus.includes("✓") ? "#16a34a" : "#dc2626",
+              }}
+            >
+              {menuVariantStatus}
             </div>
           )}
         </div>

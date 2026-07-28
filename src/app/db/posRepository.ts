@@ -216,6 +216,7 @@ export async function createItem(item: {
   price: number;
   category?: string;
   available?: boolean;
+  variants?: Array<{ id?: string; name: string; price: number; sortOrder?: number }>;
 }) {
   return api().menu!.createItem(item);
 }
@@ -639,6 +640,14 @@ export async function getConfigCategories(): Promise<string[]> {
 
 export async function setConfigCategories(categories: string[]): Promise<void> {
   await api().menu!.setCategories(categories);
+}
+
+export async function getConfigMenuVariantOptions(): Promise<string[]> {
+  return api().menu!.listVariantOptions();
+}
+
+export async function setConfigMenuVariantOptions(options: string[]): Promise<void> {
+  await api().menu!.setVariantOptions(options);
 }
 
 export type ConfigAuditDoc = ConfigDto & {

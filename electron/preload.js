@@ -100,6 +100,8 @@ contextBridge.exposeInMainWorld("pos", {
     deleteItem: (id) => authInvoke("pos:menu:delete-item", id),
     listCategories: () => authInvoke("pos:menu:list-categories"),
     setCategories: (categories) => authInvoke("pos:menu:set-categories", categories),
+    listVariantOptions: () => authInvoke("pos:menu:list-variant-options"),
+    setVariantOptions: (options) => authInvoke("pos:menu:set-variant-options", options),
   },
   orders: {
     create: (payload) => authInvoke("pos:orders:create", payload),

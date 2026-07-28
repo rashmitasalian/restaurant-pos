@@ -223,6 +223,20 @@ function runSchema(database: SqliteDatabase) {
       updated_at INTEGER NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS menu_item_variants (
+      id TEXT PRIMARY KEY,
+      menu_item_id TEXT NOT NULL REFERENCES menu_items(id) ON DELETE CASCADE,
+      name TEXT NOT NULL COLLATE NOCASE,
+      price_paise INTEGER NOT NULL CHECK (price_paise >= 0),
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      UNIQUE(menu_item_id, name)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_menu_item_variants_item
+      ON menu_item_variants(menu_item_id, sort_order, name);
+
     CREATE TABLE IF NOT EXISTS customers (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -578,6 +592,24 @@ function runSchema(database: SqliteDatabase) {
   runMigration(database, 9, "Hard-delete soft-deleted grocery items and purchases", () => {
     database.exec("DELETE FROM grocery_purchase_lines WHERE active = 0");
     database.exec("DELETE FROM grocery_items WHERE active = 0");
+  });
+
+  runMigration(database, 10, "Add menu item variants", () => {
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS menu_item_variants (
+        id TEXT PRIMARY KEY,
+        menu_item_id TEXT NOT NULL REFERENCES menu_items(id) ON DELETE CASCADE,
+        name TEXT NOT NULL COLLATE NOCASE,
+        price_paise INTEGER NOT NULL CHECK (price_paise >= 0),
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        UNIQUE(menu_item_id, name)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_menu_item_variants_item
+        ON menu_item_variants(menu_item_id, sort_order, name);
+    `);
   });
 }
 

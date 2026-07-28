@@ -6,6 +6,7 @@ import {
   updateItem,
   deleteItem,
   getConfigCategories,
+  getConfigMenuVariantOptions,
 } from "../../../app/db/posRepository";
 import {
   normalizeCategoryName,
@@ -18,6 +19,80 @@ import { useToast } from "../../context/ToastContext";
 import { useFocusTrap } from "../../hooks/useFocusTrap";
 
 const MENU_PAGE_SIZE = 50;
+
+type VariantDraft = {
+  id?: string;
+  name: string;
+  price: number;
+  sortOrder?: number;
+};
+
+function normalizeVariantDrafts(input: VariantDraft[]) {
+  const rows = (input || [])
+    .map((variant, index) => ({
+      id: variant.id,
+      name: normalizeText(variant.name),
+      price: variant.price,
+      sortOrder: Number.isFinite(Number(variant.sortOrder))
+        ? Math.trunc(Number(variant.sortOrder))
+        : index,
+    }))
+    .filter((variant) => variant.name || String(variant.price ?? "").trim() !== "");
+
+  if (!rows.length) {
+    return [] as VariantDraft[];
+  }
+
+  const seen = new Set<string>();
+  return rows.map((variant) => {
+    if (!variant.name) {
+      throw new Error("item-variant-name-required");
+    }
+    const key = variant.name.toLowerCase();
+    if (seen.has(key)) {
+      throw new Error("item-variant-duplicate");
+    }
+    seen.add(key);
+    const price = parsePositiveMoney(variant.price);
+    if (price === null) {
+      throw new Error("item-variant-price-invalid");
+    }
+    return {
+      id: variant.id,
+      name: variant.name,
+      price,
+      sortOrder: variant.sortOrder,
+    };
+  });
+}
+
+function getVariantMinPrice(variants: VariantDraft[]) {
+  if (!Array.isArray(variants) || variants.length === 0) {
+    return null;
+  }
+  const prices = variants
+    .map((variant) => parsePositiveMoney(variant.price))
+    .filter((price): price is number => price !== null);
+  if (!prices.length) {
+    return null;
+  }
+  return Math.min(...prices);
+}
+
+function getVariantPriceLabel(variants: VariantDraft[]) {
+  if (!Array.isArray(variants) || variants.length === 0) {
+    return "";
+  }
+  const prices = variants
+    .map((variant) => parsePositiveMoney(variant.price))
+    .filter((price): price is number => price !== null);
+  if (!prices.length) {
+    return "";
+  }
+  const min = Math.min(...prices);
+  const max = Math.max(...prices);
+  return min === max ? `₹${min}` : `₹${min} - ₹${max}`;
+}
 
 export default function ItemsEditor() {
   const { showToast: _showToast } = useToast();
@@ -33,6 +108,7 @@ export default function ItemsEditor() {
   const [modalPrice, setModalPrice] = React.useState<number>(100);
   const [modalCategory, setModalCategory] = React.useState("");
   const [modalAvailable, setModalAvailable] = React.useState(true);
+  const [modalVariants, setModalVariants] = React.useState<VariantDraft[]>([]);
   const [modalSaving, setModalSaving] = React.useState(false);
   // Inline edit map: itemId -> draft field overrides.
   const [editMap, setEditMap] = React.useState<
@@ -45,6 +121,7 @@ export default function ItemsEditor() {
         category?: string;
         available?: boolean;
         favorite?: boolean;
+        variants?: VariantDraft[];
       }
     >
   >({});
@@ -52,6 +129,9 @@ export default function ItemsEditor() {
   const [deletingItemId, setDeletingItemId] = React.useState<string | null>(null);
   const [bulkDeleteLoading, setBulkDeleteLoading] = React.useState(false);
   const [favoriteUpdatingId, setFavoriteUpdatingId] = React.useState<string | null>(null);
+  const [variantEditorItemId, setVariantEditorItemId] = React.useState<string | null>(null);
+  const [variantEditorDraft, setVariantEditorDraft] = React.useState<VariantDraft[]>([]);
+  const [variantEditorSaving, setVariantEditorSaving] = React.useState(false);
   const modalSavingRef = React.useRef(false);
   const saveAllLoadingRef = React.useRef(false);
   const deletingItemRef = React.useRef<string | null>(null);
@@ -60,15 +140,33 @@ export default function ItemsEditor() {
 
   // Categories loaded from DB config
   const [categories, setCategories] = React.useState<string[]>([]);
+  const [variantOptions, setVariantOptions] = React.useState<string[]>([]);
 
   React.useEffect(() => {
     (async () => {
       await seedItems();
       const all = await getItems();
       setItems(all);
-      setCategories(await getConfigCategories());
+      const [loadedCategories, loadedVariantOptions] = await Promise.all([
+        getConfigCategories(),
+        getConfigMenuVariantOptions(),
+      ]);
+      setCategories(loadedCategories);
+      setVariantOptions(loadedVariantOptions);
     })();
   }, []);
+
+  const variantNameOptions = React.useCallback(
+    (currentValue?: string) => {
+      const options = [...variantOptions];
+      const current = normalizeText(currentValue);
+      if (current && !options.some((entry) => entry.toLowerCase() === current.toLowerCase())) {
+        options.push(current);
+      }
+      return options;
+    },
+    [variantOptions],
+  );
 
   const normalizedQuery = query.trim().toLowerCase();
   const filtered = React.useMemo(
@@ -118,6 +216,7 @@ export default function ItemsEditor() {
     setModalPrice(100);
     setModalCategory("");
     setModalAvailable(true);
+    setModalVariants([]);
   }, []);
   const addItemDialogRef = useFocusTrap<HTMLDivElement>(modalOpen, closeModal);
 
@@ -127,6 +226,7 @@ export default function ItemsEditor() {
     setModalPrice(100);
     setModalCategory("");
     setModalAvailable(true);
+    setModalVariants([]);
   }, []);
 
   const onModalSave = async (addAnother = false) => {
@@ -137,11 +237,20 @@ export default function ItemsEditor() {
     const sku = normalizeSku(modalSku);
     const price = parsePositiveMoney(modalPrice);
     const category = normalizeCategoryName(modalCategory);
+    let variants: VariantDraft[] = [];
+    try {
+      variants = normalizeVariantDrafts(modalVariants);
+    } catch (e) {
+      showToast(validationMessage(e), "err");
+      return;
+    }
     if (!name) {
       showToast(validationMessage("item-name-required"), "err");
       return;
     }
-    if (price === null) {
+    const fallbackPrice = getVariantMinPrice(variants);
+    const effectivePrice = price ?? fallbackPrice;
+    if (effectivePrice === null) {
       showToast(validationMessage("item-price-invalid"), "err");
       return;
     }
@@ -154,10 +263,11 @@ export default function ItemsEditor() {
     try {
       await createItem({
         name,
-        price,
+        price: effectivePrice,
         sku: sku || undefined,
         category: category || undefined,
         available: modalAvailable,
+        variants,
       });
       const all = await getItems();
       setItems(all);
@@ -292,6 +402,7 @@ export default function ItemsEditor() {
         category: normalizeCategoryName(edits.category ?? base.category),
         available: edits.available ?? base.available !== false,
         favorite: edits.available === false ? false : (edits.favorite ?? Boolean(base.favorite)),
+        variants: edits.variants ?? (Array.isArray(base.variants) ? base.variants : []),
       };
     });
     for (const draft of drafts) {
@@ -302,7 +413,15 @@ export default function ItemsEditor() {
         showToast(validationMessage("item-name-required"), "err");
         return;
       }
-      if (draft.price === null) {
+      let normalizedVariants: VariantDraft[] = [];
+      try {
+        normalizedVariants = normalizeVariantDrafts(draft.variants || []);
+      } catch (e) {
+        showToast(`${validationMessage(e)} Check "${draft.name || "this item"}".`, "err");
+        return;
+      }
+      const fallbackPrice = getVariantMinPrice(normalizedVariants);
+      if (draft.price === null && fallbackPrice === null) {
         showToast(
           `${validationMessage("item-price-invalid")} Check "${draft.name || "this item"}".`,
           "err",
@@ -333,14 +452,20 @@ export default function ItemsEditor() {
           return Promise.resolve();
         }
         const next = drafts.find((draft) => draft._id === id) || { ...base, ...edits };
+        const variants = normalizeVariantDrafts(next.variants || []);
+        const effectivePrice = parsePositiveMoney(next.price) ?? getVariantMinPrice(variants);
+        if (effectivePrice === null) {
+          throw new Error("item-price-invalid");
+        }
         return updateItem({
           ...next,
           name: next.name,
           sku: next.sku || undefined,
-          price: Number(next.price),
+          price: Number(effectivePrice),
           category: next.category || undefined,
           available: next.available !== false,
           favorite: next.available !== false && Boolean(next.favorite),
+          variants,
         });
       });
       await Promise.all(promises);
@@ -353,6 +478,61 @@ export default function ItemsEditor() {
     } finally {
       saveAllLoadingRef.current = false;
       setSaveAllLoading(false);
+    }
+  };
+
+  const variantEditorItem = React.useMemo(
+    () => items.find((item) => item._id === variantEditorItemId) || null,
+    [items, variantEditorItemId],
+  );
+
+  const saveVariantEditor = async () => {
+    if (!variantEditorItem || variantEditorSaving) {
+      return;
+    }
+    let normalized: VariantDraft[] = [];
+    try {
+      normalized = normalizeVariantDrafts(variantEditorDraft);
+    } catch (e) {
+      showToast(validationMessage(e), "err");
+      return;
+    }
+    const fallbackPrice = getVariantMinPrice(normalized);
+    const basePrice = parsePositiveMoney(variantEditorItem.price);
+    const effectivePrice = fallbackPrice ?? basePrice;
+    if (effectivePrice === null) {
+      showToast(validationMessage("item-price-invalid"), "err");
+      return;
+    }
+    setVariantEditorSaving(true);
+    try {
+      await updateItem({
+        ...variantEditorItem,
+        price: effectivePrice,
+        variants: normalized,
+      });
+      const all = await getItems();
+      setItems(all);
+      setEditMap((prev) => {
+        const current = prev[variantEditorItem._id];
+        if (!current) {
+          return prev;
+        }
+        return {
+          ...prev,
+          [variantEditorItem._id]: {
+            ...current,
+            variants: normalized,
+            ...(fallbackPrice !== null ? { price: fallbackPrice } : {}),
+          },
+        };
+      });
+      setVariantEditorItemId(null);
+      showToast("Variants saved");
+    } catch (e) {
+      showToast(validationMessage(e, "Failed to save variants"), "err");
+    } finally {
+      setVariantEditorSaving(false);
     }
   };
 
@@ -443,7 +623,7 @@ export default function ItemsEditor() {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "28px 1fr 90px 130px 130px 70px 44px 44px",
+              gridTemplateColumns: "28px 1fr 90px 130px 150px 130px 70px 44px 44px",
               columnGap: 8,
               padding: "8px 14px",
               borderRadius: 8,
@@ -466,6 +646,7 @@ export default function ItemsEditor() {
             <span>Name</span>
             <span>SKU</span>
             <span>Category</span>
+            <span>Variants</span>
             <span style={{ textAlign: "right" }}>Price (₹)</span>
             <span style={{ textAlign: "center" }}>On Menu</span>
             <span style={{ textAlign: "center" }}>★</span>
@@ -599,6 +780,17 @@ export default function ItemsEditor() {
               const currentAvailable = editMap[it._id]?.available ?? it.available !== false;
               const currentFavorite =
                 currentAvailable && (editMap[it._id]?.favorite ?? Boolean(it.favorite));
+              const currentVariants =
+                editMap[it._id]?.variants ??
+                (Array.isArray(it.variants)
+                  ? it.variants.map((variant: any, index: number) => ({
+                      id: variant.id,
+                      name: variant.name,
+                      price: Number(variant.price),
+                      sortOrder: Number(variant.sortOrder ?? index),
+                    }))
+                  : []);
+                  const variantPriceLabel = getVariantPriceLabel(currentVariants);
               const isConfirmingDelete = confirmDeleteId === it._id;
               const isDeleting = deletingItemId === it._id;
               const isFavoriteUpdating = favoriteUpdatingId === it._id;
@@ -607,7 +799,7 @@ export default function ItemsEditor() {
                   key={it._id}
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "28px 1fr 90px 130px 130px 70px 44px 44px",
+                    gridTemplateColumns: "28px 1fr 90px 130px 150px 130px 70px 44px 44px",
                     columnGap: 8,
                     alignItems: "center",
                     padding: "10px 14px",
@@ -784,6 +976,23 @@ export default function ItemsEditor() {
                       </div>
 
                       {/* Editable price */}
+                      <div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setVariantEditorItemId(it._id);
+                            setVariantEditorDraft(currentVariants);
+                          }}
+                          className="pos-btn pos-btn-secondary"
+                          style={{ width: "100%", padding: "6px 8px", fontSize: 12 }}
+                        >
+                          {currentVariants.length > 0
+                            ? `${currentVariants.length} option${currentVariants.length !== 1 ? "s" : ""}`
+                            : "No variants"}
+                        </button>
+                      </div>
+
+                      {/* Editable price */}
                       <div
                         style={{
                           display: "flex",
@@ -792,31 +1001,53 @@ export default function ItemsEditor() {
                           gap: 4,
                         }}
                       >
-                        <span style={{ fontSize: 12, color: "#9ca3af", flexShrink: 0 }}>₹</span>
-                        <input
-                          type="number"
-                          value={currentPrice}
-                          onChange={(e) =>
-                            setEditMap((m) => ({
-                              ...m,
-                              [it._id]: { ...m[it._id], price: Number(e.target.value) },
-                            }))
-                          }
-                          style={{
-                            width: 0,
-                            flex: 1,
-                            padding: "6px 8px",
-                            borderRadius: 7,
-                            border: edited ? "1.5px solid #f59e0b" : "1px solid #e5e7eb",
-                            fontSize: 13,
-                            fontWeight: 600,
-                            fontFamily: "inherit",
-                            textAlign: "right",
-                            background: edited ? "#fffbeb" : "#fff",
-                            outline: "none",
-                            boxSizing: "border-box",
-                          }}
-                        />
+                        {currentVariants.length > 0 ? (
+                          <div
+                            title="Price is derived from variants"
+                            style={{
+                              width: "100%",
+                              padding: "6px 8px",
+                              borderRadius: 7,
+                              border: edited ? "1.5px solid #f59e0b" : "1px solid #e5e7eb",
+                              fontSize: 12,
+                              fontWeight: 700,
+                              textAlign: "right",
+                              color: "#374151",
+                              background: edited ? "#fffbeb" : "#f9fafb",
+                              boxSizing: "border-box",
+                            }}
+                          >
+                            {variantPriceLabel || "From variants"}
+                          </div>
+                        ) : (
+                          <>
+                            <span style={{ fontSize: 12, color: "#9ca3af", flexShrink: 0 }}>₹</span>
+                            <input
+                              type="number"
+                              value={currentPrice}
+                              onChange={(e) =>
+                                setEditMap((m) => ({
+                                  ...m,
+                                  [it._id]: { ...m[it._id], price: Number(e.target.value) },
+                                }))
+                              }
+                              style={{
+                                width: 0,
+                                flex: 1,
+                                padding: "6px 8px",
+                                borderRadius: 7,
+                                border: edited ? "1.5px solid #f59e0b" : "1px solid #e5e7eb",
+                                fontSize: 13,
+                                fontWeight: 600,
+                                fontFamily: "inherit",
+                                textAlign: "right",
+                                background: edited ? "#fffbeb" : "#fff",
+                                outline: "none",
+                                boxSizing: "border-box",
+                              }}
+                            />
+                          </>
+                        )}
                       </div>
 
                       {/* Available toggle */}
@@ -1173,6 +1404,138 @@ export default function ItemsEditor() {
                   ))}
                 </select>
               </div>
+              <div>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    marginBottom: 8,
+                  }}
+                >
+                  <label
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 600,
+                      color: "#374151",
+                      display: "block",
+                    }}
+                  >
+                    Variants (optional)
+                  </label>
+                  <button
+                    type="button"
+                    className="pos-btn pos-btn-secondary"
+                    style={{ padding: "4px 10px", fontSize: 12 }}
+                    onClick={() =>
+                      setModalVariants((prev) => [
+                        ...prev,
+                        {
+                          name: variantOptions[0] || "",
+                          price: modalPrice > 0 ? modalPrice : 100,
+                          sortOrder: prev.length,
+                        },
+                      ])
+                    }
+                  >
+                    + Add Variant
+                  </button>
+                </div>
+                {variantOptions.length === 0 && (
+                  <div style={{ fontSize: 12, color: "#b45309", marginBottom: 8 }}>
+                    Configure variant options in Settings to use dropdown variants.
+                  </div>
+                )}
+                {modalVariants.length === 0 ? (
+                  <div style={{ fontSize: 12, color: "#9ca3af" }}>
+                    Example: Half / Full with different prices.
+                  </div>
+                ) : (
+                  <div style={{ display: "grid", gap: 8 }}>
+                    {modalVariants.map((variant, index) => (
+                      <div
+                        key={`${variant.id || "new"}-${index}`}
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "1fr 120px 40px",
+                          gap: 8,
+                          alignItems: "center",
+                        }}
+                      >
+                        <select
+                          value={variant.name}
+                          onChange={(e) =>
+                            setModalVariants((prev) =>
+                              prev.map((row, rowIndex) =>
+                                rowIndex === index ? { ...row, name: e.target.value } : row,
+                              ),
+                            )
+                          }
+                          style={{
+                            width: "100%",
+                            padding: "8px 10px",
+                            borderRadius: 8,
+                            border: "1.5px solid #d1d5db",
+                            fontSize: 13,
+                            background: "#fff",
+                            color: variant.name ? "#111827" : "#9ca3af",
+                            fontFamily: "inherit",
+                            cursor: "pointer",
+                            boxSizing: "border-box",
+                          }}
+                        >
+                          <option value="">Select variant…</option>
+                          {variantNameOptions(variant.name).map((nameOption) => (
+                            <option key={nameOption} value={nameOption}>
+                              {nameOption}
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          type="number"
+                          placeholder="Price"
+                          value={variant.price}
+                          onChange={(e) =>
+                            setModalVariants((prev) =>
+                              prev.map((row, rowIndex) =>
+                                rowIndex === index ? { ...row, price: Number(e.target.value) } : row,
+                              ),
+                            )
+                          }
+                          style={{
+                            width: "100%",
+                            padding: "8px 10px",
+                            borderRadius: 8,
+                            border: "1.5px solid #d1d5db",
+                            fontSize: 13,
+                            boxSizing: "border-box",
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setModalVariants((prev) => prev.filter((_, rowIndex) => rowIndex !== index))
+                          }
+                          title="Remove variant"
+                          style={{
+                            width: 34,
+                            height: 34,
+                            borderRadius: 8,
+                            border: "none",
+                            background: "#fff1f2",
+                            color: "#dc2626",
+                            cursor: "pointer",
+                            fontSize: 18,
+                            lineHeight: 1,
+                          }}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
               <label
                 style={{
                   display: "flex",
@@ -1254,6 +1617,202 @@ export default function ItemsEditor() {
               >
                 {modalSaving ? "Saving…" : "Save Item"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Item variant editor modal */}
+      {variantEditorItem && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 99999,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "rgba(0,0,0,0.45)",
+          }}
+          onClick={() => setVariantEditorItemId(null)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Variants for ${variantEditorItem.name}`}
+            tabIndex={-1}
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: 560,
+              maxWidth: "95vw",
+              background: "#fff",
+              borderRadius: 14,
+              padding: "22px 24px",
+              boxShadow: "0 16px 48px rgba(0,0,0,0.18)",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: 12,
+              }}
+            >
+              <div>
+                <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: "#111827" }}>
+                  Variants · {variantEditorItem.name}
+                </h3>
+                <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>
+                  Add options like Half/Full with different prices.
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setVariantEditorItemId(null)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  color: "#9ca3af",
+                  fontSize: 20,
+                  lineHeight: 1,
+                }}
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+
+            <div style={{ display: "grid", gap: 8 }}>
+              {variantOptions.length === 0 && (
+                <div style={{ fontSize: 12, color: "#b45309" }}>
+                  Configure variant options in Settings to use dropdown variants.
+                </div>
+              )}
+              {variantEditorDraft.length === 0 && (
+                <div style={{ fontSize: 12, color: "#9ca3af" }}>
+                  No variants yet. Use Add Variant to create one.
+                </div>
+              )}
+              {variantEditorDraft.map((variant, index) => (
+                <div
+                  key={`${variant.id || "new"}-${index}`}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 130px 40px",
+                    gap: 8,
+                    alignItems: "center",
+                  }}
+                >
+                  <select
+                    value={variant.name}
+                    onChange={(e) =>
+                      setVariantEditorDraft((prev) =>
+                        prev.map((row, rowIndex) =>
+                          rowIndex === index ? { ...row, name: e.target.value } : row,
+                        ),
+                      )
+                    }
+                    style={{
+                      width: "100%",
+                      padding: "8px 10px",
+                      borderRadius: 8,
+                      border: "1.5px solid #d1d5db",
+                      fontSize: 13,
+                      background: "#fff",
+                      color: variant.name ? "#111827" : "#9ca3af",
+                      fontFamily: "inherit",
+                      cursor: "pointer",
+                      boxSizing: "border-box",
+                    }}
+                  >
+                    <option value="">Select variant…</option>
+                    {variantNameOptions(variant.name).map((nameOption) => (
+                      <option key={nameOption} value={nameOption}>
+                        {nameOption}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="number"
+                    placeholder="Price"
+                    value={variant.price}
+                    onChange={(e) =>
+                      setVariantEditorDraft((prev) =>
+                        prev.map((row, rowIndex) =>
+                          rowIndex === index ? { ...row, price: Number(e.target.value) } : row,
+                        ),
+                      )
+                    }
+                    style={{
+                      width: "100%",
+                      padding: "8px 10px",
+                      borderRadius: 8,
+                      border: "1.5px solid #d1d5db",
+                      fontSize: 13,
+                      boxSizing: "border-box",
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setVariantEditorDraft((prev) => prev.filter((_, rowIndex) => rowIndex !== index))
+                    }
+                    title="Remove variant"
+                    style={{
+                      width: 34,
+                      height: 34,
+                      borderRadius: 8,
+                      border: "none",
+                      background: "#fff1f2",
+                      color: "#dc2626",
+                      cursor: "pointer",
+                      fontSize: 18,
+                      lineHeight: 1,
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginTop: 16 }}>
+              <button
+                type="button"
+                className="pos-btn pos-btn-secondary"
+                onClick={() =>
+                  setVariantEditorDraft((prev) => [
+                    ...prev,
+                    {
+                      name: variantOptions[0] || "",
+                      price: Number(editMap[variantEditorItem._id]?.price ?? variantEditorItem.price ?? 0),
+                      sortOrder: prev.length,
+                    },
+                  ])
+                }
+              >
+                + Add Variant
+              </button>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  type="button"
+                  className="pos-btn pos-btn-secondary"
+                  onClick={() => setVariantEditorItemId(null)}
+                  disabled={variantEditorSaving}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="pos-btn pos-btn-primary"
+                  onClick={saveVariantEditor}
+                  disabled={variantEditorSaving}
+                >
+                  {variantEditorSaving ? "Saving..." : "Save Variants"}
+                </button>
+              </div>
             </div>
           </div>
         </div>

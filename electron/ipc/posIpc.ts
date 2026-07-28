@@ -219,6 +219,17 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
     const user = requireSession(event, token, ADMIN_ROLES);
     return posService.setCategories(categories, user.username);
   });
+  ipcMain.handle("pos:menu:list-variant-options", (event, token?: string | null) => {
+    requireSession(event, token);
+    return posService.getVariantOptions();
+  });
+  ipcMain.handle(
+    "pos:menu:set-variant-options",
+    (event, token: string | null, options: string[]) => {
+      const user = requireSession(event, token, ADMIN_ROLES);
+      return posService.setVariantOptions(options, user.username);
+    },
+  );
 
   ipcMain.handle("pos:orders:create", (event, token: string | null, payload) => {
     const user = requireSession(event, token);

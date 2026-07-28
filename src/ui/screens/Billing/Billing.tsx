@@ -59,6 +59,7 @@ import {
   NewDeliveryModal,
   AssignRiderModal,
   PrintFailedModal,
+  VariantPickerModal,
 } from "./components/BillingModals";
 import { buildReceiptLines, buildKotLines, buildKotVoidLines } from "./utils/receiptBuilder";
 import type { ReceiptBranding } from "./utils/receiptBuilder";
@@ -73,6 +74,12 @@ type KotVoidRequest = {
   itemName: string;
   finalQty: number;
   voidQty: number;
+};
+
+type VariantSelectionState = {
+  item: any;
+  quantity: number;
+  refocus: boolean;
 };
 
 type BillingBusyAction =
@@ -101,6 +108,34 @@ function formatCurrency(v: number) {
   } catch {
     return `₹${Math.round(v * 100) / 100}`;
   }
+}
+
+function itemPriceSummary(item: any, formatter: (value: number) => string) {
+  const variants = Array.isArray(item?.variants) ? item.variants : [];
+  if (!variants.length) {
+    return formatter(Number(item?.price || 0));
+  }
+  const prices = variants
+    .map((variant: any) => Number(variant?.price))
+    .filter((price: number) => Number.isFinite(price) && price > 0);
+  if (!prices.length) {
+    return formatter(Number(item?.price || 0));
+  }
+  const min = Math.min(...prices);
+  const max = Math.max(...prices);
+  if (min === max) {
+    return formatter(min);
+  }
+  return `${formatter(min)} - ${formatter(max)}`;
+}
+
+function extractVariantNameFromLine(lineName: string, baseName?: string) {
+  const name = String(lineName || "").trim();
+  const base = String(baseName || "").trim();
+  const escapedBase = base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = base ? new RegExp(`^${escapedBase}\\s*\\(([^)]+)\\)\\s*$`, "i") : null;
+  const match = pattern ? pattern.exec(name) : null;
+  return match?.[1]?.trim() || "";
 }
 
 function deriveOrderType(order: any, tableNum: number | null): "table" | "takeaway" | "delivery" {
@@ -269,6 +304,9 @@ export default function Billing() {
     retry: () => void;
     finish: () => void;
   } | null>(null);
+  const [variantSelection, setVariantSelection] = React.useState<VariantSelectionState | null>(
+    null,
+  );
 
   const [busyActions, setBusyActions] = React.useState<Partial<Record<BillingBusyAction, boolean>>>(
     {},
@@ -324,6 +362,15 @@ export default function Billing() {
     () => favorites.slice(0, QUICK_FAVORITE_SHORTCUT_LIMIT),
     [favorites],
   );
+  const menuItemsById = React.useMemo(() => {
+    const map: Record<string, any> = {};
+    for (const item of items || []) {
+      if (item?._id) {
+        map[item._id] = item;
+      }
+    }
+    return map;
+  }, [items]);
   const hasItems = Boolean(order && (order.items || []).length > 0);
   const unsentKotItems = React.useMemo(() => getUnsentKotItems(order), [order]);
   const isPaid = order?.status === "paid";
@@ -533,26 +580,39 @@ export default function Billing() {
   // the latest version (which closes over the current loadTableStatuses).
   loadTableRef.current = loadTable;
 
-  const addToOrder = async (item: any, quantity = 1, refocus = true) => {
+  const addToOrder = async (
+    item: any,
+    quantity = 1,
+    refocus = true,
+    selectedVariant?: { id?: string; name: string; price: number },
+  ) => {
     if (!order) {
       showToast("Open or select a table first", "error");
       return;
     }
+    const variants = Array.isArray(item?.variants) ? item.variants : [];
+    if (!selectedVariant && variants.length > 0) {
+      setVariantSelection({ item, quantity, refocus });
+      return;
+    }
+    const lineName = selectedVariant ? `${item.name} (${selectedVariant.name})` : item.name;
+    const lineRate = selectedVariant ? Number(selectedVariant.price) : Number(item.price);
     try {
       const res = await addItemToOrder(order._id, {
         menuItemId: item._id || null,
-        name: item.name,
+        name: lineName,
         categoryName: item.category || null,
         qty: quantity,
-        rate: item.price,
+        rate: lineRate,
       });
       setOrder(res);
       // find the item by name (may have been merged, not necessarily the last row)
       const addedLine = [...(res.items || [])]
         .reverse()
-        .find((l: any) => l.name.toLowerCase() === item.name.toLowerCase());
+        .find((l: any) => l.name.toLowerCase() === lineName.toLowerCase());
       setLastAddedId(addedLine?.id ?? null);
       window.dispatchEvent(new Event("orders-changed"));
+      setVariantSelection(null);
       if (refocus) {
         setTimeout(() => searchRef.current?.focus(), 10);
       }
@@ -692,6 +752,66 @@ export default function Billing() {
     } catch (e: any) {
       logger.error("Failed to save order rate", e);
       showToast(e?.message || "Failed to save rate", "error");
+    }
+  };
+
+  const changeLineVariant = async (lineId: string, variantName: string) => {
+    if (!order) {
+      return;
+    }
+    const line = (order.items || []).find((candidate: any) => candidate.id === lineId);
+    if (!line || !line.menuItemId) {
+      return;
+    }
+    if (Math.max(0, Number(line.kotPrintedQty || 0)) > 0) {
+      showToast("Sent kitchen items cannot switch variant. Void and re-add this item.", "error");
+      return;
+    }
+    const menuItem = menuItemsById[line.menuItemId];
+    const variants = Array.isArray(menuItem?.variants) ? menuItem.variants : [];
+    const nextVariant = variants.find(
+      (variant: any) => String(variant?.name || "").toLowerCase() === variantName.toLowerCase(),
+    );
+    if (!nextVariant) {
+      return;
+    }
+    const nextLineName = `${menuItem.name} (${nextVariant.name})`;
+    const nextRate = Number(nextVariant.price);
+    if (line.name === nextLineName && Number(line.rate) === nextRate) {
+      return;
+    }
+    try {
+      const mergeTarget = (order.items || []).find(
+        (entry: any) =>
+          entry.id !== lineId &&
+          String(entry.name || "").toLowerCase() === nextLineName.toLowerCase() &&
+          Number(entry.rate) === nextRate &&
+          String(entry.menuItemId || "") === String(line.menuItemId || ""),
+      );
+
+      const nextLines = mergeTarget
+        ? order.items
+            .map((entry: any) => {
+              if (entry.id === mergeTarget.id) {
+                return { ...entry, qty: Number(entry.qty || 0) + Number(line.qty || 0) };
+              }
+              return entry;
+            })
+            .filter((entry: any) => entry.id !== lineId)
+        : order.items.map((entry: any) =>
+            entry.id === lineId ? { ...entry, name: nextLineName, rate: nextRate } : entry,
+          );
+
+      const updated = await updateOrderLines(
+        order._id,
+        nextLines,
+      );
+      setOrder(updated);
+      window.dispatchEvent(new Event("orders-changed"));
+      setTimeout(() => searchRef.current?.focus(), 10);
+    } catch (e: any) {
+      logger.error("Failed to switch line variant", e);
+      showToast(e?.message || "Failed to switch variant", "error");
     }
   };
 
@@ -1620,7 +1740,10 @@ export default function Billing() {
                         >
                           <div className={styles.favTitle}>{f.name}</div>
                           <div className={styles.favMeta}>
-                            {formatCurrency(f.price)}
+                            {itemPriceSummary(f, formatCurrency)}
+                            {Array.isArray(f.variants) && f.variants.length > 0
+                              ? ` · ${f.variants.length} option${f.variants.length !== 1 ? "s" : ""}`
+                              : ""}
                             {shortcutNumber ? ` · [${shortcutNumber}]` : ""}
                           </div>
                         </button>
@@ -1635,6 +1758,7 @@ export default function Billing() {
                     <div className={styles.orderList}>
                       <OrderList
                         items={order?.items || []}
+                        menuItemsById={menuItemsById}
                         editingQty={editingQty}
                         editingRate={editingRate}
                         setEditingQty={setEditingQty}
@@ -1643,6 +1767,7 @@ export default function Billing() {
                         commitRate={commitRate}
                         removeLine={removeLine}
                         updateOrderQty={updateOrderQty}
+                        onChangeVariant={changeLineVariant}
                       />
                     </div>
                   ) : (
@@ -1795,6 +1920,22 @@ export default function Billing() {
             onClose={() => setAssignRiderOpen(false)}
             onConfirm={confirmAssignRider}
             processing={assignRiderProcessing}
+          />
+        )}
+
+        {variantSelection && Array.isArray(variantSelection.item?.variants) && (
+          <VariantPickerModal
+            itemName={variantSelection.item.name}
+            variants={variantSelection.item.variants}
+            onClose={() => setVariantSelection(null)}
+            onSelect={(variant) =>
+              addToOrder(
+                variantSelection.item,
+                variantSelection.quantity,
+                variantSelection.refocus,
+                variant,
+              )
+            }
           />
         )}
 

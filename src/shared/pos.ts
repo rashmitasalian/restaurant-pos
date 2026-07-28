@@ -44,6 +44,14 @@ export type MenuItemDto = {
   available?: boolean;
   favorite?: boolean;
   taxRateBps?: number;
+  variants?: MenuItemVariantDto[];
+};
+
+export type MenuItemVariantDto = {
+  id: string;
+  name: string;
+  price: number;
+  sortOrder?: number;
 };
 
 export type OrderLineDto = {
