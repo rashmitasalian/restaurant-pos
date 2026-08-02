@@ -3,6 +3,7 @@ export type ManagerSection =
   | "menu"
   | "history"
   | "staff"
+  | "attendance"
   | "users"
   | "audit"
   | "settings";
@@ -12,6 +13,7 @@ export const MANAGER_SECTION_HASH: Record<ManagerSection, string> = {
   menu: "#menu",
   history: "#history",
   staff: "#staff",
+  attendance: "#attendance",
   users: "#users",
   audit: "#audit",
   settings: "#settings",
@@ -33,6 +35,8 @@ export function managerSectionFromHash(hash: string): ManagerSection | null {
     "#menu": "menu",
     "#history": "history",
     "#staff": "staff",
+    "#attendance": "attendance",
+    "#manager-attendance": "attendance",
     "#users": "users",
     "#audit": "audit",
     "#settings": "settings",

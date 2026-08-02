@@ -15,6 +15,8 @@ import {
   setConfigAudit,
   getConfigHistory,
   setConfigHistory,
+  getConfigShifts,
+  setConfigShifts,
   regenerateRecoveryCodes,
   getConfigGst,
   setConfigGst,
@@ -33,12 +35,35 @@ import {
   getUpdateStatus,
   rollbackLastUpdate,
   exportDiagnostics,
+  type AttendanceShiftConfig,
   type PrintJobDoc,
 } from "../../../app/db/posRepository";
 import { DEFAULT_GST_CONFIG, isValidGstin, normalizeGstConfig } from "../../../shared/gst";
 import { RECOVERY_CODE_COUNT } from "../../../shared/auth";
 import { normalizeCategoryName, validationMessage } from "../../../shared/validation";
 import { processRestaurantLogoFile, type ReceiptLogoRaster } from "../../utils/logoProcessing";
+
+const DEFAULT_ATTENDANCE_SHIFTS: AttendanceShiftConfig[] = [
+  { id: "morning", label: "Morning", hours: 8 },
+  { id: "evening", label: "Evening", hours: 8 },
+  { id: "night", label: "Night", hours: 8 },
+  { id: "half-day", label: "Half Day", hours: 4 },
+];
+
+function mergeShiftConfig(input: AttendanceShiftConfig[]) {
+  const map = new Map(
+    (Array.isArray(input) ? input : []).map((entry) => [entry.id.toLowerCase(), entry]),
+  );
+  return DEFAULT_ATTENDANCE_SHIFTS.map((base) => {
+    const found = map.get(base.id);
+    const hours = Number(found?.hours);
+    return {
+      id: base.id,
+      label: String(found?.label || base.label),
+      hours: Number.isFinite(hours) && hours > 0 ? hours : base.hours,
+    };
+  });
+}
 
 export default function Settings() {
   const auth = React.useContext(AuthContext);
@@ -108,6 +133,13 @@ export default function Settings() {
   const [historyRetentionDays, setHistoryRetentionDays] = React.useState<number | null>(null);
   const [historyStatus, setHistoryStatus] = React.useState<string | null>(null);
   const [savingHistory, setSavingHistory] = React.useState(false);
+
+  // ── Attendance shift config ────────────────────────────────────────────────
+  const [attendanceShifts, setAttendanceShifts] = React.useState<AttendanceShiftConfig[]>(
+    DEFAULT_ATTENDANCE_SHIFTS,
+  );
+  const [shiftStatus, setShiftStatus] = React.useState<string | null>(null);
+  const [savingShifts, setSavingShifts] = React.useState(false);
 
   // ── Categories config ────────────────────────────────────────────────────────
   const [categories, setCategories] = React.useState<string[]>([]);
@@ -211,6 +243,10 @@ export default function Settings() {
       try {
         const historyCfg = await getConfigHistory();
         setHistoryRetentionDays(historyCfg.retentionDays);
+      } catch (e) {}
+      try {
+        const shifts = await getConfigShifts();
+        setAttendanceShifts(mergeShiftConfig(shifts));
       } catch (e) {}
       try {
         const gstCfg = normalizeGstConfig(await getConfigGst());
@@ -837,6 +873,44 @@ export default function Settings() {
     }
     setSavingHistory(false);
     endAction("history.save");
+  };
+
+  const setShiftHours = (id: string, hours: number) => {
+    setAttendanceShifts((prev) =>
+      prev.map((shift) => (shift.id === id ? { ...shift, hours } : shift)),
+    );
+  };
+
+  const saveShiftConfig = async () => {
+    if (!beginAction("attendance.shifts.save")) {
+      return;
+    }
+    const invalid = attendanceShifts.find(
+      (shift) => !Number.isFinite(shift.hours) || shift.hours <= 0 || shift.hours > 24,
+    );
+    if (invalid) {
+      endAction("attendance.shifts.save");
+      setShiftStatus("Shift hours must be between 0.5 and 24");
+      return;
+    }
+
+    setSavingShifts(true);
+    setShiftStatus(null);
+    try {
+      const sanitized = attendanceShifts.map((shift) => ({
+        id: shift.id,
+        label: shift.label,
+        hours: Math.round(shift.hours * 100) / 100,
+      }));
+      await setConfigShifts(sanitized);
+      setAttendanceShifts(sanitized);
+      setShiftStatus("Saved ✓");
+      setTimeout(() => setShiftStatus(null), 3000);
+    } catch (e: any) {
+      setShiftStatus("Save failed: " + (e?.message || String(e)));
+    }
+    setSavingShifts(false);
+    endAction("attendance.shifts.save");
   };
 
   const regenerateAdminRecoveryCodes = async () => {
@@ -2262,6 +2336,92 @@ export default function Settings() {
               }}
             >
               {menuVariantStatus}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Attendance Shift Master Section */}
+      <div className="pos-card pos-card-p" style={{ marginBottom: 24 }}>
+        <div
+          style={{
+            fontSize: 11,
+            fontWeight: 800,
+            color: "var(--pos-muted,#9ca3af)",
+            marginBottom: 20,
+            textTransform: "uppercase",
+            letterSpacing: "0.1em",
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
+          <span style={{ fontSize: 15 }}>⏱</span>
+          Attendance Shift Master
+        </div>
+
+        <p style={{ fontSize: 13, color: "#6b7280", marginBottom: 16, lineHeight: 1.6 }}>
+          Configure standard working hours for each shift. Attendance overtime is computed using
+          these values.
+        </p>
+
+        <div style={{ display: "grid", gap: 10, marginBottom: 20 }}>
+          {attendanceShifts.map((shift) => (
+            <div
+              key={shift.id}
+              style={{
+                display: "grid",
+                gridTemplateColumns: "minmax(160px, 1fr) 120px auto",
+                gap: 10,
+                alignItems: "center",
+              }}
+            >
+              <div style={{ fontSize: 13, fontWeight: 700, color: "var(--pos-tx,#111827)" }}>
+                {shift.label}
+              </div>
+              <input
+                type="number"
+                min={0.5}
+                max={24}
+                step={0.5}
+                value={shift.hours}
+                onChange={(e) => setShiftHours(shift.id, Number(e.target.value) || 0)}
+                className="pos-input"
+                aria-label={`${shift.label} hours`}
+              />
+              <span style={{ fontSize: 12, color: "var(--pos-tx-sub,#6b7280)" }}>hours</span>
+            </div>
+          ))}
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            gap: 10,
+            alignItems: "center",
+            paddingTop: 14,
+            borderTop: "1px solid var(--pos-border,#e5e7eb)",
+          }}
+        >
+          <button
+            onClick={saveShiftConfig}
+            disabled={savingShifts}
+            className="pos-btn pos-btn-primary"
+          >
+            {savingShifts ? "Saving..." : "Save Shift Master"}
+          </button>
+          {shiftStatus && (
+            <div
+              style={{
+                padding: "8px 12px",
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 600,
+                background: shiftStatus.includes("✓") ? "#dcfce7" : "#fee2e2",
+                color: shiftStatus.includes("✓") ? "#16a34a" : "#dc2626",
+              }}
+            >
+              {shiftStatus}
             </div>
           )}
         </div>

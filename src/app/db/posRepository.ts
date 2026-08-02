@@ -1,5 +1,7 @@
 import type {
   AuditDto,
+  AttendanceDto,
+  AttendanceStatus,
   ConfigDto,
   FoodCostSummaryDto,
   GstConfigDto,
@@ -28,6 +30,7 @@ export type OrderDoc = OrderDto;
 export type ItemDoc = MenuItemDto;
 export type UserDoc = UserDto;
 export type StaffDoc = StaffDto;
+export type AttendanceDoc = AttendanceDto;
 export type AuditDoc = AuditDto;
 export type PrintJobDoc = PrintJobDto;
 export type GroceryItemDoc = GroceryItemDto;
@@ -256,6 +259,48 @@ export async function updateStaff(
 
 export async function deleteStaff(id: string): Promise<void> {
   await staffApi().delete(id);
+}
+
+function attendanceApi() {
+  const attendance = api().attendance;
+  if (!attendance?.list || !attendance?.upsert || !attendance?.copy || !attendance?.delete) {
+    throw new Error("pos-attendance-api-unavailable");
+  }
+  return attendance;
+}
+
+export async function listAttendance(input: {
+  date: string;
+  shiftId?: string | null;
+  status?: AttendanceStatus | null;
+  search?: string;
+}): Promise<AttendanceDoc[]> {
+  return attendanceApi().list(input);
+}
+
+export async function upsertAttendanceRows(input: {
+  attendanceDate: string;
+  rows: Array<{
+    id?: string;
+    staffId: string;
+    shiftId?: string | null;
+    status: AttendanceStatus;
+    checkInTime?: string | null;
+    checkOutTime?: string | null;
+    breakMinutes?: number;
+    overtimeMinutes?: number | null;
+    remarks?: string | null;
+  }>;
+}): Promise<AttendanceDoc[]> {
+  return attendanceApi().upsert(input);
+}
+
+export async function copyAttendance(fromDate: string, toDate: string): Promise<AttendanceDoc[]> {
+  return attendanceApi().copy(fromDate, toDate);
+}
+
+export async function deleteAttendance(id: string): Promise<{ ok: boolean }> {
+  return attendanceApi().delete(id);
 }
 
 export async function createUser(
@@ -680,6 +725,28 @@ export async function getConfigHistory(): Promise<{ retentionDays: number | null
 
 export async function setConfigHistory(cfg: { retentionDays: number | null }): Promise<void> {
   await api().settings!.set("config:history", cfg);
+}
+
+export type AttendanceShiftConfig = {
+  id: string;
+  label: string;
+  hours: number;
+};
+
+export async function getConfigShifts(): Promise<AttendanceShiftConfig[]> {
+  const cfg = await api().settings!.get("config:attendance");
+  const shifts = Array.isArray((cfg as any)?.shifts) ? (cfg as any).shifts : [];
+  return shifts
+    .map((entry: any) => ({
+      id: String(entry?.id || "").trim().toLowerCase(),
+      label: String(entry?.label || "").trim(),
+      hours: Number(entry?.hours || 0),
+    }))
+    .filter((entry: AttendanceShiftConfig) => entry.id && entry.label && entry.hours > 0);
+}
+
+export async function setConfigShifts(shifts: AttendanceShiftConfig[]): Promise<void> {
+  await api().settings!.set("config:attendance", { shifts });
 }
 
 export async function pruneOrderHistory(): Promise<number> {

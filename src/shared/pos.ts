@@ -4,6 +4,14 @@ export type OrderType = "table" | "takeaway" | "delivery";
 export type OrderStatus = "open" | "held" | "ready" | "assigned" | "paid" | "cancelled";
 export type PaymentMethod = "cash" | "upi" | "card" | "voucher" | "online" | "split" | "other";
 export type KotStatus = "pending" | "sent" | "printed" | "failed";
+export type AttendanceStatus =
+  | "present"
+  | "absent"
+  | "half-day"
+  | "leave"
+  | "holiday"
+  | "week-off"
+  | "late";
 export type GroceryUnit =
   | "g"
   | "kg"
@@ -145,6 +153,26 @@ export type StaffDto = {
   active?: boolean;
 };
 
+export type AttendanceDto = {
+  id: string;
+  staffId: string;
+  staffName: string;
+  role?: string | null;
+  attendanceDate: string;
+  shiftId?: string | null;
+  status: AttendanceStatus;
+  checkInTime?: string | null;
+  checkOutTime?: string | null;
+  breakMinutes: number;
+  workedMinutes: number;
+  overtimeMinutes: number;
+  remarks?: string | null;
+  createdBy?: string | null;
+  createdOn: number;
+  updatedBy?: string | null;
+  updatedOn: number;
+};
+
 export type AuditDto = {
   _id: string;
   type: "audit";
@@ -278,6 +306,7 @@ export type PosDoc =
   | OrderDto
   | UserDto
   | StaffDto
+  | AttendanceDto
   | AuditDto
   | AuditArchiveDto
   | ConfigDto

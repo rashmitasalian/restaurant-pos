@@ -112,6 +112,12 @@ declare global {
         update: (id: string, updates: any) => Promise<any>;
         delete: (id: string) => Promise<any>;
       };
+      attendance?: {
+        list: (input: any) => Promise<any[]>;
+        upsert: (input: any) => Promise<any[]>;
+        copy: (fromDate: string, toDate: string) => Promise<any[]>;
+        delete: (id: string) => Promise<any>;
+      };
       settings?: {
         get: (key: string) => Promise<any>;
         set: (key: string, value: any) => Promise<any>;

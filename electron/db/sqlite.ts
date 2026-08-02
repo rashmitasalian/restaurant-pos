@@ -270,6 +270,32 @@ function runSchema(database: SqliteDatabase) {
     CREATE UNIQUE INDEX IF NOT EXISTS idx_staff_phone_active
       ON staff(phone) WHERE active = 1;
 
+    CREATE TABLE IF NOT EXISTS attendance_records (
+      id TEXT PRIMARY KEY,
+      staff_id TEXT NOT NULL REFERENCES staff(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+      attendance_date TEXT NOT NULL,
+      shift_id TEXT,
+      status TEXT NOT NULL CHECK (status IN ('present', 'absent', 'half-day', 'leave', 'holiday', 'week-off', 'late')),
+      check_in_time TEXT,
+      check_out_time TEXT,
+      break_minutes INTEGER NOT NULL DEFAULT 0,
+      worked_minutes INTEGER NOT NULL DEFAULT 0,
+      overtime_minutes INTEGER NOT NULL DEFAULT 0,
+      remarks TEXT,
+      created_by TEXT REFERENCES users(username) ON UPDATE CASCADE ON DELETE SET NULL,
+      created_on INTEGER NOT NULL,
+      updated_by TEXT REFERENCES users(username) ON UPDATE CASCADE ON DELETE SET NULL,
+      updated_on INTEGER NOT NULL,
+      UNIQUE(staff_id, attendance_date)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_attendance_staff
+      ON attendance_records(staff_id);
+    CREATE INDEX IF NOT EXISTS idx_attendance_date
+      ON attendance_records(attendance_date);
+    CREATE INDEX IF NOT EXISTS idx_attendance_status
+      ON attendance_records(status);
+
     CREATE TABLE IF NOT EXISTS orders (
       id TEXT PRIMARY KEY,
       order_type TEXT NOT NULL CHECK (order_type IN ('table', 'takeaway', 'delivery')),
@@ -609,6 +635,36 @@ function runSchema(database: SqliteDatabase) {
 
       CREATE INDEX IF NOT EXISTS idx_menu_item_variants_item
         ON menu_item_variants(menu_item_id, sort_order, name);
+    `);
+  });
+
+  runMigration(database, 11, "Add attendance records", () => {
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS attendance_records (
+        id TEXT PRIMARY KEY,
+        staff_id TEXT NOT NULL REFERENCES staff(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+        attendance_date TEXT NOT NULL,
+        shift_id TEXT,
+        status TEXT NOT NULL CHECK (status IN ('present', 'absent', 'half-day', 'leave', 'holiday', 'week-off', 'late')),
+        check_in_time TEXT,
+        check_out_time TEXT,
+        break_minutes INTEGER NOT NULL DEFAULT 0,
+        worked_minutes INTEGER NOT NULL DEFAULT 0,
+        overtime_minutes INTEGER NOT NULL DEFAULT 0,
+        remarks TEXT,
+        created_by TEXT REFERENCES users(username) ON UPDATE CASCADE ON DELETE SET NULL,
+        created_on INTEGER NOT NULL,
+        updated_by TEXT REFERENCES users(username) ON UPDATE CASCADE ON DELETE SET NULL,
+        updated_on INTEGER NOT NULL,
+        UNIQUE(staff_id, attendance_date)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_attendance_staff
+        ON attendance_records(staff_id);
+      CREATE INDEX IF NOT EXISTS idx_attendance_date
+        ON attendance_records(attendance_date);
+      CREATE INDEX IF NOT EXISTS idx_attendance_status
+        ON attendance_records(status);
     `);
   });
 }

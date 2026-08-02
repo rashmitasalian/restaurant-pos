@@ -5,6 +5,7 @@ import History from "../History/History";
 import ItemsEditor from "../ItemsEditor/ItemsEditor";
 import Settings from "../Settings/Settings";
 import Staff from "../Staff/Staff";
+import Attendance from "../Attendance/Attendance";
 import UsersScreen from "../Users/UsersScreen";
 import styles from "./Manager.module.css";
 import { type ManagerSection } from "./managerSections";
@@ -24,6 +25,7 @@ const SECTIONS: Array<{
   { key: "menu", label: "Menu", group: "Admin Tools", icon: "MN" },
   { key: "history", label: "History", group: "Admin Tools", icon: "HI" },
   { key: "staff", label: "Staff", group: "Admin Tools", icon: "ST" },
+  { key: "attendance", label: "Attendance", group: "Admin Tools", icon: "AT" },
   { key: "users", label: "Users", group: "Admin Tools", icon: "US" },
   { key: "audit", label: "Audit", group: "Admin Tools", icon: "AU" },
   { key: "settings", label: "Settings", group: "Admin Tools", icon: "SE" },
@@ -42,6 +44,9 @@ export default function Manager({ section, onSectionChange }: ManagerProps) {
     }
     if (section === "staff") {
       return <Staff />;
+    }
+    if (section === "attendance") {
+      return <Attendance />;
     }
     if (section === "users") {
       return <UsersScreen />;

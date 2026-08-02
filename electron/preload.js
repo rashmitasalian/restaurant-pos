@@ -142,6 +142,12 @@ contextBridge.exposeInMainWorld("pos", {
     update: (id, updates) => authInvoke("pos:staff:update", id, updates),
     delete: (id) => authInvoke("pos:staff:delete", id),
   },
+  attendance: {
+    list: (input) => authInvoke("pos:attendance:list", input),
+    upsert: (input) => authInvoke("pos:attendance:upsert", input),
+    copy: (fromDate, toDate) => authInvoke("pos:attendance:copy", fromDate, toDate),
+    delete: (id) => authInvoke("pos:attendance:delete", id),
+  },
   settings: {
     get: (key) => authInvoke("pos:settings:get", key),
     set: (key, value) => authInvoke("pos:settings:set", key, value),

@@ -29,6 +29,7 @@ const CASHIER_READABLE_SETTINGS = new Set([
   "config:branding",
 ]);
 const WRITABLE_SETTINGS = new Set([
+  "config:attendance",
   "config:audit",
   "config:branding",
   "config:categories",
@@ -389,6 +390,23 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
   ipcMain.handle("pos:staff:delete", (event, token: string | null, id: string) => {
     const user = requireSession(event, token, ADMIN_ROLES);
     return posService.deleteStaff(id, user.username);
+  });
+
+  ipcMain.handle("pos:attendance:list", (event, token: string | null, input) => {
+    requireSession(event, token, ADMIN_ROLES);
+    return posService.listAttendance(input || {});
+  });
+  ipcMain.handle("pos:attendance:upsert", (event, token: string | null, input) => {
+    const user = requireSession(event, token, ADMIN_ROLES);
+    return posService.upsertAttendanceRows(input || {}, user.username);
+  });
+  ipcMain.handle("pos:attendance:copy", (event, token: string | null, fromDate: string, toDate: string) => {
+    const user = requireSession(event, token, ADMIN_ROLES);
+    return posService.copyAttendance(fromDate, toDate, user.username);
+  });
+  ipcMain.handle("pos:attendance:delete", (event, token: string | null, id: string) => {
+    const user = requireSession(event, token, ADMIN_ROLES);
+    return posService.deleteAttendance(id, user.username);
   });
 
   ipcMain.handle("pos:settings:get", (event, token: string | null, key: string) => {

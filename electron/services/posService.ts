@@ -14,6 +14,8 @@ import {
 import type {
   AuditArchiveDto,
   AuditDto,
+  AttendanceDto,
+  AttendanceStatus,
   ConfigDto,
   CustomerDto,
   FoodCostSummaryDto,
@@ -40,6 +42,7 @@ import type {
 import {
   STAFF_TEXT_LIMITS,
   isValidDateOnly,
+  isFutureDateOnly,
   isValidIndianMobile,
   isValidPersonName,
   normalizeCategoryName,
@@ -77,6 +80,16 @@ const GROCERY_UNITS = new Set<GroceryUnit>([
   "dozen",
   "bunch",
 ]);
+const ATTENDANCE_STATUSES = new Set<AttendanceStatus>([
+  "present",
+  "absent",
+  "half-day",
+  "leave",
+  "holiday",
+  "week-off",
+  "late",
+]);
+const DEFAULT_SHIFT_MINUTES = 8 * 60;
 
 const loginAttempts: Record<string, { count: number; lockedUntil: number }> = {};
 const recoveryAttempts: Record<string, { count: number; lockedUntil: number }> = {};
@@ -609,6 +622,79 @@ function assertGstConfig(input: Partial<GstConfig>) {
     throw new Error("gst-rate-invalid");
   }
   return cfg;
+}
+
+type AttendanceShiftConfig = {
+  id: string;
+  label: string;
+  hours: number;
+};
+
+function defaultAttendanceShifts(): AttendanceShiftConfig[] {
+  return [
+    { id: "morning", label: "Morning", hours: 8 },
+    { id: "evening", label: "Evening", hours: 8 },
+    { id: "night", label: "Night", hours: 8 },
+    { id: "half-day", label: "Half Day", hours: 4 },
+  ];
+}
+
+function assertAttendanceConfig(input: Record<string, unknown>) {
+  const source = Array.isArray((input as any)?.shifts)
+    ? ((input as any).shifts as Array<Record<string, unknown>>)
+    : defaultAttendanceShifts();
+  const shifts: AttendanceShiftConfig[] = [];
+  const seen = new Set<string>();
+  for (const raw of source) {
+    const id = normalizeText(raw?.id).toLowerCase();
+    const label = normalizeText(raw?.label);
+    const hours = Number(raw?.hours);
+    if (!id || !label) {
+      throw new Error("attendance-shift-invalid");
+    }
+    if (!Number.isFinite(hours) || hours <= 0 || hours > 24) {
+      throw new Error("attendance-shift-hours-invalid");
+    }
+    if (seen.has(id)) {
+      continue;
+    }
+    seen.add(id);
+    shifts.push({ id, label, hours: Math.round(hours * 100) / 100 });
+  }
+  if (!shifts.length) {
+    throw new Error("attendance-shift-invalid");
+  }
+  return { shifts };
+}
+
+function getAttendanceShiftHours(database: Database.Database, shiftId?: string | null) {
+  const key = String(shiftId || "")
+    .trim()
+    .toLowerCase();
+  if (!key) {
+    return DEFAULT_SHIFT_MINUTES;
+  }
+  const cfg = parseJson<any>(
+    (
+      database
+        .prepare("SELECT value_json FROM settings WHERE key = ?")
+        .get("config:attendance") as { value_json?: string } | undefined
+    )?.value_json,
+    { shifts: defaultAttendanceShifts() },
+  );
+  const shifts = Array.isArray(cfg?.shifts) ? cfg.shifts : defaultAttendanceShifts();
+  const match = shifts.find((shift: any) => String(shift?.id || "").toLowerCase() === key);
+  if (!match) {
+    if (key === "half" || key === "half-day") {
+      return 4 * 60;
+    }
+    return DEFAULT_SHIFT_MINUTES;
+  }
+  const hours = Number(match.hours);
+  if (!Number.isFinite(hours) || hours <= 0) {
+    return DEFAULT_SHIFT_MINUTES;
+  }
+  return Math.max(0, Math.trunc(hours * 60));
 }
 
 function buildGstSnapshot(config: GstConfig) {
@@ -2750,7 +2836,11 @@ export const posService = {
     const existing = this.getSetting(key) || {};
     const merged = { ...existing, ...value };
     const normalized =
-      key === "config:gst" ? assertGstConfig(merged as Partial<GstConfig>) : merged;
+      key === "config:gst"
+        ? assertGstConfig(merged as Partial<GstConfig>)
+        : key === "config:attendance"
+          ? assertAttendanceConfig(merged)
+          : merged;
     const at = now();
     const database = getDb();
     database
@@ -3655,6 +3745,249 @@ export const posService = {
     });
   },
 
+  listAttendance(input: {
+    date: string;
+    shiftId?: string | null;
+    status?: AttendanceStatus | null;
+    search?: string;
+  }): AttendanceDto[] {
+    const date = normalizeAttendanceDate(input.date);
+    const clauses = ["ar.attendance_date = ?"];
+    const params: unknown[] = [date];
+    const shiftId = normalizeText(input.shiftId);
+    if (shiftId) {
+      clauses.push("COALESCE(ar.shift_id, '') = ?");
+      params.push(shiftId);
+    }
+    if (input.status) {
+      clauses.push("ar.status = ?");
+      params.push(normalizeAttendanceStatus(input.status));
+    }
+    const search = normalizeText(input.search).toLowerCase();
+    if (search) {
+      clauses.push("(lower(s.name) LIKE ? OR lower(COALESCE(s.designation, '')) LIKE ?)");
+      params.push(`%${search}%`, `%${search}%`);
+    }
+    return getDb()
+      .prepare(
+        `SELECT ar.*, s.name AS staff_name, s.designation AS staff_role
+         FROM attendance_records ar
+         JOIN staff s ON s.id = ar.staff_id
+         WHERE ${clauses.join(" AND ")}
+         ORDER BY lower(s.name) ASC, ar.created_on ASC`,
+      )
+      .all(...params)
+      .map(attendanceFromRow);
+  },
+
+  upsertAttendanceRows(
+    input: {
+      attendanceDate: string;
+      rows: Array<{
+        id?: string;
+        staffId: string;
+        shiftId?: string | null;
+        status: AttendanceStatus;
+        checkInTime?: string | null;
+        checkOutTime?: string | null;
+        breakMinutes?: number;
+        overtimeMinutes?: number | null;
+        remarks?: string | null;
+      }>;
+    },
+    actor?: string | null,
+  ) {
+    const attendanceDate = normalizeAttendanceDate(input.attendanceDate);
+    const rows = Array.isArray(input.rows) ? input.rows : [];
+    return inTransaction((database) => {
+      let created = 0;
+      let updated = 0;
+      for (const row of rows) {
+        const staffId = normalizeText(row.staffId);
+        if (!staffId) {
+          throw new Error("attendance-staff-required");
+        }
+        assertAttendanceStaffExists(database, staffId);
+        const status = normalizeAttendanceStatus(row.status);
+        const shiftId = normalizeText(row.shiftId) || null;
+        const checkInTime = normalizeAttendanceTime(row.checkInTime);
+        const checkOutTime = normalizeAttendanceTime(row.checkOutTime);
+        const breakMinutes = normalizeAttendanceBreakMinutes(row.breakMinutes);
+        const overtimeOverrideMinutes = normalizeAttendanceOvertimeOverride(row.overtimeMinutes);
+        const remarks = optionalLimitedText(row.remarks, STAFF_TEXT_LIMITS.notes, "staff-notes-too-long");
+        if (status === "leave" && !remarks) {
+          throw new Error("attendance-remarks-required-for-leave");
+        }
+        const durations = computeAttendanceDurations({
+          database,
+          checkInTime,
+          checkOutTime,
+          breakMinutes,
+          shiftId,
+          overtimeOverrideMinutes,
+        });
+
+        const explicitId = normalizeText(row.id);
+        const existingById = explicitId
+          ? (database.prepare("SELECT id FROM attendance_records WHERE id = ?").get(explicitId) as any)
+          : null;
+        const existingByUnique = database
+          .prepare(
+            "SELECT id FROM attendance_records WHERE staff_id = ? AND attendance_date = ? LIMIT 1",
+          )
+          .get(staffId, attendanceDate) as any;
+        const targetId = existingById?.id || existingByUnique?.id || `attendance:${randomUUID()}`;
+        const nowAt = now();
+        const exists = Boolean(existingById?.id || existingByUnique?.id);
+        if (exists) {
+          database
+            .prepare(
+              `UPDATE attendance_records
+               SET shift_id = ?, status = ?, check_in_time = ?, check_out_time = ?, break_minutes = ?,
+                   worked_minutes = ?, overtime_minutes = ?, remarks = ?, updated_by = ?, updated_on = ?
+               WHERE id = ?`,
+            )
+            .run(
+              shiftId,
+              status,
+              checkInTime,
+              checkOutTime,
+              breakMinutes,
+              durations.workedMinutes,
+              durations.overtimeMinutes,
+              remarks,
+              actor || null,
+              nowAt,
+              targetId,
+            );
+          createAuditRow(database, "attendance.updated", "attendance", targetId, actor || null, {
+            staffId,
+            attendanceDate,
+            status,
+          });
+          updated += 1;
+        } else {
+          try {
+            database
+              .prepare(
+                `INSERT INTO attendance_records (
+                  id, staff_id, attendance_date, shift_id, status, check_in_time, check_out_time,
+                  break_minutes, worked_minutes, overtime_minutes, remarks,
+                  created_by, created_on, updated_by, updated_on
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              )
+              .run(
+                targetId,
+                staffId,
+                attendanceDate,
+                shiftId,
+                status,
+                checkInTime,
+                checkOutTime,
+                breakMinutes,
+                durations.workedMinutes,
+                durations.overtimeMinutes,
+                remarks,
+                actor || null,
+                nowAt,
+                actor || null,
+                nowAt,
+              );
+          } catch (error: any) {
+            const message = String(error?.message || "");
+            if (message.includes("UNIQUE") && message.includes("attendance_records.staff_id")) {
+              throw new Error("attendance-duplicate-day");
+            }
+            throw error;
+          }
+          createAuditRow(database, "attendance.created", "attendance", targetId, actor || null, {
+            staffId,
+            attendanceDate,
+            status,
+          });
+          created += 1;
+        }
+      }
+      createAuditRow(database, "attendance.bulk-update", "attendance", attendanceDate, actor || null, {
+        attendanceDate,
+        created,
+        updated,
+        total: rows.length,
+      });
+      return this.listAttendance({ date: attendanceDate });
+    });
+  },
+
+  copyAttendance(fromDate: string, toDate: string, actor?: string | null) {
+    const sourceDate = normalizeAttendanceDate(fromDate);
+    const targetDate = normalizeAttendanceDate(toDate);
+    return inTransaction((database) => {
+      const sourceRows = database
+        .prepare("SELECT * FROM attendance_records WHERE attendance_date = ?")
+        .all(sourceDate) as any[];
+      const at = now();
+      const upsert = database.prepare(`
+        INSERT INTO attendance_records (
+          id, staff_id, attendance_date, shift_id, status, check_in_time, check_out_time,
+          break_minutes, worked_minutes, overtime_minutes, remarks,
+          created_by, created_on, updated_by, updated_on
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(staff_id, attendance_date) DO UPDATE SET
+          shift_id = excluded.shift_id,
+          status = excluded.status,
+          check_in_time = excluded.check_in_time,
+          check_out_time = excluded.check_out_time,
+          break_minutes = excluded.break_minutes,
+          worked_minutes = excluded.worked_minutes,
+          overtime_minutes = excluded.overtime_minutes,
+          remarks = excluded.remarks,
+          updated_by = excluded.updated_by,
+          updated_on = excluded.updated_on
+      `);
+      for (const row of sourceRows) {
+        upsert.run(
+          `attendance:${randomUUID()}`,
+          row.staff_id,
+          targetDate,
+          row.shift_id,
+          row.status,
+          row.check_in_time,
+          row.check_out_time,
+          row.break_minutes,
+          row.worked_minutes,
+          row.overtime_minutes,
+          row.remarks,
+          actor || null,
+          at,
+          actor || null,
+          at,
+        );
+      }
+      createAuditRow(database, "attendance.bulk-update", "attendance", targetDate, actor || null, {
+        action: "copy",
+        sourceDate,
+        targetDate,
+        copied: sourceRows.length,
+      });
+      return this.listAttendance({ date: targetDate });
+    });
+  },
+
+  deleteAttendance(id: string, actor?: string | null) {
+    return inTransaction((database) => {
+      const row = database.prepare("SELECT * FROM attendance_records WHERE id = ?").get(id) as any;
+      if (!row) {
+        throw new Error("attendance-not-found");
+      }
+      database.prepare("DELETE FROM attendance_records WHERE id = ?").run(id);
+      createAuditRow(database, "attendance.deleted", "attendance", id, actor || null, {
+        staffId: row.staff_id,
+        attendanceDate: row.attendance_date,
+      });
+      return { ok: true };
+    });
+  },
+
   addPrintJob(input: {
     printerName: string;
     jobType: PrintJobDto["jobType"];
@@ -3937,6 +4270,104 @@ function prepareStaffInput(input: {
   };
 }
 
+function normalizeAttendanceDate(value: unknown) {
+  const date = normalizeText(value);
+  if (!date) {
+    throw new Error("attendance-date-required");
+  }
+  if (!isValidDateOnly(date)) {
+    throw new Error("attendance-date-invalid");
+  }
+  if (isFutureDateOnly(date)) {
+    throw new Error("attendance-date-future");
+  }
+  return date;
+}
+
+function normalizeAttendanceStatus(value: unknown): AttendanceStatus {
+  const status = String(value || "") as AttendanceStatus;
+  if (!ATTENDANCE_STATUSES.has(status)) {
+    throw new Error("attendance-status-invalid");
+  }
+  return status;
+}
+
+function normalizeAttendanceTime(value: unknown) {
+  const text = normalizeText(value);
+  if (!text) {
+    return null;
+  }
+  if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(text)) {
+    throw new Error("attendance-time-invalid");
+  }
+  return text;
+}
+
+function attendanceTimeToMinutes(value: string | null) {
+  if (!value) {
+    return null;
+  }
+  const [hours, minutes] = value.split(":").map((part) => Number(part));
+  return hours * 60 + minutes;
+}
+
+function normalizeAttendanceBreakMinutes(value: unknown) {
+  const breakMinutes = Number(value ?? 0);
+  if (!Number.isFinite(breakMinutes) || breakMinutes < 0) {
+    throw new Error("attendance-break-invalid");
+  }
+  return Math.trunc(breakMinutes);
+}
+
+function normalizeAttendanceOvertimeOverride(value: unknown) {
+  if (value === null || value === undefined || String(value).trim() === "") {
+    return null;
+  }
+  const overtimeMinutes = Number(value);
+  if (!Number.isFinite(overtimeMinutes) || overtimeMinutes < 0) {
+    throw new Error("attendance-break-invalid");
+  }
+  return Math.trunc(overtimeMinutes);
+}
+
+function computeAttendanceDurations(input: {
+  database: Database.Database;
+  checkInTime: string | null;
+  checkOutTime: string | null;
+  breakMinutes: number;
+  shiftId?: string | null;
+  overtimeOverrideMinutes?: number | null;
+}) {
+  const inMinutes = attendanceTimeToMinutes(input.checkInTime);
+  const outMinutes = attendanceTimeToMinutes(input.checkOutTime);
+  if ((inMinutes === null) !== (outMinutes === null)) {
+    throw new Error("attendance-checkout-before-checkin");
+  }
+  if (inMinutes !== null && outMinutes !== null && outMinutes < inMinutes) {
+    throw new Error("attendance-checkout-before-checkin");
+  }
+  const rawWorked =
+    inMinutes !== null && outMinutes !== null ? Math.max(0, outMinutes - inMinutes) : 0;
+  if (input.breakMinutes > rawWorked) {
+    throw new Error("attendance-break-exceeds-worked");
+  }
+  const workedMinutes = Math.max(0, rawWorked - input.breakMinutes);
+  const shiftMinutes = getAttendanceShiftHours(input.database, input.shiftId);
+  const autoOvertimeMinutes = Math.max(0, workedMinutes - shiftMinutes);
+  const overtimeMinutes =
+    input.overtimeOverrideMinutes === null || input.overtimeOverrideMinutes === undefined
+      ? autoOvertimeMinutes
+      : Math.max(0, input.overtimeOverrideMinutes);
+  return { workedMinutes, overtimeMinutes };
+}
+
+function assertAttendanceStaffExists(database: Database.Database, staffId: string) {
+  const row = database.prepare("SELECT id FROM staff WHERE id = ?").get(staffId) as any;
+  if (!row?.id) {
+    throw new Error("attendance-staff-required");
+  }
+}
+
 function auditFromRow(row: any): AuditDto {
   return {
     _id: row.id,
@@ -3995,6 +4426,28 @@ function staffFromRow(row: any): StaffDto {
     active: Boolean(row.active),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+function attendanceFromRow(row: any): AttendanceDto {
+  return {
+    id: row.id,
+    staffId: row.staff_id,
+    staffName: row.staff_name || "",
+    role: row.staff_role || null,
+    attendanceDate: row.attendance_date,
+    shiftId: row.shift_id || null,
+    status: row.status,
+    checkInTime: row.check_in_time || null,
+    checkOutTime: row.check_out_time || null,
+    breakMinutes: Number(row.break_minutes || 0),
+    workedMinutes: Number(row.worked_minutes || 0),
+    overtimeMinutes: Number(row.overtime_minutes || 0),
+    remarks: row.remarks || null,
+    createdBy: row.created_by || null,
+    createdOn: Number(row.created_on || 0),
+    updatedBy: row.updated_by || null,
+    updatedOn: Number(row.updated_on || 0),
   };
 }
 
