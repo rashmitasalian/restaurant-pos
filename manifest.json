@@ -1,9 +1,9 @@
 {
   "version": "0.4.0",
   "installerUrl": "https://github.com/rashmitasalian/restaurant-pos/releases/download/v0.4.0/RestoNiti.Setup.0.4.0.exe",
-  "sha256": "C09F0B654151A5449B61E809321A2F88F9CB9BC016DD482ED2422A89D59D72B4",
+  "sha256": "c09f0b654151a5449b61e809321a2f88f9cb9bc016dd482ed2422a89d59d72b4",
   "rollbackInstallerUrl": "https://github.com/rashmitasalian/restaurant-pos/releases/download/v0.3.0/RestoNiti.Setup.0.3.0.exe",
-  "rollbackSha256": "E8E6E09941639A02039AA56452A06C995EB0C9F863B3D49726AAC0891BA6C2BC",
+  "rollbackSha256": "053479257e87b3fd51eee1711e2d8031f8ed4f93c85517ee5f02934449ff85b1",
   "installerSizeBytes": 108660038,
   "rollbackInstallerSizeBytes": 109437713,
   "notes": [
