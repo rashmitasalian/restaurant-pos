@@ -197,6 +197,10 @@
   align-items: center;
   flex: 1;
   justify-content: center;
+  min-height: 46px;
+}
+.headerTotalsHidden {
+  visibility: hidden;
 }
 .totalsBadge {
   text-align: right;

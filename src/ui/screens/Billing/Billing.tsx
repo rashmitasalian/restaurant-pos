@@ -354,6 +354,7 @@ export default function Billing() {
   const gstEnabled = totals.gstEnabled && taxTotal > 0;
   const gstHalfPct = formatGstRate(totals.gstHalfRateBps);
   const gstFullPct = formatGstRate(totals.gstRateBps);
+  const showHeaderTotals = Boolean(order && (order.items || []).length > 0);
   const favorites = React.useMemo(
     () => (items || []).filter((it) => it.favorite === true && it.available !== false),
     [items],
@@ -1536,8 +1537,10 @@ export default function Billing() {
           </div>
 
           {/* Live totals */}
-          {order && (order.items || []).length > 0 && (
-            <div className={styles.headerTotals}>
+          <div
+            className={`${styles.headerTotals} ${showHeaderTotals ? "" : styles.headerTotalsHidden}`}
+            aria-hidden={!showHeaderTotals}
+          >
               <div className={styles.textRight}>
                 <div className={styles.textMuted}>SUBTOTAL</div>
                 <div className={styles.headerValue}>{formatCurrency(subtotal)}</div>
@@ -1552,8 +1555,7 @@ export default function Billing() {
                 <div className={styles.textMuted}>TOTAL</div>
                 <div className={styles.largeValue}>{formatCurrency(finalTotal)}</div>
               </div>
-            </div>
-          )}
+          </div>
 
           {/* Action buttons */}
           <div className={styles.actionGroup}>
