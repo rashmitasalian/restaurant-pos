@@ -1,13 +1,13 @@
 {
-  "version": "0.3.0",
-  "installerUrl": "https://github.com/rashmitasalian/restaurant-pos/releases/download/v0.3.0/RestoNiti.Setup.0.3.0.exe",
-  "sha256": "053479257E87B3FD51EEE1711E2D8031F8ED4F93C85517EE5F02934449FF85B1",
-  "rollbackInstallerUrl": "https://github.com/rashmitasalian/restaurant-pos/releases/download/v0.1.0/RestoNiti.Setup.0.1.0.exe",
-  "rollbackSha256": "3DB857131A49D7C1A6661D9CBD98D59EBEB7D4E7C6207155DD5CF4E58F149C36",
-  "installerSizeBytes": 109434309,
-  "rollbackInstallerSizeBytes": 109433668,
+  "version": "0.4.0",
+  "installerUrl": "https://github.com/rashmitasalian/restaurant-pos/releases/download/v0.4.0/RestoNiti.Setup.0.4.0.exe",
+  "sha256": "C09F0B654151A5449B61E809321A2F88F9CB9BC016DD482ED2422A89D59D72B4",
+  "rollbackInstallerUrl": "https://github.com/rashmitasalian/restaurant-pos/releases/download/v0.3.0/RestoNiti.Setup.0.3.0.exe",
+  "rollbackSha256": "E8E6E09941639A02039AA56452A06C995EB0C9F863B3D49726AAC0891BA6C2BC",
+  "installerSizeBytes": 108660038,
+  "rollbackInstallerSizeBytes": 109437713,
   "notes": [
-    "settlement button",
-    "view password"
+    "Fixed issue with the application not starting quickly on some systems.",
+    "Added variation option in menu item creation."
   ]
 }
