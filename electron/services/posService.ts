@@ -59,6 +59,12 @@ import {
   normalizeGstConfig,
   type GstConfig,
 } from "../../src/shared/gst";
+import {
+  SERVICE_MODE_CONFIG_KEY,
+  findServiceModeById,
+  toLegacyOrderType,
+  toServiceModeConfigDoc,
+} from "../../src/shared/serviceModes";
 import { RECOVERY_CODE_COUNT } from "../../src/shared/auth";
 
 const TAX_RATE_BPS = 1800;
@@ -93,6 +99,36 @@ const DEFAULT_SHIFT_MINUTES = 8 * 60;
 
 const loginAttempts: Record<string, { count: number; lockedUntil: number }> = {};
 const recoveryAttempts: Record<string, { count: number; lockedUntil: number }> = {};
+
+function normalizeModeId(value: unknown) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_")
+    .replace(/[^a-z0-9_-]/g, "");
+}
+
+function resolveServiceModeIdFromOrderLike(orderLike: any) {
+  return normalizeModeId(orderLike?.meta?.serviceModeId || orderLike?.orderType || "");
+}
+
+function resolveLegacyOrderTypeForWrite(
+  modeConfig: unknown,
+  serviceModeId: string,
+  tableId: number | null | undefined,
+) {
+  const resolvedMode = findServiceModeById(modeConfig, serviceModeId);
+  if (resolvedMode) {
+    return toLegacyOrderType(resolvedMode);
+  }
+  if (serviceModeId === "table" || serviceModeId === "takeaway" || serviceModeId === "delivery") {
+    return serviceModeId;
+  }
+  if (tableId !== null && tableId !== undefined) {
+    return "table";
+  }
+  return "takeaway";
+}
 
 function now() {
   return Date.now();
@@ -812,10 +848,11 @@ function orderFromRow(database: Database.Database, row: any): OrderDto {
     .prepare("SELECT * FROM payments WHERE order_id = ? ORDER BY received_at ASC")
     .all(row.id)
     .map(paymentFromRow);
+  const meta = parseJson(row.meta_json, {});
   return {
     _id: row.id,
     type: "order",
-    orderType: row.order_type,
+    orderType: resolveServiceModeIdFromOrderLike({ orderType: row.order_type, meta }) || row.order_type,
     tableId: row.table_id === null || row.table_id === undefined ? null : Number(row.table_id),
     customerId: row.customer_id || null,
     status: row.status,
@@ -831,7 +868,7 @@ function orderFromRow(database: Database.Database, row: any): OrderDto {
     total: paiseToRupees(row.total_paise),
     invoiceNumber: row.invoice_number || null,
     paidAt: row.paid_at || null,
-    meta: parseJson(row.meta_json, {}),
+    meta,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     createdBy: row.created_by || null,
@@ -1945,21 +1982,25 @@ export const posService = {
   createOrder(
     input: {
       tableId?: number | null;
-      orderType?: "table" | "takeaway" | "delivery";
+      orderType?: string;
+      serviceModeId?: string;
       customerId?: string | null;
       meta?: Record<string, unknown>;
       createdBy?: string | null;
     } = {},
   ) {
     const at = now();
-    const orderType =
-      input.orderType ||
-      (input.tableId !== null && input.tableId !== undefined ? "table" : "takeaway");
+    const modeConfig = this.getSetting(SERVICE_MODE_CONFIG_KEY);
+    const fallbackModeId =
+      input.tableId !== null && input.tableId !== undefined ? "table" : "takeaway";
+    const serviceModeId =
+      normalizeModeId(input.serviceModeId || input.orderType) || fallbackModeId;
+    const orderType = resolveLegacyOrderTypeForWrite(modeConfig, serviceModeId, input.tableId);
     const id = `order:${randomUUID()}`;
     return inTransaction((database) => {
       const customerId = resolveActiveCustomerId(database, input.customerId);
       const orderSeq = nextOrderSeq(database);
-      const meta = { ...(input.meta || {}), orderSeq };
+      const meta = { ...(input.meta || {}), orderSeq, serviceModeId };
       database
         .prepare(
           `INSERT INTO orders (
@@ -1980,6 +2021,7 @@ export const posService = {
         );
       createAuditRow(database, "order.created", "order", id, input.createdBy || null, {
         orderType,
+        serviceModeId,
         tableId: input.tableId ?? null,
         customerId,
       });
@@ -2333,6 +2375,9 @@ export const posService = {
       const kotStatus =
         order.kotStatus ||
         (order.kotPrinted ? "printed" : order.kotSent ? "sent" : current.kot_status || "pending");
+      const modeConfig = this.getSetting(SERVICE_MODE_CONFIG_KEY);
+      const serviceModeId = resolveServiceModeIdFromOrderLike(order) || resolveServiceModeIdFromOrderLike(current);
+      const legacyOrderType = resolveLegacyOrderTypeForWrite(modeConfig, serviceModeId, order.tableId);
       database
         .prepare(
           `UPDATE orders
@@ -2341,13 +2386,13 @@ export const posService = {
            WHERE id = ?`,
         )
         .run(
-          order.orderType || current.order_type,
+          legacyOrderType,
           order.tableId ?? null,
           order.customerId || null,
           order.status || current.status,
           kotStatus,
           Number(order.discountPercent || 0),
-          stringifyJson(order.meta || {}),
+          stringifyJson({ ...(order.meta || {}), serviceModeId }),
           now(),
           order._id,
         );
@@ -2509,6 +2554,9 @@ export const posService = {
       }
       const createdAt = Number(order.createdAt || now());
       const paidAt = getOrderPaidAt(order);
+      const modeConfig = this.getSetting(SERVICE_MODE_CONFIG_KEY);
+      const serviceModeId = resolveServiceModeIdFromOrderLike(order) || "takeaway";
+      const legacyOrderType = resolveLegacyOrderTypeForWrite(modeConfig, serviceModeId, order.tableId);
       database
         .prepare(
           `INSERT INTO orders (
@@ -2519,8 +2567,7 @@ export const posService = {
         )
         .run(
           order._id,
-          order.orderType ||
-            (order.tableId !== null && order.tableId !== undefined ? "table" : "takeaway"),
+          legacyOrderType,
           order.tableId ?? null,
           order.customerId || null,
           order.status,
@@ -2528,7 +2575,7 @@ export const posService = {
           Number(order.discountPercent || 0),
           getOrderInvoiceNumber(order),
           paidAt,
-          stringifyJson(order.meta || {}),
+          stringifyJson({ ...(order.meta || {}), serviceModeId }),
           order.createdBy || actor || null,
           createdAt,
           Number(order.updatedAt || createdAt),
@@ -2840,6 +2887,8 @@ export const posService = {
         ? assertGstConfig(merged as Partial<GstConfig>)
         : key === "config:attendance"
           ? assertAttendanceConfig(merged)
+          : key === SERVICE_MODE_CONFIG_KEY
+            ? toServiceModeConfigDoc(merged)
           : merged;
     const at = now();
     const database = getDb();

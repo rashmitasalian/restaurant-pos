@@ -162,7 +162,7 @@ export function ConfirmPayModal({
 
 interface ConfirmCancelProps {
   tableNum: number | null;
-  activeOrderType: "table" | "takeaway" | "delivery";
+  activeOrderType: string;
   onClose: () => void;
   onConfirm: () => void;
   processing?: boolean;
@@ -189,7 +189,7 @@ export function ConfirmCancelModal({
               ? `Table ${tableNum}`
               : activeOrderType === "delivery"
                 ? "this delivery order"
-                : "this takeaway order"}
+                : "this order"}
           </strong>
           . The order will be marked as held.
         </p>
@@ -318,6 +318,7 @@ export function KotVoidModal({
 }
 
 interface NewTakeawayProps {
+  title?: string;
   name: string;
   phone: string;
   onNameChange: (v: string) => void;
@@ -328,6 +329,7 @@ interface NewTakeawayProps {
 }
 
 export function NewTakeawayModal({
+  title = "Takeaway",
   name,
   phone,
   onNameChange,
@@ -344,7 +346,7 @@ export function NewTakeawayModal({
     >
         <div className={styles.modalHeader}>
           <span style={{ fontSize: 28 }}>🛍️</span>
-          <h3 className={styles.modalTitle}>New Takeaway Order</h3>
+          <h3 className={styles.modalTitle}>New {title} Order</h3>
         </div>
         <div>
           <label className={styles.modalLabel}>
@@ -370,7 +372,7 @@ export function NewTakeawayModal({
             autoFocus
             className={styles.modalInput}
           />
-          <p className={styles.textMuted}>You can leave this blank for anonymous takeaway</p>
+          <p className={styles.textMuted}>You can leave this blank for anonymous counter orders</p>
           <label className={styles.modalLabel} style={{ marginTop: 14 }}>
             Customer Phone <span style={{ color: "#9ca3af", fontWeight: 400 }}>(optional)</span>
           </label>
@@ -415,6 +417,10 @@ interface NewDeliveryProps {
   onPlatformChange: (v: string) => void;
   code: string;
   onCodeChange: (v: string) => void;
+  customerName: string;
+  onCustomerNameChange: (v: string) => void;
+  customerPhone: string;
+  onCustomerPhoneChange: (v: string) => void;
   onClose: () => void;
   onCreate: () => void;
   processing?: boolean;
@@ -425,6 +431,10 @@ export function NewDeliveryModal({
   onPlatformChange,
   code,
   onCodeChange,
+  customerName,
+  onCustomerNameChange,
+  customerPhone,
+  onCustomerPhoneChange,
   onClose,
   onCreate,
   processing = false,
@@ -528,6 +538,32 @@ if (!processing) {
               placeholder="e.g. #ABC123"
               autoFocus
               className={`${styles.modalInput} ${styles.monoInput}`}
+            />
+          </div>
+          <div>
+            <label className={styles.modalLabel}>
+              Customer Name <span style={{ color: "#9ca3af", fontWeight: 400 }}>(optional)</span>
+            </label>
+            <input
+              type="text"
+              value={customerName}
+              onChange={(e) => onCustomerNameChange(e.target.value)}
+              placeholder="e.g. Priya"
+              className={styles.modalInput}
+            />
+          </div>
+          <div>
+            <label className={styles.modalLabel}>
+              Customer Phone <span style={{ color: "#9ca3af", fontWeight: 400 }}>(optional)</span>
+            </label>
+            <input
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              value={customerPhone}
+              onChange={(e) => onCustomerPhoneChange(normalizePhone(e.target.value))}
+              placeholder="e.g. 9876543210"
+              className={styles.modalInput}
             />
           </div>
         </div>

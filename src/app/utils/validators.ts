@@ -26,12 +26,11 @@ export class OrderValidator {
       errors.push({ field: "type", error: "Must be 'order'" });
     }
 
-    // Validate orderType
-    const validOrderTypes = ["table", "takeaway", "delivery"];
-    if (!doc.orderType || !validOrderTypes.includes(doc.orderType)) {
+    // Validate orderType/serviceMode identifier
+    if (!doc.orderType || typeof doc.orderType !== "string" || !doc.orderType.trim()) {
       errors.push({
         field: "orderType",
-        error: `Order type must be one of: ${validOrderTypes.join(", ")}`,
+        error: "Order type must be a non-empty string",
       });
     }
 

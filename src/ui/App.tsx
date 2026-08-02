@@ -14,10 +14,12 @@ import { useFocusTrap } from "./hooks/useFocusTrap";
 import {
   ensureIndexes,
   getConfigBranding,
+  getEnabledServiceModes,
   hasUsers as hasExistingUsers,
   pruneAuditLogs,
   pruneOrderHistory,
 } from "../app/db/posRepository";
+import { getDefaultServiceModes } from "../shared/serviceModes";
 import restoNitiMark from "./assets/restoniti-icon.png";
 
 const Tables = React.lazy(() => import("./screens/Tables/Tables"));
@@ -131,6 +133,12 @@ function MainContent({
       { k: "manager", t: "Manager", icon: "MG" },
     ];
 
+    const [enabledServiceModes, setEnabledServiceModes] = React.useState(() =>
+      getDefaultServiceModes().filter((mode) => mode.enabled),
+    );
+    const [serviceModesLoaded, setServiceModesLoaded] = React.useState(false);
+    const hasTableMode = enabledServiceModes.some((mode) => mode.requiresTable);
+
     // Role-based allow-list - driven by the centralised role config.
     // Enforced in the nav (hidden items), hashchange handler, and
     // the per-page render guard below.
@@ -139,6 +147,13 @@ function MainContent({
       "billing",
       "kot",
     ];
+    const effectiveAllowedPages = serviceModesLoaded
+      ? hasTableMode
+        ? allowedPages
+        : allowedPages.filter((p) => p !== "tables")
+      : allowedPages.filter((p) => p !== "tables");
+
+    const fallbackPage: Page = effectiveAllowedPages.includes("billing") ? "billing" : "kot";
 
     const getInitial = (): Page => {
       const hash = (typeof window !== "undefined" && window.location.hash) || "";
@@ -159,9 +174,12 @@ function MainContent({
       const saved = typeof window !== "undefined" ? window.localStorage.getItem("lastPage") : null;
       const validPages = Object.values(hashPageMap) as Page[];
       if (saved && validPages.includes(saved as Page)) {
+        if (!hasTableMode && saved === "tables") {
+          return fallbackPage;
+        }
         return saved as Page;
       }
-      return "tables";
+      return hasTableMode ? "tables" : fallbackPage;
     };
 
     const [page, setPage] = React.useState<Page>(getInitial);
@@ -206,6 +224,34 @@ function MainContent({
     }, [auth?.loading, auth?.session, hasUsers, page]);
 
     React.useEffect(() => {
+      const loadModes = async () => {
+        if (!auth?.session) {
+          setEnabledServiceModes(getDefaultServiceModes().filter((mode) => mode.enabled));
+          setServiceModesLoaded(false);
+          return;
+        }
+        try {
+          const modes = await getEnabledServiceModes();
+          setEnabledServiceModes(modes.length ? modes : getDefaultServiceModes().filter((m) => m.enabled));
+          setServiceModesLoaded(true);
+        } catch {
+          setEnabledServiceModes(getDefaultServiceModes().filter((m) => m.enabled));
+          setServiceModesLoaded(true);
+        }
+      };
+      loadModes();
+      window.addEventListener("service-modes-changed", loadModes);
+      return () => window.removeEventListener("service-modes-changed", loadModes);
+    }, [auth?.session?.sessionToken]);
+
+    React.useEffect(() => {
+      if (!hasTableMode && page === "tables") {
+        setPage(fallbackPage);
+        window.location.hash = fallbackPage === "billing" ? "#billing" : "#kot";
+      }
+    }, [hasTableMode, page, fallbackPage]);
+
+    React.useEffect(() => {
       const onHash = () => {
         const hashPageMap: Record<string, Page> = {
           "#billing": "billing",
@@ -220,15 +266,15 @@ function MainContent({
         if (!target) {
           return;
         }
-        if (allowedPages.includes(target)) {
+        if (effectiveAllowedPages.includes(target)) {
           if (sectionTarget) {
             setManagerSection(sectionTarget);
           }
           setPage(target);
         } else {
-          // Silently redirect unauthorised hash navigation back to tables.
-          window.location.hash = "#tables";
-          setPage("tables");
+          // Silently redirect unauthorised hash navigation to the best available page.
+          window.location.hash = fallbackPage === "billing" ? "#billing" : "#kot";
+          setPage(fallbackPage);
         }
       };
 
@@ -259,7 +305,7 @@ function MainContent({
         window.removeEventListener("select-table", onSelectTable as EventListener);
         window.removeEventListener("hashchange", onHash);
       };
-    }, [allowedPages]);
+    }, [effectiveAllowedPages, fallbackPage]);
 
     React.useEffect(() => {
       try {
@@ -275,7 +321,7 @@ function MainContent({
         const currentHash = window.location.hash;
         const currentManagerSection = managerSectionFromHash(currentHash);
         if (!(page === "manager" && currentManagerSection === managerSection)) {
-          window.location.hash = hash || "#tables";
+          window.location.hash = hash || (fallbackPage === "billing" ? "#billing" : "#kot");
         }
         // if navigating away from tables, hide inline billing
         if (page !== "tables") {
@@ -284,7 +330,7 @@ function MainContent({
       } catch (e) {
         // ignore storage errors
       }
-    }, [page, managerSection]);
+    }, [page, managerSection, fallbackPage]);
 
     // User menu (dropdown) state + outside click handler
     const userMenuRef = React.useRef<HTMLDivElement | null>(null);
@@ -680,7 +726,7 @@ function MainContent({
             }}
           >
             {navItems
-              .filter((n) => allowedPages.includes(n.k))
+              .filter((n) => effectiveAllowedPages.includes(n.k))
               .map((it) => {
                 const active = page === it.k;
                 return (
@@ -747,12 +793,12 @@ function MainContent({
                       even if hash navigation somehow sets an unauthorised page,
                       the component never mounts. This is defense-in-depth on top
                       of the hashchange handler's redirect. */}
-                  {page === "tables" && allowedPages.includes("tables") && <Tables />}
-                  {page === "billing" && allowedPages.includes("billing") && <Billing />}
-                  {page === "kot" && allowedPages.includes("kot") && <KOTQueue />}
-                  {page === "customers" && allowedPages.includes("customers") && <Customers />}
-                  {page === "reports" && allowedPages.includes("reports") && <Reports />}
-                  {page === "manager" && allowedPages.includes("manager") && (
+                  {page === "tables" && effectiveAllowedPages.includes("tables") && <Tables />}
+                  {page === "billing" && effectiveAllowedPages.includes("billing") && <Billing />}
+                  {page === "kot" && effectiveAllowedPages.includes("kot") && <KOTQueue />}
+                  {page === "customers" && effectiveAllowedPages.includes("customers") && <Customers />}
+                  {page === "reports" && effectiveAllowedPages.includes("reports") && <Reports />}
+                  {page === "manager" && effectiveAllowedPages.includes("manager") && (
                     <Manager
                       section={managerSection}
                       onSectionChange={(section) => {

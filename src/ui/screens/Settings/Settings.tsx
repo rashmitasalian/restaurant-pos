@@ -22,6 +22,8 @@ import {
   setConfigGst,
   getConfigBranding,
   setConfigBranding,
+  getConfigServiceModes,
+  setConfigServiceModes,
   listPrintJobs,
   retryPrintJob,
   clearOldPrintJobs,
@@ -41,6 +43,7 @@ import {
 import { DEFAULT_GST_CONFIG, isValidGstin, normalizeGstConfig } from "../../../shared/gst";
 import { RECOVERY_CODE_COUNT } from "../../../shared/auth";
 import { normalizeCategoryName, validationMessage } from "../../../shared/validation";
+import { getDefaultServiceModes, type ServiceMode } from "../../../shared/serviceModes";
 import { processRestaurantLogoFile, type ReceiptLogoRaster } from "../../utils/logoProcessing";
 
 const DEFAULT_ATTENDANCE_SHIFTS: AttendanceShiftConfig[] = [
@@ -123,6 +126,11 @@ export default function Settings() {
   const [tableCount, setTableCount] = React.useState<number>(ENV.TABLE_COUNT);
   const [tableStatus, setTableStatus] = React.useState<string | null>(null);
   const [savingTables, setSavingTables] = React.useState(false);
+  const [serviceModes, setServiceModes] = React.useState<ServiceMode[]>(() =>
+    getDefaultServiceModes(),
+  );
+  const [serviceModeStatus, setServiceModeStatus] = React.useState<string | null>(null);
+  const [savingServiceModes, setSavingServiceModes] = React.useState(false);
 
   // ── Audit retention config ──────────────────────────────────────────────────
   const [retentionDays, setRetentionDays] = React.useState<number | null>(90);
@@ -229,6 +237,14 @@ export default function Settings() {
         if (tCfg) {
           setTableCount(tCfg.tableCount);
         }
+      } catch (e) {}
+      try {
+        const modeCfg = await getConfigServiceModes();
+        setServiceModes(
+          Array.isArray(modeCfg?.modes) && modeCfg.modes.length
+            ? modeCfg.modes
+            : getDefaultServiceModes(),
+        );
       } catch (e) {}
       try {
         setCategories(await getConfigCategories());
@@ -724,6 +740,52 @@ export default function Settings() {
     } finally {
       setSavingTables(false);
       endAction("tables.save");
+    }
+  };
+
+  const toggleServiceMode = (id: string) => {
+    setServiceModes((prev) =>
+      prev.map((mode) => (mode.id === id ? { ...mode, enabled: !mode.enabled } : mode)),
+    );
+  };
+
+  const updateServiceModeField = <K extends keyof ServiceMode>(
+    id: string,
+    field: K,
+    value: ServiceMode[K],
+  ) => {
+    setServiceModes((prev) =>
+      prev.map((mode) => (mode.id === id ? { ...mode, [field]: value } : mode)),
+    );
+  };
+
+  const saveServiceModes = async () => {
+    if (!beginAction("serviceModes.save")) {
+      return;
+    }
+    const orderedModes = [...serviceModes].sort(
+      (a, b) => a.displayOrder - b.displayOrder || a.name.localeCompare(b.name),
+    );
+    const enabledCount = orderedModes.filter((mode) => mode.enabled).length;
+    if (enabledCount < 1) {
+      endAction("serviceModes.save");
+      setServiceModeStatus("Enable at least one service mode");
+      return;
+    }
+
+    setSavingServiceModes(true);
+    setServiceModeStatus(null);
+    try {
+      const saved = await setConfigServiceModes(orderedModes);
+      setServiceModes(saved.modes || serviceModes);
+      setServiceModeStatus("Saved ✓");
+      window.dispatchEvent(new Event("service-modes-changed"));
+      setTimeout(() => setServiceModeStatus(null), 4000);
+    } catch (e: any) {
+      setServiceModeStatus("Save failed: " + (e?.message || String(e)));
+    } finally {
+      setSavingServiceModes(false);
+      endAction("serviceModes.save");
     }
   };
 
@@ -2083,6 +2145,180 @@ export default function Settings() {
               }}
             >
               {tableStatus}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Service Modes Section ─────────────────────────────────────── */}
+      <div className="pos-card pos-card-p" style={{ marginTop: 24 }}>
+        <div
+          style={{
+            fontSize: 11,
+            fontWeight: 800,
+            color: "var(--pos-muted,#9ca3af)",
+            marginBottom: 20,
+            textTransform: "uppercase",
+            letterSpacing: "0.1em",
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
+          <span style={{ fontSize: 15 }}>⧉</span>
+          Service Modes
+        </div>
+
+        <p
+          style={{
+            fontSize: 13,
+            color: "var(--pos-tx-sub,#6b7280)",
+            marginBottom: 14,
+            marginTop: 0,
+          }}
+        >
+          Enable only the operational modes your restaurant uses. Billing will show only enabled
+          modes.
+        </p>
+
+        <div style={{ display: "grid", gap: 10 }}>
+          {[...serviceModes]
+            .sort((a, b) => a.displayOrder - b.displayOrder || a.name.localeCompare(b.name))
+            .map((mode) => (
+            <label
+              key={mode.id}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                padding: "10px 12px",
+                border: "1px solid #e5e7eb",
+                borderRadius: 10,
+                background: mode.enabled ? "#f8fafc" : "#ffffff",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={mode.enabled}
+                onChange={() => toggleServiceMode(mode.id)}
+              />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 700, color: "#111827", fontSize: 14 }}>{mode.name}</div>
+                <div style={{ color: "#6b7280", fontSize: 12 }}>
+                  {mode.requiresTable ? "Table required" : "No table"}
+                  {mode.externalPayment ? " · External payment" : " · In-POS payment"}
+                </div>
+                <div
+                  style={{
+                    marginTop: 8,
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+                    gap: 8,
+                    fontSize: 12,
+                    color: "#374151",
+                  }}
+                >
+                  <div>
+                    <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <input
+                        type="checkbox"
+                        checked={mode.supportsKOT}
+                        onChange={(event) =>
+                          updateServiceModeField(mode.id, "supportsKOT", event.target.checked)
+                        }
+                      />
+                      Supports KOT
+                    </label>
+                    <div style={{ color: "#9ca3af", marginLeft: 22 }}>Show kitchen ticket actions</div>
+                  </div>
+                  <div>
+                    <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <input
+                        type="checkbox"
+                        checked={mode.immediateBilling}
+                        onChange={(event) =>
+                          updateServiceModeField(mode.id, "immediateBilling", event.target.checked)
+                        }
+                      />
+                      Immediate billing
+                    </label>
+                    <div style={{ color: "#9ca3af", marginLeft: 22 }}>Pay first, then auto-print flow</div>
+                  </div>
+                  <div>
+                    <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <input
+                        type="checkbox"
+                        checked={mode.requiresCustomer}
+                        onChange={(event) =>
+                          updateServiceModeField(mode.id, "requiresCustomer", event.target.checked)
+                        }
+                      />
+                      Requires customer
+                    </label>
+                    <div style={{ color: "#9ca3af", marginLeft: 22 }}>Ask for name or phone before order</div>
+                  </div>
+                  <div>
+                    <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <input
+                        type="checkbox"
+                        checked={mode.supportsOpenOrders}
+                        onChange={(event) =>
+                          updateServiceModeField(mode.id, "supportsOpenOrders", event.target.checked)
+                        }
+                      />
+                      Supports open orders
+                    </label>
+                    <div style={{ color: "#9ca3af", marginLeft: 22 }}>
+                      Allow hold/ready lifecycle before payment
+                    </div>
+                  </div>
+                </div>
+                {mode.supportsKOT && (
+                  <div style={{ marginTop: 10, display: "flex", gap: 8, alignItems: "center" }}>
+                    <span style={{ fontSize: 12, color: "#6b7280" }}>Payment print flow</span>
+                    <select
+                      className="pos-input"
+                      value={mode.paymentPrintSequence}
+                      onChange={(event) =>
+                        updateServiceModeField(
+                          mode.id,
+                          "paymentPrintSequence",
+                          event.target.value as ServiceMode["paymentPrintSequence"],
+                        )
+                      }
+                      style={{ maxWidth: 220, height: 36 }}
+                    >
+                      <option value="bill_only">Bill only</option>
+                      <option value="bill_then_kot">Bill then KOT</option>
+                      <option value="kot_then_bill">KOT then Bill</option>
+                    </select>
+                  </div>
+                )}
+              </div>
+            </label>
+          ))}
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 16 }}>
+          <button
+            onClick={saveServiceModes}
+            disabled={savingServiceModes}
+            className="pos-btn pos-btn-primary"
+          >
+            {savingServiceModes ? "Saving..." : "Save Service Modes"}
+          </button>
+          {serviceModeStatus && (
+            <div
+              style={{
+                padding: "8px 12px",
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 600,
+                background: serviceModeStatus.includes("✓") ? "#dcfce7" : "#fee2e2",
+                color: serviceModeStatus.includes("✓") ? "#16a34a" : "#dc2626",
+              }}
+            >
+              {serviceModeStatus}
             </div>
           )}
         </div>

@@ -1,6 +1,6 @@
 export type Role = "admin" | "cashier";
 
-export type OrderType = "table" | "takeaway" | "delivery";
+export type OrderType = string;
 export type OrderStatus = "open" | "held" | "ready" | "assigned" | "paid" | "cancelled";
 export type PaymentMethod = "cash" | "upi" | "card" | "voucher" | "online" | "split" | "other";
 export type KotStatus = "pending" | "sent" | "printed" | "failed";

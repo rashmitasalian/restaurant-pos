@@ -23,6 +23,11 @@ import type {
 } from "../../shared/pos";
 import { DEFAULT_GST_CONFIG, normalizeGstConfig, type GstConfig } from "../../shared/gst";
 import { kotSentLinesNeedPrint } from "../../shared/kot";
+import {
+  SERVICE_MODE_CONFIG_KEY,
+  normalizeServiceModes,
+  type ServiceMode,
+} from "../../shared/serviceModes";
 
 export type TableDoc = TableDto;
 export type OrderLine = OrderLineDto;
@@ -81,7 +86,8 @@ export async function createOrderForTable(tableId: number | null): Promise<Order
 
 export async function createOrder(input: {
   tableId?: number | null;
-  orderType?: "table" | "takeaway" | "delivery";
+  orderType?: string;
+  serviceModeId?: string;
   customerId?: string | null;
   meta?: Record<string, unknown>;
 }): Promise<OrderDoc> {
@@ -661,8 +667,39 @@ export type ConfigTablesDoc = ConfigDto & {
   updatedAt: number;
 };
 
+export type ConfigServiceModesDoc = ConfigDto & {
+  _id: "config:service-modes";
+  modes: ServiceMode[];
+  updatedAt?: number;
+};
+
 export async function getConfigTables(): Promise<ConfigTablesDoc | null> {
   return api().settings!.get("config:tables");
+}
+
+export async function getConfigServiceModes(): Promise<ConfigServiceModesDoc> {
+  const cfg = await api().settings!.get(SERVICE_MODE_CONFIG_KEY);
+  return {
+    _id: SERVICE_MODE_CONFIG_KEY,
+    type: "config",
+    modes: normalizeServiceModes(cfg),
+    updatedAt: Number((cfg as any)?.updatedAt || 0) || undefined,
+  } as ConfigServiceModesDoc;
+}
+
+export async function setConfigServiceModes(modes: ServiceMode[]): Promise<ConfigServiceModesDoc> {
+  const saved = await api().settings!.set(SERVICE_MODE_CONFIG_KEY, { modes });
+  return {
+    _id: SERVICE_MODE_CONFIG_KEY,
+    type: "config",
+    modes: normalizeServiceModes(saved),
+    updatedAt: Number((saved as any)?.updatedAt || 0) || undefined,
+  } as ConfigServiceModesDoc;
+}
+
+export async function getEnabledServiceModes(): Promise<ServiceMode[]> {
+  const cfg = await getConfigServiceModes();
+  return (cfg.modes || []).filter((mode) => mode.enabled);
 }
 
 export async function setConfigTables(tableCount: number): Promise<ConfigTablesDoc> {

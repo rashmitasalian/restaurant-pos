@@ -129,9 +129,18 @@ export function buildReceiptLines(
   const orderNum = Number(ord?.meta?.orderSeq) || null;
   const invoiceNumber = String(ord?.invoiceNumber || ord?.meta?.invoice?.number || "").trim();
   const meta = ord?.meta || {};
-  const orderType = ord?.orderType || (tableNum ? "dine-in" : "takeaway");
+  const orderType = String(ord?.orderType || (tableNum ? "table" : "takeaway")).toLowerCase();
+  const normalizedOrderTypeLabel = orderType.replace(/[_-]+/g, " ").trim();
   const orderTypeLabel =
-    orderType === "delivery" ? "DELIVERY" : orderType === "takeaway" ? "TAKEAWAY" : "DINE-IN";
+    orderType === "delivery"
+      ? "DELIVERY"
+      : orderType === "takeaway"
+        ? "TAKEAWAY"
+        : orderType === "table"
+          ? "DINE-IN"
+          : normalizedOrderTypeLabel
+            ? normalizedOrderTypeLabel.toUpperCase()
+            : "ORDER";
 
   const PAD = "  ";
   const COL_ITEM = 20;
@@ -169,10 +178,10 @@ export function buildReceiptLines(
           ...(meta.code ? [`CENTER:Order Code: #${meta.code}`] : []),
         ]
       : []),
-    ...(orderType === "takeaway" && (meta.customerName || meta.parcelName)
+    ...(orderType !== "table" && orderType !== "delivery" && (meta.customerName || meta.parcelName)
       ? [`CENTER:Customer: ${meta.customerName || meta.parcelName}`]
       : []),
-    ...(orderType === "takeaway" && meta.customerPhone
+    ...(orderType !== "table" && orderType !== "delivery" && meta.customerPhone
       ? [`CENTER:Phone: ${meta.customerPhone}`]
       : []),
     "SEP",

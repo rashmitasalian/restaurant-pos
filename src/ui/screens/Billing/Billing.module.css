@@ -217,6 +217,19 @@
   align-items: center;
   flex-shrink: 0;
 }
+.paymentFlowChip {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid #d1fae5;
+  background: #ecfdf5;
+  color: #065f46;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
 .actionBtn {
   padding: 9px 18px;
   border-radius: 9px;
@@ -353,16 +366,18 @@
   min-height: 0;
 }
 .tabBar {
-  display: flex;
-  gap: 3px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
   margin-bottom: 12px;
   background: #f1f2f6;
   border-radius: 10px;
-  padding: 3px;
+  padding: 4px;
 }
 .tabButton {
-  flex: 1;
-  padding: 6px 6px;
+  width: 100%;
+  min-width: 0;
+  padding: 7px 6px;
   border-radius: 8px;
   background: transparent;
   border: none;
@@ -370,7 +385,9 @@
   font-size: 11px;
   font-weight: 600;
   color: #6b7280;
-  white-space: nowrap;
+  white-space: normal;
+  line-height: 1.15;
+  text-align: center;
   font-family: inherit;
 }
 .tabActive {
@@ -382,6 +399,7 @@
   margin-left: 3px;
   font-weight: 700;
   color: #d97706;
+  display: inline-block;
 }
 .tableGrid {
   overflow-y: auto;
@@ -1093,11 +1111,16 @@
   .actionGroup {
     width: 100%;
     justify-content: flex-start;
+    flex-wrap: wrap;
   }
   .actionBtn {
     padding: 8px 14px;
     font-size: 13px;
     min-width: 70px;
+  }
+  .paymentFlowChip {
+    height: 28px;
+    font-size: 11px;
   }
   .actionSecondary,
   .actionTertiary {
@@ -1159,11 +1182,16 @@
   }
   .actionGroup {
     gap: 6px;
+    flex-wrap: wrap;
   }
   .actionBtn {
     padding: 8px 12px;
     font-size: 12px;
     min-width: 60px;
+  }
+  .paymentFlowChip {
+    height: 26px;
+    font-size: 11px;
   }
   .actionSecondary,
   .actionTertiary {
@@ -1238,6 +1266,11 @@
     font-size: 11px;
     min-width: 50px;
   }
+  .paymentFlowChip {
+    font-size: 10px;
+    height: 24px;
+    padding: 0 8px;
+  }
   .actionSecondary,
   .actionTertiary {
     display: none;
@@ -1306,11 +1339,11 @@
     width: 100%;
   }
   .tabBar {
-    gap: 2px;
-    padding: 2px;
+    gap: 3px;
+    padding: 3px;
   }
   .tabButton {
-    padding: 5px 8px;
+    padding: 6px 6px;
     font-size: 11px;
   }
 }

@@ -43,8 +43,8 @@ describe("OrderValidator", () => {
     expect(errors.length).toBeGreaterThan(0);
   });
 
-  it("should reject order with invalid orderType", () => {
-    const invalidOrder = { ...validOrder, orderType: "invalid" as any };
+  it("should reject order with empty orderType", () => {
+    const invalidOrder = { ...validOrder, orderType: "" as any };
     const errors = OrderValidator.validate(invalidOrder);
     expect(errors.some((e: any) => e.field === "orderType")).toBe(true);
   });

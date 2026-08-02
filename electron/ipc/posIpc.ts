@@ -24,6 +24,7 @@ const CUSTOMER_ROLES: Role[] = ["admin", "cashier"];
 const CASHIER_READABLE_SETTINGS = new Set([
   "config:gst",
   "config:printers",
+  "config:service-modes",
   "config:tables",
   "config:categories",
   "config:branding",
@@ -36,6 +37,7 @@ const WRITABLE_SETTINGS = new Set([
   "config:gst",
   "config:history",
   "config:printers",
+  "config:service-modes",
   "config:tables",
 ]);
 
