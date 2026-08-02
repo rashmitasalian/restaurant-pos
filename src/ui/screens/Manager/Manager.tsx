@@ -7,15 +7,7 @@ import Settings from "../Settings/Settings";
 import Staff from "../Staff/Staff";
 import UsersScreen from "../Users/UsersScreen";
 import styles from "./Manager.module.css";
-
-export type ManagerSection =
-  | "grocery"
-  | "menu"
-  | "history"
-  | "staff"
-  | "users"
-  | "audit"
-  | "settings";
+import { type ManagerSection } from "./managerSections";
 
 type ManagerProps = {
   section: ManagerSection;
@@ -36,39 +28,6 @@ const SECTIONS: Array<{
   { key: "audit", label: "Audit", group: "Admin Tools", icon: "AU" },
   { key: "settings", label: "Settings", group: "Admin Tools", icon: "SE" },
 ];
-
-export const MANAGER_SECTION_HASH: Record<ManagerSection, string> = {
-  grocery: "#manager-grocery",
-  menu: "#menu",
-  history: "#history",
-  staff: "#staff",
-  users: "#users",
-  audit: "#audit",
-  settings: "#settings",
-};
-
-export function managerSectionFromHash(hash: string): ManagerSection | null {
-  const normalized = String(hash || "").toLowerCase();
-  const aliases: Record<string, ManagerSection> = {
-    "#manager": "grocery",
-    "#grocery": "grocery",
-    "#manager-grocery": "grocery",
-    "#manager-grocery-list": "grocery",
-    "#manager-grocery-purchases": "grocery",
-    "#manager-grocery-summary": "grocery",
-    "#manager-purchase-entry": "grocery",
-    "#manager-purchases": "grocery",
-    "#manager-purchase-history": "grocery",
-    "#manager-spend-summary": "grocery",
-    "#menu": "menu",
-    "#history": "history",
-    "#staff": "staff",
-    "#users": "users",
-    "#audit": "audit",
-    "#settings": "settings",
-  };
-  return aliases[normalized] || null;
-}
 
 export default function Manager({ section, onSectionChange }: ManagerProps) {
   const renderSection = () => {

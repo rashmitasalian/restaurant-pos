@@ -12,6 +12,19 @@ import { updateService } from "./services/updateService";
 import { printPayload, type PrinterConfig } from "./printing/printService";
 import type { Role } from "../src/shared/pos";
 
+const startupHrStart = process.hrtime.bigint();
+
+function startupElapsedMs() {
+  return Number(process.hrtime.bigint() - startupHrStart) / 1_000_000;
+}
+
+function logStartupStage(stage: string, context?: Record<string, unknown>) {
+  const elapsedMs = Number(startupElapsedMs().toFixed(1));
+  const message = `[startup] ${stage}`;
+  console.info(message, { elapsedMs, ...(context || {}) });
+  writeLogToFile("info", message, { elapsedMs, ...(context || {}) });
+}
+
 // Treat the app as dev only when NODE_ENV != 'production' AND the app is not packaged.
 // This prevents packaged releases from attempting to load the dev server.
 const isDev = process.env.NODE_ENV !== "production" && !app.isPackaged;
@@ -152,6 +165,7 @@ async function waitForServer(url: string, timeoutMs = 15000) {
 }
 
 async function createWindow() {
+  logStartupStage("createWindow:start");
   const icon = resolveAppIconPath();
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -168,6 +182,19 @@ async function createWindow() {
 
   session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => {
     callback(false);
+  });
+
+  mainWindow.webContents.once("did-start-loading", () => {
+    logStartupStage("renderer:did-start-loading");
+  });
+  mainWindow.webContents.once("dom-ready", () => {
+    logStartupStage("renderer:dom-ready");
+  });
+  mainWindow.webContents.once("did-finish-load", () => {
+    logStartupStage("renderer:did-finish-load");
+  });
+  mainWindow.once("ready-to-show", () => {
+    logStartupStage("window:ready-to-show");
   });
 
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
@@ -220,35 +247,51 @@ async function createWindow() {
 
   if (isDev) {
     const devUrl = "http://localhost:5173";
+    logStartupStage("renderer:wait-for-dev-server:start", { url: devUrl });
     const ready = await waitForServer(devUrl, 15000);
     if (!ready) {
       throw new Error("renderer-dev-server-not-ready");
     }
+    logStartupStage("renderer:wait-for-dev-server:ready");
     mainWindow.loadURL(devUrl);
-    try {
-      mainWindow.webContents.openDevTools({ mode: "right" });
-    } catch (e) {
-      // ignore if webContents not ready
+    if (process.env.POS_OPEN_DEVTOOLS === "1") {
+      try {
+        mainWindow.webContents.openDevTools({ mode: "right" });
+      } catch (e) {
+        // ignore if webContents not ready
+      }
     }
   } else {
     // ── Production: load the built renderer from dist/ ──────────────────────
     const rendererPath = path.join(__dirname, "..", "..", "dist", "index.html");
+    logStartupStage("renderer:load-file", { rendererPath });
     mainWindow.loadFile(rendererPath);
   }
 
   mainWindow.on("closed", () => {
+    logStartupStage("window:closed");
     mainWindow = null;
   });
 }
 
 app.whenReady().then(async () => {
+  logStartupStage("app:whenReady");
   configureStableUserDataPath();
   try {
+    logStartupStage("db:init:start");
     await initializeDatabase();
+    logStartupStage("db:init:done");
+    logStartupStage("service:ensure-ready:start");
     posService.ensureReady();
+    logStartupStage("service:ensure-ready:done");
+    logStartupStage("updates:startup-state:start");
     updateService.processStartupState();
+    logStartupStage("updates:startup-state:done");
+    logStartupStage("ipc:register:start");
     registerPosIpc(() => mainWindow);
+    logStartupStage("ipc:register:done");
     await createWindow();
+    logStartupStage("createWindow:done");
   } catch (err: any) {
     writeLogToFile("fatal", `Startup failed: ${err?.stack || err}`);
     dialog.showErrorBox(

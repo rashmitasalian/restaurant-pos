@@ -2,23 +2,15 @@
 import { ENV } from "../config/env";
 import { ROLES } from "../config/roles";
 import type { Role } from "../config/roles";
-import Tables from "./screens/Tables/Tables";
-import Billing from "./screens/Billing/Billing";
-import KOTQueue from "./screens/KOTQueue/KOTQueue";
-import Reports from "./screens/Reports/Reports";
-import Customers from "./screens/Customers/Customers";
-import Manager, {
+import {
   MANAGER_SECTION_HASH,
   managerSectionFromHash,
   type ManagerSection,
-} from "./screens/Manager/Manager";
+} from "./screens/Manager/managerSections";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { AuthProvider, AuthContext } from "./context/AuthContext";
 import { ToastProvider } from "./context/ToastContext";
 import { useFocusTrap } from "./hooks/useFocusTrap";
-import LoginScreen from "./screens/Login/LoginScreen";
-import ChangePasswordScreen from "./screens/Login/ChangePasswordScreen";
-import SetupScreen from "./screens/Login/SetupScreen";
 import {
   ensureIndexes,
   getConfigBranding,
@@ -28,7 +20,42 @@ import {
 } from "../app/db/posRepository";
 import restoNitiMark from "./assets/restoniti-icon.png";
 
+const Tables = React.lazy(() => import("./screens/Tables/Tables"));
+const Billing = React.lazy(() => import("./screens/Billing/Billing"));
+const KOTQueue = React.lazy(() => import("./screens/KOTQueue/KOTQueue"));
+const Reports = React.lazy(() => import("./screens/Reports/Reports"));
+const Customers = React.lazy(() => import("./screens/Customers/Customers"));
+const Manager = React.lazy(() => import("./screens/Manager/Manager"));
+const LoginScreen = React.lazy(() => import("./screens/Login/LoginScreen"));
+const ChangePasswordScreen = React.lazy(() => import("./screens/Login/ChangePasswordScreen"));
+const SetupScreen = React.lazy(() => import("./screens/Login/SetupScreen"));
+
+function ScreenLoadingFallback() {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        height: "100%",
+        color: "#9ca3af",
+        fontSize: 14,
+      }}
+    >
+      Loading…
+    </div>
+  );
+}
+
 type Page = "tables" | "billing" | "kot" | "reports" | "customers" | "manager";
+
+function getRendererStartupElapsedMs() {
+  const t0 = Number((window as any).__posStartupT0 || 0);
+  if (!Number.isFinite(t0) || t0 <= 0 || typeof performance === "undefined") {
+    return null;
+  }
+  return Number((performance.now() - t0).toFixed(1));
+}
 
 function MainContent({
   hasUsers,
@@ -142,6 +169,7 @@ function MainContent({
       const hash = (typeof window !== "undefined" && window.location.hash) || "";
       return managerSectionFromHash(hash) || "grocery";
     });
+    const firstScreenLoggedRef = React.useRef(false);
     const [now, setNow] = React.useState(new Date());
     // show Billing inline next to Tables (single-page split view)
     const [showBillingInline, setShowBillingInline] = React.useState<boolean>(false);
@@ -152,6 +180,30 @@ function MainContent({
       const id = setInterval(() => setNow(new Date()), 30000);
       return () => clearInterval(id);
     }, []);
+
+    React.useEffect(() => {
+      if (firstScreenLoggedRef.current || auth?.loading) {
+        return;
+      }
+      let screen = "unknown";
+      if (!auth?.session) {
+        screen = hasUsers === false ? "setup" : "login";
+      } else if (auth.session.requirePasswordChange) {
+        screen = "change-password";
+      } else {
+        screen = page;
+      }
+      firstScreenLoggedRef.current = true;
+      const elapsedMs = getRendererStartupElapsedMs();
+      const context = {
+        screen,
+        elapsedMs,
+      };
+      console.info("[renderer-startup] first-screen-ready", context);
+      window.pos?.writeLog?.("info", "[renderer-startup] first-screen-ready", context).catch(() => {
+        // best effort telemetry
+      });
+    }, [auth?.loading, auth?.session, hasUsers, page]);
 
     React.useEffect(() => {
       const onHash = () => {
@@ -282,14 +334,26 @@ function MainContent({
     if (!auth?.session) {
       // First-run: no users exist, so show setup wizard instead of login.
       if (hasUsers === false) {
-        return <SetupScreen onComplete={onSetupComplete} />;
+        return (
+          <React.Suspense fallback={<ScreenLoadingFallback />}>
+            <SetupScreen onComplete={onSetupComplete} />
+          </React.Suspense>
+        );
       }
-      return <LoginScreen />;
+      return (
+        <React.Suspense fallback={<ScreenLoadingFallback />}>
+          <LoginScreen />
+        </React.Suspense>
+      );
     }
     // If the account requires a password change (e.g. freshly seeded admin),
     // gate access to the entire application until a new password is set.
     if (auth.session.requirePasswordChange) {
-      return <ChangePasswordScreen />;
+      return (
+        <React.Suspense fallback={<ScreenLoadingFallback />}>
+          <ChangePasswordScreen />
+        </React.Suspense>
+      );
     }
 
     return (
@@ -638,67 +702,69 @@ function MainContent({
         </header>
 
         <div id="main-content" tabIndex={-1} style={{ display: "flex", flex: 1, minHeight: 0 }}>
-          {inlineLayout ? (
-            // Equal 50/50 split when inline billing is active
-            <div id="split-view" style={{ display: "flex", flex: 1, gap: 0, minHeight: 0 }}>
-              <main
-                id="tables-section"
-                // split view columns can scroll independently
-                style={{
-                  flex: 1,
-                  padding: 0,
-                  overflow: "auto",
-                  minHeight: 0,
-                }}
-              >
-                <Tables />
-              </main>
-              <aside
-                id="billing-section"
-                style={{
-                  flex: 1,
-                  borderLeft: "1px solid #eee",
-                  background: "var(--pos-bg, #ffffff)",
-                  overflow: "auto",
-                  minHeight: 0,
-                }}
-              >
-                <Billing />
-              </aside>
-            </div>
-          ) : (
-            // Default layout: main content
-            <>
-              <main
-                style={{
-                  flex: 1,
-                  padding: 0,
-                  overflow: "auto",
-                  minHeight: 0,
-                  background: "var(--pos-bg, #ffffff)",
-                }}
-              >
-                {/* Render guard: each page checks the allow-list so that
-                    even if hash navigation somehow sets an unauthorised page,
-                    the component never mounts. This is defense-in-depth on top
-                    of the hashchange handler's redirect. */}
-                {page === "tables" && allowedPages.includes("tables") && <Tables />}
-                {page === "billing" && allowedPages.includes("billing") && <Billing />}
-                {page === "kot" && allowedPages.includes("kot") && <KOTQueue />}
-                {page === "customers" && allowedPages.includes("customers") && <Customers />}
-                {page === "reports" && allowedPages.includes("reports") && <Reports />}
-                {page === "manager" && allowedPages.includes("manager") && (
-                  <Manager
-                    section={managerSection}
-                    onSectionChange={(section) => {
-                      setManagerSection(section);
-                      setPage("manager");
-                    }}
-                  />
-                )}
-              </main>
-            </>
-          )}
+          <React.Suspense fallback={<ScreenLoadingFallback />}>
+            {inlineLayout ? (
+              // Equal 50/50 split when inline billing is active
+              <div id="split-view" style={{ display: "flex", flex: 1, gap: 0, minHeight: 0 }}>
+                <main
+                  id="tables-section"
+                  // split view columns can scroll independently
+                  style={{
+                    flex: 1,
+                    padding: 0,
+                    overflow: "auto",
+                    minHeight: 0,
+                  }}
+                >
+                  <Tables />
+                </main>
+                <aside
+                  id="billing-section"
+                  style={{
+                    flex: 1,
+                    borderLeft: "1px solid #eee",
+                    background: "var(--pos-bg, #ffffff)",
+                    overflow: "auto",
+                    minHeight: 0,
+                  }}
+                >
+                  <Billing />
+                </aside>
+              </div>
+            ) : (
+              // Default layout: main content
+              <>
+                <main
+                  style={{
+                    flex: 1,
+                    padding: 0,
+                    overflow: "auto",
+                    minHeight: 0,
+                    background: "var(--pos-bg, #ffffff)",
+                  }}
+                >
+                  {/* Render guard: each page checks the allow-list so that
+                      even if hash navigation somehow sets an unauthorised page,
+                      the component never mounts. This is defense-in-depth on top
+                      of the hashchange handler's redirect. */}
+                  {page === "tables" && allowedPages.includes("tables") && <Tables />}
+                  {page === "billing" && allowedPages.includes("billing") && <Billing />}
+                  {page === "kot" && allowedPages.includes("kot") && <KOTQueue />}
+                  {page === "customers" && allowedPages.includes("customers") && <Customers />}
+                  {page === "reports" && allowedPages.includes("reports") && <Reports />}
+                  {page === "manager" && allowedPages.includes("manager") && (
+                    <Manager
+                      section={managerSection}
+                      onSectionChange={(section) => {
+                        setManagerSection(section);
+                        setPage("manager");
+                      }}
+                    />
+                  )}
+                </main>
+              </>
+            )}
+          </React.Suspense>
         </div>
 
         {/* Profile modal */}
