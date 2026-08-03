@@ -194,6 +194,7 @@ function runSchema(database: SqliteDatabase) {
       id INTEGER PRIMARY KEY,
       name TEXT,
       seats INTEGER NOT NULL DEFAULT 4,
+      area_id TEXT,
       sort_order INTEGER NOT NULL,
       active INTEGER NOT NULL DEFAULT 1,
       created_at INTEGER NOT NULL,
@@ -578,6 +579,10 @@ function runSchema(database: SqliteDatabase) {
   runMigration(database, 9, "Hard-delete soft-deleted grocery items and purchases", () => {
     database.exec("DELETE FROM grocery_purchase_lines WHERE active = 0");
     database.exec("DELETE FROM grocery_items WHERE active = 0");
+  });
+
+  runMigration(database, 10, "Add area_id to tables", () => {
+    addColumnIfMissing(database, "tables", "area_id", "TEXT");
   });
 }
 
