@@ -215,9 +215,6 @@ function runSchema(database: SqliteDatabase) {
       updated_at INTEGER NOT NULL
     );
 
-    CREATE INDEX IF NOT EXISTS idx_tables_area_sort
-      ON tables(area_id, sort_order, id);
-
     CREATE TABLE IF NOT EXISTS menu_categories (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL UNIQUE,
