@@ -39,6 +39,17 @@ export type TableDto = {
   name?: string;
   seats: number;
   order?: number;
+  areaId: string;
+  areaName?: string;
+  active?: boolean;
+};
+
+export type SeatingAreaDto = {
+  _id: string;
+  type: "seating-area";
+  id: string;
+  name: string;
+  order?: number;
   active?: boolean;
 };
 

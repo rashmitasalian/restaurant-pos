@@ -6,19 +6,17 @@ import {
   getOrderById,
   addItemToOrder,
   getOrCreateOrderForTable,
-  getOpenOrderForTable,
+  getTablesSnapshot,
   setOrderPaid,
   cancelOrder,
   getItems,
   seedItems,
-  seedTables,
   updateOrderLines,
   setOrderDiscount,
   setOrderStatus,
   markOrderKotFailed,
   markOrderKotSent,
   voidOrderKotLine,
-  getConfiguredTableCount,
   getConfigPrinters,
   getConfigGst,
   getConfigBranding,
@@ -316,12 +314,23 @@ export default function Billing() {
   );
   const [view, setView] = React.useState<string>("table");
   const [modeOrders, setModeOrders] = React.useState<Record<string, any[]>>({});
-  const [tableCount, setTableCount] = React.useState(0);
-  const tableNumbers = React.useMemo(
-    () => Array.from({ length: tableCount }, (_, i) => i + 1),
-    [tableCount],
-  );
-  const [tableInfos, setTableInfos] = React.useState<Record<number, any>>({});
+  const [tableAreas, setTableAreas] = React.useState<Array<{ id: string; name: string; active?: boolean }>>([]);
+  const [selectedAreaId, setSelectedAreaId] = React.useState<string>(() => {
+    try {
+      return window.localStorage.getItem("billingSelectedArea") || "area:main";
+    } catch {
+      return "area:main";
+    }
+  });
+  const [tablesByArea, setTablesByArea] = React.useState<
+    Record<string, Array<{ id: number; status?: string; count?: number; total?: number }>>
+  >({});
+
+  React.useEffect(() => {
+    try {
+      window.localStorage.setItem("billingSelectedArea", selectedAreaId || "area:main");
+    } catch {}
+  }, [selectedAreaId]);
 
   // ── Modal state ─────────────────────────────────────────────────────────
   const [payModalOpen, setPayModalOpen] = React.useState(false);
@@ -497,64 +506,68 @@ export default function Billing() {
     }
   }, []);
 
-  const loadTableStatuses = React.useCallback(async () => {
-    const acc: Record<number, any> = {};
-    for (const t of tableNumbers) {
-      try {
-        const o = await getOpenOrderForTable(t);
-        if (o) {
-          const count = (o.items || []).length;
-          const total =
-            typeof o.total === "number"
-              ? o.total
-              : (o.items || []).reduce(
-                  (s: number, it: any) => s + (it.qty || 0) * (it.rate || 0),
-                  0,
-                );
-          acc[t] = {
-            status: count > 0 ? (o.status === "held" ? "held" : "open") : "",
-            count,
-            total,
-          };
-        } else {
-          acc[t] = { status: "", count: 0, total: 0 };
-        }
-      } catch {
-        acc[t] = { status: "", count: 0, total: 0 };
+  const loadTableSnapshot = React.useCallback(async () => {
+    try {
+      const snapshot = await getTablesSnapshot();
+      const activeAreas = (snapshot.areas || []).filter((area) => area.active !== false);
+      setTableAreas(activeAreas.map((area) => ({ id: area.id, name: area.name, active: area.active })));
+      const grouped: Record<string, Array<{ id: number; status?: string; count?: number; total?: number }>> = {};
+      for (const area of activeAreas) {
+        grouped[area.id] = [];
       }
+      for (const table of snapshot.tables || []) {
+        const areaId = String(table.areaId || "area:main");
+        grouped[areaId] = grouped[areaId] || [];
+        grouped[areaId].push({
+          id: table.id,
+          status: table.status || "",
+          count: Number(table.count || 0),
+          total: Number(table.total || 0),
+        });
+      }
+      setTablesByArea(grouped);
+      setSelectedAreaId((current) => {
+        if (current && grouped[current]) {
+          return current;
+        }
+        const currentTableArea =
+          tableNum !== null
+            ? (snapshot.tables || []).find((table) => table.id === tableNum)?.areaId || null
+            : null;
+        if (currentTableArea && grouped[currentTableArea]) {
+          return currentTableArea;
+        }
+        return activeAreas[0]?.id || "area:main";
+      });
+    } catch (e) {
+      logger.error("Billing: failed to load table snapshot", e as Error);
+      setTablesByArea({});
     }
-    setTableInfos(acc);
-  }, [tableNumbers]);
+  }, [tableNum]);
 
   React.useEffect(() => {
     loadQueues();
     loadServiceModeConfig();
+    loadTableSnapshot();
     const h = () => loadQueues();
     const hs = () => loadServiceModeConfig();
+    const ht = () => loadTableSnapshot();
     window.addEventListener("orders-changed", h);
     window.addEventListener("service-modes-changed", hs);
+    window.addEventListener("seating-areas-changed", ht);
     return () => {
       window.removeEventListener("orders-changed", h);
       window.removeEventListener("service-modes-changed", hs);
+      window.removeEventListener("seating-areas-changed", ht);
     };
-  }, [loadQueues, loadServiceModeConfig]);
+  }, [loadQueues, loadServiceModeConfig, loadTableSnapshot]);
 
   React.useEffect(() => {
-    loadTableStatuses();
-    const h = () => loadTableStatuses();
+    loadTableSnapshot();
+    const h = () => loadTableSnapshot();
     window.addEventListener("orders-changed", h);
     return () => window.removeEventListener("orders-changed", h);
-  }, [loadTableStatuses]);
-
-  React.useEffect(() => {
-    const h = async () => {
-      const count = await getConfiguredTableCount();
-      await seedTables(count);
-      setTableCount(count);
-    };
-    window.addEventListener("orders-changed", h);
-    return () => window.removeEventListener("orders-changed", h);
-  }, []);
+  }, [loadTableSnapshot]);
 
   // ── Initial load ────────────────────────────────────────────────────────
   React.useEffect(() => {
@@ -588,7 +601,7 @@ export default function Billing() {
         // Load items first so favorites render immediately alongside the order
         await seedItems();
         setItems(await getItems());
-        setTableCount(await getConfiguredTableCount());
+        await loadTableSnapshot();
       } catch (e) {
         logger.error("Billing: failed to load items/config on mount", e as Error);
       }
@@ -623,7 +636,7 @@ export default function Billing() {
         window.localStorage.removeItem("currentTable");
       }
     })();
-  }, []);
+  }, [loadTableSnapshot]);
 
   // Listen for select-table events (fired by App.tsx when a table is chosen from the Tables tab)
   React.useEffect(() => {
@@ -654,14 +667,20 @@ export default function Billing() {
         cartItems: o?.items || [],
         discountPercent: o?.discountPercent || 0,
       });
+      const matchingAreaId = Object.entries(tablesByArea).find(([, list]) =>
+        list.some((entry) => entry.id === tn),
+      )?.[0];
+      if (matchingAreaId) {
+        setSelectedAreaId(matchingAreaId);
+      }
       setTimeout(() => searchRef.current?.focus(), 10);
-      setTimeout(() => loadTableStatuses(), 50);
+      setTimeout(() => loadTableSnapshot(), 50);
     } catch (error) {
       logger.error("Failed to load table", error as Error, { tableNumber: tn });
     }
   };
   // Keep the ref in sync so the select-table event handler always calls
-  // the latest version (which closes over the current loadTableStatuses).
+  // the latest version (which closes over the current table snapshot state).
   loadTableRef.current = loadTable;
 
   const addToOrder = async (
@@ -1874,8 +1893,10 @@ export default function Billing() {
                 }
               }
             }}
-            tableNumbers={tableNumbers}
-            tableInfos={tableInfos}
+            tableAreas={tableAreas}
+            selectedAreaId={selectedAreaId}
+            onSelectArea={setSelectedAreaId}
+            tablesByArea={tablesByArea}
             tableNum={tableNum}
             activeOrderType={activeOrderType}
             modeOrders={modeOrders}

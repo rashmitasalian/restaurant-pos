@@ -6,6 +6,8 @@ import path from "path";
 type SqliteDatabase = any;
 
 let db: SqliteDatabase | null = null;
+const DEFAULT_SEATING_AREA_ID = "area:main";
+const DEFAULT_SEATING_AREA_NAME = "Main Dining";
 
 export function getDatabasePath() {
   const override = process.env.POS_DB_PATH_OVERRIDE?.trim();
@@ -190,15 +192,31 @@ function runSchema(database: SqliteDatabase) {
     CREATE INDEX IF NOT EXISTS idx_admin_recovery_codes_user_unused
       ON admin_recovery_codes(username, used_at);
 
-    CREATE TABLE IF NOT EXISTS tables (
-      id INTEGER PRIMARY KEY,
-      name TEXT,
-      seats INTEGER NOT NULL DEFAULT 4,
+    CREATE TABLE IF NOT EXISTS seating_areas (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
       sort_order INTEGER NOT NULL,
       active INTEGER NOT NULL DEFAULT 1,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     );
+
+    CREATE INDEX IF NOT EXISTS idx_seating_areas_active_sort
+      ON seating_areas(active, sort_order, name);
+
+    CREATE TABLE IF NOT EXISTS tables (
+      id INTEGER PRIMARY KEY,
+      name TEXT,
+      seats INTEGER NOT NULL DEFAULT 4,
+      area_id TEXT NOT NULL DEFAULT 'area:main' REFERENCES seating_areas(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+      sort_order INTEGER NOT NULL,
+      active INTEGER NOT NULL DEFAULT 1,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_tables_area_sort
+      ON tables(area_id, sort_order, id);
 
     CREATE TABLE IF NOT EXISTS menu_categories (
       id TEXT PRIMARY KEY,
@@ -667,6 +685,64 @@ function runSchema(database: SqliteDatabase) {
         ON attendance_records(status);
     `);
   });
+
+  runMigration(database, 12, "Add seating areas", () => {
+    const at = Date.now();
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS seating_areas (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        sort_order INTEGER NOT NULL,
+        active INTEGER NOT NULL DEFAULT 1,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_seating_areas_active_sort
+        ON seating_areas(active, sort_order, name);
+    `);
+    database
+      .prepare(
+        `INSERT INTO seating_areas (id, name, sort_order, active, created_at, updated_at)
+         VALUES (?, ?, 1, 1, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           name = excluded.name,
+           active = 1,
+           updated_at = excluded.updated_at`,
+      )
+      .run(DEFAULT_SEATING_AREA_ID, DEFAULT_SEATING_AREA_NAME, at, at);
+    addColumnIfMissing(
+      database,
+      "tables",
+      "area_id",
+      `TEXT NOT NULL DEFAULT '${DEFAULT_SEATING_AREA_ID}'`,
+    );
+    database
+      .prepare("UPDATE tables SET area_id = ? WHERE area_id IS NULL OR trim(area_id) = ''")
+      .run(DEFAULT_SEATING_AREA_ID);
+    database.exec(`
+      CREATE INDEX IF NOT EXISTS idx_tables_area_sort
+        ON tables(area_id, sort_order, id);
+    `);
+  });
+
+  // Startup self-healing for pre-existing/partially migrated databases:
+  // ensure area_id exists even if migration 12 was marked applied while the column was missing.
+  addColumnIfMissing(database, "tables", "area_id", `TEXT NOT NULL DEFAULT '${DEFAULT_SEATING_AREA_ID}'`);
+  database
+    .prepare("UPDATE tables SET area_id = ? WHERE area_id IS NULL OR trim(area_id) = ''")
+    .run(DEFAULT_SEATING_AREA_ID);
+  database
+    .prepare(
+      `INSERT INTO seating_areas (id, name, sort_order, active, created_at, updated_at)
+       VALUES (?, ?, 1, 1, ?, ?)
+       ON CONFLICT(id) DO NOTHING`,
+    )
+    .run(DEFAULT_SEATING_AREA_ID, DEFAULT_SEATING_AREA_NAME, Date.now(), Date.now());
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS idx_tables_area_sort
+      ON tables(area_id, sort_order, id);
+  `);
 }
 
 function runMigration(
@@ -705,18 +781,25 @@ function addColumnIfMissing(
 
 function seedDatabase(database: SqliteDatabase) {
   const now = Date.now();
+  database
+    .prepare(
+      `INSERT INTO seating_areas (id, name, sort_order, active, created_at, updated_at)
+       VALUES (?, ?, 1, 1, ?, ?)
+       ON CONFLICT(id) DO NOTHING`,
+    )
+    .run(DEFAULT_SEATING_AREA_ID, DEFAULT_SEATING_AREA_NAME, now, now);
   const tableCount = Number(process.env.VITE_TABLE_COUNT || process.env.TABLE_COUNT || 12);
   const currentTables = database.prepare("SELECT COUNT(*) AS count FROM tables").get() as {
     count: number;
   };
   if (!currentTables.count) {
     const insert = database.prepare(`
-      INSERT INTO tables (id, name, seats, sort_order, active, created_at, updated_at)
-      VALUES (?, ?, ?, ?, 1, ?, ?)
+      INSERT INTO tables (id, name, seats, area_id, sort_order, active, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, 1, ?, ?)
     `);
     const tx = database.transaction(() => {
       for (let i = 1; i <= tableCount; i++) {
-        insert.run(i, `Table ${i}`, i % 4 === 0 ? 6 : 4, i, now, now);
+        insert.run(i, `Table ${i}`, i % 4 === 0 ? 6 : 4, DEFAULT_SEATING_AREA_ID, i, now, now);
       }
     });
     tx();

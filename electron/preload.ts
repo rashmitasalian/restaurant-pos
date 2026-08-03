@@ -106,6 +106,14 @@ contextBridge.exposeInMainWorld("pos", {
     seed: (_count?: number) => authInvoke("pos:tables:seed"),
     list: () => authInvoke("pos:tables:list"),
     configuredCount: () => authInvoke("pos:tables:configured-count"),
+    snapshot: () => authInvoke("pos:tables:snapshot"),
+    setArea: (tableId: number, areaId: string) => authInvoke("pos:tables:set-area", tableId, areaId),
+  },
+  seatingAreas: {
+    list: (includeDisabled?: boolean) => authInvoke("pos:seating-areas:list", includeDisabled),
+    save: (areas: any[]) => authInvoke("pos:seating-areas:save", areas),
+    delete: (areaId: string, reassignToAreaId: string) =>
+      authInvoke("pos:seating-areas:delete", areaId, reassignToAreaId),
   },
   menu: {
     seed: () => authInvoke("pos:menu:seed"),

@@ -56,6 +56,13 @@ declare global {
         seed: (count: number) => Promise<any[]>;
         list: () => Promise<any[]>;
         configuredCount: () => Promise<number>;
+        snapshot: () => Promise<any>;
+        setArea: (tableId: number, areaId: string) => Promise<any>;
+      };
+      seatingAreas?: {
+        list: (includeDisabled?: boolean) => Promise<any[]>;
+        save: (areas: any[]) => Promise<any[]>;
+        delete: (areaId: string, reassignToAreaId: string) => Promise<{ ok: boolean }>;
       };
       menu?: {
         seed: () => Promise<any[]>;

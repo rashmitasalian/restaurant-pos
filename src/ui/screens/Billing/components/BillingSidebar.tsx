@@ -7,6 +7,7 @@ import OrderRow from "./OrderRow";
 import ScrollableList from "./ScrollableList";
 
 interface TableInfo {
+  id: number;
   status?: string;
   count?: number;
   total?: number;
@@ -19,8 +20,10 @@ interface BillingSidebarProps {
   serviceModes: ServiceMode[];
   view: string;
   onViewChange: (v: string) => void;
-  tableNumbers: number[];
-  tableInfos: Record<number, TableInfo>;
+  tableAreas: Array<{ id: string; name: string; active?: boolean }>;
+  selectedAreaId: string;
+  onSelectArea: (areaId: string) => void;
+  tablesByArea: Record<string, TableInfo[]>;
   tableNum: number | null;
   activeOrderType: string;
   modeOrders: Record<string, any[]>;
@@ -36,8 +39,10 @@ export default function BillingSidebar({
   serviceModes,
   view,
   onViewChange,
-  tableNumbers,
-  tableInfos,
+  tableAreas,
+  selectedAreaId,
+  onSelectArea,
+  tablesByArea,
   tableNum,
   activeOrderType,
   modeOrders,
@@ -75,9 +80,35 @@ export default function BillingSidebar({
             .map((mode) =>
               mode.requiresTable ? (
                 <div key={mode.id} className={styles.tableGrid}>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+                    {(tableAreas || [])
+                      .filter((area) => area.active !== false)
+                      .map((area) => (
+                        <button
+                          key={area.id}
+                          type="button"
+                          onClick={() => onSelectArea(area.id)}
+                          className={styles.tabButton}
+                          style={
+                            selectedAreaId === area.id
+                              ? {
+                                  background: "#fff7ed",
+                                  color: "#92400e",
+                                  border: "1px solid #fdba74",
+                                }
+                              : {
+                                  background: "#fff",
+                                  border: "1px solid #e5e7eb",
+                                }
+                          }
+                        >
+                          {area.name}
+                        </button>
+                      ))}
+                  </div>
                   <div className={styles.tableGridInner}>
-                    {tableNumbers.map((t) => {
-                      const info = tableInfos[t] || { status: "", count: 0, total: 0 };
+                    {(tablesByArea[selectedAreaId] || []).map((info) => {
+                      const t = info.id;
                       const active = tableNum === t && activeOrderType === mode.id;
                       return (
                         <button

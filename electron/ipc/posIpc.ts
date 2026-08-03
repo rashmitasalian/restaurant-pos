@@ -24,6 +24,7 @@ const CUSTOMER_ROLES: Role[] = ["admin", "cashier"];
 const CASHIER_READABLE_SETTINGS = new Set([
   "config:gst",
   "config:printers",
+  "config:seating-areas",
   "config:service-modes",
   "config:tables",
   "config:categories",
@@ -37,6 +38,7 @@ const WRITABLE_SETTINGS = new Set([
   "config:gst",
   "config:history",
   "config:printers",
+  "config:seating-areas",
   "config:service-modes",
   "config:tables",
 ]);
@@ -189,6 +191,29 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
     requireSession(event, token);
     return posService.getConfiguredTableCount();
   });
+  ipcMain.handle("pos:tables:snapshot", (event, token?: string | null) => {
+    requireSession(event, token);
+    return posService.getTablesSnapshot();
+  });
+  ipcMain.handle("pos:tables:set-area", (event, token: string | null, tableId: number, areaId: string) => {
+    const user = requireSession(event, token, ADMIN_ROLES);
+    return posService.setTableArea(tableId, areaId, user.username);
+  });
+  ipcMain.handle("pos:seating-areas:list", (event, token?: string | null, includeDisabled?: boolean) => {
+    requireSession(event, token);
+    return posService.getSeatingAreas(Boolean(includeDisabled));
+  });
+  ipcMain.handle("pos:seating-areas:save", (event, token: string | null, payload) => {
+    const user = requireSession(event, token, ADMIN_ROLES);
+    return posService.setSeatingAreas(payload, user.username);
+  });
+  ipcMain.handle(
+    "pos:seating-areas:delete",
+    (event, token: string | null, areaId: string, reassignToAreaId: string) => {
+      const user = requireSession(event, token, ADMIN_ROLES);
+      return posService.deleteSeatingArea(areaId, reassignToAreaId, user.username);
+    },
+  );
 
   ipcMain.handle("pos:menu:seed", (event, token?: string | null) => {
     requireSession(event, token);

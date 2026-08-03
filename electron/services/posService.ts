@@ -35,6 +35,7 @@ import type {
   ProductSalesReportDto,
   Role,
   SalesSummaryDto,
+  SeatingAreaDto,
   StaffDto,
   TableDto,
   UserDto,
@@ -96,6 +97,9 @@ const ATTENDANCE_STATUSES = new Set<AttendanceStatus>([
   "late",
 ]);
 const DEFAULT_SHIFT_MINUTES = 8 * 60;
+const DEFAULT_SEATING_AREA_ID = "area:main";
+const DEFAULT_SEATING_AREA_NAME = "Main Dining";
+const ACTIVE_ORDER_STATUSES = ["open", "held", "ready", "assigned"] as const;
 
 const loginAttempts: Record<string, { count: number; lockedUntil: number }> = {};
 const recoveryAttempts: Record<string, { count: number; lockedUntil: number }> = {};
@@ -106,6 +110,26 @@ function normalizeModeId(value: unknown) {
     .toLowerCase()
     .replace(/\s+/g, "_")
     .replace(/[^a-z0-9_-]/g, "");
+}
+
+function normalizeSeatingAreaId(value: unknown, fallback?: string) {
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9:_-]/g, "");
+  if (normalized) {
+    return normalized.startsWith("area:") ? normalized : `area:${normalized}`;
+  }
+  if (fallback) {
+    return fallback;
+  }
+  return DEFAULT_SEATING_AREA_ID;
+}
+
+function normalizeSeatingAreaName(value: unknown, fallback?: string) {
+  const name = normalizeText(value);
+  return name || fallback || DEFAULT_SEATING_AREA_NAME;
 }
 
 function resolveServiceModeIdFromOrderLike(orderLike: any) {
@@ -585,7 +609,20 @@ function tableFromRow(row: any): TableDto {
     id: row.id,
     name: row.name || `Table ${row.id}`,
     seats: row.seats,
+    areaId: String(row.area_id || DEFAULT_SEATING_AREA_ID),
+    areaName: String(row.area_name || ""),
     order: row.sort_order,
+    active: Boolean(row.active),
+  };
+}
+
+function seatingAreaFromRow(row: any): SeatingAreaDto {
+  return {
+    _id: `seating-area:${row.id}`,
+    type: "seating-area",
+    id: String(row.id),
+    name: String(row.name || DEFAULT_SEATING_AREA_NAME),
+    order: Number(row.sort_order || 0),
     active: Boolean(row.active),
   };
 }
@@ -1386,6 +1423,33 @@ function getOrderPaidAt(order: Partial<OrderDto> | any) {
   return order?.status === "paid" ? Number(order?.updatedAt || now()) : null;
 }
 
+function ensureDefaultSeatingArea(database: Database.Database) {
+  const at = now();
+  database
+    .prepare(
+      `INSERT INTO seating_areas (id, name, sort_order, active, created_at, updated_at)
+       VALUES (?, ?, 1, 1, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         name = excluded.name,
+         active = 1,
+         updated_at = excluded.updated_at`,
+    )
+    .run(DEFAULT_SEATING_AREA_ID, DEFAULT_SEATING_AREA_NAME, at, at);
+}
+
+function getPrimaryActiveSeatingAreaId(database: Database.Database) {
+  const row = database
+    .prepare(
+      `SELECT id
+       FROM seating_areas
+       WHERE active = 1
+       ORDER BY sort_order ASC, name COLLATE NOCASE ASC, id ASC
+       LIMIT 1`,
+    )
+    .get() as { id?: string } | undefined;
+  return normalizeSeatingAreaId(row?.id, DEFAULT_SEATING_AREA_ID);
+}
+
 export const posService = {
   ensureReady() {
     getDb();
@@ -1728,13 +1792,18 @@ export const posService = {
   seedTables(count = 12, actor?: string | null) {
     const at = now();
     return inTransaction((database) => {
+      ensureDefaultSeatingArea(database);
+      const areaId = getPrimaryActiveSeatingAreaId(database);
       const insert = database.prepare(`
-        INSERT INTO tables (id, name, seats, sort_order, active, created_at, updated_at)
-        VALUES (?, ?, ?, ?, 1, ?, ?)
-        ON CONFLICT(id) DO UPDATE SET active = 1, updated_at = excluded.updated_at
+        INSERT INTO tables (id, name, seats, area_id, sort_order, active, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, 1, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          active = 1,
+          area_id = COALESCE(NULLIF(tables.area_id, ''), excluded.area_id),
+          updated_at = excluded.updated_at
       `);
       for (let i = 1; i <= count; i++) {
-        insert.run(i, `Table ${i}`, i % 4 === 0 ? 6 : 4, i, at, at);
+        insert.run(i, `Table ${i}`, i % 4 === 0 ? 6 : 4, areaId, i, at, at);
       }
       database.prepare("UPDATE tables SET active = 0, updated_at = ? WHERE id > ?").run(at, count);
       const tableConfig = this.getSetting("config:tables") as any;
@@ -1749,9 +1818,215 @@ export const posService = {
     return this.seedTables(this.getConfiguredTableCount());
   },
 
+  getSeatingAreas(includeDisabled = false): SeatingAreaDto[] {
+    const database = getDb();
+    ensureDefaultSeatingArea(database);
+    const where = includeDisabled ? "" : "WHERE active = 1";
+    return database
+      .prepare(
+        `SELECT * FROM seating_areas ${where}
+         ORDER BY sort_order ASC, name COLLATE NOCASE ASC, id ASC`,
+      )
+      .all()
+      .map(seatingAreaFromRow);
+  },
+
+  setSeatingAreas(
+    input: Array<{ id?: string; name?: string; active?: boolean; order?: number }> = [],
+    actor?: string | null,
+  ) {
+    return inTransaction((database) => {
+      ensureDefaultSeatingArea(database);
+      const source = Array.isArray(input) ? input : [];
+      const normalized = source
+        .map((entry, index) => {
+          const id = normalizeSeatingAreaId(entry?.id, `area:${randomUUID()}`);
+          const name = normalizeSeatingAreaName(entry?.name);
+          const active = entry?.active !== false;
+          const order = Number.isFinite(Number(entry?.order)) ? Math.trunc(Number(entry?.order)) : index + 1;
+          return { id, name, active, order };
+        })
+        .filter((entry, index, list) => list.findIndex((it) => it.id === entry.id) === index);
+
+      if (!normalized.some((entry) => entry.active)) {
+        throw new Error("seating-area-at-least-one-active");
+      }
+
+      const existingRows = database
+        .prepare("SELECT id FROM seating_areas")
+        .all() as Array<{ id: string }>;
+      const existingIds = new Set(existingRows.map((row) => String(row.id)));
+      const nextIds = new Set(normalized.map((entry) => entry.id));
+
+      const upsert = database.prepare(`
+        INSERT INTO seating_areas (id, name, sort_order, active, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          name = excluded.name,
+          sort_order = excluded.sort_order,
+          active = excluded.active,
+          updated_at = excluded.updated_at
+      `);
+      const at = now();
+      normalized.forEach((entry, index) => {
+        upsert.run(entry.id, entry.name, index + 1, entry.active ? 1 : 0, at, at);
+      });
+
+      const fallbackId =
+        normalized.find((entry) => entry.active)?.id || normalizeSeatingAreaId(undefined, DEFAULT_SEATING_AREA_ID);
+      const idsToDelete = Array.from(existingIds).filter(
+        (id) => id !== DEFAULT_SEATING_AREA_ID && !nextIds.has(id),
+      );
+      for (const id of idsToDelete) {
+        database.prepare("UPDATE tables SET area_id = ? WHERE area_id = ?").run(fallbackId, id);
+        database.prepare("DELETE FROM seating_areas WHERE id = ?").run(id);
+      }
+
+      if (!nextIds.has(DEFAULT_SEATING_AREA_ID)) {
+        upsert.run(DEFAULT_SEATING_AREA_ID, DEFAULT_SEATING_AREA_NAME, normalized.length + 1, 1, at, at);
+      }
+
+      createAuditRow(database, "seating_areas.updated", "config", "seating_areas", actor || null, {
+        count: normalized.length,
+      });
+      return this.getSeatingAreas(true);
+    });
+  },
+
+  deleteSeatingArea(areaId: string, reassignToAreaId: string, actor?: string | null) {
+    const normalizedAreaId = normalizeSeatingAreaId(areaId);
+    const targetId = normalizeSeatingAreaId(reassignToAreaId);
+    if (normalizedAreaId === DEFAULT_SEATING_AREA_ID) {
+      throw new Error("seating-area-default-protected");
+    }
+    if (normalizedAreaId === targetId) {
+      throw new Error("seating-area-reassign-target-invalid");
+    }
+    return inTransaction((database) => {
+      ensureDefaultSeatingArea(database);
+      const existing = database
+        .prepare("SELECT id FROM seating_areas WHERE id = ?")
+        .get(normalizedAreaId) as { id?: string } | undefined;
+      if (!existing) {
+        throw new Error("seating-area-not-found");
+      }
+      const target = database
+        .prepare("SELECT id FROM seating_areas WHERE id = ? AND active = 1")
+        .get(targetId) as { id?: string } | undefined;
+      if (!target) {
+        throw new Error("seating-area-reassign-target-missing");
+      }
+      database.prepare("UPDATE tables SET area_id = ? WHERE area_id = ?").run(targetId, normalizedAreaId);
+      database.prepare("DELETE FROM seating_areas WHERE id = ?").run(normalizedAreaId);
+      createAuditRow(database, "seating_area.deleted", "config", normalizedAreaId, actor || null, {
+        reassignToAreaId: targetId,
+      });
+      return { ok: true };
+    });
+  },
+
+  setTableArea(tableId: number, areaId: string, actor?: string | null) {
+    const safeTableId = Number(tableId);
+    if (!Number.isInteger(safeTableId) || safeTableId <= 0) {
+      throw new Error("table-id-invalid");
+    }
+    const normalizedAreaId = normalizeSeatingAreaId(areaId);
+    return inTransaction((database) => {
+      ensureDefaultSeatingArea(database);
+      const area = database
+        .prepare("SELECT id FROM seating_areas WHERE id = ? AND active = 1")
+        .get(normalizedAreaId) as { id?: string } | undefined;
+      if (!area) {
+        throw new Error("seating-area-not-found");
+      }
+      const result = database
+        .prepare("UPDATE tables SET area_id = ?, updated_at = ? WHERE id = ?")
+        .run(normalizedAreaId, now(), safeTableId);
+      if (!result.changes) {
+        throw new Error("table-not-found");
+      }
+      createAuditRow(database, "table.area.updated", "table", String(safeTableId), actor || null, {
+        areaId: normalizedAreaId,
+      });
+      return this.getTables().find((table) => table.id === safeTableId) || null;
+    });
+  },
+
+  getTablesSnapshot() {
+    const database = getDb();
+    ensureDefaultSeatingArea(database);
+    const statuses = ACTIVE_ORDER_STATUSES.map(() => "?").join(",");
+    const areas = this.getSeatingAreas(true);
+    const tables = database
+      .prepare(
+        `SELECT
+           t.*,
+           sa.name AS area_name,
+           o.id AS order_id,
+           o.status AS order_status,
+           (
+             SELECT COUNT(*)
+             FROM order_lines ol
+             WHERE ol.order_id = o.id
+           ) AS item_count,
+           (
+             SELECT COALESCE(SUM(ol.quantity * ol.rate_paise), 0)
+             FROM order_lines ol
+             WHERE ol.order_id = o.id
+           ) AS total_paise
+         FROM tables t
+         LEFT JOIN seating_areas sa ON sa.id = t.area_id
+         LEFT JOIN orders o
+           ON o.id = (
+             SELECT oo.id
+             FROM orders oo
+             WHERE oo.table_id = t.id
+               AND oo.status IN (${statuses})
+             ORDER BY oo.updated_at DESC
+             LIMIT 1
+           )
+         WHERE t.active = 1
+         ORDER BY sa.sort_order ASC, sa.name COLLATE NOCASE ASC, t.sort_order ASC, t.id ASC`,
+      )
+      .all(...ACTIVE_ORDER_STATUSES) as any[];
+
+    const tableRows = tables.map((row) => ({
+      ...tableFromRow(row),
+      status: row.order_status || "",
+      count: Number(row.item_count || 0),
+      total: paiseToRupees(Number(row.total_paise || 0)),
+      occupied: Boolean(row.order_id) && Number(row.item_count || 0) > 0,
+      orderId: row.order_id || null,
+    }));
+
+    const byArea: Record<string, Array<(typeof tableRows)[number]>> = {};
+    for (const area of areas) {
+      byArea[area.id] = [];
+    }
+    for (const table of tableRows) {
+      const areaId = normalizeSeatingAreaId(table.areaId);
+      byArea[areaId] = byArea[areaId] || [];
+      byArea[areaId].push(table);
+    }
+
+    return {
+      areas,
+      tables: tableRows,
+      byArea,
+    };
+  },
+
   getTables(): TableDto[] {
-    return getDb()
-      .prepare("SELECT * FROM tables WHERE active = 1 ORDER BY sort_order ASC, id ASC")
+    const database = getDb();
+    ensureDefaultSeatingArea(database);
+    return database
+      .prepare(
+        `SELECT t.*, sa.name AS area_name
+         FROM tables t
+         LEFT JOIN seating_areas sa ON sa.id = t.area_id
+         WHERE t.active = 1
+         ORDER BY sa.sort_order ASC, sa.name COLLATE NOCASE ASC, t.sort_order ASC, t.id ASC`,
+      )
       .all()
       .map(tableFromRow);
   },

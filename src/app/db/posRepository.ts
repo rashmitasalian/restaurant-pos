@@ -16,6 +16,7 @@ import type {
   PaymentDto,
   ProductSalesReportDto,
   Role,
+  SeatingAreaDto,
   StaffDto,
   TableDto,
   PrintJobDto,
@@ -30,6 +31,7 @@ import {
 } from "../../shared/serviceModes";
 
 export type TableDoc = TableDto;
+export type SeatingAreaDoc = SeatingAreaDto;
 export type OrderLine = OrderLineDto;
 export type OrderDoc = OrderDto;
 export type ItemDoc = MenuItemDto;
@@ -78,6 +80,51 @@ export async function seedTables(count = 12) {
 
 export async function getTables(): Promise<TableDoc[]> {
   return api().tables!.list();
+}
+
+export async function getTablesSnapshot(): Promise<{
+  areas: SeatingAreaDoc[];
+  tables: Array<
+    TableDoc & {
+      status?: string;
+      count?: number;
+      total?: number;
+      occupied?: boolean;
+      orderId?: string | null;
+    }
+  >;
+  byArea: Record<
+    string,
+    Array<
+      TableDoc & {
+        status?: string;
+        count?: number;
+        total?: number;
+        occupied?: boolean;
+        orderId?: string | null;
+      }
+    >
+  >;
+}> {
+  return api().tables!.snapshot();
+}
+
+export async function setTableArea(tableId: number, areaId: string): Promise<TableDoc | null> {
+  return api().tables!.setArea(tableId, areaId);
+}
+
+export async function getSeatingAreas(includeDisabled = true): Promise<SeatingAreaDoc[]> {
+  return api().seatingAreas!.list(includeDisabled);
+}
+
+export async function saveSeatingAreas(
+  areas: Array<{ id?: string; name?: string; active?: boolean; order?: number }>,
+): Promise<SeatingAreaDoc[]> {
+  return api().seatingAreas!.save(areas);
+}
+
+export async function deleteSeatingArea(areaId: string, reassignToAreaId: string) {
+  return api().seatingAreas!.delete(areaId, reassignToAreaId);
 }
 
 export async function createOrderForTable(tableId: number | null): Promise<OrderDoc> {

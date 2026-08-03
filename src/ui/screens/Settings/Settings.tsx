@@ -24,6 +24,11 @@ import {
   setConfigBranding,
   getConfigServiceModes,
   setConfigServiceModes,
+  getSeatingAreas,
+  saveSeatingAreas,
+  deleteSeatingArea,
+  getTables,
+  setTableArea,
   listPrintJobs,
   retryPrintJob,
   clearOldPrintJobs,
@@ -37,6 +42,8 @@ import {
   getUpdateStatus,
   rollbackLastUpdate,
   exportDiagnostics,
+  type SeatingAreaDoc,
+  type TableDoc,
   type AttendanceShiftConfig,
   type PrintJobDoc,
 } from "../../../app/db/posRepository";
@@ -45,6 +52,12 @@ import { RECOVERY_CODE_COUNT } from "../../../shared/auth";
 import { normalizeCategoryName, validationMessage } from "../../../shared/validation";
 import { getDefaultServiceModes, type ServiceMode } from "../../../shared/serviceModes";
 import { processRestaurantLogoFile, type ReceiptLogoRaster } from "../../utils/logoProcessing";
+import {
+  addSeatingAreaDraft,
+  computeTableAreaUpdates,
+  moveSeatingAreaByDirection,
+  reorderSeatingAreasByDrag,
+} from "./seatingAreaUtils";
 
 const DEFAULT_ATTENDANCE_SHIFTS: AttendanceShiftConfig[] = [
   { id: "morning", label: "Morning", hours: 8 },
@@ -126,6 +139,12 @@ export default function Settings() {
   const [tableCount, setTableCount] = React.useState<number>(ENV.TABLE_COUNT);
   const [tableStatus, setTableStatus] = React.useState<string | null>(null);
   const [savingTables, setSavingTables] = React.useState(false);
+  const [seatingAreas, setSeatingAreas] = React.useState<SeatingAreaDoc[]>([]);
+  const [newSeatingAreaName, setNewSeatingAreaName] = React.useState("");
+  const [tableDocs, setTableDocs] = React.useState<TableDoc[]>([]);
+  const [tableAreaDraft, setTableAreaDraft] = React.useState<Record<number, string>>({});
+  const [savingSeatingAreas, setSavingSeatingAreas] = React.useState(false);
+  const [dragAreaId, setDragAreaId] = React.useState<string | null>(null);
   const [serviceModes, setServiceModes] = React.useState<ServiceMode[]>(() =>
     getDefaultServiceModes(),
   );
@@ -237,6 +256,29 @@ export default function Settings() {
         if (tCfg) {
           setTableCount(tCfg.tableCount);
         }
+      } catch (e) {}
+      try {
+        const [areas, tables] = await Promise.all([getSeatingAreas(true), getTables()]);
+        const mappedAreas =
+          areas && areas.length
+            ? [...areas].sort((a, b) => Number(a.order || 0) - Number(b.order || 0))
+            : [
+                {
+                  _id: "seating-area:area:main",
+                  type: "seating-area",
+                  id: "area:main",
+                  name: "Main Dining",
+                  order: 1,
+                  active: true,
+                } as SeatingAreaDoc,
+              ];
+        setSeatingAreas(mappedAreas);
+        setTableDocs(tables || []);
+        const assignment: Record<number, string> = {};
+        for (const table of tables || []) {
+          assignment[table.id] = String(table.areaId || mappedAreas[0]?.id || "area:main");
+        }
+        setTableAreaDraft(assignment);
       } catch (e) {}
       try {
         const modeCfg = await getConfigServiceModes();
@@ -740,6 +782,102 @@ export default function Settings() {
     } finally {
       setSavingTables(false);
       endAction("tables.save");
+    }
+  };
+
+  const refreshSeatingConfig = async () => {
+    const [areas, tables] = await Promise.all([getSeatingAreas(true), getTables()]);
+    const ordered = [...areas].sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
+    setSeatingAreas(ordered);
+    setTableDocs(tables || []);
+    const assignment: Record<number, string> = {};
+    for (const table of tables || []) {
+      assignment[table.id] = String(table.areaId || ordered[0]?.id || "area:main");
+    }
+    setTableAreaDraft(assignment);
+  };
+
+  const addSeatingArea = () => {
+    const draft = addSeatingAreaDraft(seatingAreas, newSeatingAreaName);
+    if (draft.error) {
+      setTableStatus(draft.error);
+      return;
+    }
+    setSeatingAreas((draft.areas || []).map((area) => ({
+      _id: `seating-area:${area.id}`,
+      type: "seating-area",
+      id: area.id,
+      name: area.name,
+      order: area.order,
+      active: area.active,
+    })));
+    setNewSeatingAreaName("");
+    setTableStatus(null);
+  };
+
+  const moveSeatingArea = (id: string, direction: -1 | 1) => {
+    setSeatingAreas((current) => moveSeatingAreaByDirection(current, id, direction));
+  };
+
+  const dropSeatingArea = (dropTargetId: string) => {
+    if (!dragAreaId || dragAreaId === dropTargetId) {
+      setDragAreaId(null);
+      return;
+    }
+    setSeatingAreas((current) => reorderSeatingAreasByDrag(current, dragAreaId, dropTargetId));
+    setDragAreaId(null);
+  };
+
+  const removeSeatingArea = async (id: string) => {
+    if (id === "area:main") {
+      setTableStatus("Main Dining cannot be deleted");
+      return;
+    }
+    const fallback = seatingAreas.find((area) => area.id !== id && area.active !== false);
+    if (!fallback) {
+      setTableStatus("Keep at least one active area");
+      return;
+    }
+    try {
+      await deleteSeatingArea(id, fallback.id);
+      await refreshSeatingConfig();
+      setTableStatus("Area deleted");
+      window.dispatchEvent(new Event("seating-areas-changed"));
+      window.dispatchEvent(new Event("orders-changed"));
+    } catch (e: any) {
+      setTableStatus("Delete failed: " + (e?.message || String(e)));
+    }
+  };
+
+  const saveSeatingAreasAndTables = async () => {
+    if (!beginAction("seatingAreas.save")) {
+      return;
+    }
+    setSavingSeatingAreas(true);
+    setTableStatus(null);
+    try {
+      const payload = seatingAreas.map((area, index) => ({
+        id: area.id,
+        name: area.name,
+        active: area.active !== false,
+        order: index + 1,
+      }));
+      const saved = await saveSeatingAreas(payload);
+      const activeIds = new Set(saved.filter((area) => area.active !== false).map((area) => area.id));
+      const updates = computeTableAreaUpdates(tableDocs, tableAreaDraft, activeIds);
+      for (const update of updates) {
+        await setTableArea(update.tableId, update.areaId);
+      }
+      await refreshSeatingConfig();
+      setTableStatus("Seating Areas saved ✓");
+      window.dispatchEvent(new Event("seating-areas-changed"));
+      window.dispatchEvent(new Event("orders-changed"));
+      setTimeout(() => setTableStatus(null), 4000);
+    } catch (e: any) {
+      setTableStatus("Save failed: " + (e?.message || String(e)));
+    } finally {
+      setSavingSeatingAreas(false);
+      endAction("seatingAreas.save");
     }
   };
 
@@ -2147,6 +2285,149 @@ export default function Settings() {
               {tableStatus}
             </div>
           )}
+        </div>
+
+        <div style={{ marginTop: 22, borderTop: "1px solid #f3f4f6", paddingTop: 18 }}>
+          <label className="pos-label">Seating Areas</label>
+          <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+            <input
+              className="pos-input"
+              value={newSeatingAreaName}
+              onChange={(event) => setNewSeatingAreaName(event.target.value)}
+              placeholder="Ground Floor, Rooftop, AC Hall..."
+              style={{ maxWidth: 320 }}
+            />
+            <button type="button" onClick={addSeatingArea} className="pos-btn pos-btn-secondary">
+              Add Area
+            </button>
+          </div>
+          <div style={{ display: "grid", gap: 8 }}>
+            {seatingAreas.map((area, index) => (
+              <div
+                key={area.id}
+                draggable
+                onDragStart={() => setDragAreaId(area.id)}
+                onDragEnd={() => setDragAreaId(null)}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={() => dropSeatingArea(area.id)}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "minmax(180px, 1fr) auto auto auto",
+                  gap: 8,
+                  alignItems: "center",
+                  padding: "8px 10px",
+                  border: dragAreaId === area.id ? "1px solid #f59e0b" : "1px solid #e5e7eb",
+                  borderRadius: 8,
+                  background: dragAreaId === area.id ? "#fffbeb" : "#fff",
+                  cursor: "grab",
+                }}
+              >
+                <input
+                  className="pos-input"
+                  value={area.name}
+                  onChange={(event) =>
+                    setSeatingAreas((current) =>
+                      current.map((entry) =>
+                        entry.id === area.id ? { ...entry, name: event.target.value } : entry,
+                      ),
+                    )
+                  }
+                />
+                <label style={{ fontSize: 12, color: "#374151", display: "flex", gap: 6 }}>
+                  <input
+                    type="checkbox"
+                    checked={area.active !== false}
+                    onChange={(event) =>
+                      setSeatingAreas((current) =>
+                        current.map((entry) =>
+                          entry.id === area.id ? { ...entry, active: event.target.checked } : entry,
+                        ),
+                      )
+                    }
+                  />
+                  Active
+                </label>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <button
+                    type="button"
+                    className="pos-btn"
+                    onClick={() => moveSeatingArea(area.id, -1)}
+                    disabled={index === 0}
+                  >
+                    Up
+                  </button>
+                  <button
+                    type="button"
+                    className="pos-btn"
+                    onClick={() => moveSeatingArea(area.id, 1)}
+                    disabled={index === seatingAreas.length - 1}
+                  >
+                    Down
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  className="pos-btn"
+                  onClick={() => removeSeatingArea(area.id)}
+                  disabled={area.id === "area:main"}
+                >
+                  Delete
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ marginTop: 22, borderTop: "1px solid #f3f4f6", paddingTop: 18 }}>
+          <label className="pos-label">Table to Area Mapping</label>
+          <div style={{ display: "grid", gap: 8, maxHeight: 260, overflow: "auto", paddingRight: 4 }}>
+            {tableDocs
+              .slice()
+              .sort((a, b) => a.id - b.id)
+              .map((table) => (
+                <div
+                  key={table.id}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "120px minmax(150px, 1fr)",
+                    gap: 8,
+                    alignItems: "center",
+                  }}
+                >
+                  <div style={{ fontWeight: 700, color: "#111827", fontSize: 13 }}>
+                    {table.name || `Table ${table.id}`}
+                  </div>
+                  <select
+                    className="pos-input"
+                    value={tableAreaDraft[table.id] || table.areaId || "area:main"}
+                    onChange={(event) =>
+                      setTableAreaDraft((current) => ({
+                        ...current,
+                        [table.id]: event.target.value,
+                      }))
+                    }
+                  >
+                    {seatingAreas
+                      .filter((area) => area.active !== false)
+                      .map((area) => (
+                        <option key={area.id} value={area.id}>
+                          {area.name}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              ))}
+          </div>
+        </div>
+
+        <div style={{ marginTop: 16 }}>
+          <button
+            onClick={saveSeatingAreasAndTables}
+            disabled={savingSeatingAreas}
+            className="pos-btn pos-btn-primary"
+          >
+            {savingSeatingAreas ? "Saving..." : "Save Seating Areas"}
+          </button>
         </div>
       </div>
 
