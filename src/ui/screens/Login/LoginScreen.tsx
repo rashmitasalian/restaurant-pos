@@ -5,6 +5,7 @@ import { ENV } from "../../../config/env";
 import { AuthContext } from "../../context/AuthContext";
 import { useFocusTrap } from "../../hooks/useFocusTrap";
 import restoNitiMark from "../../assets/restoniti-icon.png";
+import { Eye, EyeOff } from "lucide-react";
 
 export default function LoginScreen() {
   const auth = React.useContext(AuthContext);
@@ -213,7 +214,11 @@ export default function LoginScreen() {
                 userSelect: "none",
               }}
             >
-              {showPassword ? "🙈" : "👁"}
+              {showPassword ? (
+                <EyeOff size={18} strokeWidth={2} />
+              ) : (
+                <Eye size={18} strokeWidth={2} />
+              )}
             </button>
           </div>
         </label>

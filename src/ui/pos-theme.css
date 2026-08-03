@@ -182,7 +182,7 @@ textarea:focus-visible,
   font-weight: 600;
   line-height: 1;
   cursor: pointer;
-  border: 1px solid transparent;
+  border: 1px solid #d1d5db;
   transition:
     background 120ms,
     border-color 120ms,
