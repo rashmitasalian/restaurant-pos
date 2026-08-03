@@ -1,5 +1,7 @@
 import type {
   AuditDto,
+  AttendanceDto,
+  AttendanceStatus,
   ConfigDto,
   FoodCostSummaryDto,
   GstConfigDto,
@@ -14,6 +16,7 @@ import type {
   PaymentDto,
   ProductSalesReportDto,
   Role,
+  SeatingAreaDto,
   StaffDto,
   TableDto,
   PrintJobDto,
@@ -21,13 +24,20 @@ import type {
 } from "../../shared/pos";
 import { DEFAULT_GST_CONFIG, normalizeGstConfig, type GstConfig } from "../../shared/gst";
 import { kotSentLinesNeedPrint } from "../../shared/kot";
+import {
+  SERVICE_MODE_CONFIG_KEY,
+  normalizeServiceModes,
+  type ServiceMode,
+} from "../../shared/serviceModes";
 
 export type TableDoc = TableDto;
+export type SeatingAreaDoc = SeatingAreaDto;
 export type OrderLine = OrderLineDto;
 export type OrderDoc = OrderDto;
 export type ItemDoc = MenuItemDto;
 export type UserDoc = UserDto;
 export type StaffDoc = StaffDto;
+export type AttendanceDoc = AttendanceDto;
 export type AuditDoc = AuditDto;
 export type PrintJobDoc = PrintJobDto;
 export type GroceryItemDoc = GroceryItemDto;
@@ -72,13 +82,59 @@ export async function getTables(): Promise<TableDoc[]> {
   return api().tables!.list();
 }
 
+export async function getTablesSnapshot(): Promise<{
+  areas: SeatingAreaDoc[];
+  tables: Array<
+    TableDoc & {
+      status?: string;
+      count?: number;
+      total?: number;
+      occupied?: boolean;
+      orderId?: string | null;
+    }
+  >;
+  byArea: Record<
+    string,
+    Array<
+      TableDoc & {
+        status?: string;
+        count?: number;
+        total?: number;
+        occupied?: boolean;
+        orderId?: string | null;
+      }
+    >
+  >;
+}> {
+  return api().tables!.snapshot();
+}
+
+export async function setTableArea(tableId: number, areaId: string): Promise<TableDoc | null> {
+  return api().tables!.setArea(tableId, areaId);
+}
+
+export async function getSeatingAreas(includeDisabled = true): Promise<SeatingAreaDoc[]> {
+  return api().seatingAreas!.list(includeDisabled);
+}
+
+export async function saveSeatingAreas(
+  areas: Array<{ id?: string; name?: string; active?: boolean; order?: number }>,
+): Promise<SeatingAreaDoc[]> {
+  return api().seatingAreas!.save(areas);
+}
+
+export async function deleteSeatingArea(areaId: string, reassignToAreaId: string) {
+  return api().seatingAreas!.delete(areaId, reassignToAreaId);
+}
+
 export async function createOrderForTable(tableId: number | null): Promise<OrderDoc> {
   return api().orders!.create({ tableId, orderType: tableId !== null ? "table" : "takeaway" });
 }
 
 export async function createOrder(input: {
   tableId?: number | null;
-  orderType?: "table" | "takeaway" | "delivery";
+  orderType?: string;
+  serviceModeId?: string;
   customerId?: string | null;
   meta?: Record<string, unknown>;
 }): Promise<OrderDoc> {
@@ -216,6 +272,7 @@ export async function createItem(item: {
   price: number;
   category?: string;
   available?: boolean;
+  variants?: Array<{ id?: string; name: string; price: number; sortOrder?: number }>;
 }) {
   return api().menu!.createItem(item);
 }
@@ -255,6 +312,48 @@ export async function updateStaff(
 
 export async function deleteStaff(id: string): Promise<void> {
   await staffApi().delete(id);
+}
+
+function attendanceApi() {
+  const attendance = api().attendance;
+  if (!attendance?.list || !attendance?.upsert || !attendance?.copy || !attendance?.delete) {
+    throw new Error("pos-attendance-api-unavailable");
+  }
+  return attendance;
+}
+
+export async function listAttendance(input: {
+  date: string;
+  shiftId?: string | null;
+  status?: AttendanceStatus | null;
+  search?: string;
+}): Promise<AttendanceDoc[]> {
+  return attendanceApi().list(input);
+}
+
+export async function upsertAttendanceRows(input: {
+  attendanceDate: string;
+  rows: Array<{
+    id?: string;
+    staffId: string;
+    shiftId?: string | null;
+    status: AttendanceStatus;
+    checkInTime?: string | null;
+    checkOutTime?: string | null;
+    breakMinutes?: number;
+    overtimeMinutes?: number | null;
+    remarks?: string | null;
+  }>;
+}): Promise<AttendanceDoc[]> {
+  return attendanceApi().upsert(input);
+}
+
+export async function copyAttendance(fromDate: string, toDate: string): Promise<AttendanceDoc[]> {
+  return attendanceApi().copy(fromDate, toDate);
+}
+
+export async function deleteAttendance(id: string): Promise<{ ok: boolean }> {
+  return attendanceApi().delete(id);
 }
 
 export async function createUser(
@@ -615,8 +714,39 @@ export type ConfigTablesDoc = ConfigDto & {
   updatedAt: number;
 };
 
+export type ConfigServiceModesDoc = ConfigDto & {
+  _id: "config:service-modes";
+  modes: ServiceMode[];
+  updatedAt?: number;
+};
+
 export async function getConfigTables(): Promise<ConfigTablesDoc | null> {
   return api().settings!.get("config:tables");
+}
+
+export async function getConfigServiceModes(): Promise<ConfigServiceModesDoc> {
+  const cfg = await api().settings!.get(SERVICE_MODE_CONFIG_KEY);
+  return {
+    _id: SERVICE_MODE_CONFIG_KEY,
+    type: "config",
+    modes: normalizeServiceModes(cfg),
+    updatedAt: Number((cfg as any)?.updatedAt || 0) || undefined,
+  } as ConfigServiceModesDoc;
+}
+
+export async function setConfigServiceModes(modes: ServiceMode[]): Promise<ConfigServiceModesDoc> {
+  const saved = await api().settings!.set(SERVICE_MODE_CONFIG_KEY, { modes });
+  return {
+    _id: SERVICE_MODE_CONFIG_KEY,
+    type: "config",
+    modes: normalizeServiceModes(saved),
+    updatedAt: Number((saved as any)?.updatedAt || 0) || undefined,
+  } as ConfigServiceModesDoc;
+}
+
+export async function getEnabledServiceModes(): Promise<ServiceMode[]> {
+  const cfg = await getConfigServiceModes();
+  return (cfg.modes || []).filter((mode) => mode.enabled);
 }
 
 export async function setConfigTables(tableCount: number): Promise<ConfigTablesDoc> {
@@ -639,6 +769,14 @@ export async function getConfigCategories(): Promise<string[]> {
 
 export async function setConfigCategories(categories: string[]): Promise<void> {
   await api().menu!.setCategories(categories);
+}
+
+export async function getConfigMenuVariantOptions(): Promise<string[]> {
+  return api().menu!.listVariantOptions();
+}
+
+export async function setConfigMenuVariantOptions(options: string[]): Promise<void> {
+  await api().menu!.setVariantOptions(options);
 }
 
 export type ConfigAuditDoc = ConfigDto & {
@@ -671,6 +809,28 @@ export async function getConfigHistory(): Promise<{ retentionDays: number | null
 
 export async function setConfigHistory(cfg: { retentionDays: number | null }): Promise<void> {
   await api().settings!.set("config:history", cfg);
+}
+
+export type AttendanceShiftConfig = {
+  id: string;
+  label: string;
+  hours: number;
+};
+
+export async function getConfigShifts(): Promise<AttendanceShiftConfig[]> {
+  const cfg = await api().settings!.get("config:attendance");
+  const shifts = Array.isArray((cfg as any)?.shifts) ? (cfg as any).shifts : [];
+  return shifts
+    .map((entry: any) => ({
+      id: String(entry?.id || "").trim().toLowerCase(),
+      label: String(entry?.label || "").trim(),
+      hours: Number(entry?.hours || 0),
+    }))
+    .filter((entry: AttendanceShiftConfig) => entry.id && entry.label && entry.hours > 0);
+}
+
+export async function setConfigShifts(shifts: AttendanceShiftConfig[]): Promise<void> {
+  await api().settings!.set("config:attendance", { shifts });
 }
 
 export async function pruneOrderHistory(): Promise<number> {

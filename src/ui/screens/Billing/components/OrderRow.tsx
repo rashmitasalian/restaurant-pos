@@ -1,19 +1,22 @@
 import React from "react";
+import type { ServiceMode } from "../../../../shared/serviceModes";
 import styles from "../Billing.module.css";
 
 interface OrderRowProps {
   order: any;
   isActive?: boolean;
   onSelect?: () => void;
-  type?: "takeaway" | "delivery" | "table";
+  mode?: ServiceMode | null;
 }
 
 export default function OrderRow({
   order,
   isActive = false,
   onSelect,
-  type = "takeaway",
+  mode = null,
 }: OrderRowProps) {
+  const modeId = String(mode?.id || order?.orderType || "").toLowerCase();
+  const modeName = mode?.name || "Order";
   const platform = (
     order?.meta?.platform ||
     order?.meta?.orderSource ||
@@ -32,6 +35,12 @@ export default function OrderRow({
     : platform.toLowerCase().includes("zomato")
     ? "#ef4444"
     : "#7c3aed";
+  const title =
+    modeId === "delivery"
+      ? `🚚 ${platform}`
+      : modeId === "takeaway"
+        ? `🛍️ ${order?.meta?.customerName || order?.meta?.parcelName || modeName}`
+        : `🧾 ${order?.meta?.customerName || modeName}`;
 
   return (
     <button
@@ -41,18 +50,11 @@ export default function OrderRow({
       <div className={styles.orderRowTop}>
         <span
           className={
-            type === "delivery" ? styles.deliveryTitle : styles.takeawayTitle
+            modeId === "delivery" ? styles.deliveryTitle : styles.takeawayTitle
           }
+          style={modeId === "delivery" ? { color: platformColor } : undefined}
         >
-          {type === "delivery"
-            ? `🚚 ${platform}`
-            : type === "takeaway"
-            ? `🛍️ ${
-                order?.meta?.customerName ||
-                order?.meta?.parcelName ||
-                "Takeaway"
-              }`
-            : `Table ${order?.tableId || ""}`}
+          {title}
         </span>
 
         {order?.status && order.status !== "open" && (

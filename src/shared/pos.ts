@@ -1,9 +1,17 @@
 export type Role = "admin" | "cashier";
 
-export type OrderType = "table" | "takeaway" | "delivery";
+export type OrderType = string;
 export type OrderStatus = "open" | "held" | "ready" | "assigned" | "paid" | "cancelled";
 export type PaymentMethod = "cash" | "upi" | "card" | "voucher" | "online" | "split" | "other";
 export type KotStatus = "pending" | "sent" | "printed" | "failed";
+export type AttendanceStatus =
+  | "present"
+  | "absent"
+  | "half-day"
+  | "leave"
+  | "holiday"
+  | "week-off"
+  | "late";
 export type GroceryUnit =
   | "g"
   | "kg"
@@ -31,6 +39,17 @@ export type TableDto = {
   name?: string;
   seats: number;
   order?: number;
+  areaId: string;
+  areaName?: string;
+  active?: boolean;
+};
+
+export type SeatingAreaDto = {
+  _id: string;
+  type: "seating-area";
+  id: string;
+  name: string;
+  order?: number;
   active?: boolean;
 };
 
@@ -44,6 +63,14 @@ export type MenuItemDto = {
   available?: boolean;
   favorite?: boolean;
   taxRateBps?: number;
+  variants?: MenuItemVariantDto[];
+};
+
+export type MenuItemVariantDto = {
+  id: string;
+  name: string;
+  price: number;
+  sortOrder?: number;
 };
 
 export type OrderLineDto = {
@@ -135,6 +162,26 @@ export type StaffDto = {
   createdAt: number | string;
   updatedAt?: number | string;
   active?: boolean;
+};
+
+export type AttendanceDto = {
+  id: string;
+  staffId: string;
+  staffName: string;
+  role?: string | null;
+  attendanceDate: string;
+  shiftId?: string | null;
+  status: AttendanceStatus;
+  checkInTime?: string | null;
+  checkOutTime?: string | null;
+  breakMinutes: number;
+  workedMinutes: number;
+  overtimeMinutes: number;
+  remarks?: string | null;
+  createdBy?: string | null;
+  createdOn: number;
+  updatedBy?: string | null;
+  updatedOn: number;
 };
 
 export type AuditDto = {
@@ -270,6 +317,7 @@ export type PosDoc =
   | OrderDto
   | UserDto
   | StaffDto
+  | AttendanceDto
   | AuditDto
   | AuditArchiveDto
   | ConfigDto

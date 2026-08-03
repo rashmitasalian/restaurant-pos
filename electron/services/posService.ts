@@ -14,6 +14,8 @@ import {
 import type {
   AuditArchiveDto,
   AuditDto,
+  AttendanceDto,
+  AttendanceStatus,
   ConfigDto,
   CustomerDto,
   FoodCostSummaryDto,
@@ -23,6 +25,7 @@ import type {
   GroceryPurchaseLineDto,
   GroceryUnit,
   MenuItemDto,
+  MenuItemVariantDto,
   OrderDto,
   OrderLineDto,
   OrderStatus,
@@ -32,6 +35,7 @@ import type {
   ProductSalesReportDto,
   Role,
   SalesSummaryDto,
+  SeatingAreaDto,
   StaffDto,
   TableDto,
   UserDto,
@@ -39,6 +43,7 @@ import type {
 import {
   STAFF_TEXT_LIMITS,
   isValidDateOnly,
+  isFutureDateOnly,
   isValidIndianMobile,
   isValidPersonName,
   normalizeCategoryName,
@@ -55,6 +60,12 @@ import {
   normalizeGstConfig,
   type GstConfig,
 } from "../../src/shared/gst";
+import {
+  SERVICE_MODE_CONFIG_KEY,
+  findServiceModeById,
+  toLegacyOrderType,
+  toServiceModeConfigDoc,
+} from "../../src/shared/serviceModes";
 import { RECOVERY_CODE_COUNT } from "../../src/shared/auth";
 
 const TAX_RATE_BPS = 1800;
@@ -76,9 +87,72 @@ const GROCERY_UNITS = new Set<GroceryUnit>([
   "dozen",
   "bunch",
 ]);
+const ATTENDANCE_STATUSES = new Set<AttendanceStatus>([
+  "present",
+  "absent",
+  "half-day",
+  "leave",
+  "holiday",
+  "week-off",
+  "late",
+]);
+const DEFAULT_SHIFT_MINUTES = 8 * 60;
+const DEFAULT_SEATING_AREA_ID = "area:main";
+const DEFAULT_SEATING_AREA_NAME = "Main Dining";
+const ACTIVE_ORDER_STATUSES = ["open", "held", "ready", "assigned"] as const;
 
 const loginAttempts: Record<string, { count: number; lockedUntil: number }> = {};
 const recoveryAttempts: Record<string, { count: number; lockedUntil: number }> = {};
+
+function normalizeModeId(value: unknown) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_")
+    .replace(/[^a-z0-9_-]/g, "");
+}
+
+function normalizeSeatingAreaId(value: unknown, fallback?: string) {
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9:_-]/g, "");
+  if (normalized) {
+    return normalized.startsWith("area:") ? normalized : `area:${normalized}`;
+  }
+  if (fallback) {
+    return fallback;
+  }
+  return DEFAULT_SEATING_AREA_ID;
+}
+
+function normalizeSeatingAreaName(value: unknown, fallback?: string) {
+  const name = normalizeText(value);
+  return name || fallback || DEFAULT_SEATING_AREA_NAME;
+}
+
+function resolveServiceModeIdFromOrderLike(orderLike: any) {
+  return normalizeModeId(orderLike?.meta?.serviceModeId || orderLike?.orderType || "");
+}
+
+function resolveLegacyOrderTypeForWrite(
+  modeConfig: unknown,
+  serviceModeId: string,
+  tableId: number | null | undefined,
+) {
+  const resolvedMode = findServiceModeById(modeConfig, serviceModeId);
+  if (resolvedMode) {
+    return toLegacyOrderType(resolvedMode);
+  }
+  if (serviceModeId === "table" || serviceModeId === "takeaway" || serviceModeId === "delivery") {
+    return serviceModeId;
+  }
+  if (tableId !== null && tableId !== undefined) {
+    return "table";
+  }
+  return "takeaway";
+}
 
 function now() {
   return Date.now();
@@ -106,6 +180,90 @@ function assertUniqueActiveSku(database: Database.Database, sku: string, exclude
   if (row) {
     throw new Error("item-sku-duplicate");
   }
+}
+
+function normalizeMenuVariants(input: unknown): MenuItemVariantDto[] {
+  if (!Array.isArray(input) || input.length === 0) {
+    return [];
+  }
+  const seen = new Set<string>();
+  return input.map((raw, index) => {
+    const name = normalizeText((raw as any)?.name);
+    if (!name) {
+      throw new Error("item-variant-name-required");
+    }
+    const key = name.toLowerCase();
+    if (seen.has(key)) {
+      throw new Error("item-variant-duplicate");
+    }
+    seen.add(key);
+    const price = parsePositiveMoney((raw as any)?.price);
+    if (price === null) {
+      throw new Error("item-variant-price-invalid");
+    }
+    const sortOrderRaw = Number((raw as any)?.sortOrder);
+    return {
+      id: String((raw as any)?.id || `item-variant:${randomUUID()}`),
+      name,
+      price,
+      sortOrder: Number.isFinite(sortOrderRaw) ? Math.trunc(sortOrderRaw) : index,
+    };
+  });
+}
+
+function getItemVariantsMap(database: Database.Database, itemIds: string[]) {
+  const map = new Map<string, MenuItemVariantDto[]>();
+  if (!itemIds.length) {
+    return map;
+  }
+  const placeholders = itemIds.map(() => "?").join(",");
+  const rows = database
+    .prepare(
+      `SELECT id, menu_item_id, name, price_paise, sort_order
+       FROM menu_item_variants
+       WHERE menu_item_id IN (${placeholders})
+       ORDER BY menu_item_id ASC, sort_order ASC, name COLLATE NOCASE ASC`,
+    )
+    .all(...itemIds) as any[];
+  for (const row of rows) {
+    const list = map.get(row.menu_item_id) || [];
+    list.push({
+      id: row.id,
+      name: row.name,
+      price: paiseToRupees(row.price_paise),
+      sortOrder: Number(row.sort_order || 0),
+    });
+    map.set(row.menu_item_id, list);
+  }
+  return map;
+}
+
+function writeItemVariants(
+  database: Database.Database,
+  menuItemId: string,
+  variants: MenuItemVariantDto[],
+) {
+  database.prepare("DELETE FROM menu_item_variants WHERE menu_item_id = ?").run(menuItemId);
+  if (!variants.length) {
+    return;
+  }
+  const insert = database.prepare(`
+    INSERT INTO menu_item_variants (
+      id, menu_item_id, name, price_paise, sort_order, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+  `);
+  const at = now();
+  variants.forEach((variant, index) => {
+    insert.run(
+      variant.id,
+      menuItemId,
+      variant.name,
+      rupeesToPaise(variant.price),
+      Number.isFinite(Number(variant.sortOrder)) ? Math.trunc(Number(variant.sortOrder)) : index,
+      at,
+      at,
+    );
+  });
 }
 
 function assertUniqueActiveCustomerPhone(
@@ -451,12 +609,25 @@ function tableFromRow(row: any): TableDto {
     id: row.id,
     name: row.name || `Table ${row.id}`,
     seats: row.seats,
+    areaId: String(row.area_id || DEFAULT_SEATING_AREA_ID),
+    areaName: String(row.area_name || ""),
     order: row.sort_order,
     active: Boolean(row.active),
   };
 }
 
-function itemFromRow(row: any): MenuItemDto {
+function seatingAreaFromRow(row: any): SeatingAreaDto {
+  return {
+    _id: `seating-area:${row.id}`,
+    type: "seating-area",
+    id: String(row.id),
+    name: String(row.name || DEFAULT_SEATING_AREA_NAME),
+    order: Number(row.sort_order || 0),
+    active: Boolean(row.active),
+  };
+}
+
+function itemFromRow(row: any, variants: MenuItemVariantDto[] = []): MenuItemDto {
   return {
     _id: row.id,
     type: "item",
@@ -467,6 +638,7 @@ function itemFromRow(row: any): MenuItemDto {
     available: Boolean(row.available),
     favorite: Boolean(row.favorite),
     taxRateBps: row.tax_rate_bps,
+    variants,
   };
 }
 
@@ -523,6 +695,79 @@ function assertGstConfig(input: Partial<GstConfig>) {
     throw new Error("gst-rate-invalid");
   }
   return cfg;
+}
+
+type AttendanceShiftConfig = {
+  id: string;
+  label: string;
+  hours: number;
+};
+
+function defaultAttendanceShifts(): AttendanceShiftConfig[] {
+  return [
+    { id: "morning", label: "Morning", hours: 8 },
+    { id: "evening", label: "Evening", hours: 8 },
+    { id: "night", label: "Night", hours: 8 },
+    { id: "half-day", label: "Half Day", hours: 4 },
+  ];
+}
+
+function assertAttendanceConfig(input: Record<string, unknown>) {
+  const source = Array.isArray((input as any)?.shifts)
+    ? ((input as any).shifts as Array<Record<string, unknown>>)
+    : defaultAttendanceShifts();
+  const shifts: AttendanceShiftConfig[] = [];
+  const seen = new Set<string>();
+  for (const raw of source) {
+    const id = normalizeText(raw?.id).toLowerCase();
+    const label = normalizeText(raw?.label);
+    const hours = Number(raw?.hours);
+    if (!id || !label) {
+      throw new Error("attendance-shift-invalid");
+    }
+    if (!Number.isFinite(hours) || hours <= 0 || hours > 24) {
+      throw new Error("attendance-shift-hours-invalid");
+    }
+    if (seen.has(id)) {
+      continue;
+    }
+    seen.add(id);
+    shifts.push({ id, label, hours: Math.round(hours * 100) / 100 });
+  }
+  if (!shifts.length) {
+    throw new Error("attendance-shift-invalid");
+  }
+  return { shifts };
+}
+
+function getAttendanceShiftHours(database: Database.Database, shiftId?: string | null) {
+  const key = String(shiftId || "")
+    .trim()
+    .toLowerCase();
+  if (!key) {
+    return DEFAULT_SHIFT_MINUTES;
+  }
+  const cfg = parseJson<any>(
+    (
+      database
+        .prepare("SELECT value_json FROM settings WHERE key = ?")
+        .get("config:attendance") as { value_json?: string } | undefined
+    )?.value_json,
+    { shifts: defaultAttendanceShifts() },
+  );
+  const shifts = Array.isArray(cfg?.shifts) ? cfg.shifts : defaultAttendanceShifts();
+  const match = shifts.find((shift: any) => String(shift?.id || "").toLowerCase() === key);
+  if (!match) {
+    if (key === "half" || key === "half-day") {
+      return 4 * 60;
+    }
+    return DEFAULT_SHIFT_MINUTES;
+  }
+  const hours = Number(match.hours);
+  if (!Number.isFinite(hours) || hours <= 0) {
+    return DEFAULT_SHIFT_MINUTES;
+  }
+  return Math.max(0, Math.trunc(hours * 60));
 }
 
 function buildGstSnapshot(config: GstConfig) {
@@ -640,10 +885,11 @@ function orderFromRow(database: Database.Database, row: any): OrderDto {
     .prepare("SELECT * FROM payments WHERE order_id = ? ORDER BY received_at ASC")
     .all(row.id)
     .map(paymentFromRow);
+  const meta = parseJson(row.meta_json, {});
   return {
     _id: row.id,
     type: "order",
-    orderType: row.order_type,
+    orderType: resolveServiceModeIdFromOrderLike({ orderType: row.order_type, meta }) || row.order_type,
     tableId: row.table_id === null || row.table_id === undefined ? null : Number(row.table_id),
     customerId: row.customer_id || null,
     status: row.status,
@@ -659,7 +905,7 @@ function orderFromRow(database: Database.Database, row: any): OrderDto {
     total: paiseToRupees(row.total_paise),
     invoiceNumber: row.invoice_number || null,
     paidAt: row.paid_at || null,
-    meta: parseJson(row.meta_json, {}),
+    meta,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     createdBy: row.created_by || null,
@@ -1177,6 +1423,33 @@ function getOrderPaidAt(order: Partial<OrderDto> | any) {
   return order?.status === "paid" ? Number(order?.updatedAt || now()) : null;
 }
 
+function ensureDefaultSeatingArea(database: Database.Database) {
+  const at = now();
+  database
+    .prepare(
+      `INSERT INTO seating_areas (id, name, sort_order, active, created_at, updated_at)
+       VALUES (?, ?, 1, 1, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         name = excluded.name,
+         active = 1,
+         updated_at = excluded.updated_at`,
+    )
+    .run(DEFAULT_SEATING_AREA_ID, DEFAULT_SEATING_AREA_NAME, at, at);
+}
+
+function getPrimaryActiveSeatingAreaId(database: Database.Database) {
+  const row = database
+    .prepare(
+      `SELECT id
+       FROM seating_areas
+       WHERE active = 1
+       ORDER BY sort_order ASC, name COLLATE NOCASE ASC, id ASC
+       LIMIT 1`,
+    )
+    .get() as { id?: string } | undefined;
+  return normalizeSeatingAreaId(row?.id, DEFAULT_SEATING_AREA_ID);
+}
+
 export const posService = {
   ensureReady() {
     getDb();
@@ -1519,13 +1792,18 @@ export const posService = {
   seedTables(count = 12, actor?: string | null) {
     const at = now();
     return inTransaction((database) => {
+      ensureDefaultSeatingArea(database);
+      const areaId = getPrimaryActiveSeatingAreaId(database);
       const insert = database.prepare(`
-        INSERT INTO tables (id, name, seats, sort_order, active, created_at, updated_at)
-        VALUES (?, ?, ?, ?, 1, ?, ?)
-        ON CONFLICT(id) DO UPDATE SET active = 1, updated_at = excluded.updated_at
+        INSERT INTO tables (id, name, seats, area_id, sort_order, active, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, 1, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          active = 1,
+          area_id = COALESCE(NULLIF(tables.area_id, ''), excluded.area_id),
+          updated_at = excluded.updated_at
       `);
       for (let i = 1; i <= count; i++) {
-        insert.run(i, `Table ${i}`, i % 4 === 0 ? 6 : 4, i, at, at);
+        insert.run(i, `Table ${i}`, i % 4 === 0 ? 6 : 4, areaId, i, at, at);
       }
       database.prepare("UPDATE tables SET active = 0, updated_at = ? WHERE id > ?").run(at, count);
       const tableConfig = this.getSetting("config:tables") as any;
@@ -1540,9 +1818,215 @@ export const posService = {
     return this.seedTables(this.getConfiguredTableCount());
   },
 
+  getSeatingAreas(includeDisabled = false): SeatingAreaDto[] {
+    const database = getDb();
+    ensureDefaultSeatingArea(database);
+    const where = includeDisabled ? "" : "WHERE active = 1";
+    return database
+      .prepare(
+        `SELECT * FROM seating_areas ${where}
+         ORDER BY sort_order ASC, name COLLATE NOCASE ASC, id ASC`,
+      )
+      .all()
+      .map(seatingAreaFromRow);
+  },
+
+  setSeatingAreas(
+    input: Array<{ id?: string; name?: string; active?: boolean; order?: number }> = [],
+    actor?: string | null,
+  ) {
+    return inTransaction((database) => {
+      ensureDefaultSeatingArea(database);
+      const source = Array.isArray(input) ? input : [];
+      const normalized = source
+        .map((entry, index) => {
+          const id = normalizeSeatingAreaId(entry?.id, `area:${randomUUID()}`);
+          const name = normalizeSeatingAreaName(entry?.name);
+          const active = entry?.active !== false;
+          const order = Number.isFinite(Number(entry?.order)) ? Math.trunc(Number(entry?.order)) : index + 1;
+          return { id, name, active, order };
+        })
+        .filter((entry, index, list) => list.findIndex((it) => it.id === entry.id) === index);
+
+      if (!normalized.some((entry) => entry.active)) {
+        throw new Error("seating-area-at-least-one-active");
+      }
+
+      const existingRows = database
+        .prepare("SELECT id FROM seating_areas")
+        .all() as Array<{ id: string }>;
+      const existingIds = new Set(existingRows.map((row) => String(row.id)));
+      const nextIds = new Set(normalized.map((entry) => entry.id));
+
+      const upsert = database.prepare(`
+        INSERT INTO seating_areas (id, name, sort_order, active, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          name = excluded.name,
+          sort_order = excluded.sort_order,
+          active = excluded.active,
+          updated_at = excluded.updated_at
+      `);
+      const at = now();
+      normalized.forEach((entry, index) => {
+        upsert.run(entry.id, entry.name, index + 1, entry.active ? 1 : 0, at, at);
+      });
+
+      const fallbackId =
+        normalized.find((entry) => entry.active)?.id || normalizeSeatingAreaId(undefined, DEFAULT_SEATING_AREA_ID);
+      const idsToDelete = Array.from(existingIds).filter(
+        (id) => id !== DEFAULT_SEATING_AREA_ID && !nextIds.has(id),
+      );
+      for (const id of idsToDelete) {
+        database.prepare("UPDATE tables SET area_id = ? WHERE area_id = ?").run(fallbackId, id);
+        database.prepare("DELETE FROM seating_areas WHERE id = ?").run(id);
+      }
+
+      if (!nextIds.has(DEFAULT_SEATING_AREA_ID)) {
+        upsert.run(DEFAULT_SEATING_AREA_ID, DEFAULT_SEATING_AREA_NAME, normalized.length + 1, 1, at, at);
+      }
+
+      createAuditRow(database, "seating_areas.updated", "config", "seating_areas", actor || null, {
+        count: normalized.length,
+      });
+      return this.getSeatingAreas(true);
+    });
+  },
+
+  deleteSeatingArea(areaId: string, reassignToAreaId: string, actor?: string | null) {
+    const normalizedAreaId = normalizeSeatingAreaId(areaId);
+    const targetId = normalizeSeatingAreaId(reassignToAreaId);
+    if (normalizedAreaId === DEFAULT_SEATING_AREA_ID) {
+      throw new Error("seating-area-default-protected");
+    }
+    if (normalizedAreaId === targetId) {
+      throw new Error("seating-area-reassign-target-invalid");
+    }
+    return inTransaction((database) => {
+      ensureDefaultSeatingArea(database);
+      const existing = database
+        .prepare("SELECT id FROM seating_areas WHERE id = ?")
+        .get(normalizedAreaId) as { id?: string } | undefined;
+      if (!existing) {
+        throw new Error("seating-area-not-found");
+      }
+      const target = database
+        .prepare("SELECT id FROM seating_areas WHERE id = ? AND active = 1")
+        .get(targetId) as { id?: string } | undefined;
+      if (!target) {
+        throw new Error("seating-area-reassign-target-missing");
+      }
+      database.prepare("UPDATE tables SET area_id = ? WHERE area_id = ?").run(targetId, normalizedAreaId);
+      database.prepare("DELETE FROM seating_areas WHERE id = ?").run(normalizedAreaId);
+      createAuditRow(database, "seating_area.deleted", "config", normalizedAreaId, actor || null, {
+        reassignToAreaId: targetId,
+      });
+      return { ok: true };
+    });
+  },
+
+  setTableArea(tableId: number, areaId: string, actor?: string | null) {
+    const safeTableId = Number(tableId);
+    if (!Number.isInteger(safeTableId) || safeTableId <= 0) {
+      throw new Error("table-id-invalid");
+    }
+    const normalizedAreaId = normalizeSeatingAreaId(areaId);
+    return inTransaction((database) => {
+      ensureDefaultSeatingArea(database);
+      const area = database
+        .prepare("SELECT id FROM seating_areas WHERE id = ? AND active = 1")
+        .get(normalizedAreaId) as { id?: string } | undefined;
+      if (!area) {
+        throw new Error("seating-area-not-found");
+      }
+      const result = database
+        .prepare("UPDATE tables SET area_id = ?, updated_at = ? WHERE id = ?")
+        .run(normalizedAreaId, now(), safeTableId);
+      if (!result.changes) {
+        throw new Error("table-not-found");
+      }
+      createAuditRow(database, "table.area.updated", "table", String(safeTableId), actor || null, {
+        areaId: normalizedAreaId,
+      });
+      return this.getTables().find((table) => table.id === safeTableId) || null;
+    });
+  },
+
+  getTablesSnapshot() {
+    const database = getDb();
+    ensureDefaultSeatingArea(database);
+    const statuses = ACTIVE_ORDER_STATUSES.map(() => "?").join(",");
+    const areas = this.getSeatingAreas(true);
+    const tables = database
+      .prepare(
+        `SELECT
+           t.*,
+           sa.name AS area_name,
+           o.id AS order_id,
+           o.status AS order_status,
+           (
+             SELECT COUNT(*)
+             FROM order_lines ol
+             WHERE ol.order_id = o.id
+           ) AS item_count,
+           (
+             SELECT COALESCE(SUM(ol.quantity * ol.rate_paise), 0)
+             FROM order_lines ol
+             WHERE ol.order_id = o.id
+           ) AS total_paise
+         FROM tables t
+         LEFT JOIN seating_areas sa ON sa.id = t.area_id
+         LEFT JOIN orders o
+           ON o.id = (
+             SELECT oo.id
+             FROM orders oo
+             WHERE oo.table_id = t.id
+               AND oo.status IN (${statuses})
+             ORDER BY oo.updated_at DESC
+             LIMIT 1
+           )
+         WHERE t.active = 1
+         ORDER BY sa.sort_order ASC, sa.name COLLATE NOCASE ASC, t.sort_order ASC, t.id ASC`,
+      )
+      .all(...ACTIVE_ORDER_STATUSES) as any[];
+
+    const tableRows = tables.map((row) => ({
+      ...tableFromRow(row),
+      status: row.order_status || "",
+      count: Number(row.item_count || 0),
+      total: paiseToRupees(Number(row.total_paise || 0)),
+      occupied: Boolean(row.order_id) && Number(row.item_count || 0) > 0,
+      orderId: row.order_id || null,
+    }));
+
+    const byArea: Record<string, Array<(typeof tableRows)[number]>> = {};
+    for (const area of areas) {
+      byArea[area.id] = [];
+    }
+    for (const table of tableRows) {
+      const areaId = normalizeSeatingAreaId(table.areaId);
+      byArea[areaId] = byArea[areaId] || [];
+      byArea[areaId].push(table);
+    }
+
+    return {
+      areas,
+      tables: tableRows,
+      byArea,
+    };
+  },
+
   getTables(): TableDto[] {
-    return getDb()
-      .prepare("SELECT * FROM tables WHERE active = 1 ORDER BY sort_order ASC, id ASC")
+    const database = getDb();
+    ensureDefaultSeatingArea(database);
+    return database
+      .prepare(
+        `SELECT t.*, sa.name AS area_name
+         FROM tables t
+         LEFT JOIN seating_areas sa ON sa.id = t.area_id
+         WHERE t.active = 1
+         ORDER BY sa.sort_order ASC, sa.name COLLATE NOCASE ASC, t.sort_order ASC, t.id ASC`,
+      )
       .all()
       .map(tableFromRow);
   },
@@ -1561,19 +2045,25 @@ export const posService = {
   },
 
   getItems(): MenuItemDto[] {
-    return getDb()
+    const database = getDb();
+    const rows = database
       .prepare(
         `SELECT mi.*, mc.name AS category_name
          FROM menu_items mi
          LEFT JOIN menu_categories mc ON mc.id = mi.category_id
          ORDER BY mi.name COLLATE NOCASE ASC`,
       )
-      .all()
-      .map(itemFromRow);
+      .all() as any[];
+    const variantsByItem = getItemVariantsMap(
+      database,
+      rows.map((row) => String(row.id)),
+    );
+    return rows.map((row) => itemFromRow(row, variantsByItem.get(String(row.id)) || []));
   },
 
   getItemById(id: string): MenuItemDto | null {
-    const row = getDb()
+    const database = getDb();
+    const row = database
       .prepare(
         `SELECT mi.*, mc.name AS category_name
          FROM menu_items mi
@@ -1581,7 +2071,11 @@ export const posService = {
          WHERE mi.id = ?`,
       )
       .get(id);
-    return row ? itemFromRow(row) : null;
+    if (!row) {
+      return null;
+    }
+    const variantsByItem = getItemVariantsMap(database, [id]);
+    return itemFromRow(row, variantsByItem.get(id) || []);
   },
 
   createItem(
@@ -1593,6 +2087,7 @@ export const posService = {
       available?: boolean;
       favorite?: boolean;
       taxRateBps?: number;
+      variants?: unknown;
     },
     actor?: string | null,
   ) {
@@ -1600,6 +2095,7 @@ export const posService = {
     const sku = normalizeSku(input.sku);
     const price = parsePositiveMoney(input.price);
     const category = normalizeCategoryName(input.category);
+    const variants = normalizeMenuVariants(input.variants);
     if (!name) {
       throw new Error("item-name-required");
     }
@@ -1629,6 +2125,7 @@ export const posService = {
           at,
           at,
         );
+      writeItemVariants(database, id, variants);
       createAuditRow(database, "menu.item.created", "item", id, actor || null, { name });
       return this.getItemById(id)!;
     });
@@ -1639,6 +2136,7 @@ export const posService = {
     const sku = normalizeSku(item.sku);
     const price = parsePositiveMoney(item.price);
     const category = normalizeCategoryName(item.category);
+    const variants = normalizeMenuVariants((item as any).variants);
     if (!name) {
       throw new Error("item-name-required");
     }
@@ -1670,6 +2168,7 @@ export const posService = {
           now(),
           item._id,
         );
+      writeItemVariants(database, item._id, variants);
       createAuditRow(database, "menu.item.updated", "item", item._id, actor || null, {});
       return this.getItemById(item._id)!;
     });
@@ -1720,24 +2219,63 @@ export const posService = {
     });
   },
 
+  getVariantOptions(): string[] {
+    const cfg = this.getSetting("config:menu-variant-options") as any;
+    const options = Array.isArray(cfg?.options) ? cfg.options : [];
+    return options
+      .map((value: unknown) => normalizeText(value))
+      .filter((value: string) => Boolean(value));
+  },
+
+  setVariantOptions(options: string[], actor?: string | null) {
+    const normalized: string[] = [];
+    const seen = new Set<string>();
+    for (const option of options || []) {
+      const name = normalizeText(option);
+      if (!name) {
+        continue;
+      }
+      const key = name.toLowerCase();
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      normalized.push(name);
+    }
+    this.setSetting("config:menu-variant-options", { options: normalized }, actor);
+    createAuditRow(
+      getDb(),
+      "menu.variant-options.updated",
+      "config",
+      "config:menu-variant-options",
+      actor || null,
+      { count: normalized.length },
+    );
+    return { ok: true };
+  },
+
   createOrder(
     input: {
       tableId?: number | null;
-      orderType?: "table" | "takeaway" | "delivery";
+      orderType?: string;
+      serviceModeId?: string;
       customerId?: string | null;
       meta?: Record<string, unknown>;
       createdBy?: string | null;
     } = {},
   ) {
     const at = now();
-    const orderType =
-      input.orderType ||
-      (input.tableId !== null && input.tableId !== undefined ? "table" : "takeaway");
+    const modeConfig = this.getSetting(SERVICE_MODE_CONFIG_KEY);
+    const fallbackModeId =
+      input.tableId !== null && input.tableId !== undefined ? "table" : "takeaway";
+    const serviceModeId =
+      normalizeModeId(input.serviceModeId || input.orderType) || fallbackModeId;
+    const orderType = resolveLegacyOrderTypeForWrite(modeConfig, serviceModeId, input.tableId);
     const id = `order:${randomUUID()}`;
     return inTransaction((database) => {
       const customerId = resolveActiveCustomerId(database, input.customerId);
       const orderSeq = nextOrderSeq(database);
-      const meta = { ...(input.meta || {}), orderSeq };
+      const meta = { ...(input.meta || {}), orderSeq, serviceModeId };
       database
         .prepare(
           `INSERT INTO orders (
@@ -1758,6 +2296,7 @@ export const posService = {
         );
       createAuditRow(database, "order.created", "order", id, input.createdBy || null, {
         orderType,
+        serviceModeId,
         tableId: input.tableId ?? null,
         customerId,
       });
@@ -2111,6 +2650,9 @@ export const posService = {
       const kotStatus =
         order.kotStatus ||
         (order.kotPrinted ? "printed" : order.kotSent ? "sent" : current.kot_status || "pending");
+      const modeConfig = this.getSetting(SERVICE_MODE_CONFIG_KEY);
+      const serviceModeId = resolveServiceModeIdFromOrderLike(order) || resolveServiceModeIdFromOrderLike(current);
+      const legacyOrderType = resolveLegacyOrderTypeForWrite(modeConfig, serviceModeId, order.tableId);
       database
         .prepare(
           `UPDATE orders
@@ -2119,13 +2661,13 @@ export const posService = {
            WHERE id = ?`,
         )
         .run(
-          order.orderType || current.order_type,
+          legacyOrderType,
           order.tableId ?? null,
           order.customerId || null,
           order.status || current.status,
           kotStatus,
           Number(order.discountPercent || 0),
-          stringifyJson(order.meta || {}),
+          stringifyJson({ ...(order.meta || {}), serviceModeId }),
           now(),
           order._id,
         );
@@ -2287,6 +2829,9 @@ export const posService = {
       }
       const createdAt = Number(order.createdAt || now());
       const paidAt = getOrderPaidAt(order);
+      const modeConfig = this.getSetting(SERVICE_MODE_CONFIG_KEY);
+      const serviceModeId = resolveServiceModeIdFromOrderLike(order) || "takeaway";
+      const legacyOrderType = resolveLegacyOrderTypeForWrite(modeConfig, serviceModeId, order.tableId);
       database
         .prepare(
           `INSERT INTO orders (
@@ -2297,8 +2842,7 @@ export const posService = {
         )
         .run(
           order._id,
-          order.orderType ||
-            (order.tableId !== null && order.tableId !== undefined ? "table" : "takeaway"),
+          legacyOrderType,
           order.tableId ?? null,
           order.customerId || null,
           order.status,
@@ -2306,7 +2850,7 @@ export const posService = {
           Number(order.discountPercent || 0),
           getOrderInvoiceNumber(order),
           paidAt,
-          stringifyJson(order.meta || {}),
+          stringifyJson({ ...(order.meta || {}), serviceModeId }),
           order.createdBy || actor || null,
           createdAt,
           Number(order.updatedAt || createdAt),
@@ -2614,7 +3158,13 @@ export const posService = {
     const existing = this.getSetting(key) || {};
     const merged = { ...existing, ...value };
     const normalized =
-      key === "config:gst" ? assertGstConfig(merged as Partial<GstConfig>) : merged;
+      key === "config:gst"
+        ? assertGstConfig(merged as Partial<GstConfig>)
+        : key === "config:attendance"
+          ? assertAttendanceConfig(merged)
+          : key === SERVICE_MODE_CONFIG_KEY
+            ? toServiceModeConfigDoc(merged)
+          : merged;
     const at = now();
     const database = getDb();
     database
@@ -3519,6 +4069,249 @@ export const posService = {
     });
   },
 
+  listAttendance(input: {
+    date: string;
+    shiftId?: string | null;
+    status?: AttendanceStatus | null;
+    search?: string;
+  }): AttendanceDto[] {
+    const date = normalizeAttendanceDate(input.date);
+    const clauses = ["ar.attendance_date = ?"];
+    const params: unknown[] = [date];
+    const shiftId = normalizeText(input.shiftId);
+    if (shiftId) {
+      clauses.push("COALESCE(ar.shift_id, '') = ?");
+      params.push(shiftId);
+    }
+    if (input.status) {
+      clauses.push("ar.status = ?");
+      params.push(normalizeAttendanceStatus(input.status));
+    }
+    const search = normalizeText(input.search).toLowerCase();
+    if (search) {
+      clauses.push("(lower(s.name) LIKE ? OR lower(COALESCE(s.designation, '')) LIKE ?)");
+      params.push(`%${search}%`, `%${search}%`);
+    }
+    return getDb()
+      .prepare(
+        `SELECT ar.*, s.name AS staff_name, s.designation AS staff_role
+         FROM attendance_records ar
+         JOIN staff s ON s.id = ar.staff_id
+         WHERE ${clauses.join(" AND ")}
+         ORDER BY lower(s.name) ASC, ar.created_on ASC`,
+      )
+      .all(...params)
+      .map(attendanceFromRow);
+  },
+
+  upsertAttendanceRows(
+    input: {
+      attendanceDate: string;
+      rows: Array<{
+        id?: string;
+        staffId: string;
+        shiftId?: string | null;
+        status: AttendanceStatus;
+        checkInTime?: string | null;
+        checkOutTime?: string | null;
+        breakMinutes?: number;
+        overtimeMinutes?: number | null;
+        remarks?: string | null;
+      }>;
+    },
+    actor?: string | null,
+  ) {
+    const attendanceDate = normalizeAttendanceDate(input.attendanceDate);
+    const rows = Array.isArray(input.rows) ? input.rows : [];
+    return inTransaction((database) => {
+      let created = 0;
+      let updated = 0;
+      for (const row of rows) {
+        const staffId = normalizeText(row.staffId);
+        if (!staffId) {
+          throw new Error("attendance-staff-required");
+        }
+        assertAttendanceStaffExists(database, staffId);
+        const status = normalizeAttendanceStatus(row.status);
+        const shiftId = normalizeText(row.shiftId) || null;
+        const checkInTime = normalizeAttendanceTime(row.checkInTime);
+        const checkOutTime = normalizeAttendanceTime(row.checkOutTime);
+        const breakMinutes = normalizeAttendanceBreakMinutes(row.breakMinutes);
+        const overtimeOverrideMinutes = normalizeAttendanceOvertimeOverride(row.overtimeMinutes);
+        const remarks = optionalLimitedText(row.remarks, STAFF_TEXT_LIMITS.notes, "staff-notes-too-long");
+        if (status === "leave" && !remarks) {
+          throw new Error("attendance-remarks-required-for-leave");
+        }
+        const durations = computeAttendanceDurations({
+          database,
+          checkInTime,
+          checkOutTime,
+          breakMinutes,
+          shiftId,
+          overtimeOverrideMinutes,
+        });
+
+        const explicitId = normalizeText(row.id);
+        const existingById = explicitId
+          ? (database.prepare("SELECT id FROM attendance_records WHERE id = ?").get(explicitId) as any)
+          : null;
+        const existingByUnique = database
+          .prepare(
+            "SELECT id FROM attendance_records WHERE staff_id = ? AND attendance_date = ? LIMIT 1",
+          )
+          .get(staffId, attendanceDate) as any;
+        const targetId = existingById?.id || existingByUnique?.id || `attendance:${randomUUID()}`;
+        const nowAt = now();
+        const exists = Boolean(existingById?.id || existingByUnique?.id);
+        if (exists) {
+          database
+            .prepare(
+              `UPDATE attendance_records
+               SET shift_id = ?, status = ?, check_in_time = ?, check_out_time = ?, break_minutes = ?,
+                   worked_minutes = ?, overtime_minutes = ?, remarks = ?, updated_by = ?, updated_on = ?
+               WHERE id = ?`,
+            )
+            .run(
+              shiftId,
+              status,
+              checkInTime,
+              checkOutTime,
+              breakMinutes,
+              durations.workedMinutes,
+              durations.overtimeMinutes,
+              remarks,
+              actor || null,
+              nowAt,
+              targetId,
+            );
+          createAuditRow(database, "attendance.updated", "attendance", targetId, actor || null, {
+            staffId,
+            attendanceDate,
+            status,
+          });
+          updated += 1;
+        } else {
+          try {
+            database
+              .prepare(
+                `INSERT INTO attendance_records (
+                  id, staff_id, attendance_date, shift_id, status, check_in_time, check_out_time,
+                  break_minutes, worked_minutes, overtime_minutes, remarks,
+                  created_by, created_on, updated_by, updated_on
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              )
+              .run(
+                targetId,
+                staffId,
+                attendanceDate,
+                shiftId,
+                status,
+                checkInTime,
+                checkOutTime,
+                breakMinutes,
+                durations.workedMinutes,
+                durations.overtimeMinutes,
+                remarks,
+                actor || null,
+                nowAt,
+                actor || null,
+                nowAt,
+              );
+          } catch (error: any) {
+            const message = String(error?.message || "");
+            if (message.includes("UNIQUE") && message.includes("attendance_records.staff_id")) {
+              throw new Error("attendance-duplicate-day");
+            }
+            throw error;
+          }
+          createAuditRow(database, "attendance.created", "attendance", targetId, actor || null, {
+            staffId,
+            attendanceDate,
+            status,
+          });
+          created += 1;
+        }
+      }
+      createAuditRow(database, "attendance.bulk-update", "attendance", attendanceDate, actor || null, {
+        attendanceDate,
+        created,
+        updated,
+        total: rows.length,
+      });
+      return this.listAttendance({ date: attendanceDate });
+    });
+  },
+
+  copyAttendance(fromDate: string, toDate: string, actor?: string | null) {
+    const sourceDate = normalizeAttendanceDate(fromDate);
+    const targetDate = normalizeAttendanceDate(toDate);
+    return inTransaction((database) => {
+      const sourceRows = database
+        .prepare("SELECT * FROM attendance_records WHERE attendance_date = ?")
+        .all(sourceDate) as any[];
+      const at = now();
+      const upsert = database.prepare(`
+        INSERT INTO attendance_records (
+          id, staff_id, attendance_date, shift_id, status, check_in_time, check_out_time,
+          break_minutes, worked_minutes, overtime_minutes, remarks,
+          created_by, created_on, updated_by, updated_on
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(staff_id, attendance_date) DO UPDATE SET
+          shift_id = excluded.shift_id,
+          status = excluded.status,
+          check_in_time = excluded.check_in_time,
+          check_out_time = excluded.check_out_time,
+          break_minutes = excluded.break_minutes,
+          worked_minutes = excluded.worked_minutes,
+          overtime_minutes = excluded.overtime_minutes,
+          remarks = excluded.remarks,
+          updated_by = excluded.updated_by,
+          updated_on = excluded.updated_on
+      `);
+      for (const row of sourceRows) {
+        upsert.run(
+          `attendance:${randomUUID()}`,
+          row.staff_id,
+          targetDate,
+          row.shift_id,
+          row.status,
+          row.check_in_time,
+          row.check_out_time,
+          row.break_minutes,
+          row.worked_minutes,
+          row.overtime_minutes,
+          row.remarks,
+          actor || null,
+          at,
+          actor || null,
+          at,
+        );
+      }
+      createAuditRow(database, "attendance.bulk-update", "attendance", targetDate, actor || null, {
+        action: "copy",
+        sourceDate,
+        targetDate,
+        copied: sourceRows.length,
+      });
+      return this.listAttendance({ date: targetDate });
+    });
+  },
+
+  deleteAttendance(id: string, actor?: string | null) {
+    return inTransaction((database) => {
+      const row = database.prepare("SELECT * FROM attendance_records WHERE id = ?").get(id) as any;
+      if (!row) {
+        throw new Error("attendance-not-found");
+      }
+      database.prepare("DELETE FROM attendance_records WHERE id = ?").run(id);
+      createAuditRow(database, "attendance.deleted", "attendance", id, actor || null, {
+        staffId: row.staff_id,
+        attendanceDate: row.attendance_date,
+      });
+      return { ok: true };
+    });
+  },
+
   addPrintJob(input: {
     printerName: string;
     jobType: PrintJobDto["jobType"];
@@ -3801,6 +4594,104 @@ function prepareStaffInput(input: {
   };
 }
 
+function normalizeAttendanceDate(value: unknown) {
+  const date = normalizeText(value);
+  if (!date) {
+    throw new Error("attendance-date-required");
+  }
+  if (!isValidDateOnly(date)) {
+    throw new Error("attendance-date-invalid");
+  }
+  if (isFutureDateOnly(date)) {
+    throw new Error("attendance-date-future");
+  }
+  return date;
+}
+
+function normalizeAttendanceStatus(value: unknown): AttendanceStatus {
+  const status = String(value || "") as AttendanceStatus;
+  if (!ATTENDANCE_STATUSES.has(status)) {
+    throw new Error("attendance-status-invalid");
+  }
+  return status;
+}
+
+function normalizeAttendanceTime(value: unknown) {
+  const text = normalizeText(value);
+  if (!text) {
+    return null;
+  }
+  if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(text)) {
+    throw new Error("attendance-time-invalid");
+  }
+  return text;
+}
+
+function attendanceTimeToMinutes(value: string | null) {
+  if (!value) {
+    return null;
+  }
+  const [hours, minutes] = value.split(":").map((part) => Number(part));
+  return hours * 60 + minutes;
+}
+
+function normalizeAttendanceBreakMinutes(value: unknown) {
+  const breakMinutes = Number(value ?? 0);
+  if (!Number.isFinite(breakMinutes) || breakMinutes < 0) {
+    throw new Error("attendance-break-invalid");
+  }
+  return Math.trunc(breakMinutes);
+}
+
+function normalizeAttendanceOvertimeOverride(value: unknown) {
+  if (value === null || value === undefined || String(value).trim() === "") {
+    return null;
+  }
+  const overtimeMinutes = Number(value);
+  if (!Number.isFinite(overtimeMinutes) || overtimeMinutes < 0) {
+    throw new Error("attendance-break-invalid");
+  }
+  return Math.trunc(overtimeMinutes);
+}
+
+function computeAttendanceDurations(input: {
+  database: Database.Database;
+  checkInTime: string | null;
+  checkOutTime: string | null;
+  breakMinutes: number;
+  shiftId?: string | null;
+  overtimeOverrideMinutes?: number | null;
+}) {
+  const inMinutes = attendanceTimeToMinutes(input.checkInTime);
+  const outMinutes = attendanceTimeToMinutes(input.checkOutTime);
+  if ((inMinutes === null) !== (outMinutes === null)) {
+    throw new Error("attendance-checkout-before-checkin");
+  }
+  if (inMinutes !== null && outMinutes !== null && outMinutes < inMinutes) {
+    throw new Error("attendance-checkout-before-checkin");
+  }
+  const rawWorked =
+    inMinutes !== null && outMinutes !== null ? Math.max(0, outMinutes - inMinutes) : 0;
+  if (input.breakMinutes > rawWorked) {
+    throw new Error("attendance-break-exceeds-worked");
+  }
+  const workedMinutes = Math.max(0, rawWorked - input.breakMinutes);
+  const shiftMinutes = getAttendanceShiftHours(input.database, input.shiftId);
+  const autoOvertimeMinutes = Math.max(0, workedMinutes - shiftMinutes);
+  const overtimeMinutes =
+    input.overtimeOverrideMinutes === null || input.overtimeOverrideMinutes === undefined
+      ? autoOvertimeMinutes
+      : Math.max(0, input.overtimeOverrideMinutes);
+  return { workedMinutes, overtimeMinutes };
+}
+
+function assertAttendanceStaffExists(database: Database.Database, staffId: string) {
+  const row = database.prepare("SELECT id FROM staff WHERE id = ?").get(staffId) as any;
+  if (!row?.id) {
+    throw new Error("attendance-staff-required");
+  }
+}
+
 function auditFromRow(row: any): AuditDto {
   return {
     _id: row.id,
@@ -3859,6 +4750,28 @@ function staffFromRow(row: any): StaffDto {
     active: Boolean(row.active),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+function attendanceFromRow(row: any): AttendanceDto {
+  return {
+    id: row.id,
+    staffId: row.staff_id,
+    staffName: row.staff_name || "",
+    role: row.staff_role || null,
+    attendanceDate: row.attendance_date,
+    shiftId: row.shift_id || null,
+    status: row.status,
+    checkInTime: row.check_in_time || null,
+    checkOutTime: row.check_out_time || null,
+    breakMinutes: Number(row.break_minutes || 0),
+    workedMinutes: Number(row.worked_minutes || 0),
+    overtimeMinutes: Number(row.overtime_minutes || 0),
+    remarks: row.remarks || null,
+    createdBy: row.created_by || null,
+    createdOn: Number(row.created_on || 0),
+    updatedBy: row.updated_by || null,
+    updatedOn: Number(row.updated_on || 0),
   };
 }
 

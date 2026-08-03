@@ -6,23 +6,22 @@ import {
   getOrderById,
   addItemToOrder,
   getOrCreateOrderForTable,
-  getOpenOrderForTable,
+  getTablesSnapshot,
   setOrderPaid,
   cancelOrder,
   getItems,
   seedItems,
-  seedTables,
   updateOrderLines,
   setOrderDiscount,
   setOrderStatus,
   markOrderKotFailed,
   markOrderKotSent,
   voidOrderKotLine,
-  getConfiguredTableCount,
   getConfigPrinters,
   getConfigGst,
   getConfigBranding,
   nextKotSeq,
+  getEnabledServiceModes,
 } from "../../../app/db/posRepository";
 import {
   DEFAULT_GST_CONFIG,
@@ -59,10 +58,15 @@ import {
   NewDeliveryModal,
   AssignRiderModal,
   PrintFailedModal,
-  AdminOverrideModal,
+  VariantPickerModal,
 } from "./components/BillingModals";
 import { buildReceiptLines, buildKotLines, buildKotVoidLines } from "./utils/receiptBuilder";
 import type { ReceiptBranding } from "./utils/receiptBuilder";
+import {
+  findServiceModeById,
+  getDefaultServiceModes,
+  type ServiceMode,
+} from "../../../shared/serviceModes";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -74,6 +78,12 @@ type KotVoidRequest = {
   itemName: string;
   finalQty: number;
   voidQty: number;
+};
+
+type VariantSelectionState = {
+  item: any;
+  quantity: number;
+  refocus: boolean;
 };
 
 type BillingBusyAction =
@@ -104,12 +114,48 @@ function formatCurrency(v: number) {
   }
 }
 
-function deriveOrderType(order: any, tableNum: number | null): "table" | "takeaway" | "delivery" {
+function itemPriceSummary(item: any, formatter: (value: number) => string) {
+  const variants = Array.isArray(item?.variants) ? item.variants : [];
+  if (!variants.length) {
+    return formatter(Number(item?.price || 0));
+  }
+  const prices = variants
+    .map((variant: any) => Number(variant?.price))
+    .filter((price: number) => Number.isFinite(price) && price > 0);
+  if (!prices.length) {
+    return formatter(Number(item?.price || 0));
+  }
+  const min = Math.min(...prices);
+  const max = Math.max(...prices);
+  if (min === max) {
+    return formatter(min);
+  }
+  return `${formatter(min)} - ${formatter(max)}`;
+}
+
+function extractVariantNameFromLine(lineName: string, baseName?: string) {
+  const name = String(lineName || "").trim();
+  const base = String(baseName || "").trim();
+  const escapedBase = base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = base ? new RegExp(`^${escapedBase}\\s*\\(([^)]+)\\)\\s*$`, "i") : null;
+  const match = pattern ? pattern.exec(name) : null;
+  return match?.[1]?.trim() || "";
+}
+
+function normalizeModeId(value: unknown) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_")
+    .replace(/[^a-z0-9_-]/g, "");
+}
+
+function deriveOrderType(order: any, tableNum: number | null): string {
   if (!order) {
     return "table";
   }
   if (order.orderType) {
-    return order.orderType as any;
+    return normalizeModeId(order.orderType) || "table";
   }
   const meta = order.meta || {};
   const p = (meta.platform || meta.orderSource || meta.source || "").toString().toLowerCase();
@@ -190,6 +236,32 @@ function buildKotPreview(
   };
 }
 
+function modeOrderLabel(mode: ServiceMode | null | undefined, orderData: any) {
+  if (!mode) {
+    return "Order";
+  }
+  if (mode.id === "delivery") {
+    const platform = orderData?.meta?.platform || orderData?.meta?.orderSource || "Delivery";
+    const code = orderData?.meta?.code ? ` #${orderData.meta.code}` : "";
+    return `${platform}${code}`;
+  }
+  if (mode.id === "takeaway") {
+    return orderData?.meta?.parcelName || orderData?.meta?.customerName || mode.name;
+  }
+  return mode.name;
+}
+
+function paymentFlowLabel(mode: ServiceMode | null | undefined) {
+  const flow = mode?.paymentPrintSequence || "bill_only";
+  if (flow === "kot_then_bill") {
+    return "KOT -> Bill";
+  }
+  if (flow === "bill_then_kot") {
+    return "Bill -> KOT";
+  }
+  return "Bill";
+}
+
 async function resolveKitchenPrinter() {
   try {
     const cfg = await getConfigPrinters();
@@ -237,15 +309,28 @@ export default function Billing() {
       window.localStorage.setItem("tablesOpen", val ? "1" : "0");
     } catch {}
   };
-  const [view, setView] = React.useState<"tables" | "takeaway" | "delivery">("tables");
-  const [takeawayOrders, setTakeawayOrders] = React.useState<any[]>([]);
-  const [deliveryOrders, setDeliveryOrders] = React.useState<any[]>([]);
-  const [tableCount, setTableCount] = React.useState(0);
-  const tableNumbers = React.useMemo(
-    () => Array.from({ length: tableCount }, (_, i) => i + 1),
-    [tableCount],
+  const [serviceModes, setServiceModes] = React.useState<ServiceMode[]>(() =>
+    getDefaultServiceModes().filter((mode) => mode.enabled),
   );
-  const [tableInfos, setTableInfos] = React.useState<Record<number, any>>({});
+  const [view, setView] = React.useState<string>("table");
+  const [modeOrders, setModeOrders] = React.useState<Record<string, any[]>>({});
+  const [tableAreas, setTableAreas] = React.useState<Array<{ id: string; name: string; active?: boolean }>>([]);
+  const [selectedAreaId, setSelectedAreaId] = React.useState<string>(() => {
+    try {
+      return window.localStorage.getItem("billingSelectedArea") || "area:main";
+    } catch {
+      return "area:main";
+    }
+  });
+  const [tablesByArea, setTablesByArea] = React.useState<
+    Record<string, Array<{ id: number; status?: string; count?: number; total?: number }>>
+  >({});
+
+  React.useEffect(() => {
+    try {
+      window.localStorage.setItem("billingSelectedArea", selectedAreaId || "area:main");
+    } catch {}
+  }, [selectedAreaId]);
 
   // ── Modal state ─────────────────────────────────────────────────────────
   const [payModalOpen, setPayModalOpen] = React.useState(false);
@@ -258,9 +343,12 @@ export default function Billing() {
   const [newTakeawayOpen, setNewTakeawayOpen] = React.useState(false);
   const [newTakeawayName, setNewTakeawayName] = React.useState("");
   const [newTakeawayPhone, setNewTakeawayPhone] = React.useState("");
+  const [customerModeId, setCustomerModeId] = React.useState<string>("takeaway");
   const [newDeliveryOpen, setNewDeliveryOpen] = React.useState(false);
   const [newDeliveryPlatform, setNewDeliveryPlatform] = React.useState("Swiggy");
   const [newDeliveryCode, setNewDeliveryCode] = React.useState("");
+  const [newDeliveryName, setNewDeliveryName] = React.useState("");
+  const [newDeliveryPhone, setNewDeliveryPhone] = React.useState("");
   const [assignRiderOpen, setAssignRiderOpen] = React.useState(false);
   const [riderName, setRiderName] = React.useState("");
   const [riderPhone, setRiderPhone] = React.useState("");
@@ -270,14 +358,9 @@ export default function Billing() {
     retry: () => void;
     finish: () => void;
   } | null>(null);
-
-  // ── Bill-printed fraud guard ────────────────────────────────────────────
-  // Tracks which order ID had its bill printed. Any removal/reduction after
-  // bill print requires manager credentials.
-  const billPrintedOrderRef = React.useRef<string | null>(null);
-  const [adminOverrideOpen, setAdminOverrideOpen] = React.useState(false);
-  const [adminOverrideDesc, setAdminOverrideDesc] = React.useState("");
-  const pendingOverrideRef = React.useRef<(() => Promise<void>) | null>(null);
+  const [variantSelection, setVariantSelection] = React.useState<VariantSelectionState | null>(
+    null,
+  );
 
   const [busyActions, setBusyActions] = React.useState<Partial<Record<BillingBusyAction, boolean>>>(
     {},
@@ -313,6 +396,9 @@ export default function Billing() {
 
   // ── Derived values ──────────────────────────────────────────────────────
   const activeOrderType = deriveOrderType(order, tableNum);
+  const activeMode =
+    findServiceModeById({ modes: serviceModes }, activeOrderType) ||
+    findServiceModeById({ modes: getDefaultServiceModes() }, activeOrderType);
   const currentUserLabel =
     auth?.session?.displayName || auth?.session?.username || order?.createdBy || "";
   const totals = computeTotals(order, discountPercent, gstConfig);
@@ -325,6 +411,7 @@ export default function Billing() {
   const gstEnabled = totals.gstEnabled && taxTotal > 0;
   const gstHalfPct = formatGstRate(totals.gstHalfRateBps);
   const gstFullPct = formatGstRate(totals.gstRateBps);
+  const showHeaderTotals = Boolean(order && (order.items || []).length > 0);
   const favorites = React.useMemo(
     () => (items || []).filter((it) => it.favorite === true && it.available !== false),
     [items],
@@ -333,14 +420,43 @@ export default function Billing() {
     () => favorites.slice(0, QUICK_FAVORITE_SHORTCUT_LIMIT),
     [favorites],
   );
+  const menuItemsById = React.useMemo(() => {
+    const map: Record<string, any> = {};
+    for (const item of items || []) {
+      if (item?._id) {
+        map[item._id] = item;
+      }
+    }
+    return map;
+  }, [items]);
   const hasItems = Boolean(order && (order.items || []).length > 0);
   const unsentKotItems = React.useMemo(() => getUnsentKotItems(order), [order]);
   const isPaid = order?.status === "paid";
   const canCancel = hasItems && !isPaid;
+  const allowsManualKot = Boolean(activeMode?.supportsKOT) && !Boolean(activeMode?.immediateBilling);
+  const allowsManualBillPrint = !Boolean(activeMode?.immediateBilling);
+  const supportsMarkReady =
+    Boolean(activeMode?.supportsOpenOrders) &&
+    !Boolean(activeMode?.immediateBilling) &&
+    !Boolean(activeMode?.requiresTable);
   const canKot =
-    hasItems && !isPaid && unsentKotItems.length > 0 && !kotPrinting && !kotPreviewOpen;
+    allowsManualKot &&
+    hasItems &&
+    !isPaid &&
+    unsentKotItems.length > 0 &&
+    !kotPrinting &&
+    !kotPreviewOpen;
   // Delivery orders are paid through the aggregator app — no in-POS payment needed
-  const canPay = hasItems && !isPaid && activeOrderType !== "delivery";
+  const canPay = hasItems && !isPaid && !activeMode?.externalPayment;
+  const requiresOnPayPrintFlow =
+    Boolean(activeMode?.immediateBilling) ||
+    (Boolean(activeMode?.supportsKOT) &&
+      (activeMode?.paymentPrintSequence || "bill_only") !== "bill_only");
+  const showPaymentFlowHint =
+    canPay &&
+    Boolean(activeMode?.supportsKOT) &&
+    activeMode?.paymentPrintSequence &&
+    activeMode.paymentPrintSequence !== "bill_only";
   const paymentProcessing = Boolean(busyActions.payment);
   const cancelProcessing = Boolean(busyActions.cancel);
   const voidKotProcessing = Boolean(busyActions.voidKot);
@@ -353,86 +469,105 @@ export default function Billing() {
   const canStartPayment = canPay && !paymentProcessing && !payModalOpen;
   const canStartCancel = canCancel && !cancelProcessing;
   const billPrinting = Boolean(busyActions.printBill);
-  const canPrintBill = hasItems && !isPaid && !billPrinting;
+  const canPrintBill = allowsManualBillPrint && hasItems && !isPaid && !billPrinting;
 
   // ── Data loading ────────────────────────────────────────────────────────
   const loadQueues = React.useCallback(async () => {
     try {
       const orders = await getActiveOrders();
-      setTakeawayOrders(
-        orders.filter(
-          (o: any) => (o.orderType || o.meta?.orderType || "").toLowerCase() === "takeaway",
-        ),
-      );
-      setDeliveryOrders(
-        orders.filter(
-          (o: any) =>
-            (o.orderType || o.meta?.orderType || "").toLowerCase() === "delivery" ||
-            (o.meta?.platform || "")
-              .toString()
-              .toLowerCase()
-              .match(/swiggy|zomato|dunzo|zepto/),
-        ),
-      );
+      const grouped: Record<string, any[]> = {};
+      for (const candidate of orders) {
+        const modeId = deriveOrderType(candidate, candidate?.tableId ?? null);
+        grouped[modeId] = grouped[modeId] || [];
+        grouped[modeId].push(candidate);
+      }
+      setModeOrders(grouped);
     } catch (e) {
       logger.error("Billing: failed to load queues", e as Error);
-      setTakeawayOrders([]);
-      setDeliveryOrders([]);
+      setModeOrders({});
     }
   }, []);
 
-  const loadTableStatuses = React.useCallback(async () => {
-    const acc: Record<number, any> = {};
-    for (const t of tableNumbers) {
-      try {
-        const o = await getOpenOrderForTable(t);
-        if (o) {
-          const count = (o.items || []).length;
-          const total =
-            typeof o.total === "number"
-              ? o.total
-              : (o.items || []).reduce(
-                  (s: number, it: any) => s + (it.qty || 0) * (it.rate || 0),
-                  0,
-                );
-          acc[t] = {
-            status: count > 0 ? (o.status === "held" ? "held" : "open") : "",
-            count,
-            total,
-          };
-        } else {
-          acc[t] = { status: "", count: 0, total: 0 };
+  const loadServiceModeConfig = React.useCallback(async () => {
+    try {
+      const enabled = await getEnabledServiceModes();
+      const next = enabled.length ? enabled : getDefaultServiceModes().filter((mode) => mode.enabled);
+      setServiceModes(next);
+      setView((current) => {
+        if (next.some((mode) => mode.id === current)) {
+          return current;
         }
-      } catch {
-        acc[t] = { status: "", count: 0, total: 0 };
-      }
+        return next[0]?.id || "table";
+      });
+    } catch {
+      const fallback = getDefaultServiceModes().filter((mode) => mode.enabled);
+      setServiceModes(fallback);
+      setView((current) => (fallback.some((mode) => mode.id === current) ? current : "table"));
     }
-    setTableInfos(acc);
-  }, [tableNumbers]);
+  }, []);
+
+  const loadTableSnapshot = React.useCallback(async () => {
+    try {
+      const snapshot = await getTablesSnapshot();
+      const activeAreas = (snapshot.areas || []).filter((area) => area.active !== false);
+      setTableAreas(activeAreas.map((area) => ({ id: area.id, name: area.name, active: area.active })));
+      const grouped: Record<string, Array<{ id: number; status?: string; count?: number; total?: number }>> = {};
+      for (const area of activeAreas) {
+        grouped[area.id] = [];
+      }
+      for (const table of snapshot.tables || []) {
+        const areaId = String(table.areaId || "area:main");
+        grouped[areaId] = grouped[areaId] || [];
+        grouped[areaId].push({
+          id: table.id,
+          status: table.status || "",
+          count: Number(table.count || 0),
+          total: Number(table.total || 0),
+        });
+      }
+      setTablesByArea(grouped);
+      setSelectedAreaId((current) => {
+        if (current && grouped[current]) {
+          return current;
+        }
+        const currentTableArea =
+          tableNum !== null
+            ? (snapshot.tables || []).find((table) => table.id === tableNum)?.areaId || null
+            : null;
+        if (currentTableArea && grouped[currentTableArea]) {
+          return currentTableArea;
+        }
+        return activeAreas[0]?.id || "area:main";
+      });
+    } catch (e) {
+      logger.error("Billing: failed to load table snapshot", e as Error);
+      setTablesByArea({});
+    }
+  }, [tableNum]);
 
   React.useEffect(() => {
     loadQueues();
+    loadServiceModeConfig();
+    loadTableSnapshot();
     const h = () => loadQueues();
+    const hs = () => loadServiceModeConfig();
+    const ht = () => loadTableSnapshot();
     window.addEventListener("orders-changed", h);
-    return () => window.removeEventListener("orders-changed", h);
-  }, [loadQueues]);
-
-  React.useEffect(() => {
-    loadTableStatuses();
-    const h = () => loadTableStatuses();
-    window.addEventListener("orders-changed", h);
-    return () => window.removeEventListener("orders-changed", h);
-  }, [loadTableStatuses]);
-
-  React.useEffect(() => {
-    const h = async () => {
-      const count = await getConfiguredTableCount();
-      await seedTables(count);
-      setTableCount(count);
+    window.addEventListener("service-modes-changed", hs);
+    window.addEventListener("seating-areas-changed", ht);
+    return () => {
+      window.removeEventListener("orders-changed", h);
+      window.removeEventListener("service-modes-changed", hs);
+      window.removeEventListener("seating-areas-changed", ht);
     };
+  }, [loadQueues, loadServiceModeConfig, loadTableSnapshot]);
+
+  React.useEffect(() => {
+    loadTableSnapshot();
+    const h = () => loadTableSnapshot();
     window.addEventListener("orders-changed", h);
     return () => window.removeEventListener("orders-changed", h);
-  }, []);
+  }, [loadTableSnapshot]);
 
   // ── Initial load ────────────────────────────────────────────────────────
   React.useEffect(() => {
@@ -466,7 +601,7 @@ export default function Billing() {
         // Load items first so favorites render immediately alongside the order
         await seedItems();
         setItems(await getItems());
-        setTableCount(await getConfiguredTableCount());
+        await loadTableSnapshot();
       } catch (e) {
         logger.error("Billing: failed to load items/config on mount", e as Error);
       }
@@ -501,7 +636,7 @@ export default function Billing() {
         window.localStorage.removeItem("currentTable");
       }
     })();
-  }, []);
+  }, [loadTableSnapshot]);
 
   // Listen for select-table events (fired by App.tsx when a table is chosen from the Tables tab)
   React.useEffect(() => {
@@ -532,36 +667,55 @@ export default function Billing() {
         cartItems: o?.items || [],
         discountPercent: o?.discountPercent || 0,
       });
+      const matchingAreaId = Object.entries(tablesByArea).find(([, list]) =>
+        list.some((entry) => entry.id === tn),
+      )?.[0];
+      if (matchingAreaId) {
+        setSelectedAreaId(matchingAreaId);
+      }
       setTimeout(() => searchRef.current?.focus(), 10);
-      setTimeout(() => loadTableStatuses(), 50);
+      setTimeout(() => loadTableSnapshot(), 50);
     } catch (error) {
       logger.error("Failed to load table", error as Error, { tableNumber: tn });
     }
   };
   // Keep the ref in sync so the select-table event handler always calls
-  // the latest version (which closes over the current loadTableStatuses).
+  // the latest version (which closes over the current table snapshot state).
   loadTableRef.current = loadTable;
 
-  const addToOrder = async (item: any, quantity = 1, refocus = true) => {
+  const addToOrder = async (
+    item: any,
+    quantity = 1,
+    refocus = true,
+    selectedVariant?: { id?: string; name: string; price: number },
+  ) => {
     if (!order) {
       showToast("Open or select a table first", "error");
       return;
     }
+    const variants = Array.isArray(item?.variants) ? item.variants : [];
+    if (!selectedVariant && variants.length > 0) {
+      setVariantSelection({ item, quantity, refocus });
+      return;
+    }
+    const lineName = selectedVariant ? `${item.name} (${selectedVariant.name})` : item.name;
+    const lineRate = selectedVariant ? Number(selectedVariant.price) : Number(item.price);
     try {
       const res = await addItemToOrder(order._id, {
         menuItemId: item._id || null,
-        name: item.name,
+        name: lineName,
         categoryName: item.category || null,
         qty: quantity,
-        rate: item.price,
+        rate: lineRate,
       });
       setOrder(res);
       // find the item by name (may have been merged, not necessarily the last row)
       const addedLine = [...(res.items || [])]
         .reverse()
-        .find((l: any) => l.name.toLowerCase() === item.name.toLowerCase());
+        .find((l: any) => l.name.toLowerCase() === lineName.toLowerCase());
       setLastAddedId(addedLine?.id ?? null);
       window.dispatchEvent(new Event("orders-changed"));
+      setVariantSelection(null);
       if (refocus) {
         setTimeout(() => searchRef.current?.focus(), 10);
       }
@@ -587,29 +741,6 @@ export default function Billing() {
     return true;
   };
 
-  // If the bill has been printed for this order, intercept remove/reduce actions
-  // and require manager credentials before proceeding.
-  const requireBillPrintedOverride = (description: string, action: () => Promise<void>): boolean => {
-    if (billPrintedOrderRef.current !== order?._id || !order) {
-      return false; // not intercepted, caller should proceed normally
-    }
-    pendingOverrideRef.current = action;
-    setAdminOverrideDesc(description);
-    setAdminOverrideOpen(true);
-    return true; // intercepted — waiting for manager approval
-  };
-
-  const handleAdminOverrideConfirm = async (adminUsername: string, adminPassword: string) => {
-    // throws on bad credentials — AdminOverrideModal catches and shows the error
-    await (window as any).pos?.auth?.verifyAdmin?.(adminUsername, adminPassword);
-    setAdminOverrideOpen(false);
-    const action = pendingOverrideRef.current;
-    pendingOverrideRef.current = null;
-    if (action) {
-      await action();
-    }
-  };
-
   const removeLine = async (lineId: string) => {
     if (!order) {
       return false;
@@ -631,9 +762,6 @@ export default function Billing() {
         showToast(e?.message || "Failed to remove item", "error");
       }
     };
-    if (requireBillPrintedOverride(`Remove: ${line?.name || "item"}`, doRemove)) {
-      return false;
-    }
     await doRemove();
     return true;
   };
@@ -664,12 +792,6 @@ export default function Billing() {
         showToast(e?.message || "Failed to update quantity", "error");
       }
     };
-    if (delta < 0 && requireBillPrintedOverride(
-      `Reduce: ${line.name} (qty ${Number(line.qty || 1)} → ${nextQty})`,
-      doUpdate,
-    )) {
-      return;
-    }
     await doUpdate();
   };
 
@@ -705,13 +827,6 @@ export default function Billing() {
         showToast(e?.message || "Failed to save quantity", "error");
       }
     };
-    const prevQty = Number(line?.qty || 1);
-    if (rawQty < prevQty && requireBillPrintedOverride(
-      `Reduce: ${line?.name || "item"} (qty ${prevQty} → ${rawQty})`,
-      doCommit,
-    )) {
-      return;
-    }
     await doCommit();
   };
 
@@ -743,6 +858,66 @@ export default function Billing() {
     }
   };
 
+  const changeLineVariant = async (lineId: string, variantName: string) => {
+    if (!order) {
+      return;
+    }
+    const line = (order.items || []).find((candidate: any) => candidate.id === lineId);
+    if (!line || !line.menuItemId) {
+      return;
+    }
+    if (Math.max(0, Number(line.kotPrintedQty || 0)) > 0) {
+      showToast("Sent kitchen items cannot switch variant. Void and re-add this item.", "error");
+      return;
+    }
+    const menuItem = menuItemsById[line.menuItemId];
+    const variants = Array.isArray(menuItem?.variants) ? menuItem.variants : [];
+    const nextVariant = variants.find(
+      (variant: any) => String(variant?.name || "").toLowerCase() === variantName.toLowerCase(),
+    );
+    if (!nextVariant) {
+      return;
+    }
+    const nextLineName = `${menuItem.name} (${nextVariant.name})`;
+    const nextRate = Number(nextVariant.price);
+    if (line.name === nextLineName && Number(line.rate) === nextRate) {
+      return;
+    }
+    try {
+      const mergeTarget = (order.items || []).find(
+        (entry: any) =>
+          entry.id !== lineId &&
+          String(entry.name || "").toLowerCase() === nextLineName.toLowerCase() &&
+          Number(entry.rate) === nextRate &&
+          String(entry.menuItemId || "") === String(line.menuItemId || ""),
+      );
+
+      const nextLines = mergeTarget
+        ? order.items
+            .map((entry: any) => {
+              if (entry.id === mergeTarget.id) {
+                return { ...entry, qty: Number(entry.qty || 0) + Number(line.qty || 0) };
+              }
+              return entry;
+            })
+            .filter((entry: any) => entry.id !== lineId)
+        : order.items.map((entry: any) =>
+            entry.id === lineId ? { ...entry, name: nextLineName, rate: nextRate } : entry,
+          );
+
+      const updated = await updateOrderLines(
+        order._id,
+        nextLines,
+      );
+      setOrder(updated);
+      window.dispatchEvent(new Event("orders-changed"));
+      setTimeout(() => searchRef.current?.focus(), 10);
+    } catch (e: any) {
+      logger.error("Failed to switch line variant", e);
+      showToast(e?.message || "Failed to switch variant", "error");
+    }
+  };
+
   const undoLast = async () => {
     if (!order || !lastAddedId) {
       return;
@@ -755,18 +930,35 @@ export default function Billing() {
 
   // ── Order creation ──────────────────────────────────────────────────────
   const createStandaloneOrder = async (
-    orderType: "takeaway" | "delivery",
+    serviceModeId: string,
     meta: Record<string, any>,
   ) => {
     if (!beginBusyAction("creatingOrder")) {
       return null;
     }
     try {
+      const selectedMode =
+        findServiceModeById({ modes: serviceModes }, serviceModeId) ||
+        findServiceModeById({ modes: getDefaultServiceModes() }, serviceModeId);
       const fresh = await createPosOrder({
         tableId: null,
-        orderType,
+        orderType: serviceModeId,
+        serviceModeId,
         customerId: meta.customerId || null,
-        meta,
+        meta: {
+          ...meta,
+          serviceModeId,
+          modeSnapshot: selectedMode
+            ? {
+                name: selectedMode.name,
+                requiresCustomer: selectedMode.requiresCustomer,
+                supportsKOT: selectedMode.supportsKOT,
+                immediateBilling: selectedMode.immediateBilling,
+                externalPayment: selectedMode.externalPayment,
+                paymentPrintSequence: selectedMode.paymentPrintSequence,
+              }
+            : undefined,
+        },
       });
       const id = fresh._id;
       setOrder(fresh);
@@ -778,8 +970,8 @@ export default function Billing() {
       setTimeout(() => searchRef.current?.focus(), 50);
       return fresh;
     } catch (error) {
-      logger.error(`Failed to create ${orderType} order`, error as Error);
-      showToast(`Failed to create ${orderType} order`, "error");
+      logger.error(`Failed to create ${serviceModeId} order`, error as Error);
+      showToast(`Failed to create ${serviceModeId} order`, "error");
       return null;
     } finally {
       endBusyAction("creatingOrder");
@@ -814,10 +1006,15 @@ export default function Billing() {
     }
   };
 
-  const createTakeawayOrder = async () => {
+  const createCustomerModeOrder = async () => {
     const enteredName = normalizeText(newTakeawayName);
     if (enteredName && !isValidPersonName(enteredName)) {
       showToast(validationMessage("customer-name-invalid"), "error");
+      return;
+    }
+    const selectedMode = findServiceModeById({ modes: serviceModes }, customerModeId);
+    if (selectedMode?.requiresCustomer && !enteredName && !normalizePhone(newTakeawayPhone)) {
+      showToast("Customer name or phone is required for this service mode", "error");
       return;
     }
     let customer: any = null;
@@ -831,7 +1028,7 @@ export default function Billing() {
       return;
     }
     const takeawayName = enteredName || customer?.name || "";
-    const created = await createStandaloneOrder("takeaway", {
+    const created = await createStandaloneOrder(customerModeId, {
       customerName: takeawayName,
       customerPhone: normalizePhone(newTakeawayPhone),
       customerId: customer?.id || null,
@@ -845,18 +1042,41 @@ export default function Billing() {
   };
 
   const createDeliveryOrder = async () => {
+    const deliveryMode = findServiceModeById({ modes: serviceModes }, "delivery");
     const platform = normalizeText(newDeliveryPlatform);
     if (!platform || platform.toLowerCase() === "other") {
       showToast(validationMessage("delivery-platform-required"), "error");
       return;
     }
+    const customerName = normalizeText(newDeliveryName);
+    const customerPhone = normalizePhone(newDeliveryPhone);
+    if (deliveryMode?.requiresCustomer && !customerName && !customerPhone) {
+      showToast("Customer name or phone is required for delivery", "error");
+      return;
+    }
+    if (customerName && !isValidPersonName(customerName)) {
+      showToast(validationMessage("customer-name-invalid"), "error");
+      return;
+    }
+    if (customerPhone && !isValidIndianMobile(customerPhone)) {
+      showToast(validationMessage("customer-phone-invalid"), "error");
+      return;
+    }
     const code = normalizeText(newDeliveryCode);
-    const created = await createStandaloneOrder("delivery", { platform, code, orderCode: code });
+    const created = await createStandaloneOrder("delivery", {
+      platform,
+      code,
+      orderCode: code,
+      customerName,
+      customerPhone,
+    });
     if (!created) {
       return;
     }
     setNewDeliveryOpen(false);
     setNewDeliveryCode("");
+    setNewDeliveryName("");
+    setNewDeliveryPhone("");
   };
 
   // ── Select non-table order (from sidebar) ───────────────────────────────
@@ -1073,7 +1293,6 @@ export default function Billing() {
         { preview: true },
       );
       await printReceipt({ lines });
-      billPrintedOrderRef.current = order._id;
       showToast("Bill printed");
     } catch (e: any) {
       logger.error("Bill print failed", e);
@@ -1136,9 +1355,62 @@ export default function Billing() {
         setTableNum(null);
       };
 
+      const printKotAfterPaymentIfNeeded = async () => {
+        if (!activeMode?.supportsKOT) {
+          return { printed: false, copiedToCounter: false };
+        }
+        const sequence = activeMode.paymentPrintSequence || "bill_only";
+        if (sequence === "bill_only") {
+          return { printed: false, copiedToCounter: false };
+        }
+        const pendingItems = getUnsentKotItems(paidOrder);
+        if (!pendingItems.length) {
+          return { printed: false, copiedToCounter: false };
+        }
+        let kotSeqNum: number | undefined;
+        try {
+          kotSeqNum = await nextKotSeq();
+        } catch {
+          kotSeqNum = undefined;
+        }
+        const preview = buildKotPreview(
+          paidOrder,
+          snapTableNum,
+          pendingItems,
+          currentUserLabel,
+          kotSeqNum,
+        );
+        const sentLines = pendingItems.map((it: any) => ({ id: it.id, sentQty: it.sentQty ?? it.qty }));
+        const lines = buildKotLines(preview, paidOrder, snapTableNum, branding);
+        await printKOT({
+          lines,
+          printer: await resolveKitchenPrinter(),
+          orderId: paidOrder._id,
+          sentLines,
+        });
+
+        let copiedToCounter = false;
+        if (activeMode?.id === "self_service") {
+          await printKOT({
+            lines,
+            printer: "counter",
+            orderId: paidOrder._id,
+            sentLines,
+          });
+          copiedToCounter = true;
+        }
+
+        return { printed: true, copiedToCounter };
+      };
+
       const attemptPrint = async () => {
         setPrintFailed(null); // close any existing print-failed modal before retry
         try {
+          const sequence = activeMode?.paymentPrintSequence || "bill_only";
+          let kotResult = { printed: false, copiedToCounter: false };
+          if (sequence === "kot_then_bill") {
+            kotResult = await printKotAfterPaymentIfNeeded();
+          }
           const lines = buildReceiptLines(
             paidOrder,
             snapTableNum,
@@ -1147,7 +1419,17 @@ export default function Billing() {
             undefined,
             branding,
           );
-          await printReceipt({ lines });
+          await printReceipt({ lines, printer: "counter" });
+          if (sequence === "bill_then_kot") {
+            kotResult = await printKotAfterPaymentIfNeeded();
+          }
+          if (kotResult.printed && kotResult.copiedToCounter) {
+            showToast("Payment settled. Bill printed on counter and KOT printed on kitchen + counter.", "success");
+          } else if (kotResult.printed) {
+            showToast("Payment settled. Bill and KOT printed.", "success");
+          } else {
+            showToast("Payment settled. Bill printed.", "success");
+          }
           // Print succeeded — clear and navigate
           finishTransaction();
         } catch (e) {
@@ -1161,7 +1443,8 @@ export default function Billing() {
           });
         }
       };
-      if (payment.printReceipt) {
+
+      if (payment.printReceipt || requiresOnPayPrintFlow) {
         await attemptPrint();
       } else {
         finishTransaction();
@@ -1438,8 +1721,8 @@ export default function Billing() {
                   ? `Table ${tableNum}`
                   : order && activeOrderType === "delivery"
                     ? `🚚 ${order.meta?.platform || order.meta?.orderSource || "Delivery"}${order.meta?.code ? ` #${order.meta.code}` : ""}`
-                    : order && activeOrderType === "takeaway"
-                      ? `🛍️ ${order.meta?.parcelName || order.meta?.customerName || "Takeaway"}`
+                    : order && !activeMode?.requiresTable
+                      ? `${modeOrderLabel(activeMode, order)}${order.meta?.customerName && activeMode?.id !== "takeaway" ? ` - ${order.meta.customerName}` : ""}`
                       : "Billing"}
               </div>
               {order && (
@@ -1465,8 +1748,10 @@ export default function Billing() {
           </div>
 
           {/* Live totals */}
-          {order && (order.items || []).length > 0 && (
-            <div className={styles.headerTotals}>
+          <div
+            className={`${styles.headerTotals} ${showHeaderTotals ? "" : styles.headerTotalsHidden}`}
+            aria-hidden={!showHeaderTotals}
+          >
               <div className={styles.textRight}>
                 <div className={styles.textMuted}>SUBTOTAL</div>
                 <div className={styles.headerValue}>{formatCurrency(subtotal)}</div>
@@ -1481,39 +1766,45 @@ export default function Billing() {
                 <div className={styles.textMuted}>TOTAL</div>
                 <div className={styles.largeValue}>{formatCurrency(finalTotal)}</div>
               </div>
-            </div>
-          )}
+          </div>
 
           {/* Action buttons */}
           <div className={styles.actionGroup}>
-            <button
-              onClick={sendKOT}
-              disabled={!canKot}
-              aria-disabled={!canKot}
-              title={unsentKotItems.length > 0 ? "Send KOT (K)" : "No new KOT items to send"}
-              className={`${styles.actionBtn} ${styles.actionPrimary}`}
-            >
-              {kotPrinting ? "Printing..." : "KOT"}
-            </button>
-            <button
-              onClick={handlePrintBill}
-              disabled={!canPrintBill}
-              aria-disabled={!canPrintBill}
-              title="Print bill for customer to review (B)"
-              className={`${styles.actionBtn} ${styles.actionSecondary}`}
-            >
-              {billPrinting ? "Printing..." : "Print Bill"}
-            </button>
-            {activeOrderType !== "delivery" && (
+            {allowsManualKot && (
+              <button
+                onClick={sendKOT}
+                disabled={!canKot}
+                aria-disabled={!canKot}
+                title={unsentKotItems.length > 0 ? "Send KOT (K)" : "No new KOT items to send"}
+                className={`${styles.actionBtn} ${styles.actionPrimary}`}
+              >
+                {kotPrinting ? "Printing..." : "KOT"}
+              </button>
+            )}
+            {allowsManualBillPrint && (
+              <button
+                onClick={handlePrintBill}
+                disabled={!canPrintBill}
+                aria-disabled={!canPrintBill}
+                title="Print bill for customer to review (B)"
+                className={`${styles.actionBtn} ${styles.actionSecondary}`}
+              >
+                {billPrinting ? "Printing..." : "Print Bill"}
+              </button>
+            )}
+            {!activeMode?.externalPayment && (
               <button
                 onClick={() => setPayModalOpen(true)}
                 disabled={!canStartPayment}
                 aria-disabled={!canStartPayment}
-                title="Settle bill and clear table (P)"
+                title={`Settle bill and run payment print flow: ${paymentFlowLabel(activeMode)} (P)`}
                 className={`${styles.actionBtn} ${styles.actionPay}`}
               >
                 {paymentProcessing ? "Processing..." : "Settle"}
               </button>
+            )}
+            {showPaymentFlowHint && (
+              <span className={styles.paymentFlowChip}>On pay: {paymentFlowLabel(activeMode)}</span>
             )}
             <button
               onClick={() => setConfirmCancelOpen(true)}
@@ -1524,7 +1815,7 @@ export default function Billing() {
             >
               {cancelProcessing ? "Cancelling..." : "Cancel"}
             </button>
-            {order && activeOrderType !== "table" && (
+            {order && supportsMarkReady && (
               <>
                 <button
                   onClick={markReady}
@@ -1582,16 +1873,17 @@ export default function Billing() {
         <div className={styles.bodyRow}>
           <BillingSidebar
             open={tablesOpen}
+            serviceModes={serviceModes}
             view={view}
             onViewChange={(newView) => {
               setView(newView);
               // Clear the active order when switching to a different tab type
               // so the main panel shows the overview for the selected tab.
               if (order) {
+                const targetMode = findServiceModeById({ modes: serviceModes }, newView);
                 const orderBelongsToView =
-                  (newView === "tables" && activeOrderType === "table") ||
-                  (newView === "takeaway" && activeOrderType === "takeaway") ||
-                  (newView === "delivery" && activeOrderType === "delivery");
+                  (activeMode?.requiresTable === true && targetMode?.requiresTable === true) ||
+                  activeOrderType === newView;
                 if (!orderBelongsToView) {
                   setOrder(null);
                   setTableNum(null);
@@ -1601,17 +1893,33 @@ export default function Billing() {
                 }
               }
             }}
-            tableNumbers={tableNumbers}
-            tableInfos={tableInfos}
+            tableAreas={tableAreas}
+            selectedAreaId={selectedAreaId}
+            onSelectArea={setSelectedAreaId}
+            tablesByArea={tablesByArea}
             tableNum={tableNum}
             activeOrderType={activeOrderType}
+            modeOrders={modeOrders}
             onLoadTable={loadTable}
-            takeawayOrders={takeawayOrders}
-            deliveryOrders={deliveryOrders}
             currentOrderId={order?._id}
             onSelectOrder={handleSelectOrder}
-            onNewTakeaway={() => setNewTakeawayOpen(true)}
-            onNewDelivery={() => setNewDeliveryOpen(true)}
+            onCreateMode={(mode) => {
+              if (mode.requiresTable) {
+                setView(mode.id);
+                setTablesOpenPersisted(true);
+                return;
+              }
+              if (mode.id === "delivery") {
+                setNewDeliveryOpen(true);
+                return;
+              }
+              if (mode.requiresCustomer) {
+                setCustomerModeId(mode.id);
+                setNewTakeawayOpen(true);
+                return;
+              }
+              createStandaloneOrder(mode.id, { serviceModeId: mode.id });
+            }}
             formatCurrency={formatCurrency}
           />
 
@@ -1623,22 +1931,27 @@ export default function Billing() {
                   <div className={styles.noOrderEmoji}>🍽️</div>
                   <div className={styles.noOrderTitle}>No active order</div>
                   <div className={styles.noOrderText}>
-                    Pick a table from the sidebar, or start a new order below
+                    Pick a service mode from the sidebar, or start a new order below
                   </div>
                   <PickButtons
-                    onPickTable={() => {
+                    serviceModes={serviceModes}
+                    onSelectMode={(mode) => {
                       setTablesOpenPersisted(true);
-                      setView("tables");
-                    }}
-                    onNewTakeaway={() => {
-                      setTablesOpenPersisted(true);
-                      setView("takeaway");
-                      setNewTakeawayOpen(true);
-                    }}
-                    onNewDelivery={() => {
-                      setTablesOpenPersisted(true);
-                      setView("delivery");
-                      setNewDeliveryOpen(true);
+                      if (mode.requiresTable) {
+                        setView(mode.id);
+                        return;
+                      }
+                      setView(mode.id);
+                      if (mode.id === "delivery") {
+                        setNewDeliveryOpen(true);
+                        return;
+                      }
+                      if (mode.requiresCustomer) {
+                        setCustomerModeId(mode.id);
+                        setNewTakeawayOpen(true);
+                        return;
+                      }
+                      createStandaloneOrder(mode.id, { serviceModeId: mode.id });
                     }}
                   />
                 </div>
@@ -1669,7 +1982,10 @@ export default function Billing() {
                         >
                           <div className={styles.favTitle}>{f.name}</div>
                           <div className={styles.favMeta}>
-                            {formatCurrency(f.price)}
+                            {itemPriceSummary(f, formatCurrency)}
+                            {Array.isArray(f.variants) && f.variants.length > 0
+                              ? ` · ${f.variants.length} option${f.variants.length !== 1 ? "s" : ""}`
+                              : ""}
                             {shortcutNumber ? ` · [${shortcutNumber}]` : ""}
                           </div>
                         </button>
@@ -1684,6 +2000,7 @@ export default function Billing() {
                     <div className={styles.orderList}>
                       <OrderList
                         items={order?.items || []}
+                        menuItemsById={menuItemsById}
                         editingQty={editingQty}
                         editingRate={editingRate}
                         setEditingQty={setEditingQty}
@@ -1692,6 +2009,7 @@ export default function Billing() {
                         commitRate={commitRate}
                         removeLine={removeLine}
                         updateOrderQty={updateOrderQty}
+                        onChangeVariant={changeLineVariant}
                       />
                     </div>
                   ) : (
@@ -1764,7 +2082,9 @@ export default function Billing() {
             )}
 
             <div className={styles.keyboardHint}>
-              K — KOT &nbsp;·&nbsp; B — Print Bill &nbsp;·&nbsp; P — Pay &nbsp;·&nbsp; C — Cancel &nbsp;·&nbsp; U / Ctrl+Z — Undo
+              {allowsManualKot ? "K — KOT · " : ""}
+              {allowsManualBillPrint ? "B — Print Bill · " : ""}
+              P — Settle ({paymentFlowLabel(activeMode)}) &nbsp;·&nbsp; C — Cancel &nbsp;·&nbsp; U / Ctrl+Z — Undo
               &nbsp;·&nbsp; 1-6 - Quick add first favorites
             </div>
           </div>
@@ -1806,6 +2126,9 @@ export default function Billing() {
 
         {newTakeawayOpen && (
           <NewTakeawayModal
+            title={
+              findServiceModeById({ modes: serviceModes }, customerModeId)?.name || "Customer Order"
+            }
             name={newTakeawayName}
             phone={newTakeawayPhone}
             onNameChange={setNewTakeawayName}
@@ -1815,7 +2138,7 @@ export default function Billing() {
               setNewTakeawayName("");
               setNewTakeawayPhone("");
             }}
-            onCreate={createTakeawayOrder}
+            onCreate={createCustomerModeOrder}
             processing={creatingOrder}
           />
         )}
@@ -1826,9 +2149,15 @@ export default function Billing() {
             onPlatformChange={setNewDeliveryPlatform}
             code={newDeliveryCode}
             onCodeChange={setNewDeliveryCode}
+            customerName={newDeliveryName}
+            onCustomerNameChange={setNewDeliveryName}
+            customerPhone={newDeliveryPhone}
+            onCustomerPhoneChange={setNewDeliveryPhone}
             onClose={() => {
               setNewDeliveryOpen(false);
               setNewDeliveryCode("");
+              setNewDeliveryName("");
+              setNewDeliveryPhone("");
             }}
             onCreate={createDeliveryOrder}
             processing={creatingOrder}
@@ -1844,6 +2173,22 @@ export default function Billing() {
             onClose={() => setAssignRiderOpen(false)}
             onConfirm={confirmAssignRider}
             processing={assignRiderProcessing}
+          />
+        )}
+
+        {variantSelection && Array.isArray(variantSelection.item?.variants) && (
+          <VariantPickerModal
+            itemName={variantSelection.item.name}
+            variants={variantSelection.item.variants}
+            onClose={() => setVariantSelection(null)}
+            onSelect={(variant) =>
+              addToOrder(
+                variantSelection.item,
+                variantSelection.quantity,
+                variantSelection.refocus,
+                variant,
+              )
+            }
           />
         )}
 
@@ -1876,17 +2221,6 @@ export default function Billing() {
           />
         )}
 
-        {/* Manager approval required when removing/reducing items after bill print */}
-        {adminOverrideOpen && (
-          <AdminOverrideModal
-            description={adminOverrideDesc}
-            onClose={() => {
-              setAdminOverrideOpen(false);
-              pendingOverrideRef.current = null;
-            }}
-            onConfirm={handleAdminOverrideConfirm}
-          />
-        )}
       </div>
 
       <PaymentsModal
@@ -1895,6 +2229,7 @@ export default function Billing() {
         amount={finalTotal}
         onConfirm={handleConfirmPay}
         processing={paymentProcessing}
+        forcePrintReceipt={requiresOnPayPrintFlow}
       />
     </>
   );

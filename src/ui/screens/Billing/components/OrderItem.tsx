@@ -11,6 +11,9 @@ interface Props {
   commitRate: (id: string) => Promise<void>;
   removeLine: (id: string) => Promise<unknown>;
   updateOrderQty: (id: string, delta: number) => Promise<void>;
+  variantChoices?: Array<{ id?: string; name: string; price: number }>;
+  selectedVariantName?: string;
+  onChangeVariant: (id: string, variantName: string) => Promise<void>;
 }
 
 export default function OrderItem({
@@ -23,6 +26,9 @@ export default function OrderItem({
   commitRate,
   removeLine,
   updateOrderQty,
+  variantChoices = [],
+  selectedVariantName = "",
+  onChangeVariant,
 }: Props) {
   // Disable − only when qty is already at minimum AND the item has never been
   // KOT-sent (if it has been sent, − triggers the void workflow, so keep it enabled).
@@ -34,6 +40,7 @@ export default function OrderItem({
     setEditingRate((p: any) => ({ ...p, [it.id]: String(it.rate) }));
   const startEditQty = () =>
     setEditingQty((p: any) => ({ ...p, [it.id]: String(it.qty) }));
+  const hasVariants = Array.isArray(variantChoices) && variantChoices.length > 0;
 
   return (
     <div
@@ -55,6 +62,23 @@ export default function OrderItem({
       </button>
       <div className={styles.itemInfo}>
         <div className={styles.itemTitle}>{it.name}</div>
+        {hasVariants && (
+          <div style={{ marginTop: 6 }}>
+            <select
+              value={selectedVariantName}
+              onChange={(e) => onChangeVariant(it.id, e.target.value)}
+              title="Switch variant"
+              className={styles.modalInputSmall}
+              style={{ width: 180 }}
+            >
+              {variantChoices.map((variant) => (
+                <option key={variant.id || variant.name} value={variant.name}>
+                  {variant.name} · ₹{variant.price}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         {editingRate[it.id] !== undefined ? (
           <input
             type="number"

@@ -90,6 +90,14 @@ contextBridge.exposeInMainWorld("pos", {
     seed: () => authInvoke("pos:tables:seed"),
     list: () => authInvoke("pos:tables:list"),
     configuredCount: () => authInvoke("pos:tables:configured-count"),
+    snapshot: () => authInvoke("pos:tables:snapshot"),
+    setArea: (tableId, areaId) => authInvoke("pos:tables:set-area", tableId, areaId),
+  },
+  seatingAreas: {
+    list: (includeDisabled) => authInvoke("pos:seating-areas:list", includeDisabled),
+    save: (areas) => authInvoke("pos:seating-areas:save", areas),
+    delete: (areaId, reassignToAreaId) =>
+      authInvoke("pos:seating-areas:delete", areaId, reassignToAreaId),
   },
   menu: {
     seed: () => authInvoke("pos:menu:seed"),
@@ -100,6 +108,8 @@ contextBridge.exposeInMainWorld("pos", {
     deleteItem: (id) => authInvoke("pos:menu:delete-item", id),
     listCategories: () => authInvoke("pos:menu:list-categories"),
     setCategories: (categories) => authInvoke("pos:menu:set-categories", categories),
+    listVariantOptions: () => authInvoke("pos:menu:list-variant-options"),
+    setVariantOptions: (options) => authInvoke("pos:menu:set-variant-options", options),
   },
   orders: {
     create: (payload) => authInvoke("pos:orders:create", payload),
@@ -139,6 +149,12 @@ contextBridge.exposeInMainWorld("pos", {
     create: (payload) => authInvoke("pos:staff:create", payload),
     update: (id, updates) => authInvoke("pos:staff:update", id, updates),
     delete: (id) => authInvoke("pos:staff:delete", id),
+  },
+  attendance: {
+    list: (input) => authInvoke("pos:attendance:list", input),
+    upsert: (input) => authInvoke("pos:attendance:upsert", input),
+    copy: (fromDate, toDate) => authInvoke("pos:attendance:copy", fromDate, toDate),
+    delete: (id) => authInvoke("pos:attendance:delete", id),
   },
   settings: {
     get: (key) => authInvoke("pos:settings:get", key),

@@ -8,16 +8,27 @@ import {
   setConfigTables,
   seedTables,
   getConfigCategories,
+  getConfigMenuVariantOptions,
   setConfigCategories,
+  setConfigMenuVariantOptions,
   getConfigAudit,
   setConfigAudit,
   getConfigHistory,
   setConfigHistory,
+  getConfigShifts,
+  setConfigShifts,
   regenerateRecoveryCodes,
   getConfigGst,
   setConfigGst,
   getConfigBranding,
   setConfigBranding,
+  getConfigServiceModes,
+  setConfigServiceModes,
+  getSeatingAreas,
+  saveSeatingAreas,
+  deleteSeatingArea,
+  getTables,
+  setTableArea,
   listPrintJobs,
   retryPrintJob,
   clearOldPrintJobs,
@@ -31,12 +42,44 @@ import {
   getUpdateStatus,
   rollbackLastUpdate,
   exportDiagnostics,
+  type SeatingAreaDoc,
+  type TableDoc,
+  type AttendanceShiftConfig,
   type PrintJobDoc,
 } from "../../../app/db/posRepository";
 import { DEFAULT_GST_CONFIG, isValidGstin, normalizeGstConfig } from "../../../shared/gst";
 import { RECOVERY_CODE_COUNT } from "../../../shared/auth";
 import { normalizeCategoryName, validationMessage } from "../../../shared/validation";
+import { getDefaultServiceModes, type ServiceMode } from "../../../shared/serviceModes";
 import { processRestaurantLogoFile, type ReceiptLogoRaster } from "../../utils/logoProcessing";
+import {
+  addSeatingAreaDraft,
+  computeTableAreaUpdates,
+  moveSeatingAreaByDirection,
+  reorderSeatingAreasByDrag,
+} from "./seatingAreaUtils";
+
+const DEFAULT_ATTENDANCE_SHIFTS: AttendanceShiftConfig[] = [
+  { id: "morning", label: "Morning", hours: 8 },
+  { id: "evening", label: "Evening", hours: 8 },
+  { id: "night", label: "Night", hours: 8 },
+  { id: "half-day", label: "Half Day", hours: 4 },
+];
+
+function mergeShiftConfig(input: AttendanceShiftConfig[]) {
+  const map = new Map(
+    (Array.isArray(input) ? input : []).map((entry) => [entry.id.toLowerCase(), entry]),
+  );
+  return DEFAULT_ATTENDANCE_SHIFTS.map((base) => {
+    const found = map.get(base.id);
+    const hours = Number(found?.hours);
+    return {
+      id: base.id,
+      label: String(found?.label || base.label),
+      hours: Number.isFinite(hours) && hours > 0 ? hours : base.hours,
+    };
+  });
+}
 
 export default function Settings() {
   const auth = React.useContext(AuthContext);
@@ -96,6 +139,17 @@ export default function Settings() {
   const [tableCount, setTableCount] = React.useState<number>(ENV.TABLE_COUNT);
   const [tableStatus, setTableStatus] = React.useState<string | null>(null);
   const [savingTables, setSavingTables] = React.useState(false);
+  const [seatingAreas, setSeatingAreas] = React.useState<SeatingAreaDoc[]>([]);
+  const [newSeatingAreaName, setNewSeatingAreaName] = React.useState("");
+  const [tableDocs, setTableDocs] = React.useState<TableDoc[]>([]);
+  const [tableAreaDraft, setTableAreaDraft] = React.useState<Record<number, string>>({});
+  const [savingSeatingAreas, setSavingSeatingAreas] = React.useState(false);
+  const [dragAreaId, setDragAreaId] = React.useState<string | null>(null);
+  const [serviceModes, setServiceModes] = React.useState<ServiceMode[]>(() =>
+    getDefaultServiceModes(),
+  );
+  const [serviceModeStatus, setServiceModeStatus] = React.useState<string | null>(null);
+  const [savingServiceModes, setSavingServiceModes] = React.useState(false);
 
   // ── Audit retention config ──────────────────────────────────────────────────
   const [retentionDays, setRetentionDays] = React.useState<number | null>(90);
@@ -107,11 +161,22 @@ export default function Settings() {
   const [historyStatus, setHistoryStatus] = React.useState<string | null>(null);
   const [savingHistory, setSavingHistory] = React.useState(false);
 
+  // ── Attendance shift config ────────────────────────────────────────────────
+  const [attendanceShifts, setAttendanceShifts] = React.useState<AttendanceShiftConfig[]>(
+    DEFAULT_ATTENDANCE_SHIFTS,
+  );
+  const [shiftStatus, setShiftStatus] = React.useState<string | null>(null);
+  const [savingShifts, setSavingShifts] = React.useState(false);
+
   // ── Categories config ────────────────────────────────────────────────────────
   const [categories, setCategories] = React.useState<string[]>([]);
   const [newCategory, setNewCategory] = React.useState("");
   const [categoryStatus, setCategoryStatus] = React.useState<string | null>(null);
   const [savingCategories, setSavingCategories] = React.useState(false);
+  const [menuVariantOptions, setMenuVariantOptions] = React.useState<string[]>([]);
+  const [newMenuVariantOption, setNewMenuVariantOption] = React.useState("");
+  const [menuVariantStatus, setMenuVariantStatus] = React.useState<string | null>(null);
+  const [savingMenuVariantOptions, setSavingMenuVariantOptions] = React.useState(false);
   const actionInFlightRef = React.useRef<Record<string, boolean>>({});
 
   const beginAction = React.useCallback((key: string) => {
@@ -193,7 +258,41 @@ export default function Settings() {
         }
       } catch (e) {}
       try {
+        const [areas, tables] = await Promise.all([getSeatingAreas(true), getTables()]);
+        const mappedAreas =
+          areas && areas.length
+            ? [...areas].sort((a, b) => Number(a.order || 0) - Number(b.order || 0))
+            : [
+                {
+                  _id: "seating-area:area:main",
+                  type: "seating-area",
+                  id: "area:main",
+                  name: "Main Dining",
+                  order: 1,
+                  active: true,
+                } as SeatingAreaDoc,
+              ];
+        setSeatingAreas(mappedAreas);
+        setTableDocs(tables || []);
+        const assignment: Record<number, string> = {};
+        for (const table of tables || []) {
+          assignment[table.id] = String(table.areaId || mappedAreas[0]?.id || "area:main");
+        }
+        setTableAreaDraft(assignment);
+      } catch (e) {}
+      try {
+        const modeCfg = await getConfigServiceModes();
+        setServiceModes(
+          Array.isArray(modeCfg?.modes) && modeCfg.modes.length
+            ? modeCfg.modes
+            : getDefaultServiceModes(),
+        );
+      } catch (e) {}
+      try {
         setCategories(await getConfigCategories());
+      } catch (e) {}
+      try {
+        setMenuVariantOptions(await getConfigMenuVariantOptions());
       } catch (e) {}
       try {
         const auditCfg = await getConfigAudit();
@@ -202,6 +301,10 @@ export default function Settings() {
       try {
         const historyCfg = await getConfigHistory();
         setHistoryRetentionDays(historyCfg.retentionDays);
+      } catch (e) {}
+      try {
+        const shifts = await getConfigShifts();
+        setAttendanceShifts(mergeShiftConfig(shifts));
       } catch (e) {}
       try {
         const gstCfg = normalizeGstConfig(await getConfigGst());
@@ -682,6 +785,148 @@ export default function Settings() {
     }
   };
 
+  const refreshSeatingConfig = async () => {
+    const [areas, tables] = await Promise.all([getSeatingAreas(true), getTables()]);
+    const ordered = [...areas].sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
+    setSeatingAreas(ordered);
+    setTableDocs(tables || []);
+    const assignment: Record<number, string> = {};
+    for (const table of tables || []) {
+      assignment[table.id] = String(table.areaId || ordered[0]?.id || "area:main");
+    }
+    setTableAreaDraft(assignment);
+  };
+
+  const addSeatingArea = () => {
+    const draft = addSeatingAreaDraft(seatingAreas, newSeatingAreaName);
+    if (draft.error) {
+      setTableStatus(draft.error);
+      return;
+    }
+    setSeatingAreas((draft.areas || []).map((area) => ({
+      _id: `seating-area:${area.id}`,
+      type: "seating-area",
+      id: area.id,
+      name: area.name,
+      order: area.order,
+      active: area.active,
+    })));
+    setNewSeatingAreaName("");
+    setTableStatus(null);
+  };
+
+  const moveSeatingArea = (id: string, direction: -1 | 1) => {
+    setSeatingAreas((current) => moveSeatingAreaByDirection(current, id, direction));
+  };
+
+  const dropSeatingArea = (dropTargetId: string) => {
+    if (!dragAreaId || dragAreaId === dropTargetId) {
+      setDragAreaId(null);
+      return;
+    }
+    setSeatingAreas((current) => reorderSeatingAreasByDrag(current, dragAreaId, dropTargetId));
+    setDragAreaId(null);
+  };
+
+  const removeSeatingArea = async (id: string) => {
+    if (id === "area:main") {
+      setTableStatus("Main Dining cannot be deleted");
+      return;
+    }
+    const fallback = seatingAreas.find((area) => area.id !== id && area.active !== false);
+    if (!fallback) {
+      setTableStatus("Keep at least one active area");
+      return;
+    }
+    try {
+      await deleteSeatingArea(id, fallback.id);
+      await refreshSeatingConfig();
+      setTableStatus("Area deleted");
+      window.dispatchEvent(new Event("seating-areas-changed"));
+      window.dispatchEvent(new Event("orders-changed"));
+    } catch (e: any) {
+      setTableStatus("Delete failed: " + (e?.message || String(e)));
+    }
+  };
+
+  const saveSeatingAreasAndTables = async () => {
+    if (!beginAction("seatingAreas.save")) {
+      return;
+    }
+    setSavingSeatingAreas(true);
+    setTableStatus(null);
+    try {
+      const payload = seatingAreas.map((area, index) => ({
+        id: area.id,
+        name: area.name,
+        active: area.active !== false,
+        order: index + 1,
+      }));
+      const saved = await saveSeatingAreas(payload);
+      const activeIds = new Set(saved.filter((area) => area.active !== false).map((area) => area.id));
+      const updates = computeTableAreaUpdates(tableDocs, tableAreaDraft, activeIds);
+      for (const update of updates) {
+        await setTableArea(update.tableId, update.areaId);
+      }
+      await refreshSeatingConfig();
+      setTableStatus("Seating Areas saved ✓");
+      window.dispatchEvent(new Event("seating-areas-changed"));
+      window.dispatchEvent(new Event("orders-changed"));
+      setTimeout(() => setTableStatus(null), 4000);
+    } catch (e: any) {
+      setTableStatus("Save failed: " + (e?.message || String(e)));
+    } finally {
+      setSavingSeatingAreas(false);
+      endAction("seatingAreas.save");
+    }
+  };
+
+  const toggleServiceMode = (id: string) => {
+    setServiceModes((prev) =>
+      prev.map((mode) => (mode.id === id ? { ...mode, enabled: !mode.enabled } : mode)),
+    );
+  };
+
+  const updateServiceModeField = <K extends keyof ServiceMode>(
+    id: string,
+    field: K,
+    value: ServiceMode[K],
+  ) => {
+    setServiceModes((prev) =>
+      prev.map((mode) => (mode.id === id ? { ...mode, [field]: value } : mode)),
+    );
+  };
+
+  const saveServiceModes = async () => {
+    if (!beginAction("serviceModes.save")) {
+      return;
+    }
+    const orderedModes = [...serviceModes].sort(
+      (a, b) => a.displayOrder - b.displayOrder || a.name.localeCompare(b.name),
+    );
+    const enabledCount = orderedModes.filter((mode) => mode.enabled).length;
+    if (enabledCount < 1) {
+      endAction("serviceModes.save");
+      setServiceModeStatus("Enable at least one service mode");
+      return;
+    }
+
+    setSavingServiceModes(true);
+    setServiceModeStatus(null);
+    try {
+      const saved = await setConfigServiceModes(orderedModes);
+      setServiceModes(saved.modes || serviceModes);
+      setServiceModeStatus("Saved ✓");
+      window.dispatchEvent(new Event("service-modes-changed"));
+      setTimeout(() => setServiceModeStatus(null), 4000);
+    } catch (e: any) {
+      setServiceModeStatus("Save failed: " + (e?.message || String(e)));
+    } finally {
+      setSavingServiceModes(false);
+      endAction("serviceModes.save");
+    }
+  };
+
   const addCategory = () => {
     const trimmed = normalizeCategoryName(newCategory);
     if (!trimmed) {
@@ -739,6 +984,63 @@ export default function Settings() {
     endAction("categories.save");
   };
 
+  const addMenuVariantOption = () => {
+    const trimmed = normalizeCategoryName(newMenuVariantOption);
+    if (!trimmed) {
+      setMenuVariantStatus(validationMessage("category-name-required"));
+      setTimeout(() => setMenuVariantStatus(null), 2500);
+      return;
+    }
+    if (menuVariantOptions.some((c) => c.toLowerCase() === trimmed.toLowerCase())) {
+      setMenuVariantStatus(validationMessage("category-name-duplicate"));
+      setTimeout(() => setMenuVariantStatus(null), 2500);
+      return;
+    }
+    setMenuVariantOptions((prev) => [...prev, trimmed]);
+    setNewMenuVariantOption("");
+  };
+
+  const menuVariantOptionsIncludingDraft = () => {
+    const trimmed = normalizeCategoryName(newMenuVariantOption);
+    if (!trimmed) {
+      return menuVariantOptions;
+    }
+    if (menuVariantOptions.some((c) => c.toLowerCase() === trimmed.toLowerCase())) {
+      return null;
+    }
+    return [...menuVariantOptions, trimmed];
+  };
+
+  const removeMenuVariantOption = (option: string) => {
+    setMenuVariantOptions((prev) => prev.filter((entry) => entry !== option));
+  };
+
+  const saveMenuVariantOptions = async () => {
+    if (!beginAction("menuVariantOptions.save")) {
+      return;
+    }
+    const nextOptions = menuVariantOptionsIncludingDraft();
+    if (!nextOptions) {
+      endAction("menuVariantOptions.save");
+      setMenuVariantStatus(validationMessage("category-name-duplicate"));
+      setTimeout(() => setMenuVariantStatus(null), 2500);
+      return;
+    }
+    setSavingMenuVariantOptions(true);
+    setMenuVariantStatus(null);
+    try {
+      await setConfigMenuVariantOptions(nextOptions);
+      setMenuVariantOptions(nextOptions);
+      setNewMenuVariantOption("");
+      setMenuVariantStatus("Saved ✓");
+      setTimeout(() => setMenuVariantStatus(null), 3000);
+    } catch (e: any) {
+      setMenuVariantStatus("Save failed: " + (e?.message || String(e)));
+    }
+    setSavingMenuVariantOptions(false);
+    endAction("menuVariantOptions.save");
+  };
+
   const saveAuditConfig = async () => {
     if (!beginAction("audit.save")) {
       return;
@@ -771,6 +1073,44 @@ export default function Settings() {
     }
     setSavingHistory(false);
     endAction("history.save");
+  };
+
+  const setShiftHours = (id: string, hours: number) => {
+    setAttendanceShifts((prev) =>
+      prev.map((shift) => (shift.id === id ? { ...shift, hours } : shift)),
+    );
+  };
+
+  const saveShiftConfig = async () => {
+    if (!beginAction("attendance.shifts.save")) {
+      return;
+    }
+    const invalid = attendanceShifts.find(
+      (shift) => !Number.isFinite(shift.hours) || shift.hours <= 0 || shift.hours > 24,
+    );
+    if (invalid) {
+      endAction("attendance.shifts.save");
+      setShiftStatus("Shift hours must be between 0.5 and 24");
+      return;
+    }
+
+    setSavingShifts(true);
+    setShiftStatus(null);
+    try {
+      const sanitized = attendanceShifts.map((shift) => ({
+        id: shift.id,
+        label: shift.label,
+        hours: Math.round(shift.hours * 100) / 100,
+      }));
+      await setConfigShifts(sanitized);
+      setAttendanceShifts(sanitized);
+      setShiftStatus("Saved ✓");
+      setTimeout(() => setShiftStatus(null), 3000);
+    } catch (e: any) {
+      setShiftStatus("Save failed: " + (e?.message || String(e)));
+    }
+    setSavingShifts(false);
+    endAction("attendance.shifts.save");
   };
 
   const regenerateAdminRecoveryCodes = async () => {
@@ -1946,6 +2286,323 @@ export default function Settings() {
             </div>
           )}
         </div>
+
+        <div style={{ marginTop: 22, borderTop: "1px solid #f3f4f6", paddingTop: 18 }}>
+          <label className="pos-label">Seating Areas</label>
+          <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+            <input
+              className="pos-input"
+              value={newSeatingAreaName}
+              onChange={(event) => setNewSeatingAreaName(event.target.value)}
+              placeholder="Ground Floor, Rooftop, AC Hall..."
+              style={{ maxWidth: 320 }}
+            />
+            <button type="button" onClick={addSeatingArea} className="pos-btn pos-btn-secondary">
+              Add Area
+            </button>
+          </div>
+          <div style={{ display: "grid", gap: 8 }}>
+            {seatingAreas.map((area, index) => (
+              <div
+                key={area.id}
+                draggable
+                onDragStart={() => setDragAreaId(area.id)}
+                onDragEnd={() => setDragAreaId(null)}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={() => dropSeatingArea(area.id)}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "minmax(180px, 1fr) auto auto auto",
+                  gap: 8,
+                  alignItems: "center",
+                  padding: "8px 10px",
+                  border: dragAreaId === area.id ? "1px solid #f59e0b" : "1px solid #e5e7eb",
+                  borderRadius: 8,
+                  background: dragAreaId === area.id ? "#fffbeb" : "#fff",
+                  cursor: "grab",
+                }}
+              >
+                <input
+                  className="pos-input"
+                  value={area.name}
+                  onChange={(event) =>
+                    setSeatingAreas((current) =>
+                      current.map((entry) =>
+                        entry.id === area.id ? { ...entry, name: event.target.value } : entry,
+                      ),
+                    )
+                  }
+                />
+                <label style={{ fontSize: 12, color: "#374151", display: "flex", gap: 6 }}>
+                  <input
+                    type="checkbox"
+                    checked={area.active !== false}
+                    onChange={(event) =>
+                      setSeatingAreas((current) =>
+                        current.map((entry) =>
+                          entry.id === area.id ? { ...entry, active: event.target.checked } : entry,
+                        ),
+                      )
+                    }
+                  />
+                  Active
+                </label>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <button
+                    type="button"
+                    className="pos-btn"
+                    onClick={() => moveSeatingArea(area.id, -1)}
+                    disabled={index === 0}
+                  >
+                    Up
+                  </button>
+                  <button
+                    type="button"
+                    className="pos-btn"
+                    onClick={() => moveSeatingArea(area.id, 1)}
+                    disabled={index === seatingAreas.length - 1}
+                  >
+                    Down
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  className="pos-btn"
+                  onClick={() => removeSeatingArea(area.id)}
+                  disabled={area.id === "area:main"}
+                >
+                  Delete
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ marginTop: 22, borderTop: "1px solid #f3f4f6", paddingTop: 18 }}>
+          <label className="pos-label">Table to Area Mapping</label>
+          <div style={{ display: "grid", gap: 8, maxHeight: 260, overflow: "auto", paddingRight: 4 }}>
+            {tableDocs
+              .slice()
+              .sort((a, b) => a.id - b.id)
+              .map((table) => (
+                <div
+                  key={table.id}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "120px minmax(150px, 1fr)",
+                    gap: 8,
+                    alignItems: "center",
+                  }}
+                >
+                  <div style={{ fontWeight: 700, color: "#111827", fontSize: 13 }}>
+                    {table.name || `Table ${table.id}`}
+                  </div>
+                  <select
+                    className="pos-input"
+                    value={tableAreaDraft[table.id] || table.areaId || "area:main"}
+                    onChange={(event) =>
+                      setTableAreaDraft((current) => ({
+                        ...current,
+                        [table.id]: event.target.value,
+                      }))
+                    }
+                  >
+                    {seatingAreas
+                      .filter((area) => area.active !== false)
+                      .map((area) => (
+                        <option key={area.id} value={area.id}>
+                          {area.name}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              ))}
+          </div>
+        </div>
+
+        <div style={{ marginTop: 16 }}>
+          <button
+            onClick={saveSeatingAreasAndTables}
+            disabled={savingSeatingAreas}
+            className="pos-btn pos-btn-primary"
+          >
+            {savingSeatingAreas ? "Saving..." : "Save Seating Areas"}
+          </button>
+        </div>
+      </div>
+
+      {/* ── Service Modes Section ─────────────────────────────────────── */}
+      <div className="pos-card pos-card-p" style={{ marginTop: 24 }}>
+        <div
+          style={{
+            fontSize: 11,
+            fontWeight: 800,
+            color: "var(--pos-muted,#9ca3af)",
+            marginBottom: 20,
+            textTransform: "uppercase",
+            letterSpacing: "0.1em",
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
+          <span style={{ fontSize: 15 }}>⧉</span>
+          Service Modes
+        </div>
+
+        <p
+          style={{
+            fontSize: 13,
+            color: "var(--pos-tx-sub,#6b7280)",
+            marginBottom: 14,
+            marginTop: 0,
+          }}
+        >
+          Enable only the operational modes your restaurant uses. Billing will show only enabled
+          modes.
+        </p>
+
+        <div style={{ display: "grid", gap: 10 }}>
+          {[...serviceModes]
+            .sort((a, b) => a.displayOrder - b.displayOrder || a.name.localeCompare(b.name))
+            .map((mode) => (
+            <label
+              key={mode.id}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                padding: "10px 12px",
+                border: "1px solid #e5e7eb",
+                borderRadius: 10,
+                background: mode.enabled ? "#f8fafc" : "#ffffff",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={mode.enabled}
+                onChange={() => toggleServiceMode(mode.id)}
+              />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 700, color: "#111827", fontSize: 14 }}>{mode.name}</div>
+                <div style={{ color: "#6b7280", fontSize: 12 }}>
+                  {mode.requiresTable ? "Table required" : "No table"}
+                  {mode.externalPayment ? " · External payment" : " · In-POS payment"}
+                </div>
+                <div
+                  style={{
+                    marginTop: 8,
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+                    gap: 8,
+                    fontSize: 12,
+                    color: "#374151",
+                  }}
+                >
+                  <div>
+                    <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <input
+                        type="checkbox"
+                        checked={mode.supportsKOT}
+                        onChange={(event) =>
+                          updateServiceModeField(mode.id, "supportsKOT", event.target.checked)
+                        }
+                      />
+                      Supports KOT
+                    </label>
+                    <div style={{ color: "#9ca3af", marginLeft: 22 }}>Show kitchen ticket actions</div>
+                  </div>
+                  <div>
+                    <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <input
+                        type="checkbox"
+                        checked={mode.immediateBilling}
+                        onChange={(event) =>
+                          updateServiceModeField(mode.id, "immediateBilling", event.target.checked)
+                        }
+                      />
+                      Immediate billing
+                    </label>
+                    <div style={{ color: "#9ca3af", marginLeft: 22 }}>Pay first, then auto-print flow</div>
+                  </div>
+                  <div>
+                    <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <input
+                        type="checkbox"
+                        checked={mode.requiresCustomer}
+                        onChange={(event) =>
+                          updateServiceModeField(mode.id, "requiresCustomer", event.target.checked)
+                        }
+                      />
+                      Requires customer
+                    </label>
+                    <div style={{ color: "#9ca3af", marginLeft: 22 }}>Ask for name or phone before order</div>
+                  </div>
+                  <div>
+                    <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <input
+                        type="checkbox"
+                        checked={mode.supportsOpenOrders}
+                        onChange={(event) =>
+                          updateServiceModeField(mode.id, "supportsOpenOrders", event.target.checked)
+                        }
+                      />
+                      Supports open orders
+                    </label>
+                    <div style={{ color: "#9ca3af", marginLeft: 22 }}>
+                      Allow hold/ready lifecycle before payment
+                    </div>
+                  </div>
+                </div>
+                {mode.supportsKOT && (
+                  <div style={{ marginTop: 10, display: "flex", gap: 8, alignItems: "center" }}>
+                    <span style={{ fontSize: 12, color: "#6b7280" }}>Payment print flow</span>
+                    <select
+                      className="pos-input"
+                      value={mode.paymentPrintSequence}
+                      onChange={(event) =>
+                        updateServiceModeField(
+                          mode.id,
+                          "paymentPrintSequence",
+                          event.target.value as ServiceMode["paymentPrintSequence"],
+                        )
+                      }
+                      style={{ maxWidth: 220, height: 36 }}
+                    >
+                      <option value="bill_only">Bill only</option>
+                      <option value="bill_then_kot">Bill then KOT</option>
+                      <option value="kot_then_bill">KOT then Bill</option>
+                    </select>
+                  </div>
+                )}
+              </div>
+            </label>
+          ))}
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 16 }}>
+          <button
+            onClick={saveServiceModes}
+            disabled={savingServiceModes}
+            className="pos-btn pos-btn-primary"
+          >
+            {savingServiceModes ? "Saving..." : "Save Service Modes"}
+          </button>
+          {serviceModeStatus && (
+            <div
+              style={{
+                padding: "8px 12px",
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 600,
+                background: serviceModeStatus.includes("✓") ? "#dcfce7" : "#fee2e2",
+                color: serviceModeStatus.includes("✓") ? "#16a34a" : "#dc2626",
+              }}
+            >
+              {serviceModeStatus}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ── Categories Section ─────────────────────────────────────────── */}
@@ -2071,6 +2728,217 @@ export default function Settings() {
               }}
             >
               {categoryStatus}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Menu Variant Options Section ───────────────────────────────── */}
+      <div className="pos-card pos-card-p" style={{ marginTop: 24 }}>
+        <div
+          style={{
+            fontSize: 11,
+            fontWeight: 800,
+            color: "var(--pos-muted,#9ca3af)",
+            marginBottom: 20,
+            textTransform: "uppercase",
+            letterSpacing: "0.1em",
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
+          <span style={{ fontSize: 15 }}>📏</span>
+          Menu Variant Options
+        </div>
+
+        <p
+          style={{
+            fontSize: 13,
+            color: "var(--pos-tx-sub,#6b7280)",
+            marginBottom: 16,
+            marginTop: 0,
+          }}
+        >
+          These options appear in menu variant dropdowns (for example: Half, Full, Quarter).
+        </p>
+
+        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+          <input
+            className="pos-input"
+            placeholder="e.g. Half, Full, Family Pack…"
+            value={newMenuVariantOption}
+            onChange={(e) => setNewMenuVariantOption(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && addMenuVariantOption()}
+            style={{ flex: 1 }}
+          />
+          <button
+            onClick={addMenuVariantOption}
+            disabled={!normalizeCategoryName(newMenuVariantOption)}
+            className="pos-btn pos-btn-primary"
+          >
+            + Add
+          </button>
+        </div>
+
+        {menuVariantOptions.length === 0 ? (
+          <div style={{ fontSize: 13, color: "#d1d5db", padding: "12px 0" }}>
+            No variant options yet — add one above.
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 20 }}>
+            {menuVariantOptions.map((option) => (
+              <div
+                key={option}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "5px 12px 5px 14px",
+                  borderRadius: 20,
+                  background: "#ecfeff",
+                  border: "1.5px solid #67e8f9",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: "#155e75",
+                }}
+              >
+                {option}
+                <button
+                  onClick={() => removeMenuVariantOption(option)}
+                  title={`Remove "${option}"`}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    color: "#0e7490",
+                    fontSize: 15,
+                    lineHeight: 1,
+                    padding: "0 2px",
+                    borderRadius: 4,
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div
+          style={{
+            display: "flex",
+            gap: 10,
+            alignItems: "center",
+            paddingTop: 14,
+            borderTop: "1px solid var(--pos-border,#e5e7eb)",
+          }}
+        >
+          <button
+            onClick={saveMenuVariantOptions}
+            disabled={savingMenuVariantOptions}
+            className="pos-btn pos-btn-primary"
+          >
+            {savingMenuVariantOptions ? "Saving…" : "Save Variant Options"}
+          </button>
+          {menuVariantStatus && (
+            <div
+              style={{
+                padding: "8px 12px",
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 600,
+                background: menuVariantStatus.includes("✓") ? "#dcfce7" : "#fee2e2",
+                color: menuVariantStatus.includes("✓") ? "#16a34a" : "#dc2626",
+              }}
+            >
+              {menuVariantStatus}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Attendance Shift Master Section */}
+      <div className="pos-card pos-card-p" style={{ marginBottom: 24 }}>
+        <div
+          style={{
+            fontSize: 11,
+            fontWeight: 800,
+            color: "var(--pos-muted,#9ca3af)",
+            marginBottom: 20,
+            textTransform: "uppercase",
+            letterSpacing: "0.1em",
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
+          <span style={{ fontSize: 15 }}>⏱</span>
+          Attendance Shift Master
+        </div>
+
+        <p style={{ fontSize: 13, color: "#6b7280", marginBottom: 16, lineHeight: 1.6 }}>
+          Configure standard working hours for each shift. Attendance overtime is computed using
+          these values.
+        </p>
+
+        <div style={{ display: "grid", gap: 10, marginBottom: 20 }}>
+          {attendanceShifts.map((shift) => (
+            <div
+              key={shift.id}
+              style={{
+                display: "grid",
+                gridTemplateColumns: "minmax(160px, 1fr) 120px auto",
+                gap: 10,
+                alignItems: "center",
+              }}
+            >
+              <div style={{ fontSize: 13, fontWeight: 700, color: "var(--pos-tx,#111827)" }}>
+                {shift.label}
+              </div>
+              <input
+                type="number"
+                min={0.5}
+                max={24}
+                step={0.5}
+                value={shift.hours}
+                onChange={(e) => setShiftHours(shift.id, Number(e.target.value) || 0)}
+                className="pos-input"
+                aria-label={`${shift.label} hours`}
+              />
+              <span style={{ fontSize: 12, color: "var(--pos-tx-sub,#6b7280)" }}>hours</span>
+            </div>
+          ))}
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            gap: 10,
+            alignItems: "center",
+            paddingTop: 14,
+            borderTop: "1px solid var(--pos-border,#e5e7eb)",
+          }}
+        >
+          <button
+            onClick={saveShiftConfig}
+            disabled={savingShifts}
+            className="pos-btn pos-btn-primary"
+          >
+            {savingShifts ? "Saving..." : "Save Shift Master"}
+          </button>
+          {shiftStatus && (
+            <div
+              style={{
+                padding: "8px 12px",
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 600,
+                background: shiftStatus.includes("✓") ? "#dcfce7" : "#fee2e2",
+                color: shiftStatus.includes("✓") ? "#16a34a" : "#dc2626",
+              }}
+            >
+              {shiftStatus}
             </div>
           )}
         </div>

@@ -14,6 +14,25 @@ export interface SearchResult {
   parts: { text: string; match: boolean }[];
 }
 
+function getItemPriceLabel(item: any) {
+  const variants = Array.isArray(item?.variants) ? item.variants : [];
+  if (!variants.length) {
+    return `₹${item?.price ?? 0}`;
+  }
+  const prices = variants
+    .map((variant: any) => Number(variant?.price))
+    .filter((price: number) => Number.isFinite(price) && price > 0);
+  if (!prices.length) {
+    return `₹${item?.price ?? 0}`;
+  }
+  const minPrice = Math.min(...prices);
+  const maxPrice = Math.max(...prices);
+  if (minPrice === maxPrice) {
+    return `₹${minPrice}`;
+  }
+  return `₹${minPrice} - ₹${maxPrice}`;
+}
+
 function computeMatchData(it: any, q: string): MatchResult | null {
   const hayName = (it.name || "").toLowerCase();
   const haySku = (it.sku || "").toLowerCase();
@@ -228,7 +247,14 @@ setShowDropdown(true);
                     : f.item.name}
                   {f.item.sku && <small className={styles.skuSmall}>#{f.item.sku}</small>}
                 </div>
-                <div className={styles.itemSub}>₹{f.item.price}</div>
+                {Array.isArray(f.item.variants) && f.item.variants.length > 0 && (
+                  <div className={styles.itemSub}>
+                    {f.item.variants.length} option{f.item.variants.length !== 1 ? "s" : ""} · {getItemPriceLabel(f.item)} · tap to choose
+                  </div>
+                )}
+                {(!Array.isArray(f.item.variants) || f.item.variants.length === 0) && (
+                  <div className={styles.itemSub}>{getItemPriceLabel(f.item)}</div>
+                )}
               </div>
               <div className={styles.autocompleteBadge}>#{idx + 1}</div>
             </div>

@@ -40,19 +40,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [session, setSession] = React.useState<Session | null>(() => getSession());
   const [loading, setLoading] = React.useState(true);
 
+  const logStartup = React.useCallback((stage: string, context?: Record<string, unknown>) => {
+    const t0 = Number((window as any).__posStartupT0 || 0);
+    const elapsedMs =
+      Number.isFinite(t0) && t0 > 0 && typeof performance !== "undefined"
+        ? Number((performance.now() - t0).toFixed(1))
+        : undefined;
+    const payload = { elapsedMs, ...(context || {}) };
+    console.info(`[renderer-startup] ${stage}`, payload);
+    window.pos?.writeLog?.("info", `[renderer-startup] ${stage}`, payload).catch(() => {
+      // best effort telemetry
+    });
+  }, []);
+
   React.useEffect(() => {
     let mounted = true;
     (async () => {
+      logStartup("auth-refresh:start");
       const s = await refreshSession();
       if (mounted) {
         setSession(s);
         setLoading(false);
+        logStartup("auth-refresh:done", {
+          hasSession: Boolean(s),
+          requirePasswordChange: Boolean(s?.requirePasswordChange),
+        });
       }
     })();
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [logStartup]);
 
   // ── Idle timeout: auto-logout after 30 minutes of inactivity ─────────────
   const idleTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);

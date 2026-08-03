@@ -1,37 +1,30 @@
 import React from "react";
+import type { ServiceMode } from "../../../../shared/serviceModes";
 import styles from "../Billing.module.css";
 
 interface PickButtonsProps {
-  onPickTable: () => void;
-  onNewTakeaway: () => void;
-  onNewDelivery: () => void;
+  serviceModes: ServiceMode[];
+  onSelectMode: (mode: ServiceMode) => void;
 }
 
-export default function PickButtons({
-  onPickTable,
-  onNewTakeaway,
-  onNewDelivery,
-}: PickButtonsProps) {
+export default function PickButtons({ serviceModes, onSelectMode }: PickButtonsProps) {
   return (
     <div className={styles.pickBtns}>
-      <button
-        onClick={onPickTable}
-        className={`${styles.pickBtn} ${styles.pickTable}`}
-      >
-        🪑 Pick Table
-      </button>
-      <button
-        onClick={onNewTakeaway}
-        className={`${styles.pickBtn} ${styles.pickTakeaway}`}
-      >
-        🛍️ New Takeaway
-      </button>
-      <button
-        onClick={onNewDelivery}
-        className={`${styles.pickBtn} ${styles.pickDelivery}`}
-      >
-        🚚 New Delivery
-      </button>
+      {serviceModes.map((mode) => (
+        <button
+          key={mode.id}
+          onClick={() => onSelectMode(mode)}
+          className={`${styles.pickBtn} ${
+            mode.requiresTable
+              ? styles.pickTable
+              : mode.id === "delivery"
+                ? styles.pickDelivery
+                : styles.pickTakeaway
+          }`}
+        >
+          {mode.requiresTable ? "🪑" : mode.id === "delivery" ? "🚚" : "🧾"} {mode.name}
+        </button>
+      ))}
     </div>
   );
 }

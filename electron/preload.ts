@@ -106,6 +106,14 @@ contextBridge.exposeInMainWorld("pos", {
     seed: (_count?: number) => authInvoke("pos:tables:seed"),
     list: () => authInvoke("pos:tables:list"),
     configuredCount: () => authInvoke("pos:tables:configured-count"),
+    snapshot: () => authInvoke("pos:tables:snapshot"),
+    setArea: (tableId: number, areaId: string) => authInvoke("pos:tables:set-area", tableId, areaId),
+  },
+  seatingAreas: {
+    list: (includeDisabled?: boolean) => authInvoke("pos:seating-areas:list", includeDisabled),
+    save: (areas: any[]) => authInvoke("pos:seating-areas:save", areas),
+    delete: (areaId: string, reassignToAreaId: string) =>
+      authInvoke("pos:seating-areas:delete", areaId, reassignToAreaId),
   },
   menu: {
     seed: () => authInvoke("pos:menu:seed"),
@@ -116,6 +124,8 @@ contextBridge.exposeInMainWorld("pos", {
     deleteItem: (id: string) => authInvoke("pos:menu:delete-item", id),
     listCategories: () => authInvoke("pos:menu:list-categories"),
     setCategories: (categories: string[]) => authInvoke("pos:menu:set-categories", categories),
+    listVariantOptions: () => authInvoke("pos:menu:list-variant-options"),
+    setVariantOptions: (options: string[]) => authInvoke("pos:menu:set-variant-options", options),
   },
   orders: {
     create: (payload: any) => authInvoke("pos:orders:create", payload),
@@ -160,6 +170,12 @@ contextBridge.exposeInMainWorld("pos", {
     create: (payload: any) => authInvoke("pos:staff:create", payload),
     update: (id: string, updates: any) => authInvoke("pos:staff:update", id, updates),
     delete: (id: string) => authInvoke("pos:staff:delete", id),
+  },
+  attendance: {
+    list: (input: any) => authInvoke("pos:attendance:list", input),
+    upsert: (input: any) => authInvoke("pos:attendance:upsert", input),
+    copy: (fromDate: string, toDate: string) => authInvoke("pos:attendance:copy", fromDate, toDate),
+    delete: (id: string) => authInvoke("pos:attendance:delete", id),
   },
   settings: {
     get: (key: string) => authInvoke("pos:settings:get", key),

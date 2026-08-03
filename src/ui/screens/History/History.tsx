@@ -81,6 +81,22 @@ return "This Month";
   return f === t ? f : `${f} – ${t}`;
 }
 
+function normalizeModeId(value: unknown): string {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_")
+    .replace(/[^a-z0-9_-]/g, "");
+}
+
+function titleizeMode(modeId: string): string {
+  return modeId
+    .split(/[_-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 type UIOrder = {
   uid: string;
   displayId: number;
@@ -218,7 +234,7 @@ export default function History() {
         : 0;
       const total = paidTotal > 0 ? paidTotal : Number(d.total || 0);
 
-      const ot: string = d.orderType || "";
+      const ot: string = normalizeModeId(d.meta?.serviceModeId || d.orderType || "");
       const tableId: number | null = d.tableId ?? null;
       let orderLabel = "";
       if (ot === "takeaway") {
@@ -228,8 +244,16 @@ export default function History() {
         const platform = d.meta?.platform || "Delivery";
         const code = d.meta?.code || d.meta?.orderCode || "";
         orderLabel = code ? `${platform} #${code}` : platform;
+      } else if (ot === "self_service") {
+        orderLabel = "Self Service";
+      } else if (ot === "table") {
+        orderLabel = tableId !== null && tableId !== undefined ? `Table ${tableId}` : "Table";
       } else {
-        orderLabel = tableId !== null && tableId !== undefined ? `Table ${tableId}` : "Table –";
+        orderLabel = ot
+          ? titleizeMode(ot)
+          : tableId !== null && tableId !== undefined
+            ? `Table ${tableId}`
+            : "Order";
       }
 
       // Normalise method to title-case for display

@@ -6,6 +6,8 @@ import path from "path";
 type SqliteDatabase = any;
 
 let db: SqliteDatabase | null = null;
+const DEFAULT_SEATING_AREA_ID = "area:main";
+const DEFAULT_SEATING_AREA_NAME = "Main Dining";
 
 export function getDatabasePath() {
   const override = process.env.POS_DB_PATH_OVERRIDE?.trim();
@@ -190,16 +192,31 @@ function runSchema(database: SqliteDatabase) {
     CREATE INDEX IF NOT EXISTS idx_admin_recovery_codes_user_unused
       ON admin_recovery_codes(username, used_at);
 
-    CREATE TABLE IF NOT EXISTS tables (
-      id INTEGER PRIMARY KEY,
-      name TEXT,
-      seats INTEGER NOT NULL DEFAULT 4,
-      area_id TEXT,
+    CREATE TABLE IF NOT EXISTS seating_areas (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
       sort_order INTEGER NOT NULL,
       active INTEGER NOT NULL DEFAULT 1,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     );
+
+    CREATE INDEX IF NOT EXISTS idx_seating_areas_active_sort
+      ON seating_areas(active, sort_order, name);
+
+    CREATE TABLE IF NOT EXISTS tables (
+      id INTEGER PRIMARY KEY,
+      name TEXT,
+      seats INTEGER NOT NULL DEFAULT 4,
+      area_id TEXT NOT NULL DEFAULT 'area:main' REFERENCES seating_areas(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+      sort_order INTEGER NOT NULL,
+      active INTEGER NOT NULL DEFAULT 1,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_tables_area_sort
+      ON tables(area_id, sort_order, id);
 
     CREATE TABLE IF NOT EXISTS menu_categories (
       id TEXT PRIMARY KEY,
@@ -223,6 +240,20 @@ function runSchema(database: SqliteDatabase) {
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS menu_item_variants (
+      id TEXT PRIMARY KEY,
+      menu_item_id TEXT NOT NULL REFERENCES menu_items(id) ON DELETE CASCADE,
+      name TEXT NOT NULL COLLATE NOCASE,
+      price_paise INTEGER NOT NULL CHECK (price_paise >= 0),
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      UNIQUE(menu_item_id, name)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_menu_item_variants_item
+      ON menu_item_variants(menu_item_id, sort_order, name);
 
     CREATE TABLE IF NOT EXISTS customers (
       id TEXT PRIMARY KEY,
@@ -256,6 +287,32 @@ function runSchema(database: SqliteDatabase) {
 
     CREATE UNIQUE INDEX IF NOT EXISTS idx_staff_phone_active
       ON staff(phone) WHERE active = 1;
+
+    CREATE TABLE IF NOT EXISTS attendance_records (
+      id TEXT PRIMARY KEY,
+      staff_id TEXT NOT NULL REFERENCES staff(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+      attendance_date TEXT NOT NULL,
+      shift_id TEXT,
+      status TEXT NOT NULL CHECK (status IN ('present', 'absent', 'half-day', 'leave', 'holiday', 'week-off', 'late')),
+      check_in_time TEXT,
+      check_out_time TEXT,
+      break_minutes INTEGER NOT NULL DEFAULT 0,
+      worked_minutes INTEGER NOT NULL DEFAULT 0,
+      overtime_minutes INTEGER NOT NULL DEFAULT 0,
+      remarks TEXT,
+      created_by TEXT REFERENCES users(username) ON UPDATE CASCADE ON DELETE SET NULL,
+      created_on INTEGER NOT NULL,
+      updated_by TEXT REFERENCES users(username) ON UPDATE CASCADE ON DELETE SET NULL,
+      updated_on INTEGER NOT NULL,
+      UNIQUE(staff_id, attendance_date)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_attendance_staff
+      ON attendance_records(staff_id);
+    CREATE INDEX IF NOT EXISTS idx_attendance_date
+      ON attendance_records(attendance_date);
+    CREATE INDEX IF NOT EXISTS idx_attendance_status
+      ON attendance_records(status);
 
     CREATE TABLE IF NOT EXISTS orders (
       id TEXT PRIMARY KEY,
@@ -581,9 +638,111 @@ function runSchema(database: SqliteDatabase) {
     database.exec("DELETE FROM grocery_items WHERE active = 0");
   });
 
-  runMigration(database, 10, "Add area_id to tables", () => {
-    addColumnIfMissing(database, "tables", "area_id", "TEXT");
+  runMigration(database, 10, "Add menu item variants", () => {
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS menu_item_variants (
+        id TEXT PRIMARY KEY,
+        menu_item_id TEXT NOT NULL REFERENCES menu_items(id) ON DELETE CASCADE,
+        name TEXT NOT NULL COLLATE NOCASE,
+        price_paise INTEGER NOT NULL CHECK (price_paise >= 0),
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        UNIQUE(menu_item_id, name)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_menu_item_variants_item
+        ON menu_item_variants(menu_item_id, sort_order, name);
+    `);
   });
+
+  runMigration(database, 11, "Add attendance records", () => {
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS attendance_records (
+        id TEXT PRIMARY KEY,
+        staff_id TEXT NOT NULL REFERENCES staff(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+        attendance_date TEXT NOT NULL,
+        shift_id TEXT,
+        status TEXT NOT NULL CHECK (status IN ('present', 'absent', 'half-day', 'leave', 'holiday', 'week-off', 'late')),
+        check_in_time TEXT,
+        check_out_time TEXT,
+        break_minutes INTEGER NOT NULL DEFAULT 0,
+        worked_minutes INTEGER NOT NULL DEFAULT 0,
+        overtime_minutes INTEGER NOT NULL DEFAULT 0,
+        remarks TEXT,
+        created_by TEXT REFERENCES users(username) ON UPDATE CASCADE ON DELETE SET NULL,
+        created_on INTEGER NOT NULL,
+        updated_by TEXT REFERENCES users(username) ON UPDATE CASCADE ON DELETE SET NULL,
+        updated_on INTEGER NOT NULL,
+        UNIQUE(staff_id, attendance_date)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_attendance_staff
+        ON attendance_records(staff_id);
+      CREATE INDEX IF NOT EXISTS idx_attendance_date
+        ON attendance_records(attendance_date);
+      CREATE INDEX IF NOT EXISTS idx_attendance_status
+        ON attendance_records(status);
+    `);
+  });
+
+  runMigration(database, 12, "Add seating areas", () => {
+    const at = Date.now();
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS seating_areas (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        sort_order INTEGER NOT NULL,
+        active INTEGER NOT NULL DEFAULT 1,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_seating_areas_active_sort
+        ON seating_areas(active, sort_order, name);
+    `);
+    database
+      .prepare(
+        `INSERT INTO seating_areas (id, name, sort_order, active, created_at, updated_at)
+         VALUES (?, ?, 1, 1, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           name = excluded.name,
+           active = 1,
+           updated_at = excluded.updated_at`,
+      )
+      .run(DEFAULT_SEATING_AREA_ID, DEFAULT_SEATING_AREA_NAME, at, at);
+    addColumnIfMissing(
+      database,
+      "tables",
+      "area_id",
+      `TEXT NOT NULL DEFAULT '${DEFAULT_SEATING_AREA_ID}'`,
+    );
+    database
+      .prepare("UPDATE tables SET area_id = ? WHERE area_id IS NULL OR trim(area_id) = ''")
+      .run(DEFAULT_SEATING_AREA_ID);
+    database.exec(`
+      CREATE INDEX IF NOT EXISTS idx_tables_area_sort
+        ON tables(area_id, sort_order, id);
+    `);
+  });
+
+  // Startup self-healing for pre-existing/partially migrated databases:
+  // ensure area_id exists even if migration 12 was marked applied while the column was missing.
+  addColumnIfMissing(database, "tables", "area_id", `TEXT NOT NULL DEFAULT '${DEFAULT_SEATING_AREA_ID}'`);
+  database
+    .prepare("UPDATE tables SET area_id = ? WHERE area_id IS NULL OR trim(area_id) = ''")
+    .run(DEFAULT_SEATING_AREA_ID);
+  database
+    .prepare(
+      `INSERT INTO seating_areas (id, name, sort_order, active, created_at, updated_at)
+       VALUES (?, ?, 1, 1, ?, ?)
+       ON CONFLICT(id) DO NOTHING`,
+    )
+    .run(DEFAULT_SEATING_AREA_ID, DEFAULT_SEATING_AREA_NAME, Date.now(), Date.now());
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS idx_tables_area_sort
+      ON tables(area_id, sort_order, id);
+  `);
 }
 
 function runMigration(
@@ -622,18 +781,25 @@ function addColumnIfMissing(
 
 function seedDatabase(database: SqliteDatabase) {
   const now = Date.now();
+  database
+    .prepare(
+      `INSERT INTO seating_areas (id, name, sort_order, active, created_at, updated_at)
+       VALUES (?, ?, 1, 1, ?, ?)
+       ON CONFLICT(id) DO NOTHING`,
+    )
+    .run(DEFAULT_SEATING_AREA_ID, DEFAULT_SEATING_AREA_NAME, now, now);
   const tableCount = Number(process.env.VITE_TABLE_COUNT || process.env.TABLE_COUNT || 12);
   const currentTables = database.prepare("SELECT COUNT(*) AS count FROM tables").get() as {
     count: number;
   };
   if (!currentTables.count) {
     const insert = database.prepare(`
-      INSERT INTO tables (id, name, seats, sort_order, active, created_at, updated_at)
-      VALUES (?, ?, ?, ?, 1, ?, ?)
+      INSERT INTO tables (id, name, seats, area_id, sort_order, active, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, 1, ?, ?)
     `);
     const tx = database.transaction(() => {
       for (let i = 1; i <= tableCount; i++) {
-        insert.run(i, `Table ${i}`, i % 4 === 0 ? 6 : 4, i, now, now);
+        insert.run(i, `Table ${i}`, i % 4 === 0 ? 6 : 4, DEFAULT_SEATING_AREA_ID, i, now, now);
       }
     });
     tx();

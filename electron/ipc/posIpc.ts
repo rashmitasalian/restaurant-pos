@@ -24,17 +24,22 @@ const CUSTOMER_ROLES: Role[] = ["admin", "cashier"];
 const CASHIER_READABLE_SETTINGS = new Set([
   "config:gst",
   "config:printers",
+  "config:seating-areas",
+  "config:service-modes",
   "config:tables",
   "config:categories",
   "config:branding",
 ]);
 const WRITABLE_SETTINGS = new Set([
+  "config:attendance",
   "config:audit",
   "config:branding",
   "config:categories",
   "config:gst",
   "config:history",
   "config:printers",
+  "config:seating-areas",
+  "config:service-modes",
   "config:tables",
 ]);
 
@@ -186,6 +191,29 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
     requireSession(event, token);
     return posService.getConfiguredTableCount();
   });
+  ipcMain.handle("pos:tables:snapshot", (event, token?: string | null) => {
+    requireSession(event, token);
+    return posService.getTablesSnapshot();
+  });
+  ipcMain.handle("pos:tables:set-area", (event, token: string | null, tableId: number, areaId: string) => {
+    const user = requireSession(event, token, ADMIN_ROLES);
+    return posService.setTableArea(tableId, areaId, user.username);
+  });
+  ipcMain.handle("pos:seating-areas:list", (event, token?: string | null, includeDisabled?: boolean) => {
+    requireSession(event, token);
+    return posService.getSeatingAreas(Boolean(includeDisabled));
+  });
+  ipcMain.handle("pos:seating-areas:save", (event, token: string | null, payload) => {
+    const user = requireSession(event, token, ADMIN_ROLES);
+    return posService.setSeatingAreas(payload, user.username);
+  });
+  ipcMain.handle(
+    "pos:seating-areas:delete",
+    (event, token: string | null, areaId: string, reassignToAreaId: string) => {
+      const user = requireSession(event, token, ADMIN_ROLES);
+      return posService.deleteSeatingArea(areaId, reassignToAreaId, user.username);
+    },
+  );
 
   ipcMain.handle("pos:menu:seed", (event, token?: string | null) => {
     requireSession(event, token);
@@ -219,6 +247,17 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
     const user = requireSession(event, token, ADMIN_ROLES);
     return posService.setCategories(categories, user.username);
   });
+  ipcMain.handle("pos:menu:list-variant-options", (event, token?: string | null) => {
+    requireSession(event, token);
+    return posService.getVariantOptions();
+  });
+  ipcMain.handle(
+    "pos:menu:set-variant-options",
+    (event, token: string | null, options: string[]) => {
+      const user = requireSession(event, token, ADMIN_ROLES);
+      return posService.setVariantOptions(options, user.username);
+    },
+  );
 
   ipcMain.handle("pos:orders:create", (event, token: string | null, payload) => {
     const user = requireSession(event, token);
@@ -378,6 +417,23 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
   ipcMain.handle("pos:staff:delete", (event, token: string | null, id: string) => {
     const user = requireSession(event, token, ADMIN_ROLES);
     return posService.deleteStaff(id, user.username);
+  });
+
+  ipcMain.handle("pos:attendance:list", (event, token: string | null, input) => {
+    requireSession(event, token, ADMIN_ROLES);
+    return posService.listAttendance(input || {});
+  });
+  ipcMain.handle("pos:attendance:upsert", (event, token: string | null, input) => {
+    const user = requireSession(event, token, ADMIN_ROLES);
+    return posService.upsertAttendanceRows(input || {}, user.username);
+  });
+  ipcMain.handle("pos:attendance:copy", (event, token: string | null, fromDate: string, toDate: string) => {
+    const user = requireSession(event, token, ADMIN_ROLES);
+    return posService.copyAttendance(fromDate, toDate, user.username);
+  });
+  ipcMain.handle("pos:attendance:delete", (event, token: string | null, id: string) => {
+    const user = requireSession(event, token, ADMIN_ROLES);
+    return posService.deleteAttendance(id, user.username);
   });
 
   ipcMain.handle("pos:settings:get", (event, token: string | null, key: string) => {

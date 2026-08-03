@@ -24,6 +24,7 @@ interface Props {
   amount: number;
   onConfirm: (payment: PaymentConfirm) => void;
   processing?: boolean;
+  forcePrintReceipt?: boolean;
 }
 
 const SINGLE_METHODS: SingleMethod[] = ["cash", "card", "upi", "voucher", "other"];
@@ -35,7 +36,14 @@ const QUICK_PAY: { method: SingleMethod; label: string; icon: string; shortcut: 
   { method: "other", label: "Other", icon: "…", shortcut: "4" },
 ];
 
-export default function PaymentsModal({ open, onClose, amount, onConfirm, processing = false }: Props) {
+export default function PaymentsModal({
+  open,
+  onClose,
+  amount,
+  onConfirm,
+  processing = false,
+  forcePrintReceipt = false,
+}: Props) {
   const [expanded, setExpanded] = React.useState(false);
   const [method, setMethod] = React.useState<PaymentMethod>("cash");
   const [cashReceived, setCashReceived] = React.useState<string>("");
@@ -53,13 +61,21 @@ export default function PaymentsModal({ open, onClose, amount, onConfirm, proces
       setMethod("cash");
       setCashReceived(String(amount));
       setTxnRef("");
-      setShouldPrintReceipt(false);
+      setShouldPrintReceipt(forcePrintReceipt);
       setSplits([
         { method: "cash", amount: String(amount) },
         { method: "upi", amount: "0" },
       ]);
     }
-  }, [open, amount]);
+  }, [open, amount, forcePrintReceipt]);
+
+  React.useEffect(() => {
+    if (forcePrintReceipt) {
+      setShouldPrintReceipt(true);
+    }
+  }, [forcePrintReceipt]);
+
+  const effectivePrintReceipt = forcePrintReceipt || shouldPrintReceipt;
 
   const cashInputRef = React.useRef<HTMLInputElement>(null);
   const quickPayDialogRef = useFocusTrap<HTMLDivElement>(open && !expanded);
@@ -92,7 +108,7 @@ return null;
     if (processing) {
       return;
     }
-    onConfirm({ method: m, amountPaid: amount, printReceipt: shouldPrintReceipt });
+    onConfirm({ method: m, amountPaid: amount, printReceipt: effectivePrintReceipt });
   };
 
   // ── Detailed confirm ───────────────────────────────────────────────────────
@@ -101,7 +117,7 @@ return null;
 return;
 }
     if (method === "cash") {
-      onConfirm({ method, amountPaid: numCash, change, printReceipt: shouldPrintReceipt });
+      onConfirm({ method, amountPaid: numCash, change, printReceipt: effectivePrintReceipt });
     } else if (method === "split") {
       onConfirm({
         method,
@@ -110,10 +126,15 @@ return;
           method: e.method,
           amount: parseFloat(e.amount) || 0,
         })),
-        printReceipt: shouldPrintReceipt,
+        printReceipt: effectivePrintReceipt,
       });
     } else {
-      onConfirm({ method, amountPaid: amount, txnRef: txnRef.trim() || undefined, printReceipt: shouldPrintReceipt });
+      onConfirm({
+        method,
+        amountPaid: amount,
+        txnRef: txnRef.trim() || undefined,
+        printReceipt: effectivePrintReceipt,
+      });
     }
   };
 
@@ -342,12 +363,12 @@ handleConfirm();
             >
               <input
                 type="checkbox"
-                checked={shouldPrintReceipt}
+                checked={effectivePrintReceipt}
                 onChange={(e) => setShouldPrintReceipt(e.target.checked)}
-                disabled={processing}
+                disabled={processing || forcePrintReceipt}
                 style={{ width: 15, height: 15, cursor: processing ? "not-allowed" : "pointer" }}
               />
-              Print receipt
+              {forcePrintReceipt ? "Print receipt (required by mode)" : "Print receipt"}
             </label>
             <button
               onClick={() => setExpanded(true)}
@@ -772,12 +793,12 @@ handleConfirm();
             >
               <input
                 type="checkbox"
-                checked={shouldPrintReceipt}
+                checked={effectivePrintReceipt}
                 onChange={(e) => setShouldPrintReceipt(e.target.checked)}
-                disabled={processing}
+                disabled={processing || forcePrintReceipt}
                 style={{ width: 15, height: 15, cursor: processing ? "not-allowed" : "pointer" }}
               />
-              Print receipt
+              {forcePrintReceipt ? "Print receipt (required by mode)" : "Print receipt"}
             </label>
 
             <button

@@ -56,6 +56,13 @@ declare global {
         seed: (count: number) => Promise<any[]>;
         list: () => Promise<any[]>;
         configuredCount: () => Promise<number>;
+        snapshot: () => Promise<any>;
+        setArea: (tableId: number, areaId: string) => Promise<any>;
+      };
+      seatingAreas?: {
+        list: (includeDisabled?: boolean) => Promise<any[]>;
+        save: (areas: any[]) => Promise<any[]>;
+        delete: (areaId: string, reassignToAreaId: string) => Promise<{ ok: boolean }>;
       };
       menu?: {
         seed: () => Promise<any[]>;
@@ -66,6 +73,8 @@ declare global {
         deleteItem: (id: string) => Promise<any>;
         listCategories: () => Promise<string[]>;
         setCategories: (categories: string[]) => Promise<any>;
+        listVariantOptions: () => Promise<string[]>;
+        setVariantOptions: (options: string[]) => Promise<any>;
       };
       orders?: {
         create: (payload: any) => Promise<any>;
@@ -108,6 +117,12 @@ declare global {
         list: (opts?: any) => Promise<any[]>;
         create: (payload: any) => Promise<any>;
         update: (id: string, updates: any) => Promise<any>;
+        delete: (id: string) => Promise<any>;
+      };
+      attendance?: {
+        list: (input: any) => Promise<any[]>;
+        upsert: (input: any) => Promise<any[]>;
+        copy: (fromDate: string, toDate: string) => Promise<any[]>;
         delete: (id: string) => Promise<any>;
       };
       settings?: {

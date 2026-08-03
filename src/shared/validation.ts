@@ -2,6 +2,9 @@ export const VALIDATION_MESSAGES: Record<string, string> = {
   "item-name-required": "Item name is required.",
   "item-price-invalid": "Price must be greater than zero.",
   "item-sku-duplicate": "This SKU is already used by another item.",
+  "item-variant-name-required": "Each variant must have a name.",
+  "item-variant-price-invalid": "Each variant price must be greater than zero.",
+  "item-variant-duplicate": "Variant names must be unique for an item.",
   "customer-name-invalid": "Name must be at least 2 characters and include a letter.",
   "customer-phone-invalid": "Please enter a valid 10-digit Indian mobile number (starts with 6-9).",
   "customer-phone-duplicate": "This phone number is already added.",
@@ -15,6 +18,19 @@ export const VALIDATION_MESSAGES: Record<string, string> = {
   "staff-notes-too-long": "Notes must be 500 characters or fewer.",
   "staff-photo-invalid": "Please choose a valid image file.",
   "staff-photo-too-large": "Staff photo must be 500 KB or smaller after compression.",
+  "attendance-date-required": "Attendance date is required.",
+  "attendance-date-invalid": "Attendance date must be a valid date.",
+  "attendance-date-future": "Attendance date cannot be in the future.",
+  "attendance-staff-required": "Staff member is required.",
+  "attendance-status-invalid": "Attendance status is invalid.",
+  "attendance-time-invalid": "Check-in and check-out must use HH:MM format.",
+  "attendance-checkout-before-checkin": "Check-out cannot be earlier than check-in.",
+  "attendance-break-invalid": "Break minutes must be zero or greater.",
+  "attendance-break-exceeds-worked": "Break minutes cannot exceed worked duration.",
+  "attendance-remarks-required-for-leave": "Remarks are required when status is Leave.",
+  "attendance-duplicate-day": "An attendance record already exists for this employee on this date.",
+  "attendance-not-found": "Attendance record was not found.",
+  "pos-attendance-api-unavailable": "Attendance tools are still loading. Restart the app and try again.",
   "pos-staff-api-unavailable": "Staff tools are still loading. Restart the app and try again.",
   "category-name-required": "Category name is required.",
   "category-name-duplicate": "Category already exists.",
@@ -117,6 +133,18 @@ return false;
     date.getUTCMonth() === month - 1 &&
     date.getUTCDate() === day
   );
+}
+
+export function isFutureDateOnly(value: unknown) {
+  if (!isValidDateOnly(value)) {
+    return false;
+  }
+  const text = String(value);
+  const [year, month, day] = text.split("-").map((part) => Number(part));
+  const input = Date.UTC(year, month - 1, day);
+  const now = new Date();
+  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  return input > today;
 }
 
 export function parsePositiveMoney(value: unknown): number | null {

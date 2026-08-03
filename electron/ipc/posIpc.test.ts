@@ -22,6 +22,8 @@ jest.mock("../services/posService", () => ({
     listGroceryItems: jest.fn(),
     createGroceryItem: jest.fn(),
     getFoodCostSummary: jest.fn(),
+    listAttendance: jest.fn(),
+    upsertAttendanceRows: jest.fn(),
   },
 }));
 
@@ -52,6 +54,8 @@ const listPrintJobsMock = posService.listPrintJobs as jest.Mock;
 const listGroceryItemsMock = posService.listGroceryItems as jest.Mock;
 const createGroceryItemMock = posService.createGroceryItem as jest.Mock;
 const getFoodCostSummaryMock = posService.getFoodCostSummary as jest.Mock;
+const listAttendanceMock = posService.listAttendance as jest.Mock;
+const upsertAttendanceRowsMock = posService.upsertAttendanceRows as jest.Mock;
 const appInfoMock = updateService.appInfo as jest.Mock;
 const checkForUpdatesMock = updateService.checkForUpdates as jest.Mock;
 const prepareUpdateMock = updateService.prepareUpdate as jest.Mock;
@@ -182,6 +186,23 @@ describe("print queue IPC access", () => {
     expect(getFoodCostSummaryMock).not.toHaveBeenCalled();
   });
 
+  it("blocks cashiers from attendance APIs", async () => {
+    getUserMock.mockReturnValue({
+      username: "cashier",
+      role: "cashier",
+      active: true,
+      requirePasswordChange: false,
+    });
+
+    await expectForbidden("pos:attendance:list", { date: "2026-08-01" });
+    await expectForbidden("pos:attendance:upsert", {
+      attendanceDate: "2026-08-01",
+      rows: [],
+    });
+    expect(listAttendanceMock).not.toHaveBeenCalled();
+    expect(upsertAttendanceRowsMock).not.toHaveBeenCalled();
+  });
+
   it("allows admins to use grocery APIs and food cost reports", async () => {
     getSessionMock.mockReturnValue({ token: "token", username: "admin" });
     getUserMock.mockReturnValue({
@@ -199,6 +220,25 @@ describe("print queue IPC access", () => {
     expect(invoke("pos:reports:food-cost-summary", { from: 1, to: 2 })).toEqual({
       grocerySpend: 100,
     });
+  });
+
+  it("allows admins to use attendance APIs", async () => {
+    getSessionMock.mockReturnValue({ token: "token", username: "admin" });
+    getUserMock.mockReturnValue({
+      username: "admin",
+      role: "admin",
+      active: true,
+      requirePasswordChange: false,
+    });
+    listAttendanceMock.mockReturnValue([{ id: "attendance:1" }]);
+    upsertAttendanceRowsMock.mockReturnValue([{ id: "attendance:1" }]);
+
+    expect(invoke("pos:attendance:list", { date: "2026-08-01" })).toEqual([
+      { id: "attendance:1" },
+    ]);
+    expect(
+      invoke("pos:attendance:upsert", { attendanceDate: "2026-08-01", rows: [] }),
+    ).toEqual([{ id: "attendance:1" }]);
   });
 
   it.each([
