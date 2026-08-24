@@ -206,7 +206,7 @@ return;
 setShowDropdown(true);
 }
         }}
-        placeholder="Search item by name or SKU…"
+        placeholder="Search…"
         className={styles.searchInput}
         aria-autocomplete="list"
         aria-controls="billing-autocomplete"

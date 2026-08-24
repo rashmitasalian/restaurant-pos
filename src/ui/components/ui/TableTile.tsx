@@ -46,15 +46,16 @@ export function TableTile({
   const countClass =
     state === "attention" ? "ui-table-tile-count ui-table-tile-count-attention" : "ui-table-tile-count";
   const isFloor = variant === "floor";
+  const isRail = !isFloor;
   const footMeta = [itemCount && itemCount > 0 ? `${itemCount} item${itemCount !== 1 ? "s" : ""}` : "", elapsed]
     .filter(Boolean)
     .join(" · ");
-  const showRailCount = !isFloor && itemCount !== null && itemCount !== undefined && itemCount > 0;
+  const showRailCount = isRail && itemCount !== null && itemCount !== undefined && itemCount > 0;
 
   return (
     <button
       type="button"
-      className={`ui-table-tile ${isFloor ? "ui-table-tile-floor" : ""} ${stateClass} ${active ? "ui-table-tile-active" : ""} ${className}`.trim()}
+      className={`ui-table-tile ${isFloor ? "ui-table-tile-floor" : "ui-table-tile-rail"} ${stateClass} ${active ? "ui-table-tile-active" : ""} ${className}`.trim()}
       onClick={onClick}
       disabled={disabled}
       aria-label={ariaLabel || `Table ${number}, ${label}`}
@@ -69,30 +70,36 @@ export function TableTile({
           </span>
         </span>
       ) : (
-        <>
-          <span className={`ui-table-tile-num${showRailCount ? " ui-table-tile-num-pad" : ""}`}>
-            {number}
-          </span>
-          <span className="ui-table-tile-state">
-            <StatusDot tone={tone} label={label} decorative />
-            {label}
-          </span>
-        </>
+        <span className="ui-table-tile-rail-head">
+          <span className="ui-table-tile-num">{number}</span>
+          {showRailCount ? (
+            <span className={countClass} aria-hidden="true">
+              {itemCount}
+            </span>
+          ) : null}
+        </span>
       )}
-      {seats ? <span className="ui-table-tile-meta">{seats} seats</span> : null}
-      {isFloor || amountLabel || footMeta ? (
+      {isRail ? (
+        <span className="ui-table-tile-state ui-table-tile-state-rail">
+          <StatusDot tone={tone} label={label} decorative />
+        </span>
+      ) : null}
+      {seats && !(isRail && state === "available") ? (
+        <span className="ui-table-tile-meta">{seats} seats</span>
+      ) : null}
+      {isFloor || amountLabel || footMeta || (isRail && state === "available") ? (
         <span className="ui-table-tile-foot">
           {amountLabel ? (
             <span className="ui-table-tile-amount">{amountLabel}</span>
+          ) : isRail && state === "available" ? (
+            <span className="ui-table-tile-ready">Ready</span>
           ) : (
             <span className="ui-table-tile-amount-empty" aria-hidden="true" />
           )}
           {footMeta ? <span className="ui-table-tile-foot-meta">{footMeta}</span> : null}
-        </span>
-      ) : null}
-      {showRailCount ? (
-        <span className={countClass} aria-hidden="true">
-          {itemCount}
+          {isRail && state === "available" && seats ? (
+            <span className="ui-table-tile-foot-meta">{seats} seats</span>
+          ) : null}
         </span>
       ) : null}
     </button>

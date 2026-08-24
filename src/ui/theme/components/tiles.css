@@ -159,33 +159,46 @@
   border-radius: var(--pos-r-md);
   border: 1px solid var(--pos-line);
   background: var(--pos-surface);
-  box-shadow: var(--pos-shadow-1);
+  box-shadow: none;
   color: var(--pos-tx);
   position: relative;
   overflow: hidden;
 }
 
+.ui-table-tile-rail {
+  min-height: 76px;
+  gap: 3px;
+}
+
 .ui-table-tile:hover:not(:disabled) {
   border-color: var(--pos-teal-line);
-  box-shadow: var(--pos-shadow-2);
 }
 
 .ui-table-tile-occupied {
-  background: var(--pos-state-occupied-tint);
+  background: var(--pos-surface);
   border-color: var(--pos-state-occupied-line);
   box-shadow: inset 3px 0 0 var(--pos-state-occupied-line);
 }
 
 .ui-table-tile-attention {
-  background: var(--pos-state-attention-tint);
+  background: var(--pos-surface);
   border-color: var(--pos-state-attention-line);
   box-shadow: inset 3px 0 0 var(--pos-state-attention-line);
 }
 
 .ui-table-tile-active {
   border-color: var(--pos-teal);
-  box-shadow: inset 3px 0 0 var(--pos-teal), var(--pos-shadow-2);
+  box-shadow: inset 3px 0 0 var(--pos-teal);
   color: var(--pos-teal-strong);
+}
+
+.ui-table-tile-rail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
 }
 
 .ui-table-tile-top {
@@ -207,8 +220,9 @@
   font-variant-numeric: tabular-nums;
 }
 
-.ui-table-tile-num-pad {
-  padding-right: 22px;
+.ui-table-tile-rail .ui-table-tile-num {
+  font-size: 18px;
+  letter-spacing: -0.4px;
 }
 
 .ui-table-tile-state {
@@ -223,6 +237,10 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.ui-table-tile-state-rail {
+  max-width: none;
 }
 
 .ui-table-tile-meta {
@@ -246,6 +264,13 @@
   min-height: 14px;
 }
 
+.ui-table-tile-rail .ui-table-tile-foot {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  min-height: auto;
+}
+
 .ui-table-tile-amount {
   font-size: 11px;
   font-weight: 800;
@@ -257,9 +282,30 @@
   white-space: nowrap;
 }
 
+.ui-table-tile-rail .ui-table-tile-amount {
+  max-width: 100%;
+  text-align: left;
+}
+
+.ui-table-tile-rail .ui-table-tile-foot-meta {
+  max-width: 100%;
+  text-align: left;
+}
+
+.ui-table-tile-ready {
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--pos-tx-sec);
+}
+
 .ui-table-tile-amount-empty {
   display: block;
   min-height: 1em;
+}
+
+.ui-table-tile-rail .ui-table-tile-amount-empty {
+  display: none;
 }
 
 .ui-table-tile-foot-meta {
@@ -289,6 +335,14 @@
   line-height: 1.4;
 }
 
+.ui-table-tile-rail .ui-table-tile-count {
+  position: static;
+  flex-shrink: 0;
+  min-width: 18px;
+  padding: 1px 5px;
+  font-size: 10px;
+}
+
 .ui-table-tile-count-attention {
   background: var(--pos-saffron);
 }
@@ -303,8 +357,13 @@
 }
 
 .ui-table-tile-floor.ui-table-tile-occupied {
-  background: #e4f1f2;
+  background: var(--pos-surface);
   box-shadow: inset 4px 0 0 var(--pos-state-occupied-line);
+}
+
+.ui-table-tile-floor.ui-table-tile-attention {
+  background: var(--pos-surface);
+  box-shadow: inset 4px 0 0 var(--pos-state-attention-line);
 }
 
 .ui-table-tile-floor .ui-table-tile-num {
