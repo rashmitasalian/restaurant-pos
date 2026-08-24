@@ -87,7 +87,7 @@
 
 .input {
   padding: 6px 10px;
-  border-radius: var(--pos-r-input, 8px);
+  border-radius: var(--pos-r-md);
   border: 1px solid var(--pos-line);
   font-size: 13px;
   width: min(190px, 34vw);
@@ -110,7 +110,7 @@
 .btn {
   padding: 6px 11px;
   min-height: 32px;
-  border-radius: var(--pos-r-btn, 8px);
+  border-radius: var(--pos-r-md);
   border: 1px solid var(--pos-line);
   background: var(--pos-surface);
   color: var(--pos-tx-sec);
@@ -143,13 +143,13 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  min-height: 108px;
+  min-height: 112px;
   min-width: 0;
   padding: 12px;
   border-radius: var(--pos-r-md);
-  border: 1px solid var(--pos-line-strong);
+  border: 1px solid var(--pos-line);
   background: var(--pos-surface);
-  box-shadow: var(--pos-shadow-1);
+  box-shadow: none;
   cursor: pointer;
   user-select: none;
   outline: none;
@@ -160,8 +160,8 @@
 }
 
 .card:hover {
-  border-color: var(--pos-teal);
-  background: var(--pos-surface-hover);
+  border-color: var(--pos-teal-line);
+  background: var(--pos-surface);
 }
 
 .card:focus-visible {
@@ -172,23 +172,29 @@
 
 .available {
   background: var(--pos-surface);
+  border-color: var(--pos-line);
 }
 
 .occupied {
-  background: #e4f1f2;
+  background: var(--pos-surface);
   border-color: var(--pos-state-occupied-line);
-  box-shadow: inset 4px 0 0 var(--pos-state-occupied-line);
+  box-shadow: inset 5px 0 0 var(--pos-state-occupied-line);
 }
 
 .occupied:hover {
-  background: #d8ebed;
+  background: var(--pos-surface);
   border-color: var(--pos-state-occupied-line);
 }
 
 .billPending {
-  background: var(--pos-state-attention-tint);
+  background: var(--pos-surface);
   border-color: var(--pos-state-attention-line);
-  box-shadow: inset 4px 0 0 var(--pos-state-attention-line);
+  box-shadow: inset 5px 0 0 var(--pos-state-attention-line);
+}
+
+.billPending:hover {
+  background: var(--pos-surface);
+  border-color: var(--pos-state-attention-line);
 }
 
 .headerInfo {
@@ -203,16 +209,21 @@
 }
 
 .id {
-  font-size: 28px;
+  font-size: 36px;
   font-weight: 800;
-  line-height: 1;
-  letter-spacing: -0.6px;
+  line-height: 0.95;
+  letter-spacing: -1px;
   color: var(--pos-tx);
   font-variant-numeric: tabular-nums;
 }
 
+.occupied .id,
+.billPending .id {
+  color: var(--pos-tx);
+}
+
 .subtle {
-  margin-top: 4px;
+  margin-top: 5px;
   font-size: 12px;
   font-weight: 600;
   color: var(--pos-tx-sec);
@@ -220,12 +231,25 @@
 
 .stateBadge {
   flex-shrink: 0;
+  margin-top: 4px;
   font-size: 10px !important;
   font-weight: 700 !important;
-  padding: 3px 7px !important;
+  padding: 2px 0 !important;
   line-height: 1.2 !important;
   gap: 4px !important;
   min-height: 0 !important;
+  background: transparent !important;
+  border-color: transparent !important;
+  border-radius: 0 !important;
+  color: var(--pos-tx-sub) !important;
+}
+
+.occupied .stateBadge {
+  color: var(--pos-state-occupied-text) !important;
+}
+
+.billPending .stateBadge {
+  color: var(--pos-state-attention-text) !important;
 }
 
 .metrics {
@@ -265,9 +289,20 @@
   color: var(--pos-tx-sub);
 }
 
-.metricsSpacer {
-  margin-top: auto;
-  min-height: 26px;
+.availableFoot {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.2px;
+  color: var(--pos-tx-sub);
+}
+
+.availableMeta {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--pos-tx-muted);
+  white-space: nowrap;
 }
 
 .areaSection {
@@ -340,7 +375,7 @@
 
 .modalItem {
   padding: 12px 14px;
-  border-radius: 10px;
+  border-radius: var(--pos-r-md);
   background: var(--pos-surface-hover);
   border: 1px solid var(--pos-line);
   cursor: pointer;
@@ -363,7 +398,7 @@
   }
 
   .id {
-    font-size: 32px;
+    font-size: 40px;
   }
 
   .amount {
@@ -382,12 +417,12 @@
   }
 
   .card {
-    min-height: 100px;
+    min-height: 104px;
     padding: 10px;
   }
 
   .id {
-    font-size: 24px;
+    font-size: 32px;
   }
 }
 

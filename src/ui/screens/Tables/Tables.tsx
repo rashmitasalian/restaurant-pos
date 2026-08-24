@@ -263,7 +263,6 @@ export default function Tables() {
                       <div className={styles.headerInfo}>
                         <div className={styles.idBlock}>
                           <div className={styles.id}>{titleLabel}</div>
-                          {seatsLabel ? <div className={styles.subtle}>{seatsLabel}</div> : null}
                         </div>
                         <span
                           className={`${styles.stateBadge} pos-badge ${
@@ -290,12 +289,16 @@ export default function Tables() {
                           <div className={styles.elapsed}>
                             {t.count} item{t.count !== 1 ? "s" : ""}
                             {elapsed ? ` · ${elapsed}` : ""}
+                            {seatsLabel ? ` · ${seatsLabel}` : ""}
                           </div>
                         </div>
                       ) : isOpening ? (
                         <div className={styles.openingHint}>Opening…</div>
                       ) : (
-                        <div className={styles.metricsSpacer} aria-hidden="true" />
+                        <div className={styles.metrics}>
+                          <div className={styles.availableFoot}>Ready</div>
+                          {seatsLabel ? <div className={styles.availableMeta}>{seatsLabel}</div> : null}
+                        </div>
                       )}
                     </article>
                   );
