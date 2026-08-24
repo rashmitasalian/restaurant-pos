@@ -2313,12 +2313,6 @@ export default function Billing() {
             )}
           </div>
             </div>
-            <div className={styles.keyboardHint}>
-              {allowsManualKot ? "K — KOT · " : ""}
-              {allowsManualBillPrint ? "B — Print Bill · " : ""}
-              P — Settle ({paymentFlowLabel(activeMode)}) &nbsp;·&nbsp; C — Cancel &nbsp;·&nbsp; U / Ctrl+Z — Undo
-              &nbsp;·&nbsp; 1-6 — Favorites
-            </div>
           </BillingTicketPane>
         </div>
 
