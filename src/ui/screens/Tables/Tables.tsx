@@ -199,27 +199,29 @@ export default function Tables() {
                 ]}
               />
             </div>
-            <input
-              aria-label="Search tables"
-              placeholder="Search table…"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              className={styles.input}
-            />
-            <button
-              ref={openOrdersBtnRef}
-              aria-label="View all open dine-in orders"
-              onClick={async () => {
-                const ops = await getOpenOrders();
-                setOpenOrders(
-                  ops.filter((o) => o.tableId !== null && o.tableId !== undefined && (o.items || []).length > 0),
-                );
-              }}
-              disabled={openOrdersLoading}
-              className={styles.btn}
-            >
-              {openOrdersLoading ? "Loading..." : "Open Orders"}
-            </button>
+            <div className={styles.actions}>
+              <input
+                aria-label="Search tables"
+                placeholder="Search table…"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                className={styles.input}
+              />
+              <button
+                ref={openOrdersBtnRef}
+                aria-label="View all open dine-in orders"
+                onClick={async () => {
+                  const ops = await getOpenOrders();
+                  setOpenOrders(
+                    ops.filter((o) => o.tableId !== null && o.tableId !== undefined && (o.items || []).length > 0),
+                  );
+                }}
+                disabled={openOrdersLoading}
+                className={styles.btn}
+              >
+                {openOrdersLoading ? "Loading..." : "Open Orders"}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -281,25 +283,26 @@ export default function Tables() {
                           {billPending ? "Pending" : t.occupied ? "Occupied" : "Available"}
                         </span>
                       </div>
-                      {t.occupied ? (
-                        <div className={styles.metrics}>
-                          <div className={styles.amount}>
-                            ₹{Number(t.total || 0).toLocaleString("en-IN")}
+                      <div className={styles.body}>
+                        {t.occupied ? (
+                          <div className={styles.metrics}>
+                            <div className={styles.amount}>
+                              ₹{Number(t.total || 0).toLocaleString("en-IN")}
+                            </div>
+                            <div className={styles.elapsed}>
+                              {t.count} item{t.count !== 1 ? "s" : ""}
+                              {elapsed ? ` · ${elapsed}` : ""}
+                            </div>
                           </div>
-                          <div className={styles.elapsed}>
-                            {t.count} item{t.count !== 1 ? "s" : ""}
-                            {elapsed ? ` · ${elapsed}` : ""}
-                            {seatsLabel ? ` · ${seatsLabel}` : ""}
+                        ) : isOpening ? (
+                          <div className={styles.openingHint}>Opening…</div>
+                        ) : (
+                          <div className={styles.metrics}>
+                            <div className={styles.availableFoot}>Ready</div>
+                            {seatsLabel ? <div className={styles.availableMeta}>{seatsLabel}</div> : null}
                           </div>
-                        </div>
-                      ) : isOpening ? (
-                        <div className={styles.openingHint}>Opening…</div>
-                      ) : (
-                        <div className={styles.metrics}>
-                          <div className={styles.availableFoot}>Ready</div>
-                          {seatsLabel ? <div className={styles.availableMeta}>{seatsLabel}</div> : null}
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </article>
                   );
                 })}
