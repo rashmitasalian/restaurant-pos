@@ -37,8 +37,9 @@
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  height: 84px;
-  min-height: var(--pos-hit-pos);
+  height: 90px;
+  min-height: 90px;
+  max-height: 90px;
   padding: 10px 12px;
   border-radius: var(--pos-r-md);
   border: 1px solid var(--pos-line);
@@ -166,8 +167,9 @@
 }
 
 .ui-table-tile-rail {
-  min-height: 76px;
-  gap: 3px;
+  min-height: 84px;
+  gap: 4px;
+  padding: 8px 9px 8px 10px;
 }
 
 .ui-table-tile:hover:not(:disabled) {
@@ -267,8 +269,9 @@
 .ui-table-tile-rail .ui-table-tile-foot {
   flex-direction: column;
   align-items: flex-start;
-  gap: 1px;
+  gap: 2px;
   min-height: auto;
+  margin-top: 2px;
 }
 
 .ui-table-tile-amount {
@@ -337,10 +340,16 @@
 
 .ui-table-tile-rail .ui-table-tile-count {
   position: static;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
-  min-width: 18px;
-  padding: 1px 5px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
   font-size: 10px;
+  line-height: 1;
+  box-sizing: border-box;
 }
 
 .ui-table-tile-count-attention {
@@ -510,7 +519,9 @@
 
 @media (max-width: 1024px) {
   .ui-menu-tile {
-    height: 78px;
+    height: 90px;
+    min-height: 90px;
+    max-height: 90px;
   }
 
   .ui-favorite-tile {

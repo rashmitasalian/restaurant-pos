@@ -31,6 +31,70 @@
   overflow: auto;
   padding: 0 16px 12px;
 }
+.ticketSummary {
+  flex-shrink: 0;
+  padding: 12px 16px;
+  border-top: 1px solid var(--pos-line-strong);
+  background: var(--pos-surface-sunken);
+}
+.ticketSummaryRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--pos-tx-sec);
+  margin-bottom: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.ticketSummaryTotal {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-top: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--pos-line-strong);
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--pos-tx);
+  letter-spacing: -0.2px;
+  font-variant-numeric: tabular-nums;
+}
+.ticketSummaryTotal span:last-child {
+  font-size: 28px;
+  font-weight: 900;
+  letter-spacing: -0.6px;
+  color: var(--pos-tx);
+  line-height: 1;
+}
+.discountBox {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: var(--pos-r-md);
+  border: 1px solid var(--pos-line);
+  background: var(--pos-surface);
+}
+.discountRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+.discountControls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.discountAmt {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--pos-tx-sec);
+  font-variant-numeric: tabular-nums;
+  min-width: 64px;
+  text-align: right;
+}
 .ticketActions {
   display: flex;
   flex-wrap: wrap;

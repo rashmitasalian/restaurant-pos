@@ -152,7 +152,7 @@ export default function BillingSidebar({
                           onClick={() => onLoadTable(t)}
                           aria-label={
                             occupied
-                              ? `Table ${t}, ${stateLabel}, ${info.count || 0} items, ${formatCurrency(info.total || 0)}`
+                              ? `Table ${t}, ${stateLabel}${info.seats ? `, ${info.seats} seats` : ""}, ${info.count || 0} items, ${formatCurrency(info.total || 0)}${elapsed ? `, open ${elapsed}` : ""}`
                               : `Table ${t}, Available${info.seats ? `, ${info.seats} seats` : ""}`
                           }
                         />

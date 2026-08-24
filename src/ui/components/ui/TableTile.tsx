@@ -76,17 +76,14 @@ export function TableTile({
             <span className={countClass} aria-hidden="true">
               {itemCount}
             </span>
-          ) : null}
+          ) : (
+            <span className="ui-table-tile-state ui-table-tile-state-rail">
+              <StatusDot tone={tone} label={label} decorative />
+            </span>
+          )}
         </span>
       )}
-      {isRail ? (
-        <span className="ui-table-tile-state ui-table-tile-state-rail">
-          <StatusDot tone={tone} label={label} decorative />
-        </span>
-      ) : null}
-      {seats && !(isRail && state === "available") ? (
-        <span className="ui-table-tile-meta">{seats} seats</span>
-      ) : null}
+      {!isRail && seats ? <span className="ui-table-tile-meta">{seats} seats</span> : null}
       {isFloor || amountLabel || footMeta || (isRail && state === "available") ? (
         <span className="ui-table-tile-foot">
           {amountLabel ? (

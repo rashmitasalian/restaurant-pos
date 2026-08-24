@@ -2155,65 +2155,64 @@ export default function Billing() {
                         : "No order selected"}
                     </div>
                   )}
-                  <div className={styles.totalsBox}>
-                    <div className={styles.totalsRow}>
-                      <span>Subtotal</span>
-                      <span>{formatCurrency(subtotal)}</span>
-                    </div>
-                    {gstEnabled && (
-                      <>
-                        <div className={styles.totalsRow}>
-                          <span>Taxable value</span>
-                          <span>{formatCurrency(totals.taxableSubtotal)}</span>
-                        </div>
-                        <div className={styles.totalsRow}>
-                          <span>CGST ({gstHalfPct})</span>
-                          <span>{formatCurrency(cgst)}</span>
-                        </div>
-                        <div className={styles.totalsRow}>
-                          <span>SGST ({gstHalfPct})</span>
-                          <span>{formatCurrency(sgst)}</span>
-                        </div>
-                      </>
-                    )}
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        marginBottom: 10,
-                      }}
-                    >
-                      <div className={styles.textMuted}>Discount</div>
-                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                        <input
-                          type="number"
-                          min={0}
-                          max={100}
-                          value={discountPercent}
-                          onChange={(e) =>
-                            setDiscountPercent(
-                              Math.max(0, Math.min(100, Number(e.target.value || 0))),
-                            )
-                          }
-                          className={styles.discountInput}
-                        />
-                        <div className={styles.textMuted} style={{ fontSize: 13 }}>
-                          %
+                  {(order?.items || []).length > 0 ? (
+                    <div className={styles.discountBox}>
+                      <div className={styles.discountRow}>
+                        <span className={styles.textMuted}>Discount</span>
+                        <div className={styles.discountControls}>
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={discountPercent}
+                            onChange={(e) =>
+                              setDiscountPercent(
+                                Math.max(0, Math.min(100, Number(e.target.value || 0))),
+                              )
+                            }
+                            className={styles.discountInput}
+                            aria-label="Discount percent"
+                          />
+                          <span className={styles.textMuted} style={{ fontSize: 13 }}>
+                            %
+                          </span>
+                          <span className={styles.discountAmt}>−{formatCurrency(discountAmt)}</span>
                         </div>
                       </div>
                     </div>
-                    <div className={styles.totalsRow} style={{ marginBottom: 10 }}>
-                      <span>Discount amount</span>
-                      <span>−{formatCurrency(discountAmt)}</span>
-                    </div>
-                    <div className={styles.totalsRowStrong}>
-                      <span>Total</span>
-                      <span>{formatCurrency(finalTotal)}</span>
-                    </div>
-                  </div>
+                  ) : null}
                 </section>
             </div>
+            {(order?.items || []).length > 0 ? (
+              <div className={styles.ticketSummary} aria-live="polite">
+                <div className={styles.ticketSummaryRow}>
+                  <span>Subtotal</span>
+                  <span>{formatCurrency(subtotal)}</span>
+                </div>
+                {gstEnabled ? (
+                  <>
+                    <div className={styles.ticketSummaryRow}>
+                      <span>CGST ({gstHalfPct})</span>
+                      <span>{formatCurrency(cgst)}</span>
+                    </div>
+                    <div className={styles.ticketSummaryRow}>
+                      <span>SGST ({gstHalfPct})</span>
+                      <span>{formatCurrency(sgst)}</span>
+                    </div>
+                  </>
+                ) : null}
+                {discountAmt > 0 ? (
+                  <div className={styles.ticketSummaryRow}>
+                    <span>Discount</span>
+                    <span>−{formatCurrency(discountAmt)}</span>
+                  </div>
+                ) : null}
+                <div className={styles.ticketSummaryTotal}>
+                  <span>Total due</span>
+                  <span>{formatCurrency(finalTotal)}</span>
+                </div>
+              </div>
+            ) : null}
             <div className={styles.ticketActions}>
           <div className={styles.actionGroup}>
             {allowsManualKot && (
