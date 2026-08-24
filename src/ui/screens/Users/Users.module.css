@@ -14,7 +14,7 @@
 .pageTitle {
   font-size: 20px;
   font-weight: 800;
-  color: var(--pos-tx, #111827);
+  color: var(--pos-tx, var(--pos-tx));
   margin: 0;
   letter-spacing: -0.3px;
   display: flex;
@@ -26,21 +26,21 @@
   display: block;
   width: 3px;
   height: 22px;
-  background: linear-gradient(180deg, var(--pos-brand-deep, #d97706), var(--pos-brand, #f59e0b));
+  background: var(--pos-teal);
   border-radius: 2px;
   flex-shrink: 0;
 }
 
 .pageSubtitle {
   font-size: 13px;
-  color: var(--pos-tx-sub, #6b7280);
+  color: var(--pos-tx-sub, var(--pos-tx-sub));
   margin: 4px 0 0;
 }
 
 .btnPrimary {
   padding: 9px 18px;
-  background: var(--pos-brand-deep, #d97706);
-  color: #fff;
+  background: var(--pos-teal);
+  color: var(--pos-surface);
   border: none;
   border-radius: var(--pos-r-btn, 8px);
   font-size: 13px;
@@ -56,7 +56,7 @@
 }
 
 .btnPrimary:hover {
-  background: var(--pos-brand-dark, #92400e);
+  background: var(--pos-brand-dark, var(--pos-saffron-text));
 }
 
 .btnPrimary:active {
@@ -64,17 +64,17 @@
 }
 
 .btnPrimary:disabled {
-  background: #e5e7eb;
-  color: #9ca3af;
+  background: var(--pos-line);
+  color: var(--pos-tx-muted);
   cursor: not-allowed;
   transform: none;
 }
 
 .btnSecondary {
   padding: 7px 14px;
-  background: var(--pos-surface, #fff);
-  color: var(--pos-tx-sec, #374151);
-  border: 1px solid var(--pos-border, #e5e7eb);
+  background: var(--pos-surface, var(--pos-surface));
+  color: var(--pos-tx-sec, var(--pos-tx-sec));
+  border: 1px solid var(--pos-border, var(--pos-line));
   border-radius: var(--pos-r-btn, 8px);
   font-size: 12px;
   font-weight: 600;
@@ -84,7 +84,7 @@
 }
 
 .btnSecondary:hover {
-  background: #f9fafb;
+  background: var(--pos-surface-hover);
 }
 
 .btnSecondary:active {
@@ -93,9 +93,9 @@
 
 .btnDanger {
   padding: 7px 14px;
-  background: var(--pos-surface, #fff);
-  color: #dc2626;
-  border: 1px solid #fca5a5;
+  background: var(--pos-surface, var(--pos-surface));
+  color: var(--pos-danger);
+  border: 1px solid var(--pos-danger-line);
   border-radius: var(--pos-r-btn, 8px);
   font-size: 12px;
   font-weight: 600;
@@ -105,7 +105,7 @@
 }
 
 .btnDanger:hover {
-  background: #fef2f2;
+  background: var(--pos-danger-tint);
 }
 
 .btnDanger:active {
@@ -124,25 +124,25 @@
   align-items: center;
   gap: 14px;
   padding: 14px 18px;
-  background: var(--pos-surface, #fff);
-  border: 1px solid var(--pos-border, #e5e7eb);
+  background: var(--pos-surface, var(--pos-surface));
+  border: 1px solid var(--pos-border, var(--pos-line));
   border-radius: var(--pos-r-card, 14px);
-  box-shadow: var(--pos-shadow-xs, 0 1px 3px rgba(0, 0, 0, 0.05));
+  box-shadow: var(--pos-shadow-1);
   flex-wrap: wrap;
   transition: box-shadow 120ms;
 }
 
 .userCard.inactive {
   opacity: 0.55;
-  background: #f9fafb;
+  background: var(--pos-surface-hover);
 }
 
 .avatar {
   width: 42px;
   height: 42px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #b45309, #f59e0b);
-  color: #fff;
+  background: var(--pos-teal);
+  color: var(--pos-surface);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -160,7 +160,7 @@
 .displayName {
   font-size: 14px;
   font-weight: 700;
-  color: #111827;
+  color: var(--pos-tx);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -168,7 +168,7 @@
 
 .usernameTxt {
   font-size: 12px;
-  color: #6b7280;
+  color: var(--pos-tx-sub);
   margin-top: 2px;
 }
 
@@ -182,15 +182,15 @@
 }
 
 .roleBadge.admin {
-  background: var(--pos-brand-light, #fef3c7);
-  color: var(--pos-brand-dark, #92400e);
-  border: 1px solid #fcd34d;
+  background: var(--pos-brand-light, var(--pos-saffron-tint));
+  color: var(--pos-brand-dark, var(--pos-saffron-text));
+  border: 1px solid var(--pos-saffron-line);
 }
 
 .roleBadge.cashier {
-  background: #eff6ff;
-  color: #1d4ed8;
-  border: 1px solid #bfdbfe;
+  background: var(--pos-teal-tint);
+  color: var(--pos-teal-strong);
+  border: 1px solid var(--pos-teal-line);
 }
 
 .statusBadge {
@@ -202,15 +202,15 @@
 }
 
 .statusBadge.active {
-  background: #d1fae5;
-  color: #065f46;
-  border: 1px solid #6ee7b7;
+  background: var(--pos-success-line);
+  color: var(--pos-success-text);
+  border: 1px solid var(--pos-success-line);
 }
 
 .statusBadge.inactive {
-  background: #f3f4f6;
-  color: #9ca3af;
-  border: 1px solid #e5e7eb;
+  background: var(--pos-surface-sunken);
+  color: var(--pos-tx-muted);
+  border: 1px solid var(--pos-line);
 }
 
 .cardActions {
@@ -226,7 +226,7 @@
 .overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.45);
+  background: var(--pos-overlay);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -235,19 +235,19 @@
 }
 
 .modal {
-  background: var(--pos-surface, #fff);
+  background: var(--pos-surface, var(--pos-surface));
   border-radius: var(--pos-r-card, 14px);
   padding: 28px;
   width: 420px;
   max-width: 100%;
-  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.14);
-  border: 1px solid var(--pos-border, #e5e7eb);
+  box-shadow: var(--pos-shadow-overlay);
+  border: 1px solid var(--pos-border, var(--pos-line));
 }
 
 .modalTitle {
   font-size: 16px;
   font-weight: 800;
-  color: var(--pos-tx, #111827);
+  color: var(--pos-tx, var(--pos-tx));
   margin: 0 0 20px;
   letter-spacing: -0.2px;
 }
@@ -260,7 +260,7 @@
   display: block;
   font-size: 11px;
   font-weight: 700;
-  color: var(--pos-muted, #9ca3af);
+  color: var(--pos-muted, var(--pos-tx-muted));
   margin-bottom: 6px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -270,12 +270,12 @@
 .formField select {
   width: 100%;
   padding: 9px 12px;
-  border: 1px solid var(--pos-border, #e5e7eb);
+  border: 1px solid var(--pos-border, var(--pos-line));
   border-radius: var(--pos-r-input, 8px);
   font-size: 13px;
   box-sizing: border-box;
   outline: none;
-  color: var(--pos-tx, #111827);
+  color: var(--pos-tx, var(--pos-tx));
   font-family: inherit;
   transition:
     border-color 120ms,
@@ -284,14 +284,14 @@
 
 .formField input:focus,
 .formField select:focus {
-  border-color: var(--pos-brand-deep, #d97706);
+  border-color: var(--pos-brand-deep, var(--pos-saffron-deep));
   box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.14);
 }
 
 .formError {
-  background: #fef2f2;
-  border: 1px solid #fca5a5;
-  color: #b91c1c;
+  background: var(--pos-danger-tint);
+  border: 1px solid var(--pos-danger-line);
+  color: var(--pos-danger-strong);
   border-radius: var(--pos-r-btn, 8px);
   padding: 9px 12px;
   font-size: 13px;
@@ -299,9 +299,9 @@
 }
 
 .formSuccess {
-  background: #d1fae5;
-  border: 1px solid #6ee7b7;
-  color: #065f46;
+  background: var(--pos-success-line);
+  border: 1px solid var(--pos-success-line);
+  color: var(--pos-success-text);
   border-radius: 6px;
   padding: 9px 12px;
   font-size: 13px;
@@ -318,13 +318,13 @@
 .emptyState {
   text-align: center;
   padding: 40px 20px;
-  color: #9ca3af;
+  color: var(--pos-tx-muted);
   font-size: 14px;
 }
 
 .selfNote {
   font-size: 11px;
-  color: #9ca3af;
+  color: var(--pos-tx-muted);
   font-style: italic;
   margin-left: 4px;
 }

@@ -8,7 +8,20 @@ import {
 } from "../../../app/db/posRepository";
 import { ENV } from "../../../config/env";
 import type { ProductSalesReportDto } from "../../../shared/pos";
-import { DEFAULT_GST_CONFIG, formatGstRate, normalizeGstConfig } from "../../../shared/gst";
+import {
+  DEFAULT_GST_CONFIG,
+  formatGstRate,
+  normalizeGstConfig,
+} from "../../../shared/gst";
+import { CHART_RAMP } from "../../theme/external-brands";
+import { PRINT } from "../../theme/print-html";
+import { DataTable } from "../../components/ui/DataTable";
+import { Button } from "../../components/ui/Button";
+import { PageHeader } from "../../components/ui/PageHeader";
+import { Stat } from "../../components/ui/Stat";
+import { Icon } from "../../components/ui/Icon";
+import { FileDown } from "lucide-react";
+import "./Reports.module.css";
 
 type RangePreset = "today" | "yesterday" | "thisWeek" | "thisMonth" | "custom";
 type CategoryMetric = "sales" | "units";
@@ -22,17 +35,7 @@ const EMPTY_PRODUCT_SALES_REPORT: ProductSalesReportDto = {
   totals: { totalSales: 0, totalUnits: 0 },
 };
 
-const CATEGORY_COLORS = [
-  "#d97706",
-  "#0891b2",
-  "#7c3aed",
-  "#16a34a",
-  "#2563eb",
-  "#db2777",
-  "#4f46e5",
-  "#65a30d",
-  "#6b7280",
-];
+const CATEGORY_COLORS = CHART_RAMP;
 
 function getPresetRange(preset: RangePreset): { from: number; to: number } {
   const now = new Date();
@@ -276,35 +279,35 @@ export default function Reports() {
       label: "Cash",
       amount: cashAmount,
       pct: cashPercent,
-      color: "#d97706",
+      color: "var(--pos-saffron-deep)",
       glow: "rgba(217,119,6,0.2)",
     },
     {
       label: "UPI",
       amount: upiAmount,
       pct: upiPercent,
-      color: "#0891b2",
+      color: "var(--pos-teal)",
       glow: "rgba(8,145,178,0.2)",
     },
     {
       label: "Card",
       amount: cardAmount,
       pct: cardPercent,
-      color: "#7c3aed",
+      color: "var(--pos-teal)",
       glow: "rgba(124,58,237,0.2)",
     },
     {
       label: "Online",
       amount: onlineAmount,
       pct: onlinePercent,
-      color: "#2563eb",
+      color: "var(--pos-teal)",
       glow: "rgba(37,99,235,0.2)",
     },
     {
       label: "Other",
       amount: otherAmount,
       pct: otherPercent,
-      color: "#16a34a",
+      color: "var(--pos-success)",
       glow: "rgba(22,163,74,0.2)",
     },
   ];
@@ -399,25 +402,25 @@ export default function Reports() {
   <meta charset="UTF-8"/>
   <title>Sales Report — ${dateStr}</title>
   <style>
-    body { font-family: Arial, sans-serif; padding: 32px; color: #111; }
+    body { font-family: Arial, sans-serif; padding: 32px; color: ${PRINT.ink}; }
     h1 { font-size: 20px; margin-bottom: 4px; }
     h2 { font-size: 16px; margin: 28px 0 8px; }
-    p.sub { color: #666; font-size: 13px; margin: 0 0 24px; }
+    p.sub { color: ${PRINT.sub}; font-size: 13px; margin: 0 0 24px; }
     .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 28px; }
-    .card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; }
-    .card-label { font-size: 11px; text-transform: uppercase; color: #888; font-weight: 700; letter-spacing: 0.05em; margin-bottom: 6px; }
-    .card-value { font-size: 22px; font-weight: 900; color: #111; }
-    .card-sub { font-size: 12px; color: #888; margin-top: 4px; }
+    .card { border: 1px solid var(--pos-line); border-radius: 8px; padding: 16px; }
+    .card-label { font-size: 11px; text-transform: uppercase; color: ${PRINT.muted}; font-weight: 700; letter-spacing: 0.05em; margin-bottom: 6px; }
+    .card-value { font-size: 22px; font-weight: 900; color: ${PRINT.ink}; }
+    .card-sub { font-size: 12px; color: ${PRINT.muted}; margin-top: 4px; }
     table { width: 100%; border-collapse: collapse; }
-    th { text-align: left; padding: 8px 12px; font-size: 11px; text-transform: uppercase; color: #666; border-bottom: 2px solid #e5e7eb; }
-    td { padding: 10px 12px; font-size: 14px; border-bottom: 1px solid #f3f4f6; }
-    .total-row td { font-weight: 800; border-top: 2px solid #e5e7eb; font-size: 15px; }
-    footer { margin-top: 40px; font-size: 11px; color: #aaa; text-align: center; }
-    .report-header { display: flex; justify-content: space-between; gap: 24px; align-items: flex-start; margin-bottom: 28px; padding-bottom: 16px; border-bottom: 1px solid #e5e7eb; }
+    th { text-align: left; padding: 8px 12px; font-size: 11px; text-transform: uppercase; color: ${PRINT.sub}; border-bottom: 2px solid var(--pos-line); }
+    td { padding: 10px 12px; font-size: 14px; border-bottom: 1px solid var(--pos-surface-sunken); }
+    .total-row td { font-weight: 800; border-top: 2px solid var(--pos-line); font-size: 15px; }
+    footer { margin-top: 40px; font-size: 11px; color: ${PRINT.faint}; text-align: center; }
+    .report-header { display: flex; justify-content: space-between; gap: 24px; align-items: flex-start; margin-bottom: 28px; padding-bottom: 16px; border-bottom: 1px solid var(--pos-line); }
     .brand { display: flex; gap: 12px; align-items: center; min-width: 0; }
-    .brand-logo { width: 52px; height: 52px; border-radius: 10px; object-fit: contain; border: 1px solid #e5e7eb; background: #fff; padding: 4px; flex: 0 0 auto; }
-    .brand-name { font-size: 18px; font-weight: 900; color: #111; }
-    .brand-contact { margin-top: 3px; font-size: 11px; color: #666; }
+    .brand-logo { width: 52px; height: 52px; border-radius: 10px; object-fit: contain; border: 1px solid var(--pos-line); background: var(--pos-surface); padding: 4px; flex: 0 0 auto; }
+    .brand-name { font-size: 18px; font-weight: 900; color: ${PRINT.ink}; }
+    .brand-contact { margin-top: 3px; font-size: 11px; color: ${PRINT.sub}; }
     .report-title { text-align: right; }
     @media print { body { padding: 0; } }
   </style>
@@ -446,7 +449,7 @@ export default function Reports() {
     }
     ${
       discountTotal > 0
-        ? `<div class="card" style="border-color:#fca5a5"><div class="card-label">Discounts Given</div><div class="card-value" style="color:#dc2626">${formatCurrency(discountTotal)}</div><div class="card-sub">Total discount deducted</div></div>`
+        ? `<div class="card" style="border-color:var(--pos-danger-line)"><div class="card-label">Discounts Given</div><div class="card-value" style="color:var(--pos-danger)">${formatCurrency(discountTotal)}</div><div class="card-sub">Total discount deducted</div></div>`
         : ""
     }
     <div class="card"><div class="card-label">Cash</div><div class="card-value">${formatCurrency(cashAmount)}</div><div class="card-sub">${cashPercent}% of sales</div></div>
@@ -514,191 +517,23 @@ export default function Reports() {
   ];
 
   return (
-    <div style={{ background: "var(--pos-bg, #ffffff)", minHeight: "100%", padding: 0 }}>
-      <style>{`
-        .rpt-wrap { padding: 22px 28px; }
-        .rpt-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 28px; flex-wrap: wrap; gap: 14px; }
-        .rpt-header .pos-ph-title { margin-bottom: 5px; }
-        .rpt-controls { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
-        .rpt-kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 18px; }
-        .rpt-bottom { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-        .rpt-product-grid { display: grid; grid-template-columns: 1fr; gap: 16px; margin-top: 16px; }
-        .rpt-card {
-          background: #ffffff;
-          border: 1px solid #e5e7eb;
-          border-radius: 16px;
-          padding: 22px 20px;
-          position: relative;
-          overflow: hidden;
-          transition: box-shadow 0.2s;
-        }
-        .rpt-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.07); }
-        .rpt-card-accent {
-          position: absolute; top: 0; left: 0; right: 0; height: 3px;
-          background: var(--accent, #f59e0b);
-          opacity: 0.9;
-        }
-        .rpt-card-glow {
-          position: absolute; top: -40px; right: -30px;
-          width: 120px; height: 120px;
-          background: radial-gradient(circle, var(--glow, rgba(245,158,11,0.12)) 0%, transparent 70%);
-          pointer-events: none;
-        }
-        .rpt-kpi-label {
-          font-size: 10px; font-weight: 800; text-transform: uppercase;
-          letter-spacing: 0.1em; color: #9ca3af; margin-bottom: 10px;
-        }
-        .rpt-kpi-value {
-          font-size: 28px; font-weight: 900; line-height: 1;
-          font-variant-numeric: tabular-nums; margin-bottom: 7px;
-          transition: color 0.3s;
-        }
-        .rpt-kpi-sub { font-size: 12px; color: #9ca3af; }
-        .rpt-shimmer { animation: rpt-pulse 1.4s ease-in-out infinite; }
-        .rpt-preset-btn {
-          padding: 5px 12px; border-radius: 8px; font-size: 12px; font-weight: 500;
-          cursor: pointer; transition: all 0.15s; white-space: nowrap;
-          border: 1px solid #e5e7eb;
-          background: #fff; color: #6b7280; font-family: inherit;
-        }
-        .rpt-preset-btn:hover { background: #fff7ed; color: #374151; border-color: #fcd34d; }
-        .rpt-preset-btn.active {
-          background: #fffbeb; border-color: #f59e0b;
-          color: #92400e; font-weight: 700;
-        }
-        .rpt-date-input {
-          padding: 5px 10px; border-radius: 8px; font-size: 12px;
-          border: 1px solid #e5e7eb; background: #fff;
-          color: #374151; outline: none; font-family: inherit;
-        }
-        .rpt-date-input:focus { border-color: #f59e0b; box-shadow: 0 0 0 2px rgba(245,158,11,0.15); }
-        .rpt-export-btn {
-          padding: 7px 16px; border-radius: 9px; font-size: 12px; font-weight: 700;
-          cursor: pointer; border: none; color: #fff; white-space: nowrap;
-          background: linear-gradient(135deg, #d97706 0%, #f59e0b 100%);
-          box-shadow: 0 2px 10px rgba(217,119,6,0.35);
-          transition: opacity 0.15s, box-shadow 0.15s; font-family: inherit;
-        }
-        .rpt-export-btn:hover { box-shadow: 0 4px 18px rgba(217,119,6,0.5); }
-        .rpt-export-btn:disabled { opacity: 0.35; cursor: not-allowed; box-shadow: none; }
-        .rpt-pay-row { margin-bottom: 18px; }
-        .rpt-pay-row:last-child { margin-bottom: 0; }
-        .rpt-pay-meta { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 7px; }
-        .rpt-pay-bar-bg { height: 6px; background: #f3f4f6; border-radius: 3px; overflow: hidden; }
-        .rpt-pay-bar-fill { height: 100%; border-radius: 3px; transition: width 0.7s cubic-bezier(0.4,0,0.2,1); }
-        .rpt-section-title {
-          font-size: 10px; font-weight: 800; text-transform: uppercase;
-          letter-spacing: 0.1em; color: #9ca3af; padding: 16px 20px 14px;
-          border-bottom: 1px solid #f3f4f6;
-        }
-        .rpt-section-head {
-          display: flex; align-items: center; justify-content: space-between; gap: 12px;
-          padding: 14px 18px; border-bottom: 1px solid #f3f4f6;
-        }
-        .rpt-metric-toggle {
-          display: inline-flex; gap: 4px; padding: 3px; border: 1px solid #e5e7eb;
-          border-radius: 8px; background: #f9fafb;
-        }
-        .rpt-metric-toggle button {
-          border: none; background: transparent; border-radius: 6px; padding: 5px 9px;
-          font-size: 11px; font-weight: 700; color: #6b7280; cursor: pointer; font-family: inherit;
-          white-space: nowrap;
-        }
-        .rpt-metric-toggle button.active { background: #fff; color: #92400e; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
-        .rpt-chart-wrap { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 20px; align-items: center; padding: 20px; }
-        .rpt-chart-svg { width: 160px; height: 160px; justify-self: center; }
-        .rpt-chart-empty { fill: none; stroke: #f3f4f6; stroke-width: 24; }
-        .rpt-chart-segment { fill: none; stroke-width: 24; transition: stroke-dasharray 0.25s ease; }
-        .rpt-chart-center { font-size: 11px; fill: #6b7280; font-weight: 800; text-anchor: middle; }
-        .rpt-chart-total { font-size: 10px; fill: #9ca3af; font-weight: 700; text-anchor: middle; }
-        .rpt-legend-row { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 8px; align-items: center; margin-bottom: 9px; }
-        .rpt-legend-swatch { width: 10px; height: 10px; border-radius: 50%; }
-        .rpt-legend-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 700; color: #374151; }
-        .rpt-legend-value { font-size: 12px; color: #6b7280; font-variant-numeric: tabular-nums; white-space: nowrap; }
-        .rpt-empty-state { padding: 24px 20px; color: #9ca3af; font-size: 13px; text-align: center; }
-        .rpt-table-toolbar {
-          display: flex; align-items: center; justify-content: space-between; gap: 10px;
-          padding: 12px 16px; border-bottom: 1px solid #f3f4f6; flex-wrap: wrap;
-        }
-        .rpt-search-input {
-          min-width: 220px; flex: 1; max-width: 360px; padding: 7px 10px;
-          border: 1px solid #e5e7eb; border-radius: 8px; outline: none;
-          font: inherit; font-size: 12px; color: #374151; background: #fff;
-        }
-        .rpt-search-input:focus { border-color: #f59e0b; box-shadow: 0 0 0 2px rgba(245,158,11,0.14); }
-        .rpt-sort-select {
-          padding: 7px 10px; border: 1px solid #e5e7eb; border-radius: 8px;
-          background: #fff; font: inherit; font-size: 12px; color: #374151;
-        }
-        .rpt-table-scroll { width: 100%; overflow-x: auto; }
-        .rpt-table { width: 100%; border-collapse: collapse; }
-        .rpt-table-scroll .rpt-table { min-width: 620px; }
-        .rpt-table th {
-          text-align: left; padding: 10px 20px; font-size: 10px; font-weight: 800;
-          text-transform: uppercase; letter-spacing: 0.08em; color: #9ca3af;
-          border-bottom: 1px solid #f3f4f6;
-        }
-        .rpt-table td {
-          padding: 13px 20px; font-size: 14px; color: #6b7280;
-          border-bottom: 1px solid #f9fafb;
-        }
-        .rpt-table th:nth-child(3), .rpt-table th:nth-child(4),
-        .rpt-table td:nth-child(3), .rpt-table td:nth-child(4) {
-          text-align: right; white-space: nowrap;
-        }
-        .rpt-table td:first-child { font-weight: 700; color: #374151; }
-        .rpt-table td:last-child { font-weight: 700; color: #111827; }
-        .rpt-table-foot {
-          display: flex; align-items: center; justify-content: space-between; gap: 10px;
-          padding: 12px 16px; border-top: 1px solid #f3f4f6; color: #9ca3af;
-          font-size: 12px; flex-wrap: wrap;
-        }
-        .rpt-show-more {
-          padding: 6px 12px; border: 1px solid #e5e7eb; border-radius: 8px;
-          background: #fff; color: #374151; font: inherit; font-size: 12px;
-          font-weight: 700; cursor: pointer;
-        }
-        .rpt-show-more:hover { background: #fff7ed; border-color: #fcd34d; color: #92400e; }
-        .rpt-total-row td {
-          border-top: 1px solid #e5e7eb; border-bottom: none;
-          background: #fffbeb; color: #92400e;
-          font-weight: 800; font-size: 15px;
-        }
-        .rpt-total-row td:last-child { color: #d97706; font-size: 16px; }
-        @keyframes rpt-pulse { 0%,100% { opacity: 0.3; } 50% { opacity: 0.7; } }
-        @media (max-width: 960px) {
-          .rpt-kpi-grid { grid-template-columns: repeat(2, 1fr); }
-          .rpt-bottom { grid-template-columns: 1fr; }
-        }
-        @media (max-width: 560px) {
-          .rpt-kpi-grid { grid-template-columns: 1fr 1fr; }
-          .rpt-wrap { padding: 14px 12px; }
-          .rpt-kpi-value { font-size: 22px; }
-          .rpt-header { flex-direction: column; }
-          .rpt-chart-wrap { grid-template-columns: 1fr; justify-items: stretch; }
-          .rpt-chart-svg { width: 145px; height: 145px; }
-          .rpt-section-head { align-items: flex-start; flex-direction: column; }
-          .rpt-search-input { min-width: 100%; max-width: none; }
-          .rpt-sort-select { width: 100%; }
-        }
-      `}</style>
+    <div style={{ background: "var(--pos-bg, var(--pos-surface))", minHeight: "100%", padding: 0 }}>
 
       <div className="rpt-wrap">
-        {/* ── Header ── */}
-        <div className="rpt-header">
-          <div>
-            <h2 className="pos-ph-title">Reports</h2>
-            <p className="pos-ph-sub" style={{ paddingLeft: 13 }}>
+        <PageHeader
+          title="Reports"
+          subtitle={
+            <>
               {rangeLabel(preset, fromTs, toTs)} ·{" "}
               {new Date().toLocaleDateString("en-IN", {
                 weekday: "long",
                 day: "numeric",
                 month: "long",
               })}
-            </p>
-          </div>
-
-          <div className="rpt-controls">
+            </>
+          }
+          actions={
+            <div className="rpt-controls">
             {PRESETS.map(({ key, label }) => (
               <button
                 key={key}
@@ -732,7 +567,7 @@ setFromTs(d.getTime());
 }
                   }}
                 />
-                <span style={{ fontSize: 11, color: "#374151" }}>–</span>
+                <span style={{ fontSize: 11, color: "var(--pos-tx-sec)" }}>–</span>
                 <input
                   type="date"
                   className="rpt-date-input"
@@ -750,130 +585,47 @@ setToTs(d.getTime());
               </>
             )}
 
-            <button
-              className="rpt-export-btn"
-              onClick={handleExport}
-              disabled={loading || exporting}
-            >
-              {exporting ? "Saving…" : "↗ Export PDF"}
-            </button>
-          </div>
-        </div>
+            <Button variant="primary" onClick={handleExport} disabled={loading || exporting}>
+              {exporting ? "Saving…" : <><Icon icon={FileDown} size="sm" /> Export PDF</>}
+            </Button>
+            </div>
+          }
+        />
 
-        {/* ── KPI Cards ── */}
         <div className="rpt-kpi-grid">
-          {/* Total Sales */}
-          <div
-            className="rpt-card"
-            style={{
-              ["--accent" as string]: "#f59e0b",
-              ["--glow" as string]: "rgba(245,158,11,0.08)",
-            }}
-          >
-            <div className="rpt-card-accent" />
-            <div className="rpt-card-glow" />
-            <div className="rpt-kpi-label">Total Sales</div>
-            <div
-              className={`rpt-kpi-value${loading ? " rpt-shimmer" : ""}`}
-              style={{ color: loading ? "#e5e7eb" : "#d97706" }}
-            >
-              {loading ? "———" : formatCurrency(sales)}
-            </div>
-            <div className="rpt-kpi-sub">{loading ? "Loading…" : `${orders} orders`}</div>
-          </div>
-
-          {/* Orders */}
-          <div
-            className="rpt-card"
-            style={{
-              ["--accent" as string]: "#7c3aed",
-              ["--glow" as string]: "rgba(124,58,237,0.07)",
-            }}
-          >
-            <div className="rpt-card-accent" />
-            <div className="rpt-card-glow" />
-            <div className="rpt-kpi-label">Orders</div>
-            <div
-              className={`rpt-kpi-value${loading ? " rpt-shimmer" : ""}`}
-              style={{ color: loading ? "#e5e7eb" : "#7c3aed" }}
-            >
-              {loading ? "——" : orders}
-            </div>
-            <div className="rpt-kpi-sub">
-              {loading ? "Loading…" : `${rangeLabel(preset, fromTs, toTs)}`}
-            </div>
-          </div>
-
-          {/* Avg Order */}
-          <div
-            className="rpt-card"
-            style={{
-              ["--accent" as string]: "#0891b2",
-              ["--glow" as string]: "rgba(8,145,178,0.07)",
-            }}
-          >
-            <div className="rpt-card-accent" />
-            <div className="rpt-card-glow" />
-            <div className="rpt-kpi-label">Avg. Order Value</div>
-            <div
-              className={`rpt-kpi-value${loading ? " rpt-shimmer" : ""}`}
-              style={{ color: loading ? "#e5e7eb" : "#0891b2" }}
-            >
-              {loading ? "———" : formatCurrency(avgOrder)}
-            </div>
-            <div className="rpt-kpi-sub">
-              {loading ? "Loading…" : orders > 0 ? "Per completed order" : "No orders yet"}
-            </div>
-          </div>
-
-          {/* GST */}
+          <Stat
+            primary
+            label="Total Sales"
+            value={loading ? "———" : formatCurrency(sales)}
+            sub={loading ? "Loading…" : `${orders} orders`}
+          />
+          <Stat
+            label="Orders"
+            value={loading ? "——" : orders}
+            sub={loading ? "Loading…" : rangeLabel(preset, fromTs, toTs)}
+          />
+          <Stat
+            label="Avg. Order Value"
+            value={loading ? "———" : formatCurrency(avgOrder)}
+            sub={loading ? "Loading…" : orders > 0 ? "Per completed order" : "No orders yet"}
+          />
           {(loading || hasGst) && (
-          <div
-            className="rpt-card"
-            style={{
-              ["--accent" as string]: "#16a34a",
-              ["--glow" as string]: "rgba(22,163,74,0.07)",
-            }}
-          >
-            <div className="rpt-card-accent" />
-            <div className="rpt-card-glow" />
-            <div className="rpt-kpi-label">GST Collected</div>
-            <div
-              className={`rpt-kpi-value${loading ? " rpt-shimmer" : ""}`}
-              style={{ color: loading ? "#e5e7eb" : "#16a34a" }}
-            >
-              {loading ? "———" : formatCurrency(displayedGst)}
-            </div>
-            <div className="rpt-kpi-sub">
-              {loading
-                ? "Loading…"
-                : `${gstRateLabel} GST · CGST ${formatCurrency(cgst)} + SGST ${formatCurrency(sgst)}`}
-            </div>
-          </div>
+            <Stat
+              label="GST Collected"
+              value={loading ? "———" : formatCurrency(displayedGst)}
+              sub={
+                loading
+                  ? "Loading…"
+                  : `${gstRateLabel} GST · CGST ${formatCurrency(cgst)} + SGST ${formatCurrency(sgst)}`
+              }
+            />
           )}
-
-          {/* Discounts */}
           {(loading || discountTotal > 0) && (
-          <div
-            className="rpt-card"
-            style={{
-              ["--accent" as string]: "#dc2626",
-              ["--glow" as string]: "rgba(220,38,38,0.07)",
-            }}
-          >
-            <div className="rpt-card-accent" />
-            <div className="rpt-card-glow" />
-            <div className="rpt-kpi-label">Discounts Given</div>
-            <div
-              className={`rpt-kpi-value${loading ? " rpt-shimmer" : ""}`}
-              style={{ color: loading ? "#e5e7eb" : "#dc2626" }}
-            >
-              {loading ? "———" : formatCurrency(discountTotal)}
-            </div>
-            <div className="rpt-kpi-sub">
-              {loading ? "Loading…" : "Total discount deducted from orders"}
-            </div>
-          </div>
+            <Stat
+              label="Discounts Given"
+              value={loading ? "———" : formatCurrency(discountTotal)}
+              sub={loading ? "Loading…" : "Total discount deducted from orders"}
+            />
           )}
         </div>
 
@@ -886,7 +638,7 @@ setToTs(d.getTime());
               {payMethods.map((m) => (
                 <div key={m.label} className="rpt-pay-row">
                   <div className="rpt-pay-meta">
-                    <span style={{ fontSize: 13, fontWeight: 600, color: "#374151" }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: "var(--pos-tx-sec)" }}>
                       {m.label}
                     </span>
                     <div>
@@ -900,7 +652,7 @@ setToTs(d.getTime());
                       >
                         {loading ? "—" : formatCurrency(m.amount)}
                       </span>
-                      <span style={{ fontSize: 11, color: "#9ca3af", marginLeft: 7 }}>
+                      <span style={{ fontSize: 11, color: "var(--pos-tx-muted)", marginLeft: 7 }}>
                         {loading ? "" : `${m.pct}%`}
                       </span>
                     </div>
@@ -910,8 +662,7 @@ setToTs(d.getTime());
                       className="rpt-pay-bar-fill"
                       style={{
                         width: loading ? "0%" : `${m.pct}%`,
-                        background: `linear-gradient(90deg, ${m.color}99, ${m.color})`,
-                        boxShadow: `0 0 6px ${m.glow}`,
+                        background: "var(--pos-teal)",
                       }}
                     />
                   </div>
@@ -924,33 +675,14 @@ setToTs(d.getTime());
           {hasGst && (
           <div className="rpt-card" style={{ padding: 0 }}>
             <div className="rpt-section-title">GST Breakdown</div>
-            <table className="rpt-table">
-              <thead>
-                <tr>
-                  {["Tax Type", "Rate", "Taxable Amount", "Tax Amount"].map((h) => (
-                    <th key={h}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>CGST</td>
-                  <td>{gstHalfRateLabel}</td>
-                  <td>{formatCurrency(subtotalSales)}</td>
-                  <td>{formatCurrency(cgst)}</td>
-                </tr>
-                <tr>
-                  <td>SGST</td>
-                  <td>{gstHalfRateLabel}</td>
-                  <td>{formatCurrency(subtotalSales)}</td>
-                  <td>{formatCurrency(sgst)}</td>
-                </tr>
-                <tr className="rpt-total-row">
-                  <td colSpan={3}>Total GST</td>
-                  <td>{formatCurrency(displayedGst)}</td>
-                </tr>
-              </tbody>
-            </table>
+            <DataTable
+              headers={["Tax Type", "Rate", "Taxable Amount", "Tax Amount"]}
+              rows={[
+                ["CGST", gstHalfRateLabel, formatCurrency(subtotalSales), formatCurrency(cgst)],
+                ["SGST", gstHalfRateLabel, formatCurrency(subtotalSales), formatCurrency(sgst)],
+                ["Total GST", "", "", formatCurrency(displayedGst)],
+              ]}
+            />
           </div>
           )}
         </div>
@@ -962,7 +694,7 @@ setToTs(d.getTime());
                 <div className="rpt-section-title" style={{ padding: 0, borderBottom: "none" }}>
                   Category Sales
                 </div>
-                <div style={{ marginTop: 6, fontSize: 12, color: "#9ca3af" }}>
+                <div style={{ marginTop: 6, fontSize: 12, color: "var(--pos-tx-muted)" }}>
                   {formatCurrency(productSales.totals.totalSales)} sales -{" "}
                   {formatUnits(productSales.totals.totalUnits)} units
                 </div>
@@ -1063,27 +795,15 @@ setToTs(d.getTime());
             ) : hasItemSales ? (
               hasVisibleItemSales ? (
                 <>
-                  <div className="rpt-table-scroll">
-                    <table className="rpt-table">
-                      <thead>
-                        <tr>
-                          {["Item", "Category", "Units Sold", "Sales Amount"].map((h) => (
-                            <th key={h}>{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {visibleItemSales.map((item) => (
-                          <tr key={`${item.category}:${item.itemName}`}>
-                            <td>{item.itemName}</td>
-                            <td>{item.category}</td>
-                            <td>{formatUnits(item.units)}</td>
-                            <td>{formatCurrency(item.sales)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  <DataTable
+                    headers={["Item", "Category", "Units Sold", "Sales Amount"]}
+                    rows={visibleItemSales.map((item) => [
+                      item.itemName,
+                      item.category,
+                      formatUnits(item.units),
+                      formatCurrency(item.sales),
+                    ])}
+                  />
                   <div className="rpt-table-foot">
                     <span>
                       Showing {visibleItemSales.length} of {filteredItemSales.length} items

@@ -5,7 +5,8 @@ import "@fontsource/inter/latin-500.css";
 import "@fontsource/inter/latin-600.css";
 import "@fontsource/inter/latin-700.css";
 import "@fontsource/inter/latin-800.css";
-import "./ui/pos-theme.css";
+import "./ui/theme/base.css";
+import "./ui/theme/components/index.css";
 import App from "./ui/App";
 
 const rendererStartupT0 = typeof performance !== "undefined" ? performance.now() : Date.now();

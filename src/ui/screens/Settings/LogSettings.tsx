@@ -241,21 +241,21 @@ return "0 B";
           aria-pressed={activeTab === "logs"}
           onClick={() => setActiveTab("logs")}
         >
-          📋 Recent Logs
+           Recent Logs
         </button>
         <button
           className={`${styles.tabButton} ${activeTab === "archives" ? styles.active : ""}`}
           aria-pressed={activeTab === "archives"}
           onClick={() => setActiveTab("archives")}
         >
-          📦 Archives ({archiveStats.totalArchives})
+           Archives ({archiveStats.totalArchives})
         </button>
         <button
           className={`${styles.tabButton} ${activeTab === "recovery" ? styles.active : ""}`}
           aria-pressed={activeTab === "recovery"}
           onClick={() => setActiveTab("recovery")}
         >
-          🔄 Recovery
+           Recovery
         </button>
       </div>
 
@@ -284,17 +284,17 @@ return "0 B";
               onClick={() => handleExportLogs("json")}
               disabled={exportingLogs}
             >
-              📥 Export JSON
+               Export JSON
             </button>
             <button
               className={styles.button}
               onClick={() => handleExportLogs("csv")}
               disabled={exportingLogs}
             >
-              📊 Export CSV
+               Export CSV
             </button>
             <button className={`${styles.button} ${styles.danger}`} onClick={handleClearLogs}>
-              🗑️ Clear All Logs
+               Clear All Logs
             </button>
           </div>
 
@@ -346,13 +346,13 @@ return "0 B";
               onClick={handleBulkDeleteArchives}
               disabled={selectedArchives.size === 0}
             >
-              🗑️ Delete Selected ({selectedArchives.size})
+               Delete Selected ({selectedArchives.size})
             </button>
             <button
               className={`${styles.button} ${styles.warning}`}
               onClick={() => handleCleanupOldArchives(12)}
             >
-              🧹 Cleanup Archives &gt;1 year
+               Cleanup Archives &gt;1 year
             </button>
           </div>
 
@@ -380,13 +380,13 @@ return "0 B";
                       className={styles.buttonSmall}
                       onClick={() => handleExportArchive(archive._id)}
                     >
-                      📥 Export
+                       Export
                     </button>
                     <button
                       className={`${styles.buttonSmall} ${styles.danger}`}
                       onClick={() => handleDeleteArchive(archive._id)}
                     >
-                      🗑️ Delete
+                       Delete
                     </button>
                   </div>
                 </div>
@@ -443,14 +443,14 @@ return "0 B";
                   className={`${styles.button} ${styles.danger}`}
                   onClick={handleClearRecovery}
                 >
-                  ❌ Clear Recovery State
+                   Clear Recovery State
                 </button>
               </div>
             </div>
           ) : (
             <div className={styles.empty}>
               <p>No recovery state available</p>
-              <p style={{ fontSize: "0.9em", color: "#666" }}>
+              <p style={{ fontSize: "0.9em", color: "var(--pos-tx-sub)" }}>
                 Recovery data is created when the app crashes unexpectedly with unsaved orders
               </p>
             </div>

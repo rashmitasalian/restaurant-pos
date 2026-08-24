@@ -92,6 +92,7 @@ contextBridge.exposeInMainWorld("pos", {
     configuredCount: () => authInvoke("pos:tables:configured-count"),
     snapshot: () => authInvoke("pos:tables:snapshot"),
     setArea: (tableId, areaId) => authInvoke("pos:tables:set-area", tableId, areaId),
+    setSeats: (tableId, seats) => authInvoke("pos:tables:set-seats", tableId, seats),
   },
   seatingAreas: {
     list: (includeDisabled) => authInvoke("pos:seating-areas:list", includeDisabled),

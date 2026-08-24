@@ -50,6 +50,10 @@ import OrderList from "./components/OrderList";
 import PickButtons from "./components/PickButtons";
 import ItemSearch from "./components/ItemSearch";
 import BillingSidebar from "./components/BillingSidebar";
+import { BillingMenuBoard, BillingTicketPane } from "./components/BillingPanes";
+import { EmptyState } from "../../components/ui/EmptyState";
+import { MenuTile } from "../../components/ui/MenuTile";
+import { formatKotAge } from "../../../shared/kotAge";
 import {
   ConfirmCancelModal,
   KotPreviewModal,
@@ -72,6 +76,7 @@ import {
 
 const DEFAULT_KOT_PRINTER = "kitchen";
 const QUICK_FAVORITE_SHORTCUT_LIMIT = 6;
+const CATEGORY_VISIBLE = 6;
 
 type KotVoidRequest = {
   lineId: string;
@@ -289,6 +294,8 @@ export default function Billing() {
   const [order, setOrder] = React.useState<any>(null);
   const [tableNum, setTableNum] = React.useState<number | null>(null);
   const [items, setItems] = React.useState<any[]>([]);
+  const [menuCategory, setMenuCategory] = React.useState("all");
+  const [categoryMoreOpen, setCategoryMoreOpen] = React.useState(false);
   const [qty, setQty] = React.useState(1);
   const [lastAddedId, setLastAddedId] = React.useState<string | null>(null);
   const [discountPercent, setDiscountPercent] = React.useState(0);
@@ -323,7 +330,18 @@ export default function Billing() {
     }
   });
   const [tablesByArea, setTablesByArea] = React.useState<
-    Record<string, Array<{ id: number; status?: string; count?: number; total?: number }>>
+    Record<
+      string,
+      Array<{
+        id: number;
+        status?: string;
+        occupied?: boolean;
+        count?: number;
+        total?: number;
+        seats?: number;
+        openedAt?: number | null;
+      }>
+    >
   >({});
 
   React.useEffect(() => {
@@ -331,6 +349,19 @@ export default function Billing() {
       window.localStorage.setItem("billingSelectedArea", selectedAreaId || "area:main");
     } catch {}
   }, [selectedAreaId]);
+
+  React.useEffect(() => {
+    if (!categoryMoreOpen) {
+      return;
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setCategoryMoreOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [categoryMoreOpen]);
 
   // ── Modal state ─────────────────────────────────────────────────────────
   const [payModalOpen, setPayModalOpen] = React.useState(false);
@@ -410,15 +441,44 @@ export default function Billing() {
   const finalTotal = totals.total;
   const gstEnabled = totals.gstEnabled && taxTotal > 0;
   const gstHalfPct = formatGstRate(totals.gstHalfRateBps);
-  const gstFullPct = formatGstRate(totals.gstRateBps);
-  const showHeaderTotals = Boolean(order && (order.items || []).length > 0);
   const favorites = React.useMemo(
     () => (items || []).filter((it) => it.favorite === true && it.available !== false),
     [items],
   );
+  const menuCategories = React.useMemo(() => {
+    const cats = new Set<string>();
+    for (const it of items || []) {
+      if (it.available === false) {
+        continue;
+      }
+      const category = String(it.category || "").trim();
+      if (category) {
+        cats.add(category);
+      }
+    }
+    return Array.from(cats).sort((a, b) => a.localeCompare(b));
+  }, [items]);
+  const visibleMenuItems = React.useMemo(() => {
+    const available = (items || []).filter((it) => it.available !== false);
+    if (menuCategory === "favorites") {
+      return available.filter((it) => it.favorite === true);
+    }
+    if (menuCategory === "all") {
+      return available;
+    }
+    return available.filter((it) => String(it.category || "").trim() === menuCategory);
+  }, [items, menuCategory]);
   const quickFavoriteShortcuts = React.useMemo(
     () => favorites.slice(0, QUICK_FAVORITE_SHORTCUT_LIMIT),
     [favorites],
+  );
+  const visibleCategories = React.useMemo(
+    () => menuCategories.slice(0, CATEGORY_VISIBLE),
+    [menuCategories],
+  );
+  const overflowCategories = React.useMemo(
+    () => menuCategories.slice(CATEGORY_VISIBLE),
+    [menuCategories],
   );
   const menuItemsById = React.useMemo(() => {
     const map: Record<string, any> = {};
@@ -511,18 +571,36 @@ export default function Billing() {
       const snapshot = await getTablesSnapshot();
       const activeAreas = (snapshot.areas || []).filter((area) => area.active !== false);
       setTableAreas(activeAreas.map((area) => ({ id: area.id, name: area.name, active: area.active })));
-      const grouped: Record<string, Array<{ id: number; status?: string; count?: number; total?: number }>> = {};
+      const grouped: Record<
+        string,
+        Array<{
+          id: number;
+          status?: string;
+          occupied?: boolean;
+          count?: number;
+          total?: number;
+          seats?: number;
+          openedAt?: number | null;
+        }>
+      > = {};
       for (const area of activeAreas) {
         grouped[area.id] = [];
       }
       for (const table of snapshot.tables || []) {
         const areaId = String(table.areaId || "area:main");
         grouped[areaId] = grouped[areaId] || [];
+        const count = Number(table.count || 0);
+        const occupied = Boolean((table as { occupied?: boolean }).occupied) || count > 0;
         grouped[areaId].push({
           id: table.id,
           status: table.status || "",
-          count: Number(table.count || 0),
+          occupied,
+          count,
           total: Number(table.total || 0),
+          seats: Number((table as { seats?: number }).seats || 0) || undefined,
+          openedAt: occupied
+            ? Number((table as { openedAt?: number }).openedAt || 0) || null
+            : null,
         });
       }
       setTablesByArea(grouped);
@@ -620,6 +698,11 @@ export default function Billing() {
             setOrder(o);
             if (tableStr) {
               setTableNum(parseInt(tableStr, 10));
+              setView("table");
+            } else if (o) {
+              setTableNum(null);
+              setView(deriveOrderType(o, null));
+              setDiscountPercent(Number(o.discountPercent || 0));
             }
           }
         } else if (tableStr) {
@@ -1079,15 +1162,110 @@ export default function Billing() {
     setNewDeliveryPhone("");
   };
 
+  const beginNewModeOrder = (mode: ServiceMode) => {
+    if (mode.requiresTable) {
+      setView(mode.id);
+      setTablesOpenPersisted(true);
+      return;
+    }
+    setView(mode.id);
+    if (mode.id === "delivery") {
+      setNewDeliveryOpen(true);
+      return;
+    }
+    // Takeaway always uses the customer popup (fields optional unless requiresCustomer).
+    // Other non-table modes open it only when the mode requires customer details.
+    if (mode.id === "takeaway" || mode.requiresCustomer) {
+      setCustomerModeId(mode.id);
+      setNewTakeawayOpen(true);
+      return;
+    }
+    void createStandaloneOrder(mode.id, { serviceModeId: mode.id });
+  };
+
   // ── Select non-table order (from sidebar) ───────────────────────────────
-  const handleSelectOrder = (fullOrder: any) => {
-    setOrder(null); // clear immediately to avoid stale flash
-    setTableNum(null);
-    setDiscountPercent(0);
+  const handleSelectOrder = React.useCallback((fullOrder: any) => {
+    if (!fullOrder?._id) {
+      return;
+    }
     setOrder(fullOrder);
+    setTableNum(null);
+    setDiscountPercent(Number(fullOrder.discountPercent || 0));
     window.localStorage.setItem("currentOrderId", fullOrder._id);
     window.localStorage.removeItem("currentTable");
-  };
+    const modeId = deriveOrderType(fullOrder, null);
+    setView(modeId);
+    setTimeout(() => searchRef.current?.focus(), 50);
+  }, []);
+
+  const activateQueueOrder = React.useCallback(
+    async (summary: any) => {
+      if (!summary?._id) {
+        return false;
+      }
+      try {
+        const full = await getOrderById(summary._id);
+        if (!full || full.status === "paid" || full.status === "cancelled") {
+          return false;
+        }
+        handleSelectOrder(full);
+        return true;
+      } catch (error) {
+        logger.error("Billing: failed to open queue order", error as Error, {
+          orderId: summary._id,
+        });
+        return false;
+      }
+    },
+    [handleSelectOrder],
+  );
+
+  /** Prefer the most recently updated open order in a non-table mode queue. */
+  const pickPreferredQueueOrder = React.useCallback((queue: any[]) => {
+    if (!queue?.length) {
+      return null;
+    }
+    return [...queue].sort((a, b) => Number(b.updatedAt || b.createdAt || 0) - Number(a.updatedAt || a.createdAt || 0))[0];
+  }, []);
+
+  // When viewing a non-table mode, keep center/ticket synced with the sidebar queue.
+  React.useEffect(() => {
+    const mode = findServiceModeById({ modes: serviceModes }, view);
+    if (!mode || mode.requiresTable) {
+      return;
+    }
+    const queue = modeOrders[view] || [];
+    if (queue.length === 0) {
+      return;
+    }
+    const orderBelongsHere = Boolean(order) && deriveOrderType(order, tableNum) === view;
+    if (orderBelongsHere) {
+      return;
+    }
+    const preferred = pickPreferredQueueOrder(queue);
+    if (!preferred) {
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const full = await getOrderById(preferred._id);
+      if (cancelled || !full || full.status === "paid" || full.status === "cancelled") {
+        return;
+      }
+      handleSelectOrder(full);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    view,
+    modeOrders,
+    serviceModes,
+    order,
+    tableNum,
+    handleSelectOrder,
+    pickPreferredQueueOrder,
+  ]);
 
   // ── KOT ─────────────────────────────────────────────────────────────────
   const sendKOT = async () => {
@@ -1704,8 +1882,207 @@ export default function Billing() {
   return (
     <>
       <div className={styles.page}>
-        {/* Header bar */}
-        <div className={styles.headerBar}>
+        <div className={styles.bodyRow}>
+          <BillingSidebar
+            open={tablesOpen}
+            serviceModes={serviceModes}
+            view={view}
+            onViewChange={(newView) => {
+              setView(newView);
+              const targetMode = findServiceModeById({ modes: serviceModes }, newView);
+              const orderBelongsToView =
+                Boolean(order) &&
+                ((activeMode?.requiresTable === true && targetMode?.requiresTable === true) ||
+                  activeOrderType === newView);
+
+              if (orderBelongsToView) {
+                return;
+              }
+
+              // Leaving the current order's mode — clear, then auto-load for non-table queues.
+              setOrder(null);
+              setTableNum(null);
+              setDiscountPercent(0);
+              window.localStorage.removeItem("currentOrderId");
+              window.localStorage.removeItem("currentTable");
+
+              if (targetMode && !targetMode.requiresTable) {
+                const preferred = pickPreferredQueueOrder(modeOrders[newView] || []);
+                if (preferred) {
+                  void activateQueueOrder(preferred);
+                }
+              }
+            }}
+            tableAreas={tableAreas}
+            selectedAreaId={selectedAreaId}
+            onSelectArea={setSelectedAreaId}
+            tablesByArea={tablesByArea}
+            tableNum={tableNum}
+            activeOrderType={activeOrderType}
+            modeOrders={modeOrders}
+            onLoadTable={loadTable}
+            currentOrderId={order?._id}
+            onSelectOrder={handleSelectOrder}
+            onCreateMode={beginNewModeOrder}
+            formatCurrency={formatCurrency}
+          />
+
+          <BillingMenuBoard>
+            {/* ── No active order: welcome card ──────────────────────────── */}
+            {!order && (
+              <div className={styles.noOrderBox}>
+                <div className={styles.noOrderCard}>
+                  <EmptyState
+                    title={
+                      !findServiceModeById({ modes: serviceModes }, view)?.requiresTable &&
+                      (modeOrders[view] || []).length > 0
+                        ? "Select an order"
+                        : "No active order"
+                    }
+                    text={
+                      !findServiceModeById({ modes: serviceModes }, view)?.requiresTable &&
+                      (modeOrders[view] || []).length > 0
+                        ? "Choose an order from the sidebar, or start a new one below"
+                        : "Pick a service mode from the sidebar, or start a new order below"
+                    }
+                  />
+                  <PickButtons
+                    serviceModes={serviceModes}
+                    onSelectMode={(mode) => {
+                      setTablesOpenPersisted(true);
+                      if (mode.requiresTable) {
+                        setView(mode.id);
+                        return;
+                      }
+                      const preferred = pickPreferredQueueOrder(modeOrders[mode.id] || []);
+                      if (preferred) {
+                        void activateQueueOrder(preferred);
+                        return;
+                      }
+                      beginNewModeOrder(mode);
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* ── Active order: search + categories + menu ─── */}
+            {order && (
+              <>
+                <ItemSearch
+                  items={items}
+                  onSelect={(item) => addToOrder(item, qty)}
+                  inputRef={searchRef}
+                />
+
+                <div className={styles.categoryRail} role="tablist" aria-label="Menu categories">
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={menuCategory === "favorites"}
+                    className={`${styles.categoryChip} ${menuCategory === "favorites" ? styles.categoryChipActive : ""}`}
+                    onClick={() => {
+                      setMenuCategory("favorites");
+                      setCategoryMoreOpen(false);
+                    }}
+                  >
+                    Favorites
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={menuCategory === "all"}
+                    className={`${styles.categoryChip} ${menuCategory === "all" ? styles.categoryChipActive : ""}`}
+                    onClick={() => {
+                      setMenuCategory("all");
+                      setCategoryMoreOpen(false);
+                    }}
+                  >
+                    All
+                  </button>
+                  {visibleCategories.map((category) => (
+                    <button
+                      key={category}
+                      type="button"
+                      role="tab"
+                      aria-selected={menuCategory === category}
+                      className={`${styles.categoryChip} ${menuCategory === category ? styles.categoryChipActive : ""}`}
+                      onClick={() => {
+                        setMenuCategory(category);
+                        setCategoryMoreOpen(false);
+                      }}
+                    >
+                      {category}
+                    </button>
+                  ))}
+                  {overflowCategories.length > 0 ? (
+                    <div className={styles.categoryMoreWrap}>
+                      <button
+                        type="button"
+                        className={`${styles.categoryChip} ${
+                          overflowCategories.includes(menuCategory) ? styles.categoryChipActive : ""
+                        }`}
+                        aria-expanded={categoryMoreOpen}
+                        aria-haspopup="listbox"
+                        aria-controls="category-more"
+                        onClick={() => setCategoryMoreOpen((open) => !open)}
+                      >
+                        More ▾
+                      </button>
+                      {categoryMoreOpen ? (
+                        <div
+                          id="category-more"
+                          className={styles.morePanel}
+                          role="listbox"
+                          aria-label="More categories"
+                        >
+                          {overflowCategories.map((category) => (
+                            <button
+                              key={category}
+                              type="button"
+                              role="option"
+                              aria-selected={menuCategory === category}
+                              className={`${styles.moreOption} ${
+                                menuCategory === category ? styles.moreOptionActive : ""
+                              }`}
+                              onClick={() => {
+                                setMenuCategory(category);
+                                setCategoryMoreOpen(false);
+                              }}
+                            >
+                              {category}
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+
+                {visibleMenuItems.length > 0 ? (
+                  <div className={styles.menuBoard} role="list" aria-label="Menu items">
+                    {visibleMenuItems.map((f) => (
+                      <MenuTile
+                        key={f._id}
+                        name={f.name}
+                        priceLabel={itemPriceSummary(f, formatCurrency)}
+                        meta={
+                          Array.isArray(f.variants) && f.variants.length > 0
+                            ? `${f.variants.length} option${f.variants.length !== 1 ? "s" : ""}`
+                            : String(f.category || "").trim() || undefined
+                        }
+                        onClick={() => addToOrder(f, qty)}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyState title="No items" text="Nothing in this category yet" />
+                )}
+              </>
+            )}
+          </BillingMenuBoard>
+          <BillingTicketPane>
+            <div className={styles.ticketContext}>
           <div className={styles.headerLeft}>
             <button
               onClick={() => setTablesOpenPersisted(!tablesOpen)}
@@ -1713,14 +2090,14 @@ export default function Billing() {
               title="Toggle tables (T)"
               className={styles.toggleBtn}
             >
-              ☰
+              Menu
             </button>
             <div>
               <div className={styles.headerTitle}>
                 {tableNum
                   ? `Table ${tableNum}`
                   : order && activeOrderType === "delivery"
-                    ? `🚚 ${order.meta?.platform || order.meta?.orderSource || "Delivery"}${order.meta?.code ? ` #${order.meta.code}` : ""}`
+                    ? `${order.meta?.platform || order.meta?.orderSource || "Delivery"}${order.meta?.code ? ` #${order.meta.code}` : ""}`
                     : order && !activeMode?.requiresTable
                       ? `${modeOrderLabel(activeMode, order)}${order.meta?.customerName && activeMode?.id !== "takeaway" ? ` - ${order.meta.customerName}` : ""}`
                       : "Billing"}
@@ -1728,6 +2105,8 @@ export default function Billing() {
               {order && (
                 <div className={styles.headerMeta}>
                   {(order.items || []).length} item{(order.items || []).length !== 1 ? "s" : ""}
+                  {" · "}
+                  {formatKotAge(Number(order.createdAt) || Date.now())}
                   {order.status && order.status !== "open" && (
                     <span
                       className={
@@ -1746,254 +2125,8 @@ export default function Billing() {
               )}
             </div>
           </div>
-
-          {/* Live totals */}
-          <div
-            className={`${styles.headerTotals} ${showHeaderTotals ? "" : styles.headerTotalsHidden}`}
-            aria-hidden={!showHeaderTotals}
-          >
-              <div className={styles.textRight}>
-                <div className={styles.textMuted}>SUBTOTAL</div>
-                <div className={styles.headerValue}>{formatCurrency(subtotal)}</div>
-              </div>
-              {gstEnabled && (
-                <div className={styles.textRight}>
-                  <div className={styles.textMuted}>GST {gstFullPct}</div>
-                  <div className={styles.headerValue}>{formatCurrency(taxTotal)}</div>
-                </div>
-              )}
-              <div className={styles.totalsBadge}>
-                <div className={styles.textMuted}>TOTAL</div>
-                <div className={styles.largeValue}>{formatCurrency(finalTotal)}</div>
-              </div>
-          </div>
-
-          {/* Action buttons */}
-          <div className={styles.actionGroup}>
-            {allowsManualKot && (
-              <button
-                onClick={sendKOT}
-                disabled={!canKot}
-                aria-disabled={!canKot}
-                title={unsentKotItems.length > 0 ? "Send KOT (K)" : "No new KOT items to send"}
-                className={`${styles.actionBtn} ${styles.actionPrimary}`}
-              >
-                {kotPrinting ? "Printing..." : "KOT"}
-              </button>
-            )}
-            {allowsManualBillPrint && (
-              <button
-                onClick={handlePrintBill}
-                disabled={!canPrintBill}
-                aria-disabled={!canPrintBill}
-                title="Print bill for customer to review (B)"
-                className={`${styles.actionBtn} ${styles.actionSecondary}`}
-              >
-                {billPrinting ? "Printing..." : "Print Bill"}
-              </button>
-            )}
-            {!activeMode?.externalPayment && (
-              <button
-                onClick={() => setPayModalOpen(true)}
-                disabled={!canStartPayment}
-                aria-disabled={!canStartPayment}
-                title={`Settle bill and run payment print flow: ${paymentFlowLabel(activeMode)} (P)`}
-                className={`${styles.actionBtn} ${styles.actionPay}`}
-              >
-                {paymentProcessing ? "Processing..." : "Settle"}
-              </button>
-            )}
-            {showPaymentFlowHint && (
-              <span className={styles.paymentFlowChip}>On pay: {paymentFlowLabel(activeMode)}</span>
-            )}
-            <button
-              onClick={() => setConfirmCancelOpen(true)}
-              disabled={!canStartCancel}
-              aria-disabled={!canStartCancel}
-              title="Cancel order (C)"
-              className={`${styles.actionBtn} ${styles.actionDanger}`}
-            >
-              {cancelProcessing ? "Cancelling..." : "Cancel"}
-            </button>
-            {order && supportsMarkReady && (
-              <>
-                <button
-                  onClick={markReady}
-                  disabled={markReadyProcessing}
-                  title="Mark order as ready"
-                  className={styles.actionTertiary}
-                  style={
-                    order.status === "ready" ? { background: "#16a34a", color: "#fff" } : undefined
-                  }
-                >
-                  {markReadyProcessing
-                    ? "Saving..."
-                    : order.status === "ready"
-                      ? "✓ Ready"
-                      : "Mark Ready"}
-                </button>
-                {activeOrderType === "delivery" && (
-                  <>
-                    <button
-                      onClick={openAssignRider}
-                      disabled={!order || isPaid || assignRiderProcessing}
-                      title="Assign or update rider"
-                      className={styles.actionSecondary}
-                    >
-                      {assignRiderProcessing
-                        ? "Saving..."
-                        : (order.meta as any)?.rider?.name
-                          ? "Update Rider"
-                          : "Assign Rider"}
-                    </button>
-                    <button
-                      onClick={handleMarkDelivered}
-                      disabled={!hasItems || isPaid || deliveryProcessing}
-                      title="Mark order as delivered (paid via aggregator)"
-                      className={`${styles.actionBtn} ${styles.actionPay}`}
-                    >
-                      {deliveryProcessing ? "Processing..." : "Delivered"}
-                    </button>
-                    <button
-                      onClick={printAggregatorReceipt}
-                      disabled={!order || aggregatorPrinting}
-                      title="Print bill for delivery customer"
-                      className={styles.actionSecondary}
-                    >
-                      {aggregatorPrinting ? "Printing..." : "Print Bill"}
-                    </button>
-                  </>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Body */}
-        <div className={styles.bodyRow}>
-          <BillingSidebar
-            open={tablesOpen}
-            serviceModes={serviceModes}
-            view={view}
-            onViewChange={(newView) => {
-              setView(newView);
-              // Clear the active order when switching to a different tab type
-              // so the main panel shows the overview for the selected tab.
-              if (order) {
-                const targetMode = findServiceModeById({ modes: serviceModes }, newView);
-                const orderBelongsToView =
-                  (activeMode?.requiresTable === true && targetMode?.requiresTable === true) ||
-                  activeOrderType === newView;
-                if (!orderBelongsToView) {
-                  setOrder(null);
-                  setTableNum(null);
-                  setDiscountPercent(0);
-                  window.localStorage.removeItem("currentOrderId");
-                  window.localStorage.removeItem("currentTable");
-                }
-              }
-            }}
-            tableAreas={tableAreas}
-            selectedAreaId={selectedAreaId}
-            onSelectArea={setSelectedAreaId}
-            tablesByArea={tablesByArea}
-            tableNum={tableNum}
-            activeOrderType={activeOrderType}
-            modeOrders={modeOrders}
-            onLoadTable={loadTable}
-            currentOrderId={order?._id}
-            onSelectOrder={handleSelectOrder}
-            onCreateMode={(mode) => {
-              if (mode.requiresTable) {
-                setView(mode.id);
-                setTablesOpenPersisted(true);
-                return;
-              }
-              if (mode.id === "delivery") {
-                setNewDeliveryOpen(true);
-                return;
-              }
-              if (mode.requiresCustomer) {
-                setCustomerModeId(mode.id);
-                setNewTakeawayOpen(true);
-                return;
-              }
-              createStandaloneOrder(mode.id, { serviceModeId: mode.id });
-            }}
-            formatCurrency={formatCurrency}
-          />
-
-          <div className={styles.mainContent}>
-            {/* ── No active order: welcome card ──────────────────────────── */}
-            {!order && (
-              <div className={styles.noOrderBox}>
-                <div className={styles.noOrderCard}>
-                  <div className={styles.noOrderEmoji}>🍽️</div>
-                  <div className={styles.noOrderTitle}>No active order</div>
-                  <div className={styles.noOrderText}>
-                    Pick a service mode from the sidebar, or start a new order below
-                  </div>
-                  <PickButtons
-                    serviceModes={serviceModes}
-                    onSelectMode={(mode) => {
-                      setTablesOpenPersisted(true);
-                      if (mode.requiresTable) {
-                        setView(mode.id);
-                        return;
-                      }
-                      setView(mode.id);
-                      if (mode.id === "delivery") {
-                        setNewDeliveryOpen(true);
-                        return;
-                      }
-                      if (mode.requiresCustomer) {
-                        setCustomerModeId(mode.id);
-                        setNewTakeawayOpen(true);
-                        return;
-                      }
-                      createStandaloneOrder(mode.id, { serviceModeId: mode.id });
-                    }}
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* ── Active order: search + items ───────────────────────────── */}
-            {order && (
-              <>
-                {/* Item search */}
-                <ItemSearch
-                  items={items}
-                  onSelect={(item) => addToOrder(item, qty)}
-                  inputRef={searchRef}
-                />
-
-                {/* Favorites */}
-                {favorites.length > 0 && (
-                  <div className={styles.favRow}>
-                    {favorites.map((f, i) => {
-                      const shortcutNumber = i < QUICK_FAVORITE_SHORTCUT_LIMIT ? i + 1 : null;
-                      return (
-                        <button
-                          key={f._id}
-                          type="button"
-                          onClick={() => addToOrder(f, qty)}
-                          className={styles.favButton}
-                        >
-                          <div className={styles.favTitle}>{f.name}</div>
-                          <div className={styles.favMeta}>
-                            {itemPriceSummary(f, formatCurrency)}
-                            {Array.isArray(f.variants) && f.variants.length > 0
-                              ? ` · ${f.variants.length} option${f.variants.length !== 1 ? "s" : ""}`
-                              : ""}
-                            {shortcutNumber ? ` · [${shortcutNumber}]` : ""}
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-
+            </div>
+            <div className={styles.ticketBody}>
                 {/* Order items + totals */}
                 <section>
                   {(order?.items || []).length > 0 ? (
@@ -2017,7 +2150,9 @@ export default function Billing() {
                       className={styles.textMuted}
                       style={{ textAlign: "center", padding: "28px 0", fontSize: 14 }}
                     >
-                      No items yet &mdash; search above to add
+                      {order
+                        ? "No items yet — search above to add"
+                        : "No order selected"}
                     </div>
                   )}
                   <div className={styles.totalsBox}>
@@ -2078,17 +2213,116 @@ export default function Billing() {
                     </div>
                   </div>
                 </section>
+            </div>
+            <div className={styles.ticketActions}>
+          <div className={styles.actionGroup}>
+            {allowsManualKot && (
+              <button
+                onClick={sendKOT}
+                disabled={!canKot}
+                aria-disabled={!canKot}
+                title={unsentKotItems.length > 0 ? "Send KOT (K)" : "No new KOT items to send"}
+                className={`${styles.actionBtn} ${styles.actionPrimary}`}
+              >
+                {kotPrinting ? "Printing..." : "KOT"}
+              </button>
+            )}
+            {allowsManualBillPrint && (
+              <button
+                onClick={handlePrintBill}
+                disabled={!canPrintBill}
+                aria-disabled={!canPrintBill}
+                title="Print bill for customer to review (B)"
+                className={`${styles.actionBtn} ${styles.actionSecondary}`}
+              >
+                {billPrinting ? "Printing..." : "Print Bill"}
+              </button>
+            )}
+            {!activeMode?.externalPayment && (
+              <button
+                onClick={() => setPayModalOpen(true)}
+                disabled={!canStartPayment}
+                aria-disabled={!canStartPayment}
+                title={`Settle bill and run payment print flow: ${paymentFlowLabel(activeMode)} (P)`}
+                className={`${styles.actionBtn} ${styles.actionPay}`}
+              >
+                {paymentProcessing ? "Processing..." : "Settle"}
+              </button>
+            )}
+            {showPaymentFlowHint && (
+              <span className={styles.paymentFlowChip}>On pay: {paymentFlowLabel(activeMode)}</span>
+            )}
+            <button
+              onClick={() => setConfirmCancelOpen(true)}
+              disabled={!canStartCancel}
+              aria-disabled={!canStartCancel}
+              title="Cancel order (C)"
+              className={`${styles.actionBtn} ${styles.actionDanger}`}
+            >
+              {cancelProcessing ? "Cancelling..." : "Cancel"}
+            </button>
+            {order && supportsMarkReady && (
+              <>
+                <button
+                  onClick={markReady}
+                  disabled={markReadyProcessing}
+                  title="Mark order as ready"
+                  className={styles.actionTertiary}
+                  style={
+                    order.status === "ready" ? { background: "var(--pos-success)", color: "var(--pos-surface)" } : undefined
+                  }
+                >
+                  {markReadyProcessing
+                    ? "Saving..."
+                    : order.status === "ready"
+                      ? "Ready"
+                      : "Mark Ready"}
+                </button>
+                {activeOrderType === "delivery" && (
+                  <>
+                    <button
+                      onClick={openAssignRider}
+                      disabled={!order || isPaid || assignRiderProcessing}
+                      title="Assign or update rider"
+                      className={styles.actionSecondary}
+                    >
+                      {assignRiderProcessing
+                        ? "Saving..."
+                        : (order.meta as any)?.rider?.name
+                          ? "Update Rider"
+                          : "Assign Rider"}
+                    </button>
+                    <button
+                      onClick={handleMarkDelivered}
+                      disabled={!hasItems || isPaid || deliveryProcessing}
+                      title="Mark order as delivered (paid via aggregator)"
+                      className={`${styles.actionBtn} ${styles.actionPay}`}
+                    >
+                      {deliveryProcessing ? "Processing..." : "Delivered"}
+                    </button>
+                    <button
+                      onClick={printAggregatorReceipt}
+                      disabled={!order || aggregatorPrinting}
+                      title="Print bill for delivery customer"
+                      className={styles.actionSecondary}
+                    >
+                      {aggregatorPrinting ? "Printing..." : "Print Bill"}
+                    </button>
+                  </>
+                )}
               </>
             )}
-
+          </div>
+            </div>
             <div className={styles.keyboardHint}>
               {allowsManualKot ? "K — KOT · " : ""}
               {allowsManualBillPrint ? "B — Print Bill · " : ""}
               P — Settle ({paymentFlowLabel(activeMode)}) &nbsp;·&nbsp; C — Cancel &nbsp;·&nbsp; U / Ctrl+Z — Undo
-              &nbsp;·&nbsp; 1-6 - Quick add first favorites
+              &nbsp;·&nbsp; 1-6 — Favorites
             </div>
-          </div>
+          </BillingTicketPane>
         </div>
+
 
         {/* ── Modals ────────────────────────────────────────────────────── */}
         {confirmCancelOpen && order && (
@@ -2133,6 +2367,9 @@ export default function Billing() {
             phone={newTakeawayPhone}
             onNameChange={setNewTakeawayName}
             onPhoneChange={setNewTakeawayPhone}
+            requiresCustomer={Boolean(
+              findServiceModeById({ modes: serviceModes }, customerModeId)?.requiresCustomer,
+            )}
             onClose={() => {
               setNewTakeawayOpen(false);
               setNewTakeawayName("");
@@ -2153,6 +2390,9 @@ export default function Billing() {
             onCustomerNameChange={setNewDeliveryName}
             customerPhone={newDeliveryPhone}
             onCustomerPhoneChange={setNewDeliveryPhone}
+            requiresCustomer={Boolean(
+              findServiceModeById({ modes: serviceModes }, "delivery")?.requiresCustomer,
+            )}
             onClose={() => {
               setNewDeliveryOpen(false);
               setNewDeliveryCode("");

@@ -8,6 +8,15 @@ import {
   type ManagerSection,
 } from "./screens/Manager/managerSections";
 import ErrorBoundary from "./components/ErrorBoundary";
+import { Icon } from "./components/ui/Icon";
+import {
+  LayoutGrid,
+  Receipt,
+  ChefHat,
+  BarChart3,
+  Users,
+  Settings2,
+} from "lucide-react";
 import { AuthProvider, AuthContext } from "./context/AuthContext";
 import { ToastProvider } from "./context/ToastContext";
 import { useFocusTrap } from "./hooks/useFocusTrap";
@@ -33,20 +42,7 @@ const ChangePasswordScreen = React.lazy(() => import("./screens/Login/ChangePass
 const SetupScreen = React.lazy(() => import("./screens/Login/SetupScreen"));
 
 function ScreenLoadingFallback() {
-  return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        height: "100%",
-        color: "#9ca3af",
-        fontSize: 14,
-      }}
-    >
-      Loading…
-    </div>
-  );
+  return <div className="pos-skeleton">Loading…</div>;
 }
 
 type Page = "tables" | "billing" | "kot" | "reports" | "customers" | "manager";
@@ -125,12 +121,12 @@ function MainContent({
 
     // Role-based navigation
     const navItems = [
-      { k: "tables", t: "Tables", icon: "▦" },
-      { k: "billing", t: "Billing", icon: "⊟" },
-      { k: "kot", t: "KOT Queue", icon: "⊕" },
-      { k: "reports", t: "Reports", icon: "≡" },
-      { k: "customers", t: "Customers", icon: "⊛" },
-      { k: "manager", t: "Manager", icon: "MG" },
+      { k: "tables", t: "Tables", icon: LayoutGrid },
+      { k: "billing", t: "Billing", icon: Receipt },
+      { k: "kot", t: "KOT Queue", icon: ChefHat },
+      { k: "reports", t: "Reports", icon: BarChart3 },
+      { k: "customers", t: "Customers", icon: Users },
+      { k: "manager", t: "Manager", icon: Settings2 },
     ];
 
     const [enabledServiceModes, setEnabledServiceModes] = React.useState(() =>
@@ -362,20 +358,7 @@ function MainContent({
     // is in progress. This prevents any brief window where a tampered localStorage
     // role could be rendered.
     if (auth?.loading) {
-      return (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            height: "100%",
-            color: "#9ca3af",
-            fontSize: 14,
-          }}
-        >
-          Loading…
-        </div>
-      );
+      return <div className="pos-skeleton">Loading…</div>;
     }
     if (!auth?.session) {
       // First-run: no users exist, so show setup wizard instead of login.
@@ -403,218 +386,48 @@ function MainContent({
     }
 
     return (
-      <div
-        id="app-root"
-        // pin app-root to viewport so body can't scroll; main will be the single scroller
-        style={{
-          position: "fixed",
-          inset: 0,
-          display: "flex",
-          overflow: "hidden",
-          flexDirection: "column",
-        }}
-      >
-        <header id="app-header" style={{ userSelect: "none", flexShrink: 0 }}>
-          <style>{`
-            .skip-link {
-              position: fixed;
-              top: 8px;
-              left: 8px;
-              z-index: 5000;
-              transform: translateY(-140%);
-              background: #111827;
-              color: #fff;
-              padding: 8px 12px;
-              border-radius: 8px;
-              font-size: 13px;
-              font-weight: 800;
-              text-decoration: none;
-              transition: transform 120ms ease;
-            }
-            .skip-link:focus {
-              transform: translateY(0);
-            }
-            .hdr-nav-btn {
-              display: flex; align-items: center;
-              padding: 0 16px; height: 100%;
-              background: transparent; border: none;
-              border-bottom: 2.5px solid transparent;
-              border-top: 2.5px solid transparent;
-              color: #78716c; font-weight: 500; font-size: 13px;
-              cursor: pointer; white-space: nowrap; outline: none;
-              transition: color 140ms, border-color 140ms, background 140ms;
-            }
-            .hdr-nav-btn:hover {
-              color: #292524;
-              background: #fff7ed;
-              border-bottom-color: #fcd34d;
-            }
-            .hdr-nav-btn.hdr-active {
-              color: #92400e;
-              font-weight: 700;
-              border-bottom-color: #f59e0b;
-              background: #fffbeb;
-            }
-            .hdr-nav-btn:focus-visible,
-            .hdr-user-btn:focus-visible,
-            .hdr-dd-item:focus-visible {
-              outline: 2px solid #f59e0b;
-              outline-offset: 2px;
-              box-shadow: 0 0 0 3px rgba(245,158,11,0.2);
-            }
-            .hdr-user-btn {
-              display: flex; align-items: center; gap: 8px;
-              background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px;
-              padding: 5px 10px 5px 6px; cursor: pointer;
-              transition: background 120ms, border-color 120ms;
-            }
-            .hdr-user-btn:hover { background: #f1f5f9; border-color: #cbd5e1; }
-            .hdr-dropdown {
-              position: absolute; right: 0; top: calc(100% + 6px);
-              min-width: 182px; background: #fff;
-              border: 1px solid #e2e8f0;
-              box-shadow: 0 8px 30px rgba(15,23,42,0.10), 0 2px 6px rgba(15,23,42,0.06);
-              border-radius: 12px; overflow: hidden; z-index: 2000;
-              animation: hdrFadeIn 100ms ease;
-            }
-            .hdr-dd-item {
-              display: block; width: 100%; padding: 10px 16px;
-              text-align: left; border: none; background: transparent;
-              font-size: 13px; font-weight: 500; color: #374151; cursor: pointer;
-              transition: background 80ms;
-            }
-            .hdr-dd-item:hover { background: #f8fafc; }
-            .hdr-dd-danger { color: #dc2626; font-weight: 700; }
-            .hdr-dd-danger:hover { background: #fef2f2; }
-            .hdr-dd-sep { height: 1px; background: #f1f5f9; margin: 2px 0; }
-            @keyframes hdrFadeIn {
-              from { opacity: 0; transform: translateY(-4px); }
-              to   { opacity: 1; transform: translateY(0); }
-            }
-          `}</style>
-
-          {/* Top bar */}
-          <a className="skip-link" href="#main-content">
-            Skip to content
-          </a>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              padding: "0 20px",
-              height: 54,
-              background: "#ffffff",
-              borderBottom: "1px solid #e2e8f0",
-              gap: 14,
-            }}
-          >
-            {/* Product + restaurant brand */}
-            <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <img
-                  src={restoNitiMark}
-                  alt=""
-                  style={{ width: 34, height: 34, borderRadius: 9, display: "block" }}
-                />
-                <div style={{ fontWeight: 900, fontSize: 17, letterSpacing: -0.3, lineHeight: 1 }}>
-                  <span style={{ color: "#111827" }}>Resto</span>
-                  <span style={{ color: "#f59e0b" }}>Niti</span>
-                </div>
-              </div>
-
-              {(branding.logoDataUrl || branding.hotelName) && (
-                <>
-                  <div style={{ width: 1, height: 28, background: "#e2e8f0" }} />
-
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    {branding.logoDataUrl && (
-                      <img
-                        src={branding.logoDataUrl}
-                        alt=""
-                        style={{
-                          width: 36,
-                          height: 36,
-                          borderRadius: 10,
-                          objectFit: "contain",
-                          border: "1px solid #e2e8f0",
-                          background: "#fff",
-                          padding: 3,
-                          flexShrink: 0,
-                        }}
-                      />
-                    )}
-                    {branding.hotelName && (
-                      <div style={{ lineHeight: 1 }}>
-                        <div
-                          style={{
-                            fontWeight: 800,
-                            fontSize: 15,
-                            color: "#0f172a",
-                            letterSpacing: -0.3,
-                          }}
-                        >
-                          {branding.hotelName}
-                        </div>
-                        <div
-                          style={{
-                            fontSize: 10,
-                            fontWeight: 700,
-                            color: "#f59e0b",
-                            marginTop: 2,
-                            letterSpacing: "0.1em",
-                          }}
-                        >
-                          {branding.tagline}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </>
-              )}
+      <div id="app-root" className="pos-shell">
+        <a className="pos-skip-link" href="#main-content">
+          Skip to content
+        </a>
+        <header id="app-header" className="pos-header">
+          <div className="pos-brand-lockup">
+            <img src={restoNitiMark} alt="" className="pos-brand-mark" />
+            <div className="pos-brand-name">
+              <span className="pos-brand-resto">Resto</span>
+              <span className="pos-brand-niti">Niti</span>
             </div>
-
-            {/* Vertical rule */}
-            <div style={{ width: 1, height: 28, background: "#e2e8f0", flexShrink: 0 }} />
-
-            <div style={{ flex: 1 }} />
-
-            {/* Clock pill */}
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                background: "#f8fafc",
-                border: "1px solid #e2e8f0",
-                borderRadius: 10,
-                padding: "5px 13px",
-              }}
-            >
-              <div
-                style={{
-                  width: 7,
-                  height: 7,
-                  borderRadius: "50%",
-                  background: "#22c55e",
-                  boxShadow: "0 0 0 2.5px rgba(34,197,94,0.2)",
-                  flexShrink: 0,
-                }}
-              />
-              <div style={{ lineHeight: 1 }}>
-                <div
-                  style={{
-                    fontSize: 14,
-                    fontWeight: 800,
-                    color: "#0f172a",
-                    fontVariantNumeric: "tabular-nums",
-                    letterSpacing: 0.4,
-                  }}
-                >
+          </div>
+          <nav id="main-nav" className="pos-nav" aria-label="Main navigation">
+            {navItems
+              .filter((n) => effectiveAllowedPages.includes(n.k))
+              .map((it) => {
+                const active = page === it.k;
+                return (
+                  <button
+                    key={it.k}
+                    type="button"
+                    className={`hdr-nav-btn${active ? " hdr-active" : ""}`}
+                    aria-current={active ? "page" : undefined}
+                    onClick={() => {
+                      setPage(it.k as any);
+                      window.location.hash = `#${it.k}`;
+                    }}
+                  >
+                    <Icon icon={it.icon} size="sm" />
+                    {it.t}
+                  </button>
+                );
+              })}
+          </nav>
+          <div className="pos-header-end">
+            <div className="pos-clock">
+              <div className="pos-clock-dot" aria-label="Online" />
+              <div>
+                <div className="pos-clock-time">
                   {now.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
                 </div>
-                <div
-                  style={{ fontSize: 10, color: "#94a3b8", marginTop: 2, letterSpacing: "0.02em" }}
-                >
+                <div className="pos-clock-date">
                   {now.toLocaleDateString("en-IN", {
                     weekday: "short",
                     day: "numeric",
@@ -623,71 +436,41 @@ function MainContent({
                 </div>
               </div>
             </div>
-
-            {/* User menu */}
-            <div ref={userMenuRef as any} style={{ position: "relative" }}>
+            <div ref={userMenuRef as any} className="pos-user-menu">
               <button
                 className="hdr-user-btn"
                 onClick={() => setUserMenuOpen((s) => !s)}
                 aria-haspopup="menu"
                 aria-expanded={userMenuOpen}
-                style={{ background: "#f8fafc", border: "1px solid #e2e8f0" }}
+                aria-label={[
+                  auth.session.displayName || auth.session.username,
+                  branding.hotelName || auth.session.role,
+                ]
+                  .filter(Boolean)
+                  .join(", ")}
               >
-                <div
-                  style={{
-                    width: 28,
-                    height: 28,
-                    borderRadius: 8,
-                    background:
-                      auth.session.role === "admin"
-                        ? "linear-gradient(135deg, #7c3aed, #8b5cf6)"
-                        : "linear-gradient(135deg, #d97706, #f59e0b)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    color: "#fff",
-                    fontWeight: 900,
-                    fontSize: 12,
-                    flexShrink: 0,
-                  }}
-                >
+                <div className="pos-avatar">
                   {(auth.session.displayName || auth.session.username).charAt(0).toUpperCase()}
                 </div>
-                <div style={{ lineHeight: 1, textAlign: "left" }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: "#0f172a" }}>
+                <div className="pos-user-meta">
+                  <div className="pos-user-name">
                     {auth.session.displayName || auth.session.username}
                   </div>
-                  <div
-                    style={{
-                      fontSize: 10,
-                      color: "#94a3b8",
-                      marginTop: 2,
-                      textTransform: "capitalize",
-                    }}
-                  >
-                    {auth.session.role}
+                  <div className="pos-user-outlet">
+                    {branding.hotelName || auth.session.role}
                   </div>
                 </div>
-                <svg
-                  width="10"
-                  height="10"
-                  viewBox="0 0 10 10"
-                  fill="none"
-                  aria-hidden="true"
-                  style={{ flexShrink: 0, marginLeft: 2, color: "#94a3b8" }}
-                >
-                  <path
-                    d="M1.5 3.5L5 7L8.5 3.5"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
               </button>
-
               {userMenuOpen && (
                 <div className="hdr-dropdown" role="menu">
+                  {branding.hotelName ? (
+                    <div className="hdr-dd-meta" role="presentation">
+                      <div className="hdr-dd-meta-label">Outlet</div>
+                      <div className="hdr-dd-meta-value">{branding.hotelName}</div>
+                      <div className="hdr-dd-meta-role">{auth.session.role}</div>
+                    </div>
+                  ) : null}
+                  {branding.hotelName ? <div className="hdr-dd-sep" /> : null}
                   <button
                     className="hdr-dd-item"
                     role="menuitem"
@@ -710,89 +493,22 @@ function MainContent({
               )}
             </div>
           </div>
-
-          {/* Nav bar */}
-          <nav
-            id="main-nav"
-            aria-label="Main navigation"
-            style={{
-              display: "flex",
-              alignItems: "stretch",
-              paddingLeft: 8,
-              height: 42,
-              background: "#ffffff",
-              borderBottom: "2px solid #fde68a",
-              boxShadow: "0 2px 8px rgba(245,158,11,0.07)",
-            }}
-          >
-            {navItems
-              .filter((n) => effectiveAllowedPages.includes(n.k))
-              .map((it) => {
-                const active = page === it.k;
-                return (
-                  <button
-                    key={it.k}
-                    type="button"
-                    className={`hdr-nav-btn${active ? " hdr-active" : ""}`}
-                    aria-current={active ? "page" : undefined}
-                    onClick={() => {
-                      setPage(it.k as any);
-                      window.location.hash = `#${it.k}`;
-                    }}
-                  >
-                    {it.t}
-                  </button>
-                );
-              })}
-          </nav>
         </header>
 
-        <div id="main-content" tabIndex={-1} style={{ display: "flex", flex: 1, minHeight: 0 }}>
+        <div id="main-content" tabIndex={-1} className="pos-main-content">
           <React.Suspense fallback={<ScreenLoadingFallback />}>
             {inlineLayout ? (
-              // Equal 50/50 split when inline billing is active
-              <div id="split-view" style={{ display: "flex", flex: 1, gap: 0, minHeight: 0 }}>
-                <main
-                  id="tables-section"
-                  // split view columns can scroll independently
-                  style={{
-                    flex: 1,
-                    padding: 0,
-                    overflow: "auto",
-                    minHeight: 0,
-                  }}
-                >
+              <div id="split-view" className="pos-split-view">
+                <main id="tables-section" className="pos-tables-section">
                   <Tables />
                 </main>
-                <aside
-                  id="billing-section"
-                  style={{
-                    flex: 1,
-                    borderLeft: "1px solid #eee",
-                    background: "var(--pos-bg, #ffffff)",
-                    overflow: "auto",
-                    minHeight: 0,
-                  }}
-                >
+                <aside id="billing-section" className="pos-billing-section">
                   <Billing />
                 </aside>
               </div>
             ) : (
-              // Default layout: main content
               <>
-                <main
-                  style={{
-                    flex: 1,
-                    padding: 0,
-                    overflow: "auto",
-                    minHeight: 0,
-                    background: "var(--pos-bg, #ffffff)",
-                  }}
-                >
-                  {/* Render guard: each page checks the allow-list so that
-                      even if hash navigation somehow sets an unauthorised page,
-                      the component never mounts. This is defense-in-depth on top
-                      of the hashchange handler's redirect. */}
+                <main className="pos-main-pane">
                   {page === "tables" && effectiveAllowedPages.includes("tables") && <Tables />}
                   {page === "billing" && effectiveAllowedPages.includes("billing") && <Billing />}
                   {page === "kot" && effectiveAllowedPages.includes("kot") && <KOTQueue />}
@@ -813,116 +529,55 @@ function MainContent({
           </React.Suspense>
         </div>
 
-        {/* Profile modal */}
         {profileOpen && (
-          <div
-            onClick={closeProfile}
-            style={{
-              position: "fixed",
-              inset: 0,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              background: "rgba(0,0,0,0.4)",
-              zIndex: 3000,
-            }}
-          >
+          <div className="ui-overlay" onClick={closeProfile}>
             <div
               ref={profileDialogRef}
               role="dialog"
               aria-modal="true"
               aria-labelledby="profileDialogTitle"
               tabIndex={-1}
+              className="ui-dialog"
               onClick={(e) => e.stopPropagation()}
-              style={{
-                width: 360,
-                background: "#fff",
-                borderRadius: 12,
-                padding: 28,
-                boxShadow: "0 20px 60px rgba(0,0,0,0.18)",
-              }}
             >
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  marginBottom: 20,
-                }}
-              >
-                <h3 id="profileDialogTitle" style={{ margin: 0, fontSize: 17, fontWeight: 800 }}>
+              <div className="pos-profile-head">
+                <h3 id="profileDialogTitle" className="pos-profile-title">
                   My Profile
                 </h3>
                 <button
+                  type="button"
+                  className="ui-btn ui-btn-ghost"
                   onClick={closeProfile}
                   aria-label="Close"
-                  style={{
-                    background: "none",
-                    border: "none",
-                    fontSize: 20,
-                    cursor: "pointer",
-                    color: "#9ca3af",
-                  }}
                 >
-                  ×
+                  Close
                 </button>
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 20 }}>
-                <div
-                  style={{
-                    width: 52,
-                    height: 52,
-                    borderRadius: 14,
-                    background:
-                      auth?.session?.role === "admin"
-                        ? "linear-gradient(135deg, #7c3aed, #8b5cf6)"
-                        : "linear-gradient(135deg, #d97706, #f59e0b)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontSize: 22,
-                    fontWeight: 900,
-                    color: "#fff",
-                  }}
-                >
+              <div className="pos-profile-identity">
+                <div className="pos-avatar pos-profile-avatar">
                   {(auth?.session?.username?.[0] ?? "?").toUpperCase()}
                 </div>
                 <div>
-                  <div style={{ fontWeight: 800, fontSize: 16 }}>
-                    {auth?.session?.username ?? "—"}
+                  <div className="pos-profile-name">
+                    {auth?.session?.displayName || auth?.session?.username || "—"}
                   </div>
-                  <div
-                    style={{
-                      fontSize: 12,
-                      color: "#6b7280",
-                      textTransform: "capitalize",
-                      marginTop: 2,
-                    }}
-                  >
-                    {auth?.session?.role ?? "—"}
-                  </div>
+                  {branding.hotelName ? (
+                    <div className="pos-profile-outlet">{branding.hotelName}</div>
+                  ) : null}
+                  <div className="pos-profile-role">{auth?.session?.role ?? "—"}</div>
                 </div>
               </div>
               {auth?.session?.sessionStart && (
-                <div style={{ fontSize: 12, color: "#9ca3af", marginBottom: 20 }}>
+                <div className="pos-profile-session">
                   Session started: {new Date(auth.session.sessionStart).toLocaleString("en-IN")}
                 </div>
               )}
               <button
+                type="button"
+                className="ui-btn ui-btn-danger pos-profile-logout"
                 onClick={() => {
                   closeProfile();
                   auth?.logout();
-                }}
-                style={{
-                  width: "100%",
-                  padding: "10px",
-                  borderRadius: 8,
-                  border: "1.5px solid #e5e7eb",
-                  background: "#fff",
-                  color: "#dc2626",
-                  fontWeight: 700,
-                  fontSize: 14,
-                  cursor: "pointer",
                 }}
               >
                 Logout

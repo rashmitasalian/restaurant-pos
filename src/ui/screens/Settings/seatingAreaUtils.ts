@@ -8,6 +8,7 @@ export type SeatingAreaLike = {
 export type TableAreaLike = {
   id: number;
   areaId: string;
+  seats?: number;
 };
 
 export function buildSeatingAreaId(name: string, now = Date.now()) {
@@ -95,5 +96,26 @@ export function computeTableAreaUpdates(
     .filter(({ tableId, areaId }) => {
       const table = tableDocs.find((entry) => entry.id === tableId);
       return Boolean(table) && table!.areaId !== areaId;
+    });
+}
+
+export function computeTableSeatsUpdates(
+  tableDocs: TableAreaLike[],
+  tableSeatsDraft: Record<number, number>,
+): Array<{ tableId: number; seats: number }> {
+  return Object.entries(tableSeatsDraft)
+    .map(([tableId, seats]) => ({
+      tableId: Number(tableId),
+      seats: Math.trunc(Number(seats)),
+    }))
+    .filter(({ tableId, seats }) => {
+      if (!Number.isInteger(tableId) || tableId <= 0) {
+        return false;
+      }
+      if (!Number.isInteger(seats) || seats < 1 || seats > 50) {
+        return false;
+      }
+      const table = tableDocs.find((entry) => entry.id === tableId);
+      return Boolean(table) && Number(table!.seats || 0) !== seats;
     });
 }

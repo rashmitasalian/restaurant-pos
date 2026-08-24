@@ -199,6 +199,10 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
     const user = requireSession(event, token, ADMIN_ROLES);
     return posService.setTableArea(tableId, areaId, user.username);
   });
+  ipcMain.handle("pos:tables:set-seats", (event, token: string | null, tableId: number, seats: number) => {
+    const user = requireSession(event, token, ADMIN_ROLES);
+    return posService.setTableSeats(tableId, seats, user.username);
+  });
   ipcMain.handle("pos:seating-areas:list", (event, token?: string | null, includeDisabled?: boolean) => {
     requireSession(event, token);
     return posService.getSeatingAreas(Boolean(includeDisabled));

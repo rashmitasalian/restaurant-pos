@@ -7,6 +7,7 @@ import {
   validationMessage,
 } from "../../../shared/validation";
 import { useToast } from "../../context/ToastContext";
+import { PageHeader } from "../../components/ui/PageHeader";
 
 interface Customer {
   id: string;
@@ -167,13 +168,7 @@ export default function Customers() {
 
   return (
     <div className="pos-page pos-page-sm">
-      {/* Header */}
-      <div className="pos-ph">
-        <div>
-          <h2 className="pos-ph-title">Customers</h2>
-          <p className="pos-ph-sub">Collect customer name & phone for promotions</p>
-        </div>
-      </div>
+      <PageHeader title="Customers" subtitle="Collect customer name & phone for promotions" />
 
       {/* Add customer form */}
       <div className="pos-card pos-card-p" style={{ marginBottom: 24 }}>
@@ -182,7 +177,7 @@ export default function Customers() {
             margin: "0 0 14px",
             fontWeight: 700,
             fontSize: 13,
-            color: "var(--pos-tx-sec,#374151)",
+            color: "var(--pos-tx-sec,var(--pos-tx-sec))",
           }}
         >
           Add New Customer
@@ -272,8 +267,8 @@ setPhoneError(null);
                       width: 36,
                       height: 36,
                       borderRadius: "50%",
-                      background: "linear-gradient(135deg,#b45309,#f59e0b)",
-                      color: "#fff",
+                      background: "var(--pos-teal)",
+                      color: "var(--pos-surface)",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
@@ -321,13 +316,13 @@ setPhoneError(null);
                   ) : (
                     <div>
                       <div
-                        style={{ fontWeight: 700, fontSize: 14, color: "var(--pos-tx,#111827)" }}
+                        style={{ fontWeight: 700, fontSize: 14, color: "var(--pos-tx,var(--pos-tx))" }}
                       >
                         {c.name}
                       </div>
                       <div
                         style={{
-                          color: "var(--pos-tx-sub,#6b7280)",
+                          color: "var(--pos-tx-sub,var(--pos-tx-sub))",
                           fontSize: 13,
                           fontVariantNumeric: "tabular-nums",
                         }}

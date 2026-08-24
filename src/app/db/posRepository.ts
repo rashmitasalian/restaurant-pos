@@ -113,6 +113,10 @@ export async function setTableArea(tableId: number, areaId: string): Promise<Tab
   return api().tables!.setArea(tableId, areaId);
 }
 
+export async function setTableSeats(tableId: number, seats: number): Promise<TableDoc | null> {
+  return api().tables!.setSeats(tableId, seats);
+}
+
 export async function getSeatingAreas(includeDisabled = true): Promise<SeatingAreaDoc[]> {
   return api().seatingAreas!.list(includeDisabled);
 }
@@ -711,6 +715,7 @@ export async function setConfigBranding(cfg: {
 export type ConfigTablesDoc = ConfigDto & {
   _id: "config:tables";
   tableCount: number;
+  defaultSeats?: number;
   updatedAt: number;
 };
 
@@ -749,8 +754,12 @@ export async function getEnabledServiceModes(): Promise<ServiceMode[]> {
   return (cfg.modes || []).filter((mode) => mode.enabled);
 }
 
-export async function setConfigTables(tableCount: number): Promise<ConfigTablesDoc> {
-  return api().settings!.set("config:tables", { tableCount });
+export async function setConfigTables(
+  tableCount: number,
+  defaultSeats = 4,
+): Promise<ConfigTablesDoc> {
+  const seats = Math.max(1, Math.min(50, Math.trunc(Number(defaultSeats) || 4)));
+  return api().settings!.set("config:tables", { tableCount, defaultSeats: seats });
 }
 
 export async function getConfiguredTableCount(): Promise<number> {

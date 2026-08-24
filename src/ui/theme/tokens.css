@@ -1,0 +1,151 @@
+:root {
+  --pos-teal: #0f5e68;
+  --pos-teal-strong: #0b4a52;
+  --pos-teal-tint: #e8f1f2;
+  --pos-teal-line: #bfd8db;
+  --pos-teal-soft: #d5e6e8;
+
+  --pos-saffron: #f59e0b;
+  --pos-saffron-deep: #d97706;
+  --pos-saffron-tint: #fef6e7;
+  --pos-saffron-line: #f3d89a;
+  --pos-saffron-text: #92400e;
+
+  /* Warm light workspace */
+  --pos-bg: #f9f8f6;
+  --pos-surface: #ffffff;
+  --pos-surface-sunken: #f4f5f3;
+  --pos-surface-hover: #f1efea;
+
+  /* Text ramp */
+  --pos-tx: #17202a;
+  --pos-tx-sec: #3f4a56;
+  --pos-tx-sub: #64748b;
+  --pos-tx-muted: #94a3b8;
+  --pos-tx-inverse: #ffffff;
+
+  --pos-line: #e3e5e4;
+  --pos-line-strong: #cbd2d0;
+  --pos-border: var(--pos-line);
+  --pos-border-light: var(--pos-surface-sunken);
+
+  /* Deep teal chrome */
+  --pos-chrome: #0f5e68;
+  --pos-chrome-rail: #0b4a52;
+  --pos-chrome-line: rgba(255, 255, 255, 0.12);
+  --pos-chrome-tx: #f2fafa;
+  --pos-chrome-tx-muted: rgba(255, 255, 255, 0.72);
+  --pos-chrome-hover: rgba(255, 255, 255, 0.08);
+  --pos-chrome-active: rgba(255, 255, 255, 0.16);
+  --pos-focus-ring-inverse: 0 0 0 3px rgba(255, 255, 255, 0.5);
+
+  --pos-danger: #dc2626;
+  --pos-danger-strong: #b91c1c;
+  --pos-danger-tint: #fee2e2;
+  --pos-danger-line: #fca5a5;
+  --pos-danger-text: #991b1b;
+  --pos-danger-light: var(--pos-danger-tint);
+
+  --pos-success: #15803d;
+  --pos-success-strong: #166534;
+  --pos-success-tint: #dcfce7;
+  --pos-success-line: #86efac;
+  --pos-success-text: #14532d;
+  --pos-success-light: var(--pos-success-tint);
+
+  --pos-info: #0f5e68;
+  --pos-info-light: var(--pos-teal-tint);
+
+  --pos-state-available-dot: #94a3b8;
+  --pos-state-available-tint: #ffffff;
+  --pos-state-available-line: #e3e5e4;
+  --pos-state-available-text: #64748b;
+
+  --pos-state-occupied-dot: #0f5e68;
+  --pos-state-occupied-tint: #e7f3f4;
+  --pos-state-occupied-line: #0f5e68;
+  --pos-state-occupied-text: #0b4a52;
+
+  --pos-state-attention-dot: #f59e0b;
+  --pos-state-attention-tint: #fef6e7;
+  --pos-state-attention-line: #d97706;
+  --pos-state-attention-text: #92400e;
+
+  --pos-state-success-dot: #15803d;
+  --pos-state-success-tint: #dcfce7;
+  --pos-state-success-line: #15803d;
+  --pos-state-success-text: #14532d;
+
+  --pos-state-danger-dot: #dc2626;
+  --pos-state-danger-tint: #fee2e2;
+  --pos-state-danger-line: #dc2626;
+  --pos-state-danger-text: #991b1b;
+
+  --pos-brand: var(--pos-teal);
+  --pos-brand-deep: var(--pos-teal-strong);
+  --pos-brand-dark: var(--pos-teal-strong);
+  --pos-brand-light: var(--pos-teal-tint);
+  --pos-brand-xlight: var(--pos-teal-tint);
+  --pos-brand-border: var(--pos-teal-line);
+  --pos-muted: var(--pos-tx-muted);
+
+  --pos-space-1: 4px;
+  --pos-space-2: 8px;
+  --pos-space-3: 12px;
+  --pos-space-4: 16px;
+  --pos-space-5: 20px;
+  --pos-space-6: 24px;
+  --pos-space-8: 32px;
+
+  /* 6 / 8 / 10 shape language (max 10px) */
+  --pos-r-sm: 6px;
+  --pos-r-md: 8px;
+  --pos-r-lg: 10px;
+  --pos-r-dialog: 10px;
+  --pos-r-pill: 99px;
+  --pos-r-card: var(--pos-r-lg);
+  --pos-r-btn: var(--pos-r-md);
+  --pos-r-input: var(--pos-r-md);
+  --pos-r-badge: var(--pos-r-pill);
+
+  --pos-type-11: 11px;
+  --pos-type-12: 12px;
+  --pos-type-13: 13px;
+  --pos-type-15: 15px;
+  --pos-type-18: 18px;
+  --pos-type-22: 22px;
+  --pos-type-28: 28px;
+
+  /* Teal-tinted depth — never pure black */
+  --pos-shadow-1: 0 1px 3px rgba(15, 94, 104, 0.04);
+  --pos-shadow-2: 0 2px 6px rgba(15, 94, 104, 0.07), 0 1px 2px rgba(15, 94, 104, 0.04);
+  --pos-shadow-accent: 0 3px 12px rgba(245, 158, 11, 0.14);
+  --pos-shadow-accent-strong: 0 4px 14px rgba(245, 158, 11, 0.2);
+  --pos-shadow: var(--pos-shadow-1);
+  --pos-shadow-overlay: 0 16px 40px rgba(11, 74, 82, 0.18);
+  --pos-shadow-xs: var(--pos-shadow-1);
+  --pos-shadow-sm: var(--pos-shadow-1);
+  --pos-shadow-md: var(--pos-shadow-2);
+  --pos-shadow-lg: var(--pos-shadow-overlay);
+
+  --pos-focus-ring: 0 0 0 3px rgba(15, 94, 104, 0.22);
+  --pos-focus-color: var(--pos-teal);
+  --pos-overlay: rgba(11, 47, 52, 0.45);
+  --pos-online: var(--pos-success);
+
+  --pos-motion-fast: 140ms;
+  --pos-motion: 200ms;
+  --pos-motion-overlay: 240ms;
+  --pos-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  --pos-hit-pos: 40px;
+  --pos-hit-dense: 32px;
+  --pos-shell-h: 56px;
+  --pos-sidebar: 240px;
+  --pos-sidebar-compact: 220px;
+  --pos-ticket: 360px;
+  --pos-ticket-compact: 340px;
+  --pos-rail: 56px;
+  --pos-quick-add-visible: 8;
+  --pos-category-visible: 6;
+}

@@ -1,6 +1,7 @@
 import React from "react";
 import { AuthContext } from "../../context/AuthContext";
 import { PasswordValidator } from "../../../app/utils/validators";
+import authStyles from "./Auth.module.css";
 
 export default function ChangePasswordScreen() {
   const auth = React.useContext(AuthContext);
@@ -74,7 +75,7 @@ export default function ChangePasswordScreen() {
   const inputStyle: React.CSSProperties = {
     width: "100%",
     padding: "9px 12px",
-    border: "1px solid #d1d5db",
+    border: "1px solid var(--pos-line-strong)",
     borderRadius: 6,
     fontSize: 14,
     boxSizing: "border-box",
@@ -82,24 +83,10 @@ export default function ChangePasswordScreen() {
   };
 
   return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        height: "100%",
-        background: "linear-gradient(135deg, #fff7ed 0%, #fef3c7 100%)",
-      }}
-    >
+    <div className={authStyles.screen}>
       <form
         onSubmit={handleSubmit}
-        style={{
-          width: 420,
-          padding: 32,
-          borderRadius: 12,
-          boxShadow: "0 4px 24px rgba(0,0,0,0.12)",
-          background: "#fff",
-        }}
+        className={authStyles.card}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
           <div
@@ -107,11 +94,11 @@ export default function ChangePasswordScreen() {
               width: 40,
               height: 40,
               borderRadius: 10,
-              background: "linear-gradient(135deg, #b45309, #f59e0b)",
+              background: "var(--pos-teal)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              color: "#fff",
+              color: "var(--pos-surface)",
               fontSize: 18,
               flexShrink: 0,
             }}
@@ -119,10 +106,10 @@ export default function ChangePasswordScreen() {
             #
           </div>
           <div>
-            <div style={{ fontWeight: 700, fontSize: 16, color: "#111827" }}>
+            <div style={{ fontWeight: 700, fontSize: 16, color: "var(--pos-tx)" }}>
               Set a new password
             </div>
-            <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>
+            <div style={{ fontSize: 12, color: "var(--pos-tx-sub)", marginTop: 2 }}>
               Welcome, {displayName}
             </div>
           </div>
@@ -130,12 +117,12 @@ export default function ChangePasswordScreen() {
 
         <div
           style={{
-            background: "#fffbeb",
-            border: "1px solid #fcd34d",
+            background: "var(--pos-saffron-tint)",
+            border: "1px solid var(--pos-saffron-line)",
             borderRadius: 8,
             padding: "10px 14px",
             fontSize: 13,
-            color: "#92400e",
+            color: "var(--pos-saffron-text)",
             marginBottom: 20,
             lineHeight: 1.5,
           }}
@@ -144,7 +131,7 @@ export default function ChangePasswordScreen() {
         </div>
 
         <label style={{ display: "block", marginBottom: 14 }}>
-          <span style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 6 }}>
+          <span style={{ display: "block", fontSize: 13, fontWeight: 600, color: "var(--pos-tx-sec)", marginBottom: 6 }}>
             Current password
           </span>
           <input
@@ -159,7 +146,7 @@ export default function ChangePasswordScreen() {
         </label>
 
         <label style={{ display: "block", marginBottom: 14 }}>
-          <span style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 6 }}>
+          <span style={{ display: "block", fontSize: 13, fontWeight: 600, color: "var(--pos-tx-sec)", marginBottom: 6 }}>
             New password
           </span>
           <input
@@ -174,7 +161,7 @@ export default function ChangePasswordScreen() {
         </label>
 
         <label style={{ display: "block", marginBottom: 18 }}>
-          <span style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 6 }}>
+          <span style={{ display: "block", fontSize: 13, fontWeight: 600, color: "var(--pos-tx-sec)", marginBottom: 6 }}>
             Confirm password
           </span>
           <input
@@ -191,16 +178,16 @@ export default function ChangePasswordScreen() {
         {newPassword && passwordErrors.length > 0 && (
           <div
             style={{
-              background: "#f3f4f6",
-              border: "1px solid #e5e7eb",
+              background: "var(--pos-surface-sunken)",
+              border: "1px solid var(--pos-line)",
               borderRadius: 6,
               padding: "12px 14px",
               fontSize: 12,
-              color: "#6b7280",
+              color: "var(--pos-tx-sub)",
               marginBottom: 18,
             }}
           >
-            <div style={{ fontWeight: 600, color: "#374151", marginBottom: 8 }}>
+            <div style={{ fontWeight: 600, color: "var(--pos-tx-sec)", marginBottom: 8 }}>
               Password requirements:
             </div>
             {passwordErrors.map((message) => (
@@ -214,9 +201,9 @@ export default function ChangePasswordScreen() {
         {error && (
           <div
             style={{
-              background: "#fef2f2",
-              border: "1px solid #fca5a5",
-              color: "#b91c1c",
+              background: "var(--pos-danger-tint)",
+              border: "1px solid var(--pos-danger-line)",
+              color: "var(--pos-danger-strong)",
               borderRadius: 6,
               padding: "9px 12px",
               fontSize: 13,
@@ -233,8 +220,8 @@ export default function ChangePasswordScreen() {
           style={{
             width: "100%",
             padding: "11px 0",
-            background: canSubmit ? "#d97706" : "#e5e7eb",
-            color: canSubmit ? "#fff" : "#9ca3af",
+            background: canSubmit ? "var(--pos-saffron-deep)" : "var(--pos-line)",
+            color: canSubmit ? "var(--pos-surface)" : "var(--pos-tx-muted)",
             border: "none",
             borderRadius: 8,
             fontWeight: 700,
@@ -254,7 +241,7 @@ export default function ChangePasswordScreen() {
             style={{
               background: "none",
               border: "none",
-              color: "#6b7280",
+              color: "var(--pos-tx-sub)",
               fontSize: 12,
               cursor: isSubmitting ? "not-allowed" : "pointer",
               opacity: isSubmitting ? 0.6 : 1,

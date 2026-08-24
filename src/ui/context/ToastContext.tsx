@@ -39,9 +39,9 @@ const DEFAULT_DURATION: Record<ToastType, number> = {
 };
 
 const COLORS: Record<ToastType, { bg: string; border: string; icon: string }> = {
-  success: { bg: "#052e16", border: "#16a34a", icon: "✓" },
-  error: { bg: "#450a0a", border: "#dc2626", icon: "✕" },
-  info: { bg: "#0c1a2e", border: "#3b82f6", icon: "ℹ" },
+  success: { bg: "var(--pos-surface)", border: "var(--pos-success)", icon: "OK" },
+  error: { bg: "var(--pos-surface)", border: "var(--pos-danger)", icon: "Err" },
+  info: { bg: "var(--pos-surface)", border: "var(--pos-teal)", icon: "Info" },
 };
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
@@ -116,9 +116,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                   padding: "10px 14px",
                   borderRadius: 10,
                   background: c.bg,
-                  border: `1.5px solid ${c.border}`,
-                  boxShadow: "0 8px 32px rgba(0,0,0,0.35)",
-                  color: "#fff",
+                  border: `1px solid var(--pos-line)`,
+                  borderLeft: `3px solid ${c.border}`,
+                  boxShadow: "var(--pos-shadow-overlay)",
+                  color: "var(--pos-tx)",
                   fontSize: 13,
                   fontWeight: 600,
                   maxWidth: "min(480px, 90vw)",
@@ -178,7 +179,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                   style={{
                     background: "none",
                     border: "none",
-                    color: "#9ca3af",
+                    color: "var(--pos-tx-muted)",
                     fontSize: 18,
                     cursor: "pointer",
                     lineHeight: 1,

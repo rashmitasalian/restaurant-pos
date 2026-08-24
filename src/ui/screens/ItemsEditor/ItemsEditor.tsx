@@ -17,6 +17,9 @@ import {
 } from "../../../shared/validation";
 import { useToast } from "../../context/ToastContext";
 import { useFocusTrap } from "../../hooks/useFocusTrap";
+import { PageHeader } from "../../components/ui/PageHeader";
+import { Icon } from "../../components/ui/Icon";
+import { Star, X } from "lucide-react";
 
 const MENU_PAGE_SIZE = 50;
 
@@ -289,14 +292,29 @@ export default function ItemsEditor() {
     if (favoriteUpdatingRef.current) {
       return;
     }
+    if (it.available === false) {
+      showToast("Unavailable items cannot be favorites", "error");
+      return;
+    }
     favoriteUpdatingRef.current = true;
     setFavoriteUpdatingId(it._id);
+    const nextFavorite = !Boolean(it.favorite);
     try {
-      await updateItem({ ...it, favorite: !it.favorite });
+      await updateItem({ ...it, favorite: nextFavorite, available: true });
       const all = await getItems();
       setItems(all);
+      setEditMap((prev) => {
+        if (!prev[it._id]) {
+          return prev;
+        }
+        return {
+          ...prev,
+          [it._id]: { ...prev[it._id], favorite: nextFavorite },
+        };
+      });
+      showToast(nextFavorite ? "Added to favorites" : "Removed from favorites");
     } catch (e) {
-      showToast("Failed to update favorite", "err");
+      showToast("Failed to update favorite", "error");
     } finally {
       favoriteUpdatingRef.current = false;
       setFavoriteUpdatingId(null);
@@ -538,20 +556,15 @@ export default function ItemsEditor() {
 
   return (
     <div className="pos-page">
-      {/* Page header */}
-      <div className="pos-ph">
-        <div>
-          <h2 className="pos-ph-title">Menu</h2>
-          <p className="pos-ph-sub">
-            {items.length} item{items.length !== 1 ? "s" : ""} · edit prices inline, then Save All
-          </p>
-        </div>
-        <div className="pos-ph-actions">
+      <PageHeader
+        title="Menu"
+        subtitle={`${items.length} item${items.length !== 1 ? "s" : ""} · edit prices inline, then Save All`}
+        actions={
           <button onClick={() => setModalOpen(true)} className="pos-btn pos-btn-primary">
             + Add Item
           </button>
-        </div>
-      </div>
+        }
+      />
 
       {/* Search bar */}
       <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
@@ -576,7 +589,7 @@ export default function ItemsEditor() {
           alignItems: "center",
           gap: 12,
           marginBottom: 10,
-          color: "var(--pos-muted,#6b7280)",
+          color: "var(--pos-muted,var(--pos-tx-sub))",
           fontSize: 12,
           flexWrap: "wrap",
         }}
@@ -627,10 +640,10 @@ export default function ItemsEditor() {
               columnGap: 8,
               padding: "8px 14px",
               borderRadius: 8,
-              background: "var(--pos-border-light,#f3f4f6)",
+              background: "var(--pos-border-light,var(--pos-surface-sunken))",
               fontSize: 10,
               fontWeight: 800,
-              color: "var(--pos-muted,#9ca3af)",
+              color: "var(--pos-muted,var(--pos-tx-muted))",
               letterSpacing: "0.08em",
               textTransform: "uppercase",
               marginBottom: 8,
@@ -649,8 +662,10 @@ export default function ItemsEditor() {
             <span>Variants</span>
             <span style={{ textAlign: "right" }}>Price (₹)</span>
             <span style={{ textAlign: "center" }}>On Menu</span>
-            <span style={{ textAlign: "center" }}>★</span>
-            <span style={{ textAlign: "center" }}></span>
+            <span style={{ textAlign: "center" }} title="Favorites">
+              Fav
+            </span>
+            <span style={{ textAlign: "center" }} />
           </div>
 
           {/* Bulk-delete toolbar — sticky bottom bar, doesn't shift layout */}
@@ -667,15 +682,15 @@ export default function ItemsEditor() {
                 gap: 12,
                 padding: "12px 20px",
                 borderRadius: 12,
-                background: confirmBulkDelete ? "#fff5f5" : "#1f2937",
-                border: confirmBulkDelete ? "1.5px solid #fca5a5" : "none",
-                boxShadow: "0 8px 32px rgba(0,0,0,0.22), 0 2px 8px rgba(0,0,0,0.12)",
+                background: confirmBulkDelete ? "var(--pos-danger-tint)" : "var(--pos-tx)",
+                border: confirmBulkDelete ? "1.5px solid var(--pos-danger-line)" : "none",
+                boxShadow: "var(--pos-shadow-overlay)",
                 minWidth: 340,
               }}
             >
               {confirmBulkDelete ? (
                 <>
-                  <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: "#dc2626" }}>
+                  <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: "var(--pos-danger)" }}>
                     Delete {selectedIds.size} item{selectedIds.size !== 1 ? "s" : ""} permanently?
                   </span>
                   <button
@@ -685,8 +700,8 @@ export default function ItemsEditor() {
                       padding: "6px 16px",
                       borderRadius: 8,
                       border: "none",
-                      background: "#ef4444",
-                      color: "#fff",
+                      background: "var(--pos-danger)",
+                      color: "var(--pos-surface)",
                       fontWeight: 700,
                       fontSize: 13,
                       cursor: bulkDeleteLoading ? "not-allowed" : "pointer",
@@ -703,9 +718,9 @@ export default function ItemsEditor() {
                     style={{
                       padding: "6px 16px",
                       borderRadius: 8,
-                      border: "1px solid #e5e7eb",
-                      background: "#fff",
-                      color: "#374151",
+                      border: "1px solid var(--pos-line)",
+                      background: "var(--pos-surface)",
+                      color: "var(--pos-tx-sec)",
                       fontWeight: 600,
                       fontSize: 13,
                       cursor: bulkDeleteLoading ? "not-allowed" : "pointer",
@@ -717,7 +732,7 @@ export default function ItemsEditor() {
                 </>
               ) : (
                 <>
-                  <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: "#f9fafb" }}>
+                  <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: "var(--pos-surface-hover)" }}>
                     {selectedIds.size} item{selectedIds.size !== 1 ? "s" : ""} selected
                   </span>
                   <button
@@ -727,8 +742,8 @@ export default function ItemsEditor() {
                       padding: "6px 16px",
                       borderRadius: 8,
                       border: "none",
-                      background: "#ef4444",
-                      color: "#fff",
+                      background: "var(--pos-danger)",
+                      color: "var(--pos-surface)",
                       fontWeight: 700,
                       fontSize: 13,
                       cursor: "pointer",
@@ -745,7 +760,7 @@ export default function ItemsEditor() {
                       borderRadius: 8,
                       border: "1px solid rgba(255,255,255,0.2)",
                       background: "rgba(255,255,255,0.08)",
-                      color: "#d1d5db",
+                      color: "var(--pos-line-strong)",
                       fontWeight: 600,
                       fontSize: 13,
                       cursor: "pointer",
@@ -766,7 +781,7 @@ export default function ItemsEditor() {
                 style={{
                   textAlign: "center",
                   padding: "40px 0",
-                  color: "#9ca3af",
+                  color: "var(--pos-tx-muted)",
                   fontSize: 14,
                 }}
               >
@@ -804,13 +819,13 @@ export default function ItemsEditor() {
                     alignItems: "center",
                     padding: "10px 14px",
                     borderRadius: 10,
-                    background: isConfirmingDelete ? "#fff5f5" : edited ? "#fffbeb" : "#fff",
+                    background: isConfirmingDelete ? "var(--pos-danger-tint)" : edited ? "var(--pos-saffron-tint)" : "var(--pos-surface)",
                     border: isConfirmingDelete
-                      ? "1.5px solid #fca5a5"
+                      ? "1.5px solid var(--pos-danger-line)"
                       : edited
-                        ? "1.5px solid #fde68a"
-                        : "1px solid #f3f4f6",
-                    boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+                        ? "1.5px solid var(--pos-saffron-line)"
+                        : "1px solid var(--pos-surface-sunken)",
+                    boxShadow: "var(--pos-shadow-1)",
                     transition: "border-color 120ms, background 120ms",
                   }}
                 >
@@ -824,7 +839,7 @@ export default function ItemsEditor() {
                         gap: 12,
                       }}
                     >
-                      <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: "#dc2626" }}>
+                      <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: "var(--pos-danger)" }}>
                         Delete "{it.name}" permanently?
                       </span>
                       <button
@@ -834,8 +849,8 @@ export default function ItemsEditor() {
                           padding: "6px 16px",
                           borderRadius: 8,
                           border: "none",
-                          background: "#ef4444",
-                          color: "#fff",
+                          background: "var(--pos-danger)",
+                          color: "var(--pos-surface)",
                           fontWeight: 700,
                           fontSize: 13,
                           cursor: isDeleting ? "not-allowed" : "pointer",
@@ -852,9 +867,9 @@ export default function ItemsEditor() {
                         style={{
                           padding: "6px 16px",
                           borderRadius: 8,
-                          border: "1px solid #e5e7eb",
-                          background: "#fff",
-                          color: "#374151",
+                          border: "1px solid var(--pos-line)",
+                          background: "var(--pos-surface)",
+                          color: "var(--pos-tx-sec)",
                           fontWeight: 600,
                           fontSize: 13,
                           cursor: isDeleting ? "not-allowed" : "pointer",
@@ -893,12 +908,12 @@ export default function ItemsEditor() {
                             borderRadius: 7,
                             border:
                               editMap[it._id]?.name !== undefined
-                                ? "1.5px solid #f59e0b"
-                                : "1px solid #e5e7eb",
+                                ? "1.5px solid var(--pos-saffron)"
+                                : "1px solid var(--pos-line)",
                             fontSize: 14,
                             fontWeight: 700,
-                            color: "#111827",
-                            background: editMap[it._id]?.name !== undefined ? "#fffbeb" : "#fff",
+                            color: "var(--pos-tx)",
+                            background: editMap[it._id]?.name !== undefined ? "var(--pos-saffron-tint)" : "var(--pos-surface)",
                             outline: "none",
                             fontFamily: "inherit",
                             boxSizing: "border-box",
@@ -923,12 +938,12 @@ export default function ItemsEditor() {
                             borderRadius: 7,
                             border:
                               editMap[it._id]?.sku !== undefined
-                                ? "1.5px solid #f59e0b"
-                                : "1px solid #e5e7eb",
+                                ? "1.5px solid var(--pos-saffron)"
+                                : "1px solid var(--pos-line)",
                             fontSize: 12,
                             fontFamily: "'Courier New', monospace",
-                            color: "#6b7280",
-                            background: editMap[it._id]?.sku !== undefined ? "#fffbeb" : "#fff",
+                            color: "var(--pos-tx-sub)",
+                            background: editMap[it._id]?.sku !== undefined ? "var(--pos-saffron-tint)" : "var(--pos-surface)",
                             outline: "none",
                             boxSizing: "border-box",
                           }}
@@ -952,12 +967,12 @@ export default function ItemsEditor() {
                             borderRadius: 7,
                             border:
                               editMap[it._id]?.category !== undefined
-                                ? "1.5px solid #f59e0b"
-                                : "1px solid #e5e7eb",
+                                ? "1.5px solid var(--pos-saffron)"
+                                : "1px solid var(--pos-line)",
                             fontSize: 13,
                             background:
-                              editMap[it._id]?.category !== undefined ? "#fffbeb" : "#fff",
-                            color: "#374151",
+                              editMap[it._id]?.category !== undefined ? "var(--pos-saffron-tint)" : "var(--pos-surface)",
+                            color: "var(--pos-tx-sec)",
                             outline: "none",
                             fontFamily: "inherit",
                             cursor: "pointer",
@@ -1008,12 +1023,12 @@ export default function ItemsEditor() {
                               width: "100%",
                               padding: "6px 8px",
                               borderRadius: 7,
-                              border: edited ? "1.5px solid #f59e0b" : "1px solid #e5e7eb",
+                              border: edited ? "1.5px solid var(--pos-saffron)" : "1px solid var(--pos-line)",
                               fontSize: 12,
                               fontWeight: 700,
                               textAlign: "right",
-                              color: "#374151",
-                              background: edited ? "#fffbeb" : "#f9fafb",
+                              color: "var(--pos-tx-sec)",
+                              background: edited ? "var(--pos-saffron-tint)" : "var(--pos-surface-hover)",
                               boxSizing: "border-box",
                             }}
                           >
@@ -1021,7 +1036,7 @@ export default function ItemsEditor() {
                           </div>
                         ) : (
                           <>
-                            <span style={{ fontSize: 12, color: "#9ca3af", flexShrink: 0 }}>₹</span>
+                            <span style={{ fontSize: 12, color: "var(--pos-tx-muted)", flexShrink: 0 }}>₹</span>
                             <input
                               type="number"
                               value={currentPrice}
@@ -1036,12 +1051,12 @@ export default function ItemsEditor() {
                                 flex: 1,
                                 padding: "6px 8px",
                                 borderRadius: 7,
-                                border: edited ? "1.5px solid #f59e0b" : "1px solid #e5e7eb",
+                                border: edited ? "1.5px solid var(--pos-saffron)" : "1px solid var(--pos-line)",
                                 fontSize: 13,
                                 fontWeight: 600,
                                 fontFamily: "inherit",
                                 textAlign: "right",
-                                background: edited ? "#fffbeb" : "#fff",
+                                background: edited ? "var(--pos-saffron-tint)" : "var(--pos-surface)",
                                 outline: "none",
                                 boxSizing: "border-box",
                               }}
@@ -1082,8 +1097,8 @@ export default function ItemsEditor() {
                             border: "none",
                             cursor: "pointer",
                             fontFamily: "inherit",
-                            background: currentAvailable ? "#dcfce7" : "#fee2e2",
-                            color: currentAvailable ? "#16a34a" : "#dc2626",
+                            background: currentAvailable ? "var(--pos-success-tint)" : "var(--pos-danger-tint)",
+                            color: currentAvailable ? "var(--pos-success)" : "var(--pos-danger)",
                             transition: "background 120ms, color 120ms",
                             letterSpacing: "0.02em",
                           }}
@@ -1095,8 +1110,17 @@ export default function ItemsEditor() {
                       {/* Favorite star toggle */}
                       <div style={{ textAlign: "center" }}>
                         <button
+                          type="button"
                           onClick={() => currentAvailable && toggleFavorite(it)}
                           disabled={!currentAvailable || isFavoriteUpdating}
+                          aria-label={
+                            currentAvailable
+                              ? currentFavorite
+                                ? `Remove ${currentName} from favorites`
+                                : `Add ${currentName} to favorites`
+                              : "Unavailable items cannot be favorites"
+                          }
+                          aria-pressed={currentFavorite}
                           title={
                             currentAvailable
                               ? currentFavorite
@@ -1105,29 +1129,28 @@ export default function ItemsEditor() {
                               : "Unavailable items cannot be favorites"
                           }
                           style={{
-                            background: "none",
-                            border: "none",
+                            background: currentFavorite ? "var(--pos-saffron-tint)" : "var(--pos-surface-sunken)",
+                            border: `1px solid ${currentFavorite ? "var(--pos-saffron-line)" : "var(--pos-line)"}`,
                             cursor:
                               currentAvailable && !isFavoriteUpdating ? "pointer" : "not-allowed",
-                            fontSize: 18,
                             lineHeight: 1,
-                            color: currentFavorite ? "#f59e0b" : "#d1d5db",
-                            padding: "2px 4px",
-                            borderRadius: 4,
+                            color: currentFavorite ? "var(--pos-saffron-deep)" : "var(--pos-tx-muted)",
+                            padding: 0,
+                            width: 36,
+                            height: 36,
+                            borderRadius: 8,
                             opacity: currentAvailable && !isFavoriteUpdating ? 1 : 0.55,
-                            transition: "color 120ms, transform 120ms",
-                          }}
-                          onMouseEnter={(e) => {
-                            if (currentAvailable && !isFavoriteUpdating) {
-                              (e.currentTarget as HTMLButtonElement).style.transform =
-                                "scale(1.25)";
-                            }
-                          }}
-                          onMouseLeave={(e) => {
-                            (e.currentTarget as HTMLButtonElement).style.transform = "scale(1)";
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            transition: "color 120ms, background 120ms, border-color 120ms",
                           }}
                         >
-                          {currentFavorite ? "★" : "☆"}
+                          <Icon
+                            icon={Star}
+                            size="md"
+                            fill={currentFavorite ? "currentColor" : "none"}
+                          />
                         </button>
                       </div>
 
@@ -1141,9 +1164,9 @@ export default function ItemsEditor() {
                             width: 36,
                             height: 36,
                             borderRadius: 8,
-                            background: "#fff1f2",
+                            background: "var(--pos-danger-tint)",
                             border: "none",
-                            color: "#dc2626",
+                            color: "var(--pos-danger)",
                             cursor: "pointer",
                             fontSize: 18,
                             display: "flex",
@@ -1153,13 +1176,13 @@ export default function ItemsEditor() {
                             transition: "background 120ms",
                           }}
                           onMouseEnter={(e) => {
-                            (e.currentTarget as HTMLButtonElement).style.background = "#fee2e2";
+                            (e.currentTarget as HTMLButtonElement).style.background = "var(--pos-danger-tint)";
                           }}
                           onMouseLeave={(e) => {
-                            (e.currentTarget as HTMLButtonElement).style.background = "#fff1f2";
+                            (e.currentTarget as HTMLButtonElement).style.background = "var(--pos-danger-tint)";
                           }}
                         >
-                          ×
+                          <Icon icon={X} size="sm" />
                         </button>
                       </div>
                     </>
@@ -1176,7 +1199,7 @@ export default function ItemsEditor() {
         style={{
           marginTop: 20,
           paddingTop: 16,
-          borderTop: "1px solid var(--pos-border,#e5e7eb)",
+          borderTop: "1px solid var(--pos-border,var(--pos-line))",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
@@ -1184,7 +1207,7 @@ export default function ItemsEditor() {
           gap: 10,
         }}
       >
-        <span style={{ fontSize: 12, color: "var(--pos-muted,#9ca3af)" }}>
+        <span style={{ fontSize: 12, color: "var(--pos-muted,var(--pos-tx-muted))" }}>
           {hasEdits
             ? `${Object.keys(editMap).length} unsaved change${
                 Object.keys(editMap).length !== 1 ? "s" : ""
@@ -1221,7 +1244,7 @@ export default function ItemsEditor() {
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            background: "rgba(0,0,0,0.45)",
+            background: "var(--pos-overlay)",
           }}
           onClick={closeModal}
         >
@@ -1235,10 +1258,10 @@ export default function ItemsEditor() {
             style={{
               width: 480,
               maxWidth: "95vw",
-              background: "#fff",
+              background: "var(--pos-surface)",
               borderRadius: 14,
               padding: "24px 28px",
-              boxShadow: "0 16px 48px rgba(0,0,0,0.18)",
+              boxShadow: "var(--pos-shadow-overlay)",
             }}
           >
             <div
@@ -1254,7 +1277,7 @@ export default function ItemsEditor() {
                   margin: 0,
                   fontSize: 18,
                   fontWeight: 800,
-                  color: "#111827",
+                  color: "var(--pos-tx)",
                 }}
               >
                 New Menu Item
@@ -1266,14 +1289,14 @@ export default function ItemsEditor() {
                   background: "none",
                   border: "none",
                   cursor: modalSaving ? "not-allowed" : "pointer",
-                  color: "#9ca3af",
+                  color: "var(--pos-tx-muted)",
                   fontSize: 20,
                   lineHeight: 1,
                   opacity: modalSaving ? 0.55 : 1,
                 }}
                 aria-label="Close"
               >
-                ×
+                <Icon icon={X} size="sm" />
               </button>
             </div>
 
@@ -1283,12 +1306,12 @@ export default function ItemsEditor() {
                   style={{
                     fontSize: 12,
                     fontWeight: 600,
-                    color: "#374151",
+                    color: "var(--pos-tx-sec)",
                     display: "block",
                     marginBottom: 4,
                   }}
                 >
-                  Item Name <span style={{ color: "#ef4444" }}>*</span>
+                  Item Name <span style={{ color: "var(--pos-danger)" }}>*</span>
                 </label>
                 <input
                   placeholder="e.g. Paneer Tikka"
@@ -1300,7 +1323,7 @@ export default function ItemsEditor() {
                     width: "100%",
                     padding: "10px 12px",
                     borderRadius: 8,
-                    border: "1.5px solid #d1d5db",
+                    border: "1.5px solid var(--pos-line-strong)",
                     fontSize: 14,
                     boxSizing: "border-box",
                   }}
@@ -1318,7 +1341,7 @@ export default function ItemsEditor() {
                     style={{
                       fontSize: 12,
                       fontWeight: 600,
-                      color: "#374151",
+                      color: "var(--pos-tx-sec)",
                       display: "block",
                       marginBottom: 4,
                     }}
@@ -1333,7 +1356,7 @@ export default function ItemsEditor() {
                       width: "100%",
                       padding: "10px 12px",
                       borderRadius: 8,
-                      border: "1.5px solid #d1d5db",
+                      border: "1.5px solid var(--pos-line-strong)",
                       fontSize: 14,
                       boxSizing: "border-box",
                     }}
@@ -1344,12 +1367,12 @@ export default function ItemsEditor() {
                     style={{
                       fontSize: 12,
                       fontWeight: 600,
-                      color: "#374151",
+                      color: "var(--pos-tx-sec)",
                       display: "block",
                       marginBottom: 4,
                     }}
                   >
-                    Price (₹) <span style={{ color: "#ef4444" }}>*</span>
+                    Price (₹) <span style={{ color: "var(--pos-danger)" }}>*</span>
                   </label>
                   <input
                     type="number"
@@ -1360,7 +1383,7 @@ export default function ItemsEditor() {
                       width: "100%",
                       padding: "10px 12px",
                       borderRadius: 8,
-                      border: "1.5px solid #d1d5db",
+                      border: "1.5px solid var(--pos-line-strong)",
                       fontSize: 14,
                       boxSizing: "border-box",
                     }}
@@ -1372,7 +1395,7 @@ export default function ItemsEditor() {
                   style={{
                     fontSize: 12,
                     fontWeight: 600,
-                    color: "#374151",
+                    color: "var(--pos-tx-sec)",
                     display: "block",
                     marginBottom: 4,
                   }}
@@ -1386,10 +1409,10 @@ export default function ItemsEditor() {
                     width: "100%",
                     padding: "10px 12px",
                     borderRadius: 8,
-                    border: "1.5px solid #d1d5db",
+                    border: "1.5px solid var(--pos-line-strong)",
                     fontSize: 14,
-                    background: "#fff",
-                    color: modalCategory ? "#111827" : "#9ca3af",
+                    background: "var(--pos-surface)",
+                    color: modalCategory ? "var(--pos-tx)" : "var(--pos-tx-muted)",
                     fontFamily: "inherit",
                     outline: "none",
                     cursor: "pointer",
@@ -1417,7 +1440,7 @@ export default function ItemsEditor() {
                     style={{
                       fontSize: 12,
                       fontWeight: 600,
-                      color: "#374151",
+                      color: "var(--pos-tx-sec)",
                       display: "block",
                     }}
                   >
@@ -1442,12 +1465,12 @@ export default function ItemsEditor() {
                   </button>
                 </div>
                 {variantOptions.length === 0 && (
-                  <div style={{ fontSize: 12, color: "#b45309", marginBottom: 8 }}>
+                  <div style={{ fontSize: 12, color: "var(--pos-saffron-text)", marginBottom: 8 }}>
                     Configure variant options in Settings to use dropdown variants.
                   </div>
                 )}
                 {modalVariants.length === 0 ? (
-                  <div style={{ fontSize: 12, color: "#9ca3af" }}>
+                  <div style={{ fontSize: 12, color: "var(--pos-tx-muted)" }}>
                     Example: Half / Full with different prices.
                   </div>
                 ) : (
@@ -1475,10 +1498,10 @@ export default function ItemsEditor() {
                             width: "100%",
                             padding: "8px 10px",
                             borderRadius: 8,
-                            border: "1.5px solid #d1d5db",
+                            border: "1.5px solid var(--pos-line-strong)",
                             fontSize: 13,
-                            background: "#fff",
-                            color: variant.name ? "#111827" : "#9ca3af",
+                            background: "var(--pos-surface)",
+                            color: variant.name ? "var(--pos-tx)" : "var(--pos-tx-muted)",
                             fontFamily: "inherit",
                             cursor: "pointer",
                             boxSizing: "border-box",
@@ -1506,7 +1529,7 @@ export default function ItemsEditor() {
                             width: "100%",
                             padding: "8px 10px",
                             borderRadius: 8,
-                            border: "1.5px solid #d1d5db",
+                            border: "1.5px solid var(--pos-line-strong)",
                             fontSize: 13,
                             boxSizing: "border-box",
                           }}
@@ -1522,14 +1545,14 @@ export default function ItemsEditor() {
                             height: 34,
                             borderRadius: 8,
                             border: "none",
-                            background: "#fff1f2",
-                            color: "#dc2626",
+                            background: "var(--pos-danger-tint)",
+                            color: "var(--pos-danger)",
                             cursor: "pointer",
                             fontSize: 18,
                             lineHeight: 1,
                           }}
                         >
-                          ×
+                          <Icon icon={X} size="sm" />
                         </button>
                       </div>
                     ))}
@@ -1542,7 +1565,7 @@ export default function ItemsEditor() {
                   gap: 10,
                   alignItems: "center",
                   fontSize: 13,
-                  color: "#374151",
+                  color: "var(--pos-tx-sec)",
                   cursor: "pointer",
                 }}
               >
@@ -1550,7 +1573,7 @@ export default function ItemsEditor() {
                   type="checkbox"
                   checked={modalAvailable}
                   onChange={(e) => setModalAvailable(e.target.checked)}
-                  style={{ width: 16, height: 16, accentColor: "#d97706" }}
+                  style={{ width: 16, height: 16, accentColor: "var(--pos-saffron-deep)" }}
                 />
                 Available on menu
               </label>
@@ -1571,9 +1594,9 @@ export default function ItemsEditor() {
                 style={{
                   padding: "10px 20px",
                   borderRadius: 8,
-                  border: "1px solid #e5e7eb",
-                  background: "#fff",
-                  color: "#374151",
+                  border: "1px solid var(--pos-line)",
+                  background: "var(--pos-surface)",
+                  color: "var(--pos-tx-sec)",
                   fontWeight: 600,
                   fontSize: 13,
                   cursor: modalSaving ? "not-allowed" : "pointer",
@@ -1588,9 +1611,9 @@ export default function ItemsEditor() {
                 style={{
                   padding: "10px 20px",
                   borderRadius: 8,
-                  border: "1.5px solid #d97706",
-                  background: "#fff",
-                  color: "#d97706",
+                  border: "1.5px solid var(--pos-saffron-deep)",
+                  background: "var(--pos-surface)",
+                  color: "var(--pos-saffron-deep)",
                   fontWeight: 700,
                   fontSize: 13,
                   cursor: modalSaving ? "not-allowed" : "pointer",
@@ -1606,8 +1629,8 @@ export default function ItemsEditor() {
                   padding: "10px 24px",
                   borderRadius: 8,
                   border: "none",
-                  background: "linear-gradient(135deg,#d97706,#f59e0b)",
-                  color: "#fff",
+                  background: "var(--pos-teal)",
+                  color: "var(--pos-surface)",
                   fontWeight: 700,
                   fontSize: 13,
                   cursor: modalSaving ? "not-allowed" : "pointer",
@@ -1632,7 +1655,7 @@ export default function ItemsEditor() {
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            background: "rgba(0,0,0,0.45)",
+            background: "var(--pos-overlay)",
           }}
           onClick={() => setVariantEditorItemId(null)}
         >
@@ -1645,10 +1668,10 @@ export default function ItemsEditor() {
             style={{
               width: 560,
               maxWidth: "95vw",
-              background: "#fff",
+              background: "var(--pos-surface)",
               borderRadius: 14,
               padding: "22px 24px",
-              boxShadow: "0 16px 48px rgba(0,0,0,0.18)",
+              boxShadow: "var(--pos-shadow-overlay)",
             }}
           >
             <div
@@ -1660,10 +1683,10 @@ export default function ItemsEditor() {
               }}
             >
               <div>
-                <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: "#111827" }}>
+                <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: "var(--pos-tx)" }}>
                   Variants · {variantEditorItem.name}
                 </h3>
-                <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>
+                <div style={{ fontSize: 12, color: "var(--pos-tx-sub)", marginTop: 2 }}>
                   Add options like Half/Full with different prices.
                 </div>
               </div>
@@ -1674,24 +1697,24 @@ export default function ItemsEditor() {
                   background: "none",
                   border: "none",
                   cursor: "pointer",
-                  color: "#9ca3af",
+                  color: "var(--pos-tx-muted)",
                   fontSize: 20,
                   lineHeight: 1,
                 }}
                 aria-label="Close"
               >
-                ×
+                <Icon icon={X} size="sm" />
               </button>
             </div>
 
             <div style={{ display: "grid", gap: 8 }}>
               {variantOptions.length === 0 && (
-                <div style={{ fontSize: 12, color: "#b45309" }}>
+                <div style={{ fontSize: 12, color: "var(--pos-saffron-text)" }}>
                   Configure variant options in Settings to use dropdown variants.
                 </div>
               )}
               {variantEditorDraft.length === 0 && (
-                <div style={{ fontSize: 12, color: "#9ca3af" }}>
+                <div style={{ fontSize: 12, color: "var(--pos-tx-muted)" }}>
                   No variants yet. Use Add Variant to create one.
                 </div>
               )}
@@ -1718,10 +1741,10 @@ export default function ItemsEditor() {
                       width: "100%",
                       padding: "8px 10px",
                       borderRadius: 8,
-                      border: "1.5px solid #d1d5db",
+                      border: "1.5px solid var(--pos-line-strong)",
                       fontSize: 13,
-                      background: "#fff",
-                      color: variant.name ? "#111827" : "#9ca3af",
+                      background: "var(--pos-surface)",
+                      color: variant.name ? "var(--pos-tx)" : "var(--pos-tx-muted)",
                       fontFamily: "inherit",
                       cursor: "pointer",
                       boxSizing: "border-box",
@@ -1749,7 +1772,7 @@ export default function ItemsEditor() {
                       width: "100%",
                       padding: "8px 10px",
                       borderRadius: 8,
-                      border: "1.5px solid #d1d5db",
+                      border: "1.5px solid var(--pos-line-strong)",
                       fontSize: 13,
                       boxSizing: "border-box",
                     }}
@@ -1765,14 +1788,14 @@ export default function ItemsEditor() {
                       height: 34,
                       borderRadius: 8,
                       border: "none",
-                      background: "#fff1f2",
-                      color: "#dc2626",
+                      background: "var(--pos-danger-tint)",
+                      color: "var(--pos-danger)",
                       cursor: "pointer",
                       fontSize: 18,
                       lineHeight: 1,
                     }}
                   >
-                    ×
+                    <Icon icon={X} size="sm" />
                   </button>
                 </div>
               ))}

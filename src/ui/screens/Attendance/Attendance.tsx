@@ -14,6 +14,18 @@ import type { AttendanceStatus } from "../../../shared/pos";
 import { useToast } from "../../context/ToastContext";
 import StatusBadge from "./components/StatusBadge";
 import { useAttendanceShortcuts } from "./hooks/useAttendanceShortcuts";
+import { PageHeader } from "../../components/ui/PageHeader";
+import { Icon } from "../../components/ui/Icon";
+import {
+  Ban,
+  Copy,
+  Download,
+  FileSpreadsheet,
+  LayoutGrid,
+  RotateCcw,
+  Table2,
+  UserCheck,
+} from "lucide-react";
 import styles from "./Attendance.module.css";
 
 type AttendanceRow = {
@@ -226,10 +238,6 @@ function IconButton({ label, title, icon, onClick, disabled, active }: IconButto
       <span className={styles.iconButtonLabel}>{label}</span>
     </button>
   );
-}
-
-function MiniIcon({ children }: { children: React.ReactNode }) {
-  return <span className={styles.iconGlyph}>{children}</span>;
 }
 
 export default function Attendance() {
@@ -481,12 +489,12 @@ export default function Attendance() {
       )
       .join("");
     const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/><style>
-      body { font-family: Arial, sans-serif; padding: 24px; color: #111827; }
+      body { font-family: Arial, sans-serif; padding: 24px; color: var(--pos-tx); }
       h1 { margin: 0 0 6px; font-size: 20px; }
-      p { margin: 0 0 12px; color: #6b7280; }
+      p { margin: 0 0 12px; color: var(--pos-tx-sub); }
       table { width: 100%; border-collapse: collapse; }
-      th, td { border: 1px solid #e5e7eb; padding: 6px; font-size: 11px; text-align: left; }
-      th { background: #f9fafb; text-transform: uppercase; }
+      th, td { border: 1px solid var(--pos-line); padding: 6px; font-size: 11px; text-align: left; }
+      th { background: var(--pos-surface-hover); text-transform: uppercase; }
     </style></head><body>
       <h1>Attendance Report</h1>
       <p>Date: ${attendanceDate}</p>
@@ -540,21 +548,23 @@ export default function Attendance() {
     <div className={styles.root}>
       <div className={styles.toolbar}>
         <div className={styles.headerRow}>
-          <div>
-            <h2 className="pos-ph-title">Attendance</h2>
-            <p className="pos-ph-sub">Simplified daily roster with fast edits, filters, and exports.</p>
-          </div>
-          <div className={styles.headerActions}>
-            {dirtyCount > 0 && <div className={styles.unsaved}>{dirtyCount} unsaved change(s)</div>}
-            <button
-              type="button"
-              className="pos-btn pos-btn-primary"
-              onClick={save}
-              disabled={saving}
-            >
-              {saving ? "Saving..." : "Save Changes"}
-            </button>
-          </div>
+          <PageHeader
+            title="Attendance"
+            subtitle="Simplified daily roster with fast edits, filters, and exports."
+            actions={
+              <>
+                {dirtyCount > 0 && <div className={styles.unsaved}>{dirtyCount} unsaved change(s)</div>}
+                <button
+                  type="button"
+                  className="pos-btn pos-btn-primary"
+                  onClick={save}
+                  disabled={saving}
+                >
+                  {saving ? "Saving..." : "Save Changes"}
+                </button>
+              </>
+            }
+          />
         </div>
 
         <div className={styles.filterGrid}>
@@ -644,19 +654,19 @@ export default function Attendance() {
             <IconButton
               label="Present"
               title="Mark all present"
-              icon={<MiniIcon>✓</MiniIcon>}
+              icon={<Icon icon={UserCheck} size="sm" />}
               onClick={() => markAll("present")}
             />
             <IconButton
               label="Absent"
               title="Mark all absent"
-              icon={<MiniIcon>⊘</MiniIcon>}
+              icon={<Icon icon={Ban} size="sm" />}
               onClick={() => markAll("absent")}
             />
             <IconButton
               label="Copy"
               title="Copy yesterday"
-              icon={<MiniIcon>⟲</MiniIcon>}
+              icon={<Icon icon={Copy} size="sm" />}
               onClick={copyYesterday}
               disabled={saving}
             />
@@ -666,13 +676,13 @@ export default function Attendance() {
             <IconButton
               label="Excel"
               title="Export Excel"
-              icon={<MiniIcon>⇩</MiniIcon>}
+              icon={<Icon icon={FileSpreadsheet} size="sm" />}
               onClick={exportExcel}
             />
             <IconButton
               label="PDF"
               title="Export PDF"
-              icon={<MiniIcon>▣</MiniIcon>}
+              icon={<Icon icon={Download} size="sm" />}
               onClick={exportPdf}
             />
           </div>
@@ -681,14 +691,14 @@ export default function Attendance() {
             <IconButton
               label="Table"
               title="Table view"
-              icon={<MiniIcon>▦</MiniIcon>}
+              icon={<Icon icon={Table2} size="sm" />}
               onClick={() => setViewMode("table")}
               active={viewMode === "table"}
             />
             <IconButton
               label="Cards"
               title="Card view"
-              icon={<MiniIcon>▤</MiniIcon>}
+              icon={<Icon icon={LayoutGrid} size="sm" />}
               onClick={() => setViewMode("cards")}
               active={viewMode === "cards"}
             />
@@ -696,7 +706,7 @@ export default function Attendance() {
               <IconButton
                 label="Reset"
                 title="Reset filters"
-                icon={<MiniIcon>↺</MiniIcon>}
+                icon={<Icon icon={RotateCcw} size="sm" />}
                 onClick={clearFilters}
               />
             )}
@@ -911,7 +921,7 @@ export default function Attendance() {
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
                     <div>
                       <div style={{ fontWeight: 800 }}>{row.employee}</div>
-                      <div style={{ color: "#6b7280", fontSize: 12 }}>{row.role}</div>
+                      <div style={{ color: "var(--pos-tx-sub)", fontSize: 12 }}>{row.role}</div>
                     </div>
                     <StatusBadge status={row.status} />
                   </div>

@@ -2,6 +2,7 @@ import {
   addSeatingAreaDraft,
   buildSeatingAreaId,
   computeTableAreaUpdates,
+  computeTableSeatsUpdates,
   moveSeatingAreaByDirection,
   reorderSeatingAreasByDrag,
 } from "./seatingAreaUtils";
@@ -59,5 +60,20 @@ describe("seatingAreaUtils", () => {
       new Set(["area:main", "area:first"]),
     );
     expect(updates).toEqual([{ tableId: 1, areaId: "area:first" }]);
+  });
+
+  it("computes only changed seat counts", () => {
+    const updates = computeTableSeatsUpdates(
+      [
+        { id: 1, areaId: "area:main", seats: 4 },
+        { id: 2, areaId: "area:main", seats: 6 },
+      ],
+      {
+        1: 4,
+        2: 8,
+        3: 2,
+      },
+    );
+    expect(updates).toEqual([{ tableId: 2, seats: 8 }]);
   });
 });

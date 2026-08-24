@@ -19,6 +19,7 @@ import {
 import { ENV } from "../../../config/env";
 import type { FoodCostSummaryDto, GroceryUnit } from "../../../shared/pos";
 import { normalizeCategoryName, normalizeText, validationMessage } from "../../../shared/validation";
+import { PRINT } from "../../theme/print-html";
 import styles from "./Grocery.module.css";
 
 type GroceryView = "list" | "purchases" | "summary";
@@ -886,12 +887,12 @@ export default function Grocery() {
       )
       .join("");
     const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/><style>
-      body { font-family: Arial, sans-serif; padding: 28px; color: #111; }
+      body { font-family: Arial, sans-serif; padding: 28px; color: ${PRINT.ink}; }
       h1 { font-size: 22px; margin: 0 0 4px; }
-      p { margin: 0 0 20px; color: #666; }
+      p { margin: 0 0 20px; color: ${PRINT.sub}; }
       table { width: 100%; border-collapse: collapse; }
-      th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid #eee; }
-      th { font-size: 11px; text-transform: uppercase; color: #666; }
+      th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--pos-line); }
+      th { font-size: 11px; text-transform: uppercase; color: ${PRINT.sub}; }
     </style></head><body>
       <h1>${escapeHtml(selectedList.title)}</h1>
       <p>${formatDate(selectedList.listDate)}</p>
@@ -1223,16 +1224,16 @@ export default function Grocery() {
       )
       .join("");
     const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/><style>
-      body { font-family: Arial, sans-serif; padding: 28px; color: #111; }
+      body { font-family: Arial, sans-serif; padding: 28px; color: ${PRINT.ink}; }
       h1 { font-size: 22px; margin: 0 0 4px; }
       h2 { font-size: 16px; margin-top: 24px; }
       .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin: 20px 0; }
-      .card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px; }
-      .label { color: #666; font-size: 11px; text-transform: uppercase; font-weight: bold; }
+      .card { border: 1px solid var(--pos-line); border-radius: 8px; padding: 14px; }
+      .label { color: ${PRINT.sub}; font-size: 11px; text-transform: uppercase; font-weight: bold; }
       .value { font-size: 22px; font-weight: bold; margin-top: 5px; }
       table { width: 100%; border-collapse: collapse; }
-      th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid #eee; }
-      th { font-size: 11px; text-transform: uppercase; color: #666; }
+      th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--pos-line); }
+      th { font-size: 11px; text-transform: uppercase; color: ${PRINT.sub}; }
     </style></head><body>
       <h1>Grocery Spend Summary</h1>
       <p>${formatDate(fromTs)} to ${formatDate(toTs)}</p>

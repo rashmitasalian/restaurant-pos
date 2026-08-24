@@ -58,6 +58,7 @@ declare global {
         configuredCount: () => Promise<number>;
         snapshot: () => Promise<any>;
         setArea: (tableId: number, areaId: string) => Promise<any>;
+        setSeats: (tableId: number, seats: number) => Promise<any>;
       };
       seatingAreas?: {
         list: (includeDisabled?: boolean) => Promise<any[]>;

@@ -67,10 +67,12 @@ return (
         const menuItem = it?.menuItemId ? menuItemsById[it.menuItemId] : null;
         const variants = Array.isArray(menuItem?.variants) ? menuItem.variants : [];
         const selectedVariantName = detectSelectedVariant(it, menuItem);
+        const displayName = String(it?.name || menuItem?.name || "").trim() || "Item";
         return (
           <OrderItem
             key={it.id}
             it={it}
+            displayName={displayName}
             editingQty={editingQty}
             editingRate={editingRate}
             setEditingQty={setEditingQty}

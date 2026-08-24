@@ -1,0 +1,82 @@
+.screen {
+  min-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--pos-bg);
+}
+
+.card {
+  width: 100%;
+  max-width: 420px;
+  padding: 32px 24px;
+  border-radius: var(--pos-r-dialog);
+  box-shadow: var(--pos-shadow-overlay);
+  background: var(--pos-surface);
+  border: 1px solid var(--pos-line);
+}
+
+.cardWide {
+  max-width: 500px;
+  padding: 36px 28px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.brandMark {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--pos-r-sm);
+}
+
+.brandName {
+  font-weight: 900;
+  font-size: 22px;
+  letter-spacing: -0.4px;
+}
+
+.brandResto {
+  color: var(--pos-teal);
+}
+
+.brandNiti {
+  color: var(--pos-saffron);
+}
+
+.warning {
+  padding: 10px 12px;
+  border-radius: var(--pos-r-md);
+  background: var(--pos-saffron-tint);
+  border: 1px solid var(--pos-saffron-line);
+  color: var(--pos-saffron-text);
+  font-size: 13px;
+  line-height: 1.5;
+  margin-bottom: 16px;
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--pos-overlay);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+}
+
+.overlayCard {
+  width: 100%;
+  max-width: 460px;
+  background: var(--pos-surface);
+  border-radius: var(--pos-r-dialog);
+  padding: 24px;
+  box-shadow: var(--pos-shadow-overlay);
+  border: 1px solid var(--pos-line);
+}

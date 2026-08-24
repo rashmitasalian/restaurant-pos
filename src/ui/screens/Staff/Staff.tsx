@@ -20,6 +20,7 @@ import {
 import { AuthContext } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
 import { useFocusTrap } from "../../hooks/useFocusTrap";
+import { PageHeader } from "../../components/ui/PageHeader";
 
 const MAX_PHOTO_BYTES = 500 * 1024;
 const PHOTO_SIZE = 512;
@@ -148,7 +149,7 @@ async function compressStaffPhoto(file: File): Promise<PhotoDraft> {
   if (!ctx) {
     throw new Error("staff-photo-invalid");
   }
-  ctx.fillStyle = "#ffffff";
+  ctx.fillStyle = "var(--pos-surface)";
   ctx.fillRect(0, 0, width, height);
   ctx.drawImage(img, 0, 0, width, height);
 
@@ -332,26 +333,26 @@ function buildStaffRosterPdfHtml(
   <title>Confidential Staff Roster</title>
   <style>
     * { box-sizing: border-box; }
-    body { font-family: Arial, sans-serif; padding: 28px; color: #111827; font-size: 12px; }
+    body { font-family: Arial, sans-serif; padding: 28px; color: var(--pos-tx); font-size: 12px; }
     h1 { font-size: 20px; margin: 0 0 4px; }
-    .sub { color: #6b7280; margin: 0 0 18px; }
+    .sub { color: var(--pos-tx-sub); margin: 0 0 18px; }
     .meta { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 0 0 18px; }
-    .meta-box { border: 1px solid #e5e7eb; border-radius: 8px; padding: 9px 10px; }
-    .meta-box span { display: block; color: #6b7280; font-size: 9px; text-transform: uppercase; font-weight: 700; margin-bottom: 3px; }
+    .meta-box { border: 1px solid var(--pos-line); border-radius: 8px; padding: 9px 10px; }
+    .meta-box span { display: block; color: var(--pos-tx-sub); font-size: 9px; text-transform: uppercase; font-weight: 700; margin-bottom: 3px; }
     .meta-box strong { font-size: 12px; }
     .staff-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-    .staff-card { break-inside: avoid; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px; display: grid; grid-template-columns: 58px 1fr; gap: 10px; min-height: 82px; }
+    .staff-card { break-inside: avoid; border: 1px solid var(--pos-line); border-radius: 8px; padding: 10px; display: grid; grid-template-columns: 58px 1fr; gap: 10px; min-height: 82px; }
     .photo, .avatar { width: 54px; height: 54px; border-radius: 7px; object-fit: cover; }
-    .avatar { background: #0f766e; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 20px; }
+    .avatar { background: var(--pos-teal); color: var(--pos-surface); display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 20px; }
     .staff-top { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; }
     .staff-name { font-weight: 900; font-size: 13px; }
-    .designation { color: #0f766e; font-weight: 700; margin-top: 2px; }
-    .status { font-size: 9px; font-weight: 800; text-transform: uppercase; border-radius: 999px; padding: 3px 6px; background: #fee2e2; color: #991b1b; }
+    .designation { color: var(--pos-teal); font-weight: 700; margin-top: 2px; }
+    .status { font-size: 9px; font-weight: 800; text-transform: uppercase; border-radius: 999px; padding: 3px 6px; background: var(--pos-danger-tint); color: var(--pos-danger-text); }
     .details { margin-top: 7px; display: grid; gap: 4px; }
     .detail { display: grid; grid-template-columns: 78px 1fr; gap: 6px; }
-    .detail span { color: #6b7280; }
+    .detail span { color: var(--pos-tx-sub); }
     .detail strong { font-weight: 600; overflow-wrap: anywhere; }
-    footer { margin-top: 20px; color: #9ca3af; text-align: center; font-size: 10px; }
+    footer { margin-top: 20px; color: var(--pos-tx-muted); text-align: center; font-size: 10px; }
     @media print {
       body { padding: 0; }
       .staff-card { page-break-inside: avoid; }
@@ -380,7 +381,7 @@ const staffFieldGrid: React.CSSProperties = {
 };
 
 const requiredBadgeStyle: React.CSSProperties = {
-  color: "#b45309",
+  color: "var(--pos-saffron-text)",
   fontSize: 14,
   fontWeight: 800,
   lineHeight: 1,
@@ -881,7 +882,7 @@ export default function Staff() {
             cursor: "zoom-in",
             flexShrink: 0,
             overflow: "hidden",
-            boxShadow: "0 0 0 1px #e5e7eb",
+            boxShadow: "0 0 0 1px var(--pos-line)",
           }}
         >
           <img
@@ -899,8 +900,8 @@ export default function Staff() {
           width: 48,
           height: 48,
           borderRadius: 8,
-          background: "linear-gradient(135deg,#0f766e,#14b8a6)",
-          color: "#fff",
+          background: "var(--pos-teal)",
+          color: "var(--pos-surface)",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -916,12 +917,11 @@ export default function Staff() {
 
   return (
     <div className="pos-page">
-      <div className="pos-ph">
-        <div>
-          <h2 className="pos-ph-title">Staff</h2>
-          <p className="pos-ph-sub">Manage staff details, optional salary details, and profile photos</p>
-        </div>
-        <div className="pos-ph-actions">
+      <PageHeader
+        title="Staff"
+        subtitle="Manage staff details, optional salary details, and profile photos"
+        actions={
+          <>
           <button
             type="button"
             className={`pos-btn ${showLeftStaff ? "pos-btn-primary" : "pos-btn-secondary"}`}
@@ -938,8 +938,9 @@ export default function Staff() {
           >
             Export
           </button>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {exportOpen && (
         <div
@@ -947,7 +948,7 @@ export default function Staff() {
             position: "fixed",
             inset: 0,
             zIndex: 1000,
-            background: "rgba(15,23,42,0.42)",
+            background: "var(--pos-overlay)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -961,14 +962,14 @@ export default function Staff() {
             aria-labelledby="staffExportTitle"
             tabIndex={-1}
             className="pos-card pos-card-p"
-            style={{ width: "min(520px, 100%)", boxShadow: "0 24px 80px rgba(15,23,42,0.28)" }}
+            style={{ width: "min(520px, 100%)", boxShadow: "var(--pos-shadow-overlay)" }}
           >
             <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginBottom: 16 }}>
               <div>
                 <h3 id="staffExportTitle" style={{ margin: 0, fontSize: 18 }}>
                   Export Staff
                 </h3>
-                <p style={{ margin: "4px 0 0", color: "#6b7280", fontSize: 12 }}>
+                <p style={{ margin: "4px 0 0", color: "var(--pos-tx-sub)", fontSize: 12 }}>
                   Confidential roster export
                 </p>
               </div>
@@ -991,7 +992,7 @@ export default function Staff() {
                 />
                 <span>
                   <strong>Include photos</strong>
-                  <span style={{ display: "block", color: "#6b7280", marginTop: 2 }}>
+                  <span style={{ display: "block", color: "var(--pos-tx-sub)", marginTop: 2 }}>
                     Adds profile images to the PDF roster only.
                   </span>
                 </span>
@@ -1004,7 +1005,7 @@ export default function Staff() {
                 />
                 <span>
                   <strong>Include salary</strong>
-                  <span style={{ display: "block", color: "#b45309", marginTop: 2 }}>
+                  <span style={{ display: "block", color: "var(--pos-saffron-text)", marginTop: 2 }}>
                     Salary is sensitive and is excluded by default.
                   </span>
                 </span>
@@ -1017,7 +1018,7 @@ export default function Staff() {
                 />
                 <span>
                   <strong>Include left staff</strong>
-                  <span style={{ display: "block", color: "#6b7280", marginTop: 2 }}>
+                  <span style={{ display: "block", color: "var(--pos-tx-sub)", marginTop: 2 }}>
                     Adds staff marked Left to the roster.
                   </span>
                 </span>
@@ -1031,7 +1032,7 @@ export default function Staff() {
                 gap: 10,
                 marginTop: 18,
                 paddingTop: 14,
-                borderTop: "1px solid #e5e7eb",
+                borderTop: "1px solid var(--pos-line)",
               }}
             >
               <button
@@ -1070,7 +1071,7 @@ export default function Staff() {
             position: "fixed",
             inset: 0,
             zIndex: 1100,
-            background: "rgba(15,23,42,0.72)",
+            background: "var(--pos-overlay)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -1087,9 +1088,9 @@ export default function Staff() {
             style={{
               width: "min(560px, 96vw)",
               maxHeight: "92vh",
-              background: "#fff",
+              background: "var(--pos-surface)",
               borderRadius: 12,
-              boxShadow: "0 24px 80px rgba(15,23,42,0.36)",
+              boxShadow: "var(--pos-shadow-overlay)",
               overflow: "hidden",
             }}
           >
@@ -1100,14 +1101,14 @@ export default function Staff() {
                 justifyContent: "space-between",
                 gap: 12,
                 padding: "14px 16px",
-                borderBottom: "1px solid #e5e7eb",
+                borderBottom: "1px solid var(--pos-line)",
               }}
             >
               <div>
                 <h3 id="staffPhotoPreviewTitle" style={{ margin: 0, fontSize: 16 }}>
                   {photoPreview.name}
                 </h3>
-                <div style={{ marginTop: 2, color: "#6b7280", fontSize: 12 }}>Staff photo</div>
+                <div style={{ marginTop: 2, color: "var(--pos-tx-sub)", fontSize: 12 }}>Staff photo</div>
               </div>
               <button
                 type="button"
@@ -1127,7 +1128,7 @@ export default function Staff() {
             <div
               style={{
                 padding: 16,
-                background: "#f8fafc",
+                background: "var(--pos-surface-sunken)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -1142,7 +1143,7 @@ export default function Staff() {
                   maxHeight: "calc(92vh - 96px)",
                   borderRadius: 10,
                   objectFit: "contain",
-                  background: "#fff",
+                  background: "var(--pos-surface)",
                 }}
               />
             </div>
@@ -1339,12 +1340,12 @@ export default function Staff() {
                         <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
                           <div>
                             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                              <div style={{ fontWeight: 900, color: "#111827" }}>{member.name}</div>
+                              <div style={{ fontWeight: 900, color: "var(--pos-tx)" }}>{member.name}</div>
                               <span className={`pos-badge ${isActive ? "pos-badge-green" : "pos-badge-red"}`}>
                                 {isActive ? "Active" : "Left"}
                               </span>
                             </div>
-                            {member.designation && <div style={{ color: "#0f766e", fontWeight: 800, fontSize: 13 }}>{member.designation}</div>}
+                            {member.designation && <div style={{ color: "var(--pos-teal)", fontWeight: 800, fontSize: 13 }}>{member.designation}</div>}
                           </div>
                           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                             <button
@@ -1416,7 +1417,7 @@ export default function Staff() {
                             )}
                           </div>
                         </div>
-                        <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginTop: 8, color: "#6b7280", fontSize: 13 }}>
+                        <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginTop: 8, color: "var(--pos-tx-sub)", fontSize: 13 }}>
                           <span>{member.phone}</span>
                           <span>Joined: {member.joiningDate || "Not set"}</span>
                           <span>Salary: {formatSalary(member.salary)}</span>

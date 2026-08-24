@@ -796,7 +796,7 @@ function seedDatabase(database: SqliteDatabase) {
     `);
     const tx = database.transaction(() => {
       for (let i = 1; i <= tableCount; i++) {
-        insert.run(i, `Table ${i}`, i % 4 === 0 ? 6 : 4, DEFAULT_SEATING_AREA_ID, i, now, now);
+        insert.run(i, `Table ${i}`, 4, DEFAULT_SEATING_AREA_ID, i, now, now);
       }
     });
     tx();

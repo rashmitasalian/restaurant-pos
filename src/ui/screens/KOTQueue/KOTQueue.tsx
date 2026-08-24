@@ -1,4 +1,4 @@
-﻿import React from "react";
+import React from "react";
 import {
   getActiveOrders,
   getConfigPrinters,
@@ -10,7 +10,13 @@ import {
 } from "../../../app/db/posRepository";
 import { printKOT } from "../../../app/services/printer";
 import { AuthContext } from "../../context/AuthContext";
+import { formatKotAge, kotAgeTone } from "../../../shared/kotAge";
+import { PageHeader } from "../../components/ui/PageHeader";
+import { Badge } from "../../components/ui/Badge";
+import { Button } from "../../components/ui/Button";
+import { Card } from "../../components/ui/Card";
 import { buildKotLines } from "../Billing/utils/receiptBuilder";
+import styles from "./KOTQueue.module.css";
 
 type KOTItem = {
   orderId: string;
@@ -250,147 +256,56 @@ export default function KOTQueue() {
   // The "done" concept is handled at the order level (kotPrinted flag)
   const pending = kotList;
 
-  const ageColor = (ms: number) => {
-    const mins = Math.round(ms / 60000);
-    if (mins < 5) {
-      return "#16a34a";
-    }
-    if (mins < 15) {
-      return "#d97706";
-    }
-    return "#dc2626";
-  };
-
   return (
     <div className="pos-page">
-      {/* Header */}
-      <div className="pos-ph">
-        <div>
-          <h2 className="pos-ph-title">KOT Queue</h2>
-          <p className="pos-ph-sub">
-            <span style={{ color: "var(--pos-brand-deep,#d97706)", fontWeight: 700 }}>
-              {pending.length}
-            </span>{" "}
-            pending orders
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="KOT Queue"
+        subtitle={
+          <>
+            <span style={{ color: "var(--pos-teal)", fontWeight: 700 }}>{pending.length}</span> pending
+            orders
+          </>
+        }
+      />
 
-      {/* Empty state */}
       {pending.length === 0 && (
         <div className="pos-empty" style={{ marginTop: 32 }}>
           All clear — no pending KOTs
         </div>
       )}
 
-      {/* KOT grid */}
-      <div
-        style={{
-          display: "grid",
-          gap: 14,
-          gridTemplateColumns: "repeat(auto-fill, minmax(290px, 1fr))",
-        }}
-      >
+      <div className={styles.grid}>
         {pending.map((k) => {
-          const ageMins = Math.round((Date.now() - k.time) / 60000);
-          const ageBg = ageMins < 5 ? "#dcfce7" : ageMins < 15 ? "#fef3c7" : "#fee2e2";
-          const ageClr = ageColor(Date.now() - k.time);
+          const tone = kotAgeTone(k.time);
           const hasPendingItems = k.pendingItems.length > 0;
           const canMarkDone = k.status === "sent" && !hasPendingItems && k.sentItems.length > 0;
           const isMarkingDone = Boolean(markingDone[k.orderId]);
           const isReprinting = Boolean(reprinting[k.orderId]);
           return (
-            <div key={k.orderId} className="pos-card" style={{ padding: "18px 20px" }}>
-              {/* Card header */}
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  marginBottom: 14,
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: 17,
-                    fontWeight: 800,
-                    color: "var(--pos-tx,#111827)",
-                    letterSpacing: -0.3,
-                  }}
-                >
+            <Card key={k.orderId} padded className={styles.ticket}>
+              <div className={styles.head}>
+                <div className={styles.tableAnchor}>
                   {k.table ? `Table ${k.table}` : "Takeaway / Delivery"}
                 </div>
-                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                  {k.status === "failed" && (
-                    <span
-                      className="pos-badge"
-                      style={{
-                        background: "#fee2e2",
-                        color: "#b91c1c",
-                        borderColor: "transparent",
-                      }}
-                    >
-                      Print failed
-                    </span>
-                  )}
+                <div className={styles.badges}>
+                  {k.status === "failed" && <Badge tone="danger">Print failed</Badge>}
                   {hasPendingItems && k.status !== "failed" && (
-                    <span
-                      className="pos-badge"
-                      style={{
-                        background: "#fffbeb",
-                        color: "#92400e",
-                        borderColor: "transparent",
-                      }}
-                    >
-                      Pending print
-                    </span>
+                    <Badge tone="attention">Pending print</Badge>
                   )}
-                  <span
-                    className="pos-badge"
-                    style={{ background: ageBg, color: ageClr, borderColor: "transparent" }}
-                  >
-                    {ageMins}m ago
-                  </span>
+                  <Badge tone={tone === "danger" ? "danger" : tone === "attention" ? "attention" : "neutral"}>
+                    {formatKotAge(k.time)} ago
+                  </Badge>
                 </div>
               </div>
 
-              {/* Items */}
-              <div style={{ display: "grid", gap: 5, marginBottom: 16 }}>
+              <div className={styles.lines}>
                 {hasPendingItems && (
                   <>
-                    <div
-                      style={{
-                        fontSize: 11,
-                        fontWeight: 800,
-                        color: "#92400e",
-                        textTransform: "uppercase",
-                      }}
-                    >
-                      Pending to print
-                    </div>
+                    <div className="ui-overline">Pending to print</div>
                     {k.pendingItems.map((it) => (
-                      <div
-                        key={`pending-${it.id}`}
-                        style={{
-                          fontSize: 13,
-                          color: "var(--pos-tx-sec,#374151)",
-                          fontWeight: 700,
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 8,
-                        }}
-                      >
-                        <span style={{ color: "#d97706", fontSize: 11 }}>›</span>
+                      <div key={`pending-${it.id}`} className={styles.line}>
                         <span style={{ flex: 1 }}>{it.name}</span>
-                        <span
-                          style={{
-                            color: "#92400e",
-                            fontSize: 12,
-                            fontVariantNumeric: "tabular-nums",
-                          }}
-                        >
-                          ×{it.qty}
-                        </span>
+                        <span className={`${styles.qty} ${styles.qtyPending}`}>x{it.qty}</span>
                       </div>
                     ))}
                   </>
@@ -398,66 +313,20 @@ export default function KOTQueue() {
                 {k.sentItems.length > 0 && (
                   <>
                     {hasPendingItems && <div style={{ height: 4 }} />}
-                    <div
-                      style={{
-                        fontSize: 11,
-                        fontWeight: 800,
-                        color: "#6b7280",
-                        textTransform: "uppercase",
-                      }}
-                    >
-                      Already sent
-                    </div>
+                    <div className="ui-overline">Already sent</div>
                     {k.sentItems.map((it, index) => (
-                      <div
-                        key={`sent-${it.name}-${index}`}
-                        style={{
-                          fontSize: 13,
-                          color: "var(--pos-tx-sec,#374151)",
-                          fontWeight: 600,
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 8,
-                        }}
-                      >
-                        <span style={{ color: "var(--pos-brand-deep,#d97706)", fontSize: 11 }}>
-                          ›
-                        </span>
+                      <div key={`sent-${it.name}-${index}`} className={styles.line}>
                         <span style={{ flex: 1 }}>{it.name}</span>
-                        <span
-                          style={{
-                            color: "var(--pos-muted,#9ca3af)",
-                            fontSize: 12,
-                            fontVariantNumeric: "tabular-nums",
-                          }}
-                        >
-                          ×{it.qty}
-                        </span>
+                        <span className={`${styles.qty} ${styles.qtySent}`}>x{it.qty}</span>
                       </div>
                     ))}
                   </>
                 )}
               </div>
 
-              {/* Error */}
               {orderErrors[k.orderId] && (
-                <div
-                  style={{
-                    marginBottom: 12,
-                    padding: "8px 10px",
-                    borderRadius: 8,
-                    background: "#fef2f2",
-                    border: "1px solid #fecaca",
-                    color: "#991b1b",
-                    fontSize: 12,
-                    fontWeight: 600,
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    gap: 8,
-                  }}
-                >
-                  <span>⚠ {orderErrors[k.orderId]}</span>
+                <div className={styles.error}>
+                  <span>{orderErrors[k.orderId]}</span>
                   <button
                     onClick={() =>
                       setOrderErrors((p) => {
@@ -466,53 +335,37 @@ export default function KOTQueue() {
                         return c;
                       })
                     }
-                    style={{
-                      background: "none",
-                      border: "none",
-                      cursor: "pointer",
-                      fontSize: 16,
-                      color: "#991b1b",
-                      lineHeight: 1,
-                      padding: 0,
-                    }}
+                    className="ui-btn ui-btn-ghost"
                     aria-label="Dismiss error"
                   >
-                    ×
+                    Close
                   </button>
                 </div>
               )}
 
-              {/* Actions */}
-              <div style={{ display: "flex", gap: 8 }}>
-                <button
+              <div className={styles.actions}>
+                <Button
+                  variant="primary"
                   onClick={() => markDone(k.orderId)}
                   disabled={!canMarkDone || isMarkingDone || isReprinting}
-                  className="pos-btn pos-btn-primary"
-                  style={{
-                    flex: 1,
-                    justifyContent: "center",
-                    background: "#16a34a",
-                    borderColor: "#16a34a",
-                    boxShadow: "0 2px 8px rgba(22,163,74,0.25)",
-                    opacity: canMarkDone && !isMarkingDone && !isReprinting ? 1 : 0.55,
-                  }}
                   title={canMarkDone ? "Mark KOT done" : "Print pending KOT items first"}
+                  style={{ flex: 1 }}
                 >
-                  {isMarkingDone ? "Saving..." : "✓ Done"}
-                </button>
-                <button
+                  {isMarkingDone ? "Saving..." : "Done"}
+                </Button>
+                <Button
+                  variant="secondary"
                   onClick={() => reprintKOT(k)}
                   disabled={isReprinting || isMarkingDone}
-                  className="pos-btn pos-btn-secondary"
                 >
                   {isReprinting
                     ? "Printing..."
                     : hasPendingItems || k.status === "failed"
                       ? "Print pending"
                       : "Reprint"}
-                </button>
+                </Button>
               </div>
-            </div>
+            </Card>
           );
         })}
       </div>

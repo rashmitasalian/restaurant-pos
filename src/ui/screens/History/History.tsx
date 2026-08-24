@@ -20,6 +20,8 @@ import {
   getOrderGstConfig,
   normalizeGstConfig,
 } from "../../../shared/gst";
+import { PRINT } from "../../theme/print-html";
+import { PageHeader } from "../../components/ui/PageHeader";
 
 type RangePreset = "today" | "yesterday" | "thisWeek" | "thisMonth" | "custom";
 
@@ -102,7 +104,7 @@ type UIOrder = {
   displayId: number;
   table: number | null;
   orderType: string;
-  orderLabel: string; // "Table 3" | "Takeaway" | "Delivery #ABC"
+  orderLabel: string; // "Table 3" | "Takeaway" | "Delivery" with id
   total: number;
   discountPercent: number;
   discountTotal: number;
@@ -741,13 +743,13 @@ export default function History() {
     const rows = allItems
       .map(
         (o, i) =>
-          `<tr${o.discountPercent > 0 ? ' style="background:#fff5f5"' : ''}>
+          `<tr${o.discountPercent > 0 ? ` style="background:${PRINT.dangerRow}"` : ""}>
         <td>${i + 1}</td>
         <td>${o.orderLabel}</td>
         <td>${new Date(o.time).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</td>
         <td style="text-align:center">${o.items}</td>
         <td style="text-align:center">${o.method}</td>
-        <td style="text-align:center;color:${o.discountPercent > 0 ? '#dc2626' : '#aaa'}">${o.discountPercent > 0 ? `${o.discountPercent}% (−${fmt(o.discountTotal)})` : '—'}</td>
+        <td style="text-align:center;color:${o.discountPercent > 0 ? "var(--pos-danger)" : PRINT.faint}">${o.discountPercent > 0 ? `${o.discountPercent}% (−${fmt(o.discountTotal)})` : "—"}</td>
         <td style="text-align:right">${fmt(o.total)}</td>
       </tr>`,
       )
@@ -759,16 +761,16 @@ export default function History() {
   <meta charset="UTF-8"/>
   <title>Order History — ${label}</title>
   <style>
-    body { font-family: Arial, sans-serif; padding: 32px; color: #111; font-size: 13px; }
+    body { font-family: Arial, sans-serif; padding: 32px; color: ${PRINT.ink}; font-size: 13px; }
     h1 { font-size: 18px; margin-bottom: 2px; }
-    p.sub { color: #666; font-size: 12px; margin: 0 0 20px; }
+    p.sub { color: ${PRINT.sub}; font-size: 12px; margin: 0 0 20px; }
     table { width: 100%; border-collapse: collapse; }
     th { text-align: left; padding: 8px 10px; font-size: 10px; text-transform: uppercase;
-         letter-spacing: 0.06em; color: #666; border-bottom: 2px solid #e5e7eb; }
-    td { padding: 9px 10px; border-bottom: 1px solid #f3f4f6; }
-    tr:nth-child(even) td { background: #fafafa; }
-    .total-row td { font-weight: 800; border-top: 2px solid #e5e7eb; font-size: 14px; }
-    footer { margin-top: 32px; font-size: 10px; color: #aaa; text-align: center; }
+         letter-spacing: 0.06em; color: ${PRINT.sub}; border-bottom: 2px solid var(--pos-line); }
+    td { padding: 9px 10px; border-bottom: 1px solid var(--pos-surface-sunken); }
+    tr:nth-child(even) td { background: var(--pos-surface-hover); }
+    .total-row td { font-weight: 800; border-top: 2px solid var(--pos-line); font-size: 14px; }
+    footer { margin-top: 32px; font-size: 10px; color: ${PRINT.faint}; text-align: center; }
     @media print { body { padding: 0; } }
   </style>
 </head>
@@ -783,7 +785,7 @@ export default function History() {
       ${rows}
       <tr class="total-row">
         <td colspan="5">Total</td>
-        <td style="text-align:center;color:#dc2626">${grandDiscount > 0 ? `−${fmt(grandDiscount)}` : '—'}</td>
+        <td style="text-align:center;color:var(--pos-danger)">${grandDiscount > 0 ? `−${fmt(grandDiscount)}` : '—'}</td>
         <td style="text-align:right">${fmt(grandTotal)}</td>
       </tr>
     </tbody>
@@ -808,17 +810,17 @@ export default function History() {
 
   return (
     <div className="pos-page">
-      {/* Row 1: title + right-side actions */}
-      <div className="pos-ph">
-        <div>
-          <h2 className="pos-ph-title">Order History</h2>
-          <p className="pos-ph-sub">
+      <PageHeader
+        title="Order History"
+        subtitle={
+          <>
             {rangeLabel(preset, fromTs, toTs)}
             {pageItems.length > 0 &&
               ` · ${pageItems.length} order${pageItems.length !== 1 ? "s" : ""}`}
-          </p>
-        </div>
-        <div className="pos-ph-actions">
+          </>
+        }
+        actions={
+          <>
           <input
             placeholder="Search order, method…"
             value={search}
@@ -858,8 +860,9 @@ loadFirstPage(pageSize, search, fromTs, toTs);
           >
             {deletingAll ? "Deleting..." : "Delete All"}
           </button>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {/* Row 2: date-range filter bar */}
       <div
@@ -871,8 +874,8 @@ loadFirstPage(pageSize, search, fromTs, toTs);
           flexWrap: "wrap",
           padding: "10px 14px",
           borderRadius: 10,
-          background: "#f9fafb",
-          border: "1px solid #f3f4f6",
+          background: "var(--pos-surface-hover)",
+          border: "1px solid var(--pos-surface-sunken)",
         }}
       >
         {/* Preset pills */}
@@ -890,7 +893,7 @@ loadFirstPage(pageSize, search, fromTs, toTs);
         {/* Custom date pickers — inline, only when Custom active */}
         {preset === "custom" && (
           <>
-            <span style={{ width: 1, height: 20, background: "#e5e7eb", margin: "0 4px" }} />
+            <span style={{ width: 1, height: 20, background: "var(--pos-line)", margin: "0 4px" }} />
             <input
               type="date"
               value={customFrom}
@@ -898,7 +901,7 @@ loadFirstPage(pageSize, search, fromTs, toTs);
               className="pos-input"
               style={{ width: 136 }}
             />
-            <span style={{ fontSize: 12, color: "#9ca3af" }}>to</span>
+            <span style={{ fontSize: 12, color: "var(--pos-tx-muted)" }}>to</span>
             <input
               type="date"
               value={customTo}
@@ -922,10 +925,10 @@ loadFirstPage(pageSize, search, fromTs, toTs);
           alignItems: "center",
           padding: "8px 16px",
           borderRadius: 8,
-          background: "var(--pos-border-light,#f3f4f6)",
+          background: "var(--pos-border-light,var(--pos-surface-sunken))",
           fontSize: 10,
           fontWeight: 800,
-          color: "var(--pos-muted,#9ca3af)",
+          color: "var(--pos-muted,var(--pos-tx-muted))",
           letterSpacing: "0.08em",
           textTransform: "uppercase",
           marginBottom: 8,
@@ -967,9 +970,9 @@ loadFirstPage(pageSize, search, fromTs, toTs);
               alignItems: "center",
               padding: "10px 16px",
               borderRadius: 10,
-              background: selected.includes(s.uid) ? "#fffbeb" : "#fff",
-              border: selected.includes(s.uid) ? "1.5px solid #fde68a" : "1px solid #f3f4f6",
-              boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+              background: selected.includes(s.uid) ? "var(--pos-saffron-tint)" : "var(--pos-surface)",
+              border: selected.includes(s.uid) ? "1.5px solid var(--pos-saffron-line)" : "1px solid var(--pos-surface-sunken)",
+              boxShadow: "var(--pos-shadow-1)",
               transition: "background 120ms, border-color 120ms",
             }}
           >
@@ -985,12 +988,12 @@ loadFirstPage(pageSize, search, fromTs, toTs);
             </div>
             {/* # */}
             <span
-              style={{ fontSize: 12, color: "#9ca3af", fontFamily: "'Courier New', monospace" }}
+              style={{ fontSize: 12, color: "var(--pos-tx-muted)", fontFamily: "'Courier New', monospace" }}
             >
               {rowIdx + 1}
             </span>
             {/* Order label */}
-            <div style={{ fontWeight: 700, fontSize: 14, color: "#111827", display: "flex", alignItems: "center", gap: 6 }}>
+            <div style={{ fontWeight: 700, fontSize: 14, color: "var(--pos-tx)", display: "flex", alignItems: "center", gap: 6 }}>
               {s.orderLabel}
               {s.discountPercent > 0 && (
                 <span
@@ -1000,9 +1003,9 @@ loadFirstPage(pageSize, search, fromTs, toTs);
                     fontWeight: 700,
                     padding: "2px 6px",
                     borderRadius: 10,
-                    background: "#fef2f2",
-                    color: "#dc2626",
-                    border: "1px solid #fca5a5",
+                    background: "var(--pos-danger-tint)",
+                    color: "var(--pos-danger)",
+                    border: "1px solid var(--pos-danger-line)",
                     whiteSpace: "nowrap",
                   }}
                 >
@@ -1011,7 +1014,7 @@ loadFirstPage(pageSize, search, fromTs, toTs);
               )}
             </div>
             {/* Time */}
-            <span style={{ fontSize: 12, color: "#6b7280" }}>
+            <span style={{ fontSize: 12, color: "var(--pos-tx-sub)" }}>
               {new Date(s.time).toLocaleString("en-IN", {
                 day: "numeric",
                 month: "short",
@@ -1020,7 +1023,7 @@ loadFirstPage(pageSize, search, fromTs, toTs);
               })}
             </span>
             {/* Items */}
-            <span style={{ textAlign: "center", fontSize: 13, color: "#374151", fontWeight: 600 }}>
+            <span style={{ textAlign: "center", fontSize: 13, color: "var(--pos-tx-sec)", fontWeight: 600 }}>
               {s.items}
             </span>
             {/* Method badge */}
@@ -1036,20 +1039,20 @@ loadFirstPage(pageSize, search, fromTs, toTs);
                   borderRadius: 20,
                   background:
                     s.method === "UPI"
-                      ? "#ede9fe"
+                      ? "var(--pos-teal-tint)"
                       : s.method === "Card"
-                        ? "#dbeafe"
+                        ? "var(--pos-teal-tint)"
                         : s.method === "Split"
-                          ? "#fef9c3"
-                          : "#f0fdf4",
+                          ? "var(--pos-saffron-tint)"
+                          : "var(--pos-success-tint)",
                   color:
                     s.method === "UPI"
-                      ? "#7c3aed"
+                      ? "var(--pos-teal)"
                       : s.method === "Card"
-                        ? "#1d4ed8"
+                        ? "var(--pos-teal-strong)"
                         : s.method === "Split"
-                          ? "#92400e"
-                          : "#16a34a",
+                          ? "var(--pos-saffron-text)"
+                          : "var(--pos-success)",
                 }}
               >
                 {s.method}
@@ -1074,7 +1077,7 @@ loadFirstPage(pageSize, search, fromTs, toTs);
               </button>
             </div>
             {/* Total */}
-            <span style={{ textAlign: "right", fontWeight: 800, fontSize: 15, color: "#111827" }}>
+            <span style={{ textAlign: "right", fontWeight: 800, fontSize: 15, color: "var(--pos-tx)" }}>
               ₹{s.total.toLocaleString("en-IN")}
             </span>
           </div>
@@ -1088,8 +1091,8 @@ loadFirstPage(pageSize, search, fromTs, toTs);
             marginTop: 12,
             padding: "12px 16px",
             borderRadius: 12,
-            background: "#fff7ed",
-            border: "1.5px solid #fde68a",
+            background: "var(--pos-saffron-tint)",
+            border: "1.5px solid var(--pos-saffron-line)",
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
@@ -1097,7 +1100,7 @@ loadFirstPage(pageSize, search, fromTs, toTs);
           }}
         >
           <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-            <span style={{ fontWeight: 700, fontSize: 14, color: "#92400e" }}>
+            <span style={{ fontWeight: 700, fontSize: 14, color: "var(--pos-saffron-text)" }}>
               {pageItems.length} order{pageItems.length !== 1 ? "s" : ""}
             </span>
             {selected.length > 0 && (
@@ -1110,7 +1113,7 @@ loadFirstPage(pageSize, search, fromTs, toTs);
               </button>
             )}
           </div>
-          <span style={{ fontWeight: 900, fontSize: 18, color: "#92400e" }}>
+          <span style={{ fontWeight: 900, fontSize: 18, color: "var(--pos-saffron-text)" }}>
             ₹{pageItems.reduce((s, o) => s + o.total, 0).toLocaleString("en-IN")}
           </span>
         </div>
@@ -1146,7 +1149,7 @@ loadFirstPage(pageSize, search, fromTs, toTs);
             <div ref={sentinelRef as any} style={{ width: 1, height: 1 }} />
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <span style={{ color: "#9ca3af", fontSize: 12 }}>
+            <span style={{ color: "var(--pos-tx-muted)", fontSize: 12 }}>
               {loadingPage
                 ? "Loading…"
                 : !hasMore
@@ -1171,7 +1174,7 @@ loadFirstPage(pageSize, search, fromTs, toTs);
             position: "fixed",
             inset: 0,
             zIndex: 99999,
-            background: "rgba(0,0,0,0.45)",
+            background: "var(--pos-overlay)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -1184,18 +1187,18 @@ loadFirstPage(pageSize, search, fromTs, toTs);
             aria-labelledby="deleteSelectedTitle"
             tabIndex={-1}
             style={{
-              background: "#fff",
+              background: "var(--pos-surface)",
               borderRadius: 14,
               padding: "24px 28px",
               width: 420,
               maxWidth: "90vw",
-              boxShadow: "0 16px 48px rgba(0,0,0,0.18)",
+              boxShadow: "var(--pos-shadow-overlay)",
             }}
           >
-            <h3 id="deleteSelectedTitle" style={{ margin: 0, fontSize: 17, fontWeight: 800, color: "#111827" }}>
+            <h3 id="deleteSelectedTitle" style={{ margin: 0, fontSize: 17, fontWeight: 800, color: "var(--pos-tx)" }}>
               Delete selected orders?
             </h3>
-            <p style={{ marginTop: 8, marginBottom: 20, color: "#6b7280", fontSize: 14 }}>
+            <p style={{ marginTop: 8, marginBottom: 20, color: "var(--pos-tx-sub)", fontSize: 14 }}>
               This will permanently delete <strong>{selected.length}</strong> selected order
               {selected.length !== 1 ? "s" : ""}.
             </p>
@@ -1226,7 +1229,7 @@ loadFirstPage(pageSize, search, fromTs, toTs);
             position: "fixed",
             inset: 0,
             zIndex: 99999,
-            background: "rgba(0,0,0,0.45)",
+            background: "var(--pos-overlay)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -1239,18 +1242,18 @@ loadFirstPage(pageSize, search, fromTs, toTs);
             aria-labelledby="deleteAllTitle"
             tabIndex={-1}
             style={{
-              background: "#fff",
+              background: "var(--pos-surface)",
               borderRadius: 14,
               padding: "24px 28px",
               width: 420,
               maxWidth: "90vw",
-              boxShadow: "0 16px 48px rgba(0,0,0,0.18)",
+              boxShadow: "var(--pos-shadow-overlay)",
             }}
           >
-            <h3 id="deleteAllTitle" style={{ margin: 0, fontSize: 17, fontWeight: 800, color: "#111827" }}>
+            <h3 id="deleteAllTitle" style={{ margin: 0, fontSize: 17, fontWeight: 800, color: "var(--pos-tx)" }}>
               Delete all history?
             </h3>
-            <p style={{ marginTop: 8, marginBottom: 20, color: "#6b7280", fontSize: 14 }}>
+            <p style={{ marginTop: 8, marginBottom: 20, color: "var(--pos-tx-sub)", fontSize: 14 }}>
               {deleteAllCountLoading ? (
                 "Counting matching orders..."
               ) : (
@@ -1288,7 +1291,7 @@ loadFirstPage(pageSize, search, fromTs, toTs);
             position: "fixed",
             inset: 0,
             zIndex: 99999,
-            background: "rgba(0,0,0,0.45)",
+            background: "var(--pos-overlay)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -1308,10 +1311,10 @@ loadFirstPage(pageSize, search, fromTs, toTs);
               maxWidth: "94vw",
               maxHeight: "85vh",
               overflow: "auto",
-              background: "#fff",
+              background: "var(--pos-surface)",
               borderRadius: 14,
               padding: "24px 28px",
-              boxShadow: "0 16px 48px rgba(0,0,0,0.18)",
+              boxShadow: "var(--pos-shadow-overlay)",
               transform: modalVisible ? "translateY(0) scale(1)" : "translateY(8px) scale(0.98)",
               opacity: modalVisible ? 1 : 0,
               transition: "opacity 180ms ease, transform 180ms ease",
@@ -1325,11 +1328,11 @@ loadFirstPage(pageSize, search, fromTs, toTs);
                 alignItems: "flex-start",
                 paddingBottom: 16,
                 marginBottom: 16,
-                borderBottom: "1px solid #f3f4f6",
+                borderBottom: "1px solid var(--pos-surface-sunken)",
               }}
             >
               <div>
-                <h3 id="historyPreviewTitle" style={{ margin: 0, fontSize: 17, fontWeight: 800, color: "#111827" }}>
+                <h3 id="historyPreviewTitle" style={{ margin: 0, fontSize: 17, fontWeight: 800, color: "var(--pos-tx)" }}>
                   {previewFull
                     ? previewFull.orderType === "takeaway"
                       ? `Takeaway${previewFull.meta?.customerName ? ` – ${previewFull.meta.customerName}` : ""}`
@@ -1339,7 +1342,7 @@ loadFirstPage(pageSize, search, fromTs, toTs);
                     : "Order Preview"}
                 </h3>
                 {previewFull && (
-                  <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 3 }}>
+                  <div style={{ fontSize: 12, color: "var(--pos-tx-muted)", marginTop: 3 }}>
                     {new Date(
                       previewFull.updatedAt || previewFull.createdAt || Date.now(),
                     ).toLocaleString("en-IN")}
@@ -1367,7 +1370,7 @@ loadFirstPage(pageSize, search, fromTs, toTs);
             {/* Loading state */}
             {previewLoading && (
               <div
-                style={{ color: "#9ca3af", padding: "32px 0", textAlign: "center", fontSize: 14 }}
+                style={{ color: "var(--pos-tx-muted)", padding: "32px 0", textAlign: "center", fontSize: 14 }}
               >
                 Loading…
               </div>
@@ -1386,10 +1389,10 @@ loadFirstPage(pageSize, search, fromTs, toTs);
                       columnGap: 8,
                       padding: "6px 10px",
                       borderRadius: 6,
-                      background: "#f9fafb",
+                      background: "var(--pos-surface-hover)",
                       fontSize: 10,
                       fontWeight: 800,
-                      color: "#9ca3af",
+                      color: "var(--pos-tx-muted)",
                       letterSpacing: "0.07em",
                       textTransform: "uppercase",
                       marginBottom: 4,
@@ -1402,7 +1405,7 @@ loadFirstPage(pageSize, search, fromTs, toTs);
                   </div>
 
                   {(previewFull?.items || []).length === 0 && (
-                    <div style={{ color: "#9ca3af", fontSize: 13, padding: "12px 0" }}>
+                    <div style={{ color: "var(--pos-tx-muted)", fontSize: 13, padding: "12px 0" }}>
                       No line items.
                     </div>
                   )}
@@ -1415,17 +1418,17 @@ loadFirstPage(pageSize, search, fromTs, toTs);
                         columnGap: 8,
                         padding: "9px 10px",
                         borderRadius: 8,
-                        background: idx % 2 === 0 ? "#fff" : "#fafafa",
-                        borderBottom: "1px solid #f3f4f6",
+                        background: idx % 2 === 0 ? "var(--pos-surface)" : "var(--pos-surface-hover)",
+                        borderBottom: "1px solid var(--pos-surface-sunken)",
                       }}
                     >
-                      <span style={{ fontWeight: 600, fontSize: 13, color: "#111827" }}>
+                      <span style={{ fontWeight: 600, fontSize: 13, color: "var(--pos-tx)" }}>
                         {it.name || it.title || "Item"}
                       </span>
-                      <span style={{ textAlign: "center", fontSize: 13, color: "#374151" }}>
+                      <span style={{ textAlign: "center", fontSize: 13, color: "var(--pos-tx-sec)" }}>
                         {it.qty}
                       </span>
-                      <span style={{ textAlign: "right", fontSize: 13, color: "#6b7280" }}>
+                      <span style={{ textAlign: "right", fontSize: 13, color: "var(--pos-tx-sub)" }}>
                         ₹{(it.rate || 0).toLocaleString("en-IN")}
                       </span>
                       <span
@@ -1433,7 +1436,7 @@ loadFirstPage(pageSize, search, fromTs, toTs);
                           textAlign: "right",
                           fontSize: 13,
                           fontWeight: 700,
-                          color: "#111827",
+                          color: "var(--pos-tx)",
                         }}
                       >
                         ₹{((it.qty || 0) * (it.rate || 0)).toLocaleString("en-IN")}
@@ -1460,8 +1463,8 @@ loadFirstPage(pageSize, search, fromTs, toTs);
                   return (
                     <div
                       style={{
-                        background: "#fff7ed",
-                        border: "1.5px solid #fde68a",
+                        background: "var(--pos-saffron-tint)",
+                        border: "1.5px solid var(--pos-saffron-line)",
                         borderRadius: 10,
                         padding: "14px 16px",
                         display: "grid",
@@ -1473,7 +1476,7 @@ loadFirstPage(pageSize, search, fromTs, toTs);
                           display: "flex",
                           justifyContent: "space-between",
                           fontSize: 13,
-                          color: "#374151",
+                          color: "var(--pos-tx-sec)",
                         }}
                       >
                         <span>Subtotal</span>
@@ -1488,7 +1491,7 @@ loadFirstPage(pageSize, search, fromTs, toTs);
                               display: "flex",
                               justifyContent: "space-between",
                               fontSize: 12,
-                              color: "#6b7280",
+                              color: "var(--pos-tx-sub)",
                             }}
                           >
                             <span>Taxable value</span>
@@ -1499,7 +1502,7 @@ loadFirstPage(pageSize, search, fromTs, toTs);
                               display: "flex",
                               justifyContent: "space-between",
                               fontSize: 12,
-                              color: "#6b7280",
+                              color: "var(--pos-tx-sub)",
                             }}
                           >
                             <span>CGST ({formatGstRate(t.gstHalfRateBps)})</span>
@@ -1510,7 +1513,7 @@ loadFirstPage(pageSize, search, fromTs, toTs);
                               display: "flex",
                               justifyContent: "space-between",
                               fontSize: 12,
-                              color: "#6b7280",
+                              color: "var(--pos-tx-sub)",
                             }}
                           >
                             <span>SGST ({formatGstRate(t.gstHalfRateBps)})</span>
@@ -1524,7 +1527,7 @@ loadFirstPage(pageSize, search, fromTs, toTs);
                             display: "flex",
                             justifyContent: "space-between",
                             fontSize: 12,
-                            color: "#16a34a",
+                            color: "var(--pos-success)",
                           }}
                         >
                           <span>Discount</span>
@@ -1537,10 +1540,10 @@ loadFirstPage(pageSize, search, fromTs, toTs);
                           justifyContent: "space-between",
                           paddingTop: 8,
                           marginTop: 2,
-                          borderTop: "1px solid #fde68a",
+                          borderTop: "1px solid var(--pos-saffron-line)",
                           fontSize: 16,
                           fontWeight: 900,
-                          color: "#92400e",
+                          color: "var(--pos-saffron-text)",
                         }}
                       >
                         <span>Total</span>
@@ -1557,7 +1560,7 @@ loadFirstPage(pageSize, search, fromTs, toTs);
                       style={{
                         fontSize: 11,
                         fontWeight: 800,
-                        color: "#9ca3af",
+                        color: "var(--pos-tx-muted)",
                         letterSpacing: "0.07em",
                         textTransform: "uppercase",
                         marginBottom: 8,
@@ -1570,20 +1573,20 @@ loadFirstPage(pageSize, search, fromTs, toTs);
                         const method = (p?.method || p?.type || "Payment").toLowerCase();
                         const bg =
                           method === "upi"
-                            ? "#ede9fe"
+                            ? "var(--pos-teal-tint)"
                             : method === "card"
-                              ? "#dbeafe"
+                              ? "var(--pos-teal-tint)"
                               : method === "split"
-                                ? "#fef9c3"
-                                : "#f0fdf4";
+                                ? "var(--pos-saffron-tint)"
+                                : "var(--pos-success-tint)";
                         const fg =
                           method === "upi"
-                            ? "#7c3aed"
+                            ? "var(--pos-teal)"
                             : method === "card"
-                              ? "#1d4ed8"
+                              ? "var(--pos-teal-strong)"
                               : method === "split"
-                                ? "#92400e"
-                                : "#16a34a";
+                                ? "var(--pos-saffron-text)"
+                                : "var(--pos-success)";
                         return (
                           <div
                             key={idx}
@@ -1593,8 +1596,8 @@ loadFirstPage(pageSize, search, fromTs, toTs);
                               alignItems: "center",
                               padding: "8px 12px",
                               borderRadius: 8,
-                              background: "#fafafa",
-                              border: "1px solid #f3f4f6",
+                              background: "var(--pos-surface-hover)",
+                              border: "1px solid var(--pos-surface-sunken)",
                             }}
                           >
                             <span
@@ -1612,7 +1615,7 @@ loadFirstPage(pageSize, search, fromTs, toTs);
                             >
                               {p?.method || p?.type || "Payment"}
                             </span>
-                            <span style={{ fontWeight: 800, fontSize: 14, color: "#111827" }}>
+                            <span style={{ fontWeight: 800, fontSize: 14, color: "var(--pos-tx)" }}>
                               ₹{(+(p?.amount || 0)).toLocaleString("en-IN")}
                             </span>
                           </div>

@@ -30,10 +30,10 @@ interface Props {
 const SINGLE_METHODS: SingleMethod[] = ["cash", "card", "upi", "voucher", "other"];
 
 const QUICK_PAY: { method: SingleMethod; label: string; icon: string; shortcut: string }[] = [
-  { method: "cash", label: "Cash", icon: "💵", shortcut: "1" },
-  { method: "card", label: "Card", icon: "💳", shortcut: "2" },
-  { method: "upi", label: "UPI", icon: "📱", shortcut: "3" },
-  { method: "other", label: "Other", icon: "…", shortcut: "4" },
+  { method: "cash", label: "Cash", icon: "C", shortcut: "1" },
+  { method: "card", label: "Card", icon: "R", shortcut: "2" },
+  { method: "upi", label: "UPI", icon: "U", shortcut: "3" },
+  { method: "other", label: "Other", icon: "O", shortcut: "4" },
 ];
 
 export default function PaymentsModal({
@@ -174,7 +174,7 @@ handleConfirm();
   const inputStyle: React.CSSProperties = {
     width: "100%",
     padding: "10px 12px",
-    border: "1.5px solid #d1d5db",
+    border: "1.5px solid var(--pos-line-strong)",
     borderRadius: 8,
     fontSize: 15,
     boxSizing: "border-box",
@@ -185,7 +185,7 @@ handleConfirm();
     display: "block",
     fontSize: 12,
     fontWeight: 600,
-    color: "#6b7280",
+    color: "var(--pos-tx-sub)",
     marginBottom: 6,
     textTransform: "uppercase",
     letterSpacing: 0.5,
@@ -193,10 +193,10 @@ handleConfirm();
 
   const methodBtn = (active: boolean): React.CSSProperties => ({
     padding: "10px 6px",
-    border: active ? "2px solid #b45309" : "1.5px solid #e5e7eb",
+    border: active ? "2px solid var(--pos-saffron-text)" : "1.5px solid var(--pos-line)",
     borderRadius: 8,
-    background: active ? "#fef3c7" : "#fff",
-    color: active ? "#92400e" : "#374151",
+    background: active ? "var(--pos-saffron-tint)" : "var(--pos-surface)",
+    color: active ? "var(--pos-saffron-text)" : "var(--pos-tx-sec)",
     fontWeight: active ? 700 : 500,
     fontSize: 13,
     cursor: "pointer",
@@ -215,7 +215,7 @@ handleConfirm();
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: "rgba(0,0,0,0.5)",
+          background: "var(--pos-overlay)",
           zIndex: 3000,
         }}
       >
@@ -223,14 +223,14 @@ handleConfirm();
           ref={quickPayDialogRef}
           role="dialog"
           aria-modal="true"
-          aria-label="Settle Bill"
+          aria-label="Collect Payment"
           tabIndex={-1}
           style={{
             width: 440,
             maxWidth: "96vw",
-            background: "#fff",
+            background: "var(--pos-surface)",
             borderRadius: 16,
-            boxShadow: "0 24px 72px rgba(0,0,0,0.22)",
+            boxShadow: "var(--pos-shadow-overlay)",
             overflow: "hidden",
           }}
         >
@@ -238,7 +238,7 @@ handleConfirm();
           <div
             style={{
               padding: "20px 24px 16px",
-              borderBottom: "1px solid #f3f4f6",
+              borderBottom: "1px solid var(--pos-surface-sunken)",
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
@@ -248,7 +248,7 @@ handleConfirm();
               <div
                 style={{
                   fontSize: 12,
-                  color: "#9ca3af",
+                  color: "var(--pos-tx-muted)",
                   fontWeight: 600,
                   textTransform: "uppercase",
                   letterSpacing: 0.5,
@@ -260,7 +260,7 @@ handleConfirm();
                 style={{
                   fontSize: 32,
                   fontWeight: 900,
-                  color: "#111827",
+                  color: "var(--pos-tx)",
                   lineHeight: 1.1,
                   marginTop: 4,
                 }}
@@ -277,7 +277,7 @@ handleConfirm();
                 border: "none",
                 fontSize: 22,
                 cursor: processing ? "not-allowed" : "pointer",
-                color: "#9ca3af",
+                color: "var(--pos-tx-muted)",
                 lineHeight: 1,
                 padding: "0 4px",
               }}
@@ -291,7 +291,7 @@ handleConfirm();
             <div
               style={{
                 fontSize: 12,
-                color: "#6b7280",
+                color: "var(--pos-tx-sub)",
                 fontWeight: 600,
                 marginBottom: 12,
                 textTransform: "uppercase",
@@ -314,9 +314,9 @@ handleConfirm();
                   disabled={processing}
                   style={{
                     padding: "18px 8px 14px",
-                    border: "1.5px solid #e5e7eb",
+                    border: "1.5px solid var(--pos-line)",
                     borderRadius: 12,
-                    background: "#fff",
+                    background: "var(--pos-surface)",
                     cursor: processing ? "not-allowed" : "pointer",
                     opacity: processing ? 0.6 : 1,
                     transition: "all 0.12s",
@@ -326,19 +326,19 @@ handleConfirm();
                     gap: 6,
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.borderColor = "#16a34a";
-                    e.currentTarget.style.background = "#f0fdf4";
+                    e.currentTarget.style.borderColor = "var(--pos-success)";
+                    e.currentTarget.style.background = "var(--pos-success-tint)";
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.borderColor = "#e5e7eb";
-                    e.currentTarget.style.background = "#fff";
+                    e.currentTarget.style.borderColor = "var(--pos-line)";
+                    e.currentTarget.style.background = "var(--pos-surface)";
                   }}
                 >
                   <span style={{ fontSize: 28 }}>{qp.icon}</span>
-                  <span style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: "var(--pos-tx)" }}>
                     {qp.label}
                   </span>
-                  <span style={{ fontSize: 10, color: "#9ca3af", fontWeight: 600 }}>
+                  <span style={{ fontSize: 10, color: "var(--pos-tx-muted)", fontWeight: 600 }}>
                     [{qp.shortcut}]
                   </span>
                 </button>
@@ -350,7 +350,7 @@ handleConfirm();
           <div
             style={{
               padding: "12px 24px 18px",
-              borderTop: "1px solid #f3f4f6",
+              borderTop: "1px solid var(--pos-surface-sunken)",
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
@@ -359,7 +359,7 @@ handleConfirm();
             }}
           >
             <label
-              style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 13, color: "#374151", fontWeight: 600 }}
+              style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 13, color: "var(--pos-tx-sec)", fontWeight: 600 }}
             >
               <input
                 type="checkbox"
@@ -376,7 +376,7 @@ handleConfirm();
               style={{
                 background: "none",
                 border: "none",
-                color: "#6b7280",
+                color: "var(--pos-tx-sub)",
                 fontSize: 13,
                 fontWeight: 600,
                 cursor: processing ? "not-allowed" : "pointer",
@@ -393,8 +393,8 @@ handleConfirm();
               style={{
                 padding: "8px 16px",
                 background: "transparent",
-                color: "#6b7280",
-                border: "1.5px solid #e5e7eb",
+                color: "var(--pos-tx-sub)",
+                border: "1.5px solid var(--pos-line)",
                 borderRadius: 8,
                 fontWeight: 600,
                 fontSize: 13,
@@ -419,7 +419,7 @@ handleConfirm();
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        background: "rgba(0,0,0,0.5)",
+        background: "var(--pos-overlay)",
         zIndex: 3000,
       }}
     >
@@ -427,14 +427,14 @@ handleConfirm();
         ref={detailedPayDialogRef}
         role="dialog"
         aria-modal="true"
-        aria-label="Settle Bill"
+        aria-label="Collect Payment"
         tabIndex={-1}
         style={{
           width: 660,
           maxWidth: "96vw",
-          background: "#fff",
+          background: "var(--pos-surface)",
           borderRadius: 14,
-          boxShadow: "0 24px 72px rgba(0,0,0,0.22)",
+          boxShadow: "var(--pos-shadow-overlay)",
           overflow: "hidden",
           display: "flex",
           flexDirection: "column",
@@ -444,7 +444,7 @@ handleConfirm();
         <div
           style={{
             padding: "14px 20px",
-            borderBottom: "1px solid #f3f4f6",
+            borderBottom: "1px solid var(--pos-surface-sunken)",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
@@ -460,13 +460,13 @@ handleConfirm();
                 border: "none",
                 fontSize: 18,
                 cursor: processing ? "not-allowed" : "pointer",
-                color: "#6b7280",
+                color: "var(--pos-tx-sub)",
                 padding: "0 4px",
               }}
             >
               ←
             </button>
-            <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: "#111827" }}>
+            <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: "var(--pos-tx)" }}>
               Settle Bill
             </h3>
           </div>
@@ -479,7 +479,7 @@ handleConfirm();
               border: "none",
               fontSize: 22,
               cursor: processing ? "not-allowed" : "pointer",
-              color: "#9ca3af",
+              color: "var(--pos-tx-muted)",
               lineHeight: 1,
               padding: "0 4px",
             }}
@@ -491,7 +491,7 @@ handleConfirm();
         {/* ── Body ── */}
         <div style={{ display: "flex", flex: 1 }}>
           {/* Left: method + inputs */}
-          <div style={{ flex: 1, padding: "18px 20px", borderRight: "1px solid #f3f4f6" }}>
+          <div style={{ flex: 1, padding: "18px 20px", borderRight: "1px solid var(--pos-surface-sunken)" }}>
             {/* Method grid */}
             <label style={labelStyle}>Payment Method</label>
             <div
@@ -511,16 +511,16 @@ handleConfirm();
                     disabled={processing}
                   >
                     {m === "cash"
-                      ? "💵 Cash"
+                      ? "Cash"
                       : m === "card"
-                        ? "💳 Card"
+                        ? "Card"
                         : m === "upi"
-                          ? "📱 UPI"
+                          ? "UPI"
                           : m === "split"
-                            ? "⇄ Split"
+                            ? "Split"
                             : m === "voucher"
-                              ? "🎟 Voucher"
-                              : "… Other"}
+                              ? "Voucher"
+                              : "Other"}
                   </button>
                 ),
               )}
@@ -544,24 +544,24 @@ handleConfirm();
                     style={{
                       marginTop: 12,
                       padding: "10px 14px",
-                      background: "#f0fdf4",
-                      border: "1.5px solid #86efac",
+                      background: "var(--pos-success-tint)",
+                      border: "1.5px solid var(--pos-success-line)",
                       borderRadius: 8,
                       display: "flex",
                       justifyContent: "space-between",
                       alignItems: "center",
                     }}
                   >
-                    <span style={{ fontWeight: 600, color: "#166534", fontSize: 14 }}>
+                    <span style={{ fontWeight: 600, color: "var(--pos-success-text)", fontSize: 14 }}>
                       Change to return
                     </span>
-                    <span style={{ fontWeight: 900, color: "#166534", fontSize: 22 }}>
+                    <span style={{ fontWeight: 900, color: "var(--pos-success-text)", fontSize: 22 }}>
                       ₹{change.toFixed(2)}
                     </span>
                   </div>
                 )}
                 {numCash > 0 && numCash < amount && (
-                  <div style={{ marginTop: 8, color: "#ef4444", fontSize: 13, fontWeight: 600 }}>
+                  <div style={{ marginTop: 8, color: "var(--pos-danger)", fontSize: 13, fontWeight: 600 }}>
                     ₹{(amount - numCash).toFixed(2)} still needed
                   </div>
                 )}
@@ -580,7 +580,7 @@ handleConfirm();
                   style={inputStyle}
                   autoFocus
                 />
-                <p style={{ marginTop: 8, fontSize: 12, color: "#9ca3af" }}>
+                <p style={{ marginTop: 8, fontSize: 12, color: "var(--pos-tx-muted)" }}>
                   Full amount of ₹{amount.toFixed(2)} will be recorded.
                 </p>
               </div>
@@ -598,7 +598,7 @@ handleConfirm();
                   style={inputStyle}
                   autoFocus
                 />
-                <p style={{ marginTop: 8, fontSize: 12, color: "#9ca3af" }}>
+                <p style={{ marginTop: 8, fontSize: 12, color: "var(--pos-tx-muted)" }}>
                   Full amount of ₹{amount.toFixed(2)} will be recorded.
                 </p>
               </div>
@@ -659,10 +659,10 @@ handleConfirm();
                       style={{
                         flex: "0 0 100px",
                         padding: "10px 8px",
-                        border: "1.5px solid #d1d5db",
+                        border: "1.5px solid var(--pos-line-strong)",
                         borderRadius: 8,
                         fontSize: 13,
-                        background: "#fff",
+                        background: "var(--pos-surface)",
                       }}
                     >
                       {SINGLE_METHODS.map((m) => (
@@ -683,18 +683,18 @@ handleConfirm();
                   </div>
                 ))}
                 {splitBalance > 0 && (
-                  <div style={{ color: "#ef4444", fontSize: 13, fontWeight: 600 }}>
+                  <div style={{ color: "var(--pos-danger)", fontSize: 13, fontWeight: 600 }}>
                     Remaining: ₹{splitBalance.toFixed(2)}
                   </div>
                 )}
                 {splitBalance < 0 && (
-                  <div style={{ color: "#f59e0b", fontSize: 13, fontWeight: 600 }}>
+                  <div style={{ color: "var(--pos-saffron)", fontSize: 13, fontWeight: 600 }}>
                     Overpaid by ₹{Math.abs(splitBalance).toFixed(2)}
                   </div>
                 )}
                 {splitBalance === 0 && splitTotal > 0 && (
-                  <div style={{ color: "#16a34a", fontSize: 13, fontWeight: 600 }}>
-                    ✓ Fully covered
+                  <div style={{ color: "var(--pos-success)", fontSize: 13, fontWeight: 600 }}>
+                     Fully covered
                   </div>
                 )}
               </div>
@@ -706,7 +706,7 @@ handleConfirm();
             style={{
               width: 200,
               padding: 18,
-              background: "#fafafa",
+              background: "var(--pos-surface-hover)",
               display: "flex",
               flexDirection: "column",
               gap: 12,
@@ -718,13 +718,13 @@ handleConfirm();
             <div
               style={{
                 padding: 14,
-                background: "#fff",
-                border: "1.5px solid #f3f4f6",
+                background: "var(--pos-surface)",
+                border: "1.5px solid var(--pos-surface-sunken)",
                 borderRadius: 10,
               }}
             >
-              <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 4 }}>Amount Due</div>
-              <div style={{ fontSize: 26, fontWeight: 900, color: "#111827", lineHeight: 1 }}>
+              <div style={{ fontSize: 11, color: "var(--pos-tx-muted)", marginBottom: 4 }}>Amount Due</div>
+              <div style={{ fontSize: 26, fontWeight: 900, color: "var(--pos-tx)", lineHeight: 1 }}>
                 ₹{amount.toFixed(2)}
               </div>
             </div>
@@ -735,13 +735,13 @@ handleConfirm();
                 <div
                   style={{
                     padding: "10px 14px",
-                    background: "#fff",
-                    border: "1.5px solid #f3f4f6",
+                    background: "var(--pos-surface)",
+                    border: "1.5px solid var(--pos-surface-sunken)",
                     borderRadius: 8,
                   }}
                 >
-                  <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 2 }}>Received</div>
-                  <div style={{ fontSize: 18, fontWeight: 800, color: "#374151" }}>
+                  <div style={{ fontSize: 11, color: "var(--pos-tx-muted)", marginBottom: 2 }}>Received</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: "var(--pos-tx-sec)" }}>
                     ₹{numCash.toFixed(2)}
                   </div>
                 </div>
@@ -749,13 +749,13 @@ handleConfirm();
                   <div
                     style={{
                       padding: "10px 14px",
-                      background: "#f0fdf4",
-                      border: "1.5px solid #86efac",
+                      background: "var(--pos-success-tint)",
+                      border: "1.5px solid var(--pos-success-line)",
                       borderRadius: 8,
                     }}
                   >
-                    <div style={{ fontSize: 11, color: "#166534", marginBottom: 2 }}>Change</div>
-                    <div style={{ fontSize: 20, fontWeight: 900, color: "#166534" }}>
+                    <div style={{ fontSize: 11, color: "var(--pos-success-text)", marginBottom: 2 }}>Change</div>
+                    <div style={{ fontSize: 20, fontWeight: 900, color: "var(--pos-success-text)" }}>
                       ₹{change.toFixed(2)}
                     </div>
                   </div>
@@ -768,17 +768,17 @@ handleConfirm();
               <div
                 style={{
                   padding: "10px 14px",
-                  background: "#fff",
-                  border: "1.5px solid #f3f4f6",
+                  background: "var(--pos-surface)",
+                  border: "1.5px solid var(--pos-surface-sunken)",
                   borderRadius: 8,
                 }}
               >
-                <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 2 }}>Collected</div>
+                <div style={{ fontSize: 11, color: "var(--pos-tx-muted)", marginBottom: 2 }}>Collected</div>
                 <div
                   style={{
                     fontSize: 18,
                     fontWeight: 800,
-                    color: splitExact ? "#16a34a" : "#374151",
+                    color: splitExact ? "var(--pos-success)" : "var(--pos-tx-sec)",
                   }}
                 >
                   ₹{splitTotal.toFixed(2)}
@@ -789,7 +789,7 @@ handleConfirm();
             <div style={{ flex: 1 }} />
 
             <label
-              style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 13, color: "#374151", fontWeight: 600 }}
+              style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 13, color: "var(--pos-tx-sec)", fontWeight: 600 }}
             >
               <input
                 type="checkbox"
@@ -806,8 +806,8 @@ handleConfirm();
               disabled={!canConfirm}
               style={{
                 padding: "13px",
-                background: canConfirm ? "#16a34a" : "#d1d5db",
-                color: canConfirm ? "#fff" : "#9ca3af",
+                background: canConfirm ? "var(--pos-success)" : "var(--pos-line-strong)",
+                color: canConfirm ? "var(--pos-surface)" : "var(--pos-tx-muted)",
                 border: "none",
                 borderRadius: 8,
                 fontWeight: 800,
@@ -816,7 +816,7 @@ handleConfirm();
                 transition: "background 0.15s",
               }}
             >
-              {processing ? "Processing..." : "✓ Settle"}
+              {processing ? "Processing..." : " Settle"}
             </button>
 
             <button
@@ -825,8 +825,8 @@ handleConfirm();
               style={{
                 padding: "10px",
                 background: "transparent",
-                color: "#6b7280",
-                border: "1.5px solid #e5e7eb",
+                color: "var(--pos-tx-sub)",
+                border: "1.5px solid var(--pos-line)",
                 borderRadius: 8,
                 fontWeight: 600,
                 fontSize: 13,

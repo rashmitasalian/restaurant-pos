@@ -1,0 +1,99 @@
+.grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+
+.ticket {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 12px !important;
+}
+
+.head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.tableAnchor {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--pos-tx);
+  letter-spacing: -0.4px;
+  line-height: 1.1;
+}
+
+.badges {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.lines {
+  display: grid;
+  gap: 0;
+  margin-bottom: 10px;
+  flex: 1;
+}
+
+.line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-bottom: 1px solid var(--pos-line);
+  padding: 5px 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--pos-tx-sec);
+}
+
+.qty {
+  font-size: 13px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  min-width: 28px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.qtyPending {
+  color: var(--pos-saffron-text);
+}
+
+.qtySent {
+  color: var(--pos-tx-muted);
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.error {
+  margin-bottom: 8px;
+  padding: 6px 8px;
+  border-radius: var(--pos-r-md);
+  background: var(--pos-danger-tint);
+  border: 1px solid var(--pos-danger-line);
+  color: var(--pos-danger-text);
+  font-size: 12px;
+  font-weight: 600;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+@media (max-width: 1280px) {
+  .grid {
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  }
+}

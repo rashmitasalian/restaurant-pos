@@ -1794,6 +1794,12 @@ export const posService = {
     return inTransaction((database) => {
       ensureDefaultSeatingArea(database);
       const areaId = getPrimaryActiveSeatingAreaId(database);
+      const tableConfig = this.getSetting("config:tables") as any;
+      const configuredDefault = Math.trunc(Number(tableConfig?.defaultSeats));
+      const defaultSeats =
+        Number.isInteger(configuredDefault) && configuredDefault >= 1 && configuredDefault <= 50
+          ? configuredDefault
+          : 4;
       const insert = database.prepare(`
         INSERT INTO tables (id, name, seats, area_id, sort_order, active, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, 1, ?, ?)
@@ -1803,12 +1809,21 @@ export const posService = {
           updated_at = excluded.updated_at
       `);
       for (let i = 1; i <= count; i++) {
-        insert.run(i, `Table ${i}`, i % 4 === 0 ? 6 : 4, areaId, i, at, at);
+        insert.run(i, `Table ${i}`, defaultSeats, areaId, i, at, at);
       }
       database.prepare("UPDATE tables SET active = 0, updated_at = ? WHERE id > ?").run(at, count);
-      const tableConfig = this.getSetting("config:tables") as any;
-      if (Number(tableConfig?.tableCount || 0) !== count) {
-        this.setSetting("config:tables", { tableCount: count }, actor);
+      if (
+        Number(tableConfig?.tableCount || 0) !== count ||
+        Number(tableConfig?.defaultSeats || 0) !== defaultSeats
+      ) {
+        this.setSetting(
+          "config:tables",
+          {
+            tableCount: count,
+            defaultSeats,
+          },
+          actor,
+        );
       }
       return this.getTables();
     });
@@ -1952,6 +1967,29 @@ export const posService = {
     });
   },
 
+  setTableSeats(tableId: number, seats: number, actor?: string | null) {
+    const safeTableId = Number(tableId);
+    if (!Number.isInteger(safeTableId) || safeTableId <= 0) {
+      throw new Error("table-id-invalid");
+    }
+    const safeSeats = Math.trunc(Number(seats));
+    if (!Number.isInteger(safeSeats) || safeSeats < 1 || safeSeats > 50) {
+      throw new Error("table-seats-invalid");
+    }
+    return inTransaction((database) => {
+      const result = database
+        .prepare("UPDATE tables SET seats = ?, updated_at = ? WHERE id = ? AND active = 1")
+        .run(safeSeats, now(), safeTableId);
+      if (!result.changes) {
+        throw new Error("table-not-found");
+      }
+      createAuditRow(database, "table.seats.updated", "table", String(safeTableId), actor || null, {
+        seats: safeSeats,
+      });
+      return this.getTables().find((table) => table.id === safeTableId) || null;
+    });
+  },
+
   getTablesSnapshot() {
     const database = getDb();
     ensureDefaultSeatingArea(database);
@@ -1964,6 +2002,7 @@ export const posService = {
            sa.name AS area_name,
            o.id AS order_id,
            o.status AS order_status,
+           o.created_at AS order_created_at,
            (
              SELECT COUNT(*)
              FROM order_lines ol
@@ -1997,6 +2036,7 @@ export const posService = {
       total: paiseToRupees(Number(row.total_paise || 0)),
       occupied: Boolean(row.order_id) && Number(row.item_count || 0) > 0,
       orderId: row.order_id || null,
+      openedAt: Number(row.order_created_at || 0) || null,
     }));
 
     const byArea: Record<string, Array<(typeof tableRows)[number]>> = {};

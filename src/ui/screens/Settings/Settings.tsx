@@ -1,6 +1,9 @@
 ﻿import React from "react";
 import { ENV } from "../../../config/env";
 import { AuthContext } from "../../context/AuthContext";
+import { PageHeader } from "../../components/ui/PageHeader";
+import { Icon } from "../../components/ui/Icon";
+import { Clock3, LayoutGrid, Timer, X } from "lucide-react";
 import {
   getConfigPrinters,
   setConfigPrinters,
@@ -29,6 +32,7 @@ import {
   deleteSeatingArea,
   getTables,
   setTableArea,
+  setTableSeats,
   listPrintJobs,
   retryPrintJob,
   clearOldPrintJobs,
@@ -55,6 +59,7 @@ import { processRestaurantLogoFile, type ReceiptLogoRaster } from "../../utils/l
 import {
   addSeatingAreaDraft,
   computeTableAreaUpdates,
+  computeTableSeatsUpdates,
   moveSeatingAreaByDirection,
   reorderSeatingAreasByDrag,
 } from "./seatingAreaUtils";
@@ -137,12 +142,14 @@ export default function Settings() {
 
   // â”€â”€ Tables config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [tableCount, setTableCount] = React.useState<number>(ENV.TABLE_COUNT);
+  const [defaultSeats, setDefaultSeats] = React.useState<number>(4);
   const [tableStatus, setTableStatus] = React.useState<string | null>(null);
   const [savingTables, setSavingTables] = React.useState(false);
   const [seatingAreas, setSeatingAreas] = React.useState<SeatingAreaDoc[]>([]);
   const [newSeatingAreaName, setNewSeatingAreaName] = React.useState("");
   const [tableDocs, setTableDocs] = React.useState<TableDoc[]>([]);
   const [tableAreaDraft, setTableAreaDraft] = React.useState<Record<number, string>>({});
+  const [tableSeatsDraft, setTableSeatsDraft] = React.useState<Record<number, number>>({});
   const [savingSeatingAreas, setSavingSeatingAreas] = React.useState(false);
   const [dragAreaId, setDragAreaId] = React.useState<string | null>(null);
   const [serviceModes, setServiceModes] = React.useState<ServiceMode[]>(() =>
@@ -255,6 +262,8 @@ export default function Settings() {
         const tCfg = await getConfigTables();
         if (tCfg) {
           setTableCount(tCfg.tableCount);
+          const seats = Math.trunc(Number(tCfg.defaultSeats || 4));
+          setDefaultSeats(Number.isFinite(seats) && seats >= 1 ? Math.min(50, seats) : 4);
         }
       } catch (e) {}
       try {
@@ -275,10 +284,13 @@ export default function Settings() {
         setSeatingAreas(mappedAreas);
         setTableDocs(tables || []);
         const assignment: Record<number, string> = {};
+        const seatsDraft: Record<number, number> = {};
         for (const table of tables || []) {
           assignment[table.id] = String(table.areaId || mappedAreas[0]?.id || "area:main");
+          seatsDraft[table.id] = Math.max(1, Math.min(50, Number(table.seats) || 4));
         }
         setTableAreaDraft(assignment);
+        setTableSeatsDraft(seatsDraft);
       } catch (e) {}
       try {
         const modeCfg = await getConfigServiceModes();
@@ -362,7 +374,7 @@ export default function Settings() {
         counterPrinterIp: counterIp,
         printerPort: port,
       });
-      setStatus("Saved successfully ✓");
+      setStatus("Saved successfully ");
       setTimeout(() => setStatus(null), 3000);
     } catch (e: any) {
       setStatus("Save failed: " + (e?.message || String(e)));
@@ -747,7 +759,7 @@ export default function Settings() {
       // @ts-ignore
       const res = await window.pos.testPrint(printer);
       if (res?.ok) {
-        setStatus(`${printer} printer reachable ✓`);
+        setStatus(`${printer} printer reachable `);
         setTimeout(() => setStatus(null), 3000);
       } else {
         setStatus(`${printer} failed: ${res?.error || "unknown"}`);
@@ -769,13 +781,20 @@ export default function Settings() {
       setTableStatus("Table count must be between 1 and 100");
       return;
     }
+    if (defaultSeats < 1 || defaultSeats > 50) {
+      endAction("tables.save");
+      setTableStatus("Default seats must be between 1 and 50");
+      return;
+    }
     setSavingTables(true);
     setTableStatus(null);
     try {
-      await setConfigTables(tableCount);
+      await setConfigTables(tableCount, defaultSeats);
       await seedTables(tableCount);
+      await refreshSeatingConfig();
       window.dispatchEvent(new Event("orders-changed"));
-      setTableStatus("Saved ✓");
+      window.dispatchEvent(new Event("seating-areas-changed"));
+      setTableStatus("Saved ");
       setTimeout(() => setTableStatus(null), 4000);
     } catch (e: any) {
       setTableStatus("Save failed: " + (e?.message || String(e)));
@@ -791,10 +810,13 @@ export default function Settings() {
     setSeatingAreas(ordered);
     setTableDocs(tables || []);
     const assignment: Record<number, string> = {};
+    const seatsDraft: Record<number, number> = {};
     for (const table of tables || []) {
       assignment[table.id] = String(table.areaId || ordered[0]?.id || "area:main");
+      seatsDraft[table.id] = Math.max(1, Math.min(50, Number(table.seats) || 4));
     }
     setTableAreaDraft(assignment);
+    setTableSeatsDraft(seatsDraft);
   };
 
   const addSeatingArea = () => {
@@ -816,7 +838,7 @@ export default function Settings() {
   };
 
   const moveSeatingArea = (id: string, direction: -1 | 1) => {
-    setSeatingAreas((current) => moveSeatingAreaByDirection(current, id, direction));
+    setSeatingAreas((current) => moveSeatingAreaByDirection(current, id, direction) as SeatingAreaDoc[]);
   };
 
   const dropSeatingArea = (dropTargetId: string) => {
@@ -824,7 +846,7 @@ export default function Settings() {
       setDragAreaId(null);
       return;
     }
-    setSeatingAreas((current) => reorderSeatingAreasByDrag(current, dragAreaId, dropTargetId));
+    setSeatingAreas((current) => reorderSeatingAreasByDrag(current, dragAreaId, dropTargetId) as SeatingAreaDoc[]);
     setDragAreaId(null);
   };
 
@@ -868,8 +890,12 @@ export default function Settings() {
       for (const update of updates) {
         await setTableArea(update.tableId, update.areaId);
       }
+      const seatUpdates = computeTableSeatsUpdates(tableDocs, tableSeatsDraft);
+      for (const update of seatUpdates) {
+        await setTableSeats(update.tableId, update.seats);
+      }
       await refreshSeatingConfig();
-      setTableStatus("Seating Areas saved ✓");
+      setTableStatus("Seating Areas saved ");
       window.dispatchEvent(new Event("seating-areas-changed"));
       window.dispatchEvent(new Event("orders-changed"));
       setTimeout(() => setTableStatus(null), 4000);
@@ -916,7 +942,7 @@ export default function Settings() {
     try {
       const saved = await setConfigServiceModes(orderedModes);
       setServiceModes(saved.modes || serviceModes);
-      setServiceModeStatus("Saved ✓");
+      setServiceModeStatus("Saved ");
       window.dispatchEvent(new Event("service-modes-changed"));
       setTimeout(() => setServiceModeStatus(null), 4000);
     } catch (e: any) {
@@ -1032,7 +1058,7 @@ export default function Settings() {
       await setConfigMenuVariantOptions(nextOptions);
       setMenuVariantOptions(nextOptions);
       setNewMenuVariantOption("");
-      setMenuVariantStatus("Saved ✓");
+      setMenuVariantStatus("Saved ");
       setTimeout(() => setMenuVariantStatus(null), 3000);
     } catch (e: any) {
       setMenuVariantStatus("Save failed: " + (e?.message || String(e)));
@@ -1104,7 +1130,7 @@ export default function Settings() {
       }));
       await setConfigShifts(sanitized);
       setAttendanceShifts(sanitized);
-      setShiftStatus("Saved ✓");
+      setShiftStatus("Saved ");
       setTimeout(() => setShiftStatus(null), 3000);
     } catch (e: any) {
       setShiftStatus("Save failed: " + (e?.message || String(e)));
@@ -1198,12 +1224,12 @@ export default function Settings() {
           : "neutral";
   const updateStatusColors =
     updateStatusTone === "error"
-      ? { background: "#fee2e2", color: "#991b1b", border: "#fecaca" }
+      ? { background: "var(--pos-danger-tint)", color: "var(--pos-danger-text)", border: "var(--pos-danger-line)" }
       : updateStatusTone === "warning"
-        ? { background: "#fef3c7", color: "#92400e", border: "#fde68a" }
+        ? { background: "var(--pos-saffron-tint)", color: "var(--pos-saffron-text)", border: "var(--pos-saffron-line)" }
         : updateStatusTone === "success"
-          ? { background: "#dcfce7", color: "#166534", border: "#bbf7d0" }
-          : { background: "#f9fafb", color: "#374151", border: "#e5e7eb" };
+          ? { background: "var(--pos-success-tint)", color: "var(--pos-success-text)", border: "var(--pos-success-line)" }
+          : { background: "var(--pos-surface-hover)", color: "var(--pos-tx-sec)", border: "var(--pos-line)" };
   const updateMessageIsError = Boolean(
     updateMessage?.includes("failed") ||
     updateMessage?.includes("Could not") ||
@@ -1212,13 +1238,7 @@ export default function Settings() {
 
   return (
     <div className="pos-page pos-page-sm">
-      {/* Header */}
-      <div className="pos-ph" style={{ marginBottom: 28 }}>
-        <div>
-          <h2 className="pos-ph-title">Settings</h2>
-          <p className="pos-ph-sub">Configure your POS system</p>
-        </div>
-      </div>
+      <PageHeader title="Settings" subtitle="Configure your POS system" />
 
       {auth?.session?.role === "admin" && (
         <div className="pos-card pos-card-p" style={{ marginBottom: 24 }}>
@@ -1226,7 +1246,7 @@ export default function Settings() {
             style={{
               fontSize: 11,
               fontWeight: 800,
-              color: "var(--pos-muted,#9ca3af)",
+              color: "var(--pos-muted,var(--pos-tx-muted))",
               marginBottom: 14,
               textTransform: "uppercase",
               letterSpacing: "0.1em",
@@ -1235,7 +1255,7 @@ export default function Settings() {
             Admin Recovery Codes
           </div>
 
-          <p style={{ fontSize: 13, color: "#6b7280", margin: "0 0 16px", lineHeight: 1.6 }}>
+          <p style={{ fontSize: 13, color: "var(--pos-tx-sub)", margin: "0 0 16px", lineHeight: 1.6 }}>
             Regenerating creates {RECOVERY_CODE_COUNT} new one-time codes and invalidates all
             unused recovery codes for your admin account. New codes are shown only once.
           </p>
@@ -1268,8 +1288,8 @@ export default function Settings() {
                 borderRadius: 8,
                 fontSize: 13,
                 fontWeight: 600,
-                background: recoveryStatus.includes("created") ? "#dcfce7" : "#fee2e2",
-                color: recoveryStatus.includes("created") ? "#16a34a" : "#dc2626",
+                background: recoveryStatus.includes("created") ? "var(--pos-success-tint)" : "var(--pos-danger-tint)",
+                color: recoveryStatus.includes("created") ? "var(--pos-success)" : "var(--pos-danger)",
               }}
             >
               {recoveryStatus}
@@ -1282,11 +1302,11 @@ export default function Settings() {
                 marginTop: 14,
                 padding: 14,
                 borderRadius: 10,
-                border: "1px solid #e5e7eb",
-                background: "#f9fafb",
+                border: "1px solid var(--pos-line)",
+                background: "var(--pos-surface-hover)",
               }}
             >
-              <div style={{ fontSize: 13, fontWeight: 800, color: "#111827", marginBottom: 10 }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: "var(--pos-tx)", marginBottom: 10 }}>
                 Save these {recoveryCodes.length} one-time codes now
               </div>
               <div
@@ -1301,11 +1321,11 @@ export default function Settings() {
                     key={code}
                     style={{
                       padding: "8px 10px",
-                      background: "#fff",
-                      border: "1px solid #e5e7eb",
+                      background: "var(--pos-surface)",
+                      border: "1px solid var(--pos-line)",
                       borderRadius: 7,
                       fontSize: 13,
-                      color: "#111827",
+                      color: "var(--pos-tx)",
                       textAlign: "center",
                       userSelect: "text",
                     }}
@@ -1325,7 +1345,7 @@ export default function Settings() {
           style={{
             fontSize: 11,
             fontWeight: 800,
-            color: "var(--pos-muted,#9ca3af)",
+            color: "var(--pos-muted,var(--pos-tx-muted))",
             marginBottom: 18,
             textTransform: "uppercase",
             letterSpacing: "0.1em",
@@ -1394,9 +1414,9 @@ export default function Settings() {
                 gap: 14,
                 alignItems: "center",
                 padding: 14,
-                border: "1px solid var(--pos-border,#e5e7eb)",
+                border: "1px solid var(--pos-border,var(--pos-line))",
                 borderRadius: 10,
-                background: "#f8fafc",
+                background: "var(--pos-surface-sunken)",
               }}
             >
               <div
@@ -1404,13 +1424,13 @@ export default function Settings() {
                   width: 84,
                   height: 84,
                   borderRadius: 12,
-                  border: "1px solid #e2e8f0",
-                  background: "#fff",
+                  border: "1px solid var(--pos-line)",
+                  background: "var(--pos-surface)",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
                   overflow: "hidden",
-                  color: "#94a3b8",
+                  color: "var(--pos-tx-muted)",
                   fontSize: 12,
                   fontWeight: 800,
                 }}
@@ -1450,7 +1470,7 @@ export default function Settings() {
                     </button>
                   )}
                 </div>
-                <div style={{ fontSize: 12, color: "#64748b", marginTop: 8, lineHeight: 1.5 }}>
+                <div style={{ fontSize: 12, color: "var(--pos-tx-sub)", marginTop: 8, lineHeight: 1.5 }}>
                   PNG, JPG, or WebP up to 3 MB. The app will create a small UI logo and a receipt-safe monochrome version.
                 </div>
               </div>
@@ -1465,7 +1485,7 @@ export default function Settings() {
             alignItems: "center",
             paddingTop: 16,
             marginTop: 18,
-            borderTop: "1px solid var(--pos-border,#e5e7eb)",
+            borderTop: "1px solid var(--pos-border,var(--pos-line))",
             flexWrap: "wrap",
           }}
         >
@@ -1488,14 +1508,14 @@ export default function Settings() {
                   brandingStatus.includes("saved") ||
                   brandingStatus.includes("ready") ||
                   brandingStatus.includes("removed")
-                    ? "#dcfce7"
-                    : "#fee2e2",
+                    ? "var(--pos-success-tint)"
+                    : "var(--pos-danger-tint)",
                 color:
                   brandingStatus.includes("saved") ||
                   brandingStatus.includes("ready") ||
                   brandingStatus.includes("removed")
-                    ? "#16a34a"
-                    : "#dc2626",
+                    ? "var(--pos-success)"
+                    : "var(--pos-danger)",
               }}
             >
               {brandingStatus}
@@ -1510,7 +1530,7 @@ export default function Settings() {
           style={{
             fontSize: 11,
             fontWeight: 800,
-            color: "var(--pos-muted,#9ca3af)",
+            color: "var(--pos-muted,var(--pos-tx-muted))",
             marginBottom: 18,
             textTransform: "uppercase",
             letterSpacing: "0.1em",
@@ -1530,18 +1550,18 @@ export default function Settings() {
             justifyContent: "space-between",
             gap: 14,
             padding: "12px 14px",
-            border: "1px solid var(--pos-border,#e5e7eb)",
+            border: "1px solid var(--pos-border,var(--pos-line))",
             borderRadius: 10,
-            background: gstEnabled ? "#f0fdf4" : "#f9fafb",
+            background: gstEnabled ? "var(--pos-success-tint)" : "var(--pos-surface-hover)",
             marginBottom: 18,
             cursor: "pointer",
           }}
         >
           <span>
-            <span style={{ display: "block", fontSize: 14, fontWeight: 800, color: "#111827" }}>
+            <span style={{ display: "block", fontSize: 14, fontWeight: 800, color: "var(--pos-tx)" }}>
               Print GST registration details on bills
             </span>
-            <span style={{ display: "block", fontSize: 12, color: "#6b7280", marginTop: 2 }}>
+            <span style={{ display: "block", fontSize: 12, color: "var(--pos-tx-sub)", marginTop: 2 }}>
               GST is still calculated when this is off; only GSTIN/legal details are hidden.
             </span>
           </span>
@@ -1549,7 +1569,7 @@ export default function Settings() {
             type="checkbox"
             checked={gstEnabled}
             onChange={(event) => setGstEnabled(event.target.checked)}
-            style={{ width: 18, height: 18, accentColor: "#16a34a", flexShrink: 0 }}
+            style={{ width: 18, height: 18, accentColor: "var(--pos-success)", flexShrink: 0 }}
           />
         </label>
 
@@ -1627,7 +1647,7 @@ export default function Settings() {
             gap: 10,
             marginTop: 16,
             fontSize: 13,
-            color: "#374151",
+            color: "var(--pos-tx-sec)",
             cursor: "pointer",
           }}
         >
@@ -1635,7 +1655,7 @@ export default function Settings() {
             type="checkbox"
             checked={gstPriceIncludesTax}
             onChange={(event) => setGstPriceIncludesTax(event.target.checked)}
-            style={{ width: 16, height: 16, accentColor: "#d97706" }}
+            style={{ width: 16, height: 16, accentColor: "var(--pos-saffron-deep)" }}
           />
           Menu prices include GST
         </label>
@@ -1647,7 +1667,7 @@ export default function Settings() {
             alignItems: "center",
             paddingTop: 16,
             marginTop: 18,
-            borderTop: "1px solid var(--pos-border,#e5e7eb)",
+            borderTop: "1px solid var(--pos-border,var(--pos-line))",
             flexWrap: "wrap",
           }}
         >
@@ -1684,8 +1704,8 @@ export default function Settings() {
                 borderRadius: 8,
                 fontSize: 13,
                 fontWeight: 600,
-                background: gstStatus.includes("saved") ? "#dcfce7" : "#fee2e2",
-                color: gstStatus.includes("saved") ? "#16a34a" : "#dc2626",
+                background: gstStatus.includes("saved") ? "var(--pos-success-tint)" : "var(--pos-danger-tint)",
+                color: gstStatus.includes("saved") ? "var(--pos-success)" : "var(--pos-danger)",
               }}
             >
               {gstStatus}
@@ -1700,7 +1720,7 @@ export default function Settings() {
           style={{
             fontSize: 11,
             fontWeight: 800,
-            color: "var(--pos-muted,#9ca3af)",
+            color: "var(--pos-muted,var(--pos-tx-muted))",
             marginBottom: 20,
             textTransform: "uppercase",
             letterSpacing: "0.1em",
@@ -1709,7 +1729,7 @@ export default function Settings() {
             gap: 8,
           }}
         >
-          <span style={{ fontSize: 15 }}>🖨</span>
+          <span style={{ fontSize: 15 }}></span>
           Printer Configuration
         </div>
 
@@ -1769,7 +1789,7 @@ export default function Settings() {
             className="pos-input"
             style={{ width: 120, fontFamily: "monospace" }}
           />
-          <p style={{ fontSize: 12, color: "var(--pos-muted,#9ca3af)", marginTop: 6 }}>
+          <p style={{ fontSize: 12, color: "var(--pos-muted,var(--pos-tx-muted))", marginTop: 6 }}>
             Default: 9100 (for network printers)
           </p>
         </div>
@@ -1781,7 +1801,7 @@ export default function Settings() {
             gap: 10,
             alignItems: "center",
             paddingTop: 16,
-            borderTop: "1px solid var(--pos-border,#e5e7eb)",
+            borderTop: "1px solid var(--pos-border,var(--pos-line))",
             flexWrap: "wrap",
           }}
         >
@@ -1790,8 +1810,8 @@ export default function Settings() {
             disabled={saving}
             className="pos-btn pos-btn-primary"
             style={{
-              background: "#16a34a",
-              borderColor: "#16a34a",
+              background: "var(--pos-success)",
+              borderColor: "var(--pos-success)",
               boxShadow: "0 2px 8px rgba(22,163,74,0.25)",
             }}
           >
@@ -1817,16 +1837,16 @@ export default function Settings() {
                 borderRadius: 8,
                 fontSize: 13,
                 fontWeight: 600,
-                background: status.includes("✓")
-                  ? "#dcfce7"
+                background: status.includes("")
+                  ? "var(--pos-success-tint)"
                   : status.includes("failed") || status.includes("Failed")
-                    ? "#fee2e2"
-                    : "#fef3c7",
-                color: status.includes("✓")
-                  ? "#16a34a"
+                    ? "var(--pos-danger-tint)"
+                    : "var(--pos-saffron-tint)",
+                color: status.includes("")
+                  ? "var(--pos-success)"
                   : status.includes("failed") || status.includes("Failed")
-                    ? "#dc2626"
-                    : "#b45309",
+                    ? "var(--pos-danger)"
+                    : "var(--pos-saffron-text)",
               }}
             >
               {status}
@@ -1841,7 +1861,7 @@ export default function Settings() {
           style={{
             fontSize: 11,
             fontWeight: 800,
-            color: "var(--pos-muted,#9ca3af)",
+            color: "var(--pos-muted,var(--pos-tx-muted))",
             marginBottom: 18,
             textTransform: "uppercase",
             letterSpacing: "0.1em",
@@ -1867,9 +1887,9 @@ export default function Settings() {
           <div
             style={{
               padding: "14px 0",
-              color: "#6b7280",
+              color: "var(--pos-tx-sub)",
               fontSize: 13,
-              borderTop: "1px solid var(--pos-border,#e5e7eb)",
+              borderTop: "1px solid var(--pos-border,var(--pos-line))",
             }}
           >
             No pending or failed print jobs.
@@ -1885,20 +1905,20 @@ export default function Settings() {
                   gap: 12,
                   alignItems: "center",
                   padding: 12,
-                  border: "1px solid var(--pos-border,#e5e7eb)",
+                  border: "1px solid var(--pos-border,var(--pos-line))",
                   borderRadius: 8,
-                  background: job.status === "failed" ? "#fff7ed" : "#f9fafb",
+                  background: job.status === "failed" ? "var(--pos-saffron-tint)" : "var(--pos-surface-hover)",
                 }}
               >
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 800, color: "#111827" }}>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: "var(--pos-tx)" }}>
                     {job.jobType.toUpperCase()} to {job.printerName || "default"}
                   </div>
-                  <div style={{ fontSize: 12, color: "#6b7280", marginTop: 3 }}>
+                  <div style={{ fontSize: 12, color: "var(--pos-tx-sub)", marginTop: 3 }}>
                     {job.status} - attempts {job.retryCount}/{job.maxRetries} - {formatDateTime(job.createdAt)}
                   </div>
                   {job.error && (
-                    <div style={{ fontSize: 12, color: "#b45309", marginTop: 4 }}>
+                    <div style={{ fontSize: 12, color: "var(--pos-saffron-text)", marginTop: 4 }}>
                       {job.error}
                     </div>
                   )}
@@ -1924,7 +1944,7 @@ export default function Settings() {
             alignItems: "center",
             paddingTop: 14,
             marginTop: 14,
-            borderTop: "1px solid var(--pos-border,#e5e7eb)",
+            borderTop: "1px solid var(--pos-border,var(--pos-line))",
             flexWrap: "wrap",
           }}
         >
@@ -1944,11 +1964,11 @@ export default function Settings() {
                 fontSize: 13,
                 fontWeight: 600,
                 background: printQueueStatus.includes("failed") || printQueueStatus.includes("Could not") || printQueueStatus.includes("Cleanup")
-                  ? "#fee2e2"
-                  : "#dcfce7",
+                  ? "var(--pos-danger-tint)"
+                  : "var(--pos-success-tint)",
                 color: printQueueStatus.includes("failed") || printQueueStatus.includes("Could not") || printQueueStatus.includes("Cleanup")
-                  ? "#dc2626"
-                  : "#16a34a",
+                  ? "var(--pos-danger)"
+                  : "var(--pos-success)",
               }}
             >
               {printQueueStatus}
@@ -1963,7 +1983,7 @@ export default function Settings() {
           style={{
             fontSize: 11,
             fontWeight: 800,
-            color: "var(--pos-muted,#9ca3af)",
+            color: "var(--pos-muted,var(--pos-tx-muted))",
             marginBottom: 18,
             textTransform: "uppercase",
             letterSpacing: "0.1em",
@@ -2003,9 +2023,9 @@ export default function Settings() {
           style={{
             marginTop: 14,
             paddingTop: 14,
-            borderTop: "1px solid var(--pos-border,#e5e7eb)",
+            borderTop: "1px solid var(--pos-border,var(--pos-line))",
             fontSize: 13,
-            color: "#6b7280",
+            color: "var(--pos-tx-sub)",
           }}
         >
           {backups.length > 0 ? (
@@ -2029,11 +2049,11 @@ export default function Settings() {
               fontSize: 13,
               fontWeight: 600,
               background: backupStatus.includes("failed") || backupStatus.includes("Could not")
-                ? "#fee2e2"
-                : "#dcfce7",
+                ? "var(--pos-danger-tint)"
+                : "var(--pos-success-tint)",
               color: backupStatus.includes("failed") || backupStatus.includes("Could not")
-                ? "#dc2626"
-                : "#16a34a",
+                ? "var(--pos-danger)"
+                : "var(--pos-success)",
             }}
           >
             {backupStatus}
@@ -2047,7 +2067,7 @@ export default function Settings() {
           style={{
             fontSize: 11,
             fontWeight: 800,
-            color: "var(--pos-muted,#9ca3af)",
+            color: "var(--pos-muted,var(--pos-tx-muted))",
             marginBottom: 18,
             textTransform: "uppercase",
             letterSpacing: "0.1em",
@@ -2063,7 +2083,7 @@ export default function Settings() {
             gap: 12,
             marginBottom: 16,
             fontSize: 13,
-            color: "#374151",
+            color: "var(--pos-tx-sec)",
           }}
         >
           <div>
@@ -2080,7 +2100,7 @@ export default function Settings() {
           </div>
         </div>
 
-        <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 14 }}>
+        <div style={{ fontSize: 12, color: "var(--pos-tx-sub)", marginBottom: 14 }}>
           Update files:{" "}
           <span style={{ fontFamily: "monospace", wordBreak: "break-all" }}>
             {appInfo?.updateStoragePath || "-"}
@@ -2116,8 +2136,8 @@ export default function Settings() {
             style={{
               padding: 12,
               borderRadius: 8,
-              border: "1px solid var(--pos-border,#e5e7eb)",
-              background: "#f9fafb",
+              border: "1px solid var(--pos-border,var(--pos-line))",
+              background: "var(--pos-surface-hover)",
               marginBottom: 14,
               fontSize: 13,
             }}
@@ -2175,7 +2195,7 @@ export default function Settings() {
         </div>
 
         {updateStatus?.rollbackRisk && updateStatus.rollbackAvailable && (
-          <div style={{ marginTop: 12, fontSize: 12, color: "#92400e" }}>
+          <div style={{ marginTop: 12, fontSize: 12, color: "var(--pos-saffron-text)" }}>
             Rollback would discard {updateStatus.rollbackRisk.orders || 0} order(s) and{" "}
             {updateStatus.rollbackRisk.payments || 0} payment(s) created after the update.
           </div>
@@ -2189,8 +2209,8 @@ export default function Settings() {
               borderRadius: 8,
               fontSize: 13,
               fontWeight: 600,
-              background: updateMessageIsError ? "#fee2e2" : "#dcfce7",
-              color: updateMessageIsError ? "#dc2626" : "#16a34a",
+              background: updateMessageIsError ? "var(--pos-danger-tint)" : "var(--pos-success-tint)",
+              color: updateMessageIsError ? "var(--pos-danger)" : "var(--pos-success)",
             }}
           >
             {updateMessage}
@@ -2201,12 +2221,12 @@ export default function Settings() {
       {/* Info Box */}
       <div
         style={{
-          background: "var(--pos-brand-xlight,#fffbeb)",
-          border: "1px solid var(--pos-brand-border,#fcd34d)",
+          background: "var(--pos-brand-xlight,var(--pos-saffron-tint))",
+          border: "1px solid var(--pos-brand-border,var(--pos-saffron-line))",
           borderRadius: 12,
           padding: "16px 18px",
           fontSize: 13,
-          color: "var(--pos-brand-dark,#92400e)",
+          color: "var(--pos-brand-dark,var(--pos-saffron-text))",
           lineHeight: 1.6,
           marginBottom: 24,
         }}
@@ -2227,7 +2247,7 @@ export default function Settings() {
           style={{
             fontSize: 11,
             fontWeight: 800,
-            color: "var(--pos-muted,#9ca3af)",
+            color: "var(--pos-muted,var(--pos-tx-muted))",
             marginBottom: 20,
             textTransform: "uppercase",
             letterSpacing: "0.1em",
@@ -2236,7 +2256,7 @@ export default function Settings() {
             gap: 8,
           }}
         >
-          <span style={{ fontSize: 15 }}>⊞</span>
+          <Icon icon={LayoutGrid} size="sm" />
           Table Configuration
         </div>
 
@@ -2254,12 +2274,35 @@ export default function Settings() {
               className="pos-input"
               style={{ width: 100, fontWeight: 700, fontSize: 15, textAlign: "center" }}
             />
-            <span style={{ fontSize: 13, color: "var(--pos-tx-sub,#6b7280)" }}>
+            <span style={{ fontSize: 13, color: "var(--pos-tx-sub,var(--pos-tx-sub))" }}>
               tables (current: {tableCount})
             </span>
           </div>
-          <p style={{ fontSize: 12, color: "var(--pos-muted,#9ca3af)", marginTop: 6 }}>
+          <p style={{ fontSize: 12, color: "var(--pos-muted,var(--pos-tx-muted))", marginTop: 6 }}>
             Tables with active orders will not be removed when reducing the count.
+          </p>
+        </div>
+
+        <div style={{ marginBottom: 20 }}>
+          <label className="pos-label">Default seats (new tables)</label>
+          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            <input
+              type="number"
+              min={1}
+              max={50}
+              value={defaultSeats}
+              onChange={(e) =>
+                setDefaultSeats(Math.max(1, Math.min(50, Number(e.target.value) || 1)))
+              }
+              className="pos-input"
+              style={{ width: 100, fontWeight: 700, fontSize: 15, textAlign: "center" }}
+            />
+            <span style={{ fontSize: 13, color: "var(--pos-tx-sub,var(--pos-tx-sub))" }}>
+              seats per newly added table
+            </span>
+          </div>
+          <p style={{ fontSize: 12, color: "var(--pos-muted,var(--pos-tx-muted))", marginTop: 6 }}>
+            Existing tables keep their seat counts. Edit them in Table Mapping below.
           </p>
         </div>
 
@@ -2278,8 +2321,8 @@ export default function Settings() {
                 borderRadius: 8,
                 fontSize: 13,
                 fontWeight: 600,
-                background: tableStatus.includes("✓") ? "#dcfce7" : "#fee2e2",
-                color: tableStatus.includes("✓") ? "#16a34a" : "#dc2626",
+                background: tableStatus.includes("") ? "var(--pos-success-tint)" : "var(--pos-danger-tint)",
+                color: tableStatus.includes("") ? "var(--pos-success)" : "var(--pos-danger)",
               }}
             >
               {tableStatus}
@@ -2287,7 +2330,7 @@ export default function Settings() {
           )}
         </div>
 
-        <div style={{ marginTop: 22, borderTop: "1px solid #f3f4f6", paddingTop: 18 }}>
+        <div style={{ marginTop: 22, borderTop: "1px solid var(--pos-surface-sunken)", paddingTop: 18 }}>
           <label className="pos-label">Seating Areas</label>
           <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
             <input
@@ -2316,9 +2359,9 @@ export default function Settings() {
                   gap: 8,
                   alignItems: "center",
                   padding: "8px 10px",
-                  border: dragAreaId === area.id ? "1px solid #f59e0b" : "1px solid #e5e7eb",
+                  border: dragAreaId === area.id ? "1px solid var(--pos-saffron)" : "1px solid var(--pos-line)",
                   borderRadius: 8,
-                  background: dragAreaId === area.id ? "#fffbeb" : "#fff",
+                  background: dragAreaId === area.id ? "var(--pos-saffron-tint)" : "var(--pos-surface)",
                   cursor: "grab",
                 }}
               >
@@ -2333,7 +2376,7 @@ export default function Settings() {
                     )
                   }
                 />
-                <label style={{ fontSize: 12, color: "#374151", display: "flex", gap: 6 }}>
+                <label style={{ fontSize: 12, color: "var(--pos-tx-sec)", display: "flex", gap: 6 }}>
                   <input
                     type="checkbox"
                     checked={area.active !== false}
@@ -2378,9 +2421,29 @@ export default function Settings() {
           </div>
         </div>
 
-        <div style={{ marginTop: 22, borderTop: "1px solid #f3f4f6", paddingTop: 18 }}>
-          <label className="pos-label">Table to Area Mapping</label>
-          <div style={{ display: "grid", gap: 8, maxHeight: 260, overflow: "auto", paddingRight: 4 }}>
+        <div style={{ marginTop: 22, borderTop: "1px solid var(--pos-surface-sunken)", paddingTop: 18 }}>
+          <label className="pos-label">Table Mapping</label>
+          <p style={{ fontSize: 12, color: "var(--pos-muted,var(--pos-tx-muted))", marginTop: 0, marginBottom: 10 }}>
+            Set seating area and seat count for each table. Save with “Save Seating Areas”.
+          </p>
+          <div style={{ display: "grid", gap: 8, maxHeight: 320, overflow: "auto", paddingRight: 4 }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "120px 88px minmax(150px, 1fr)",
+                gap: 8,
+                alignItems: "center",
+                fontSize: 11,
+                fontWeight: 700,
+                color: "var(--pos-tx-muted)",
+                textTransform: "uppercase",
+                letterSpacing: "0.04em",
+              }}
+            >
+              <span>Table</span>
+              <span>Seats</span>
+              <span>Area</span>
+            </div>
             {tableDocs
               .slice()
               .sort((a, b) => a.id - b.id)
@@ -2389,14 +2452,29 @@ export default function Settings() {
                   key={table.id}
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "120px minmax(150px, 1fr)",
+                    gridTemplateColumns: "120px 88px minmax(150px, 1fr)",
                     gap: 8,
                     alignItems: "center",
                   }}
                 >
-                  <div style={{ fontWeight: 700, color: "#111827", fontSize: 13 }}>
+                  <div style={{ fontWeight: 700, color: "var(--pos-tx)", fontSize: 13 }}>
                     {table.name || `Table ${table.id}`}
                   </div>
+                  <input
+                    type="number"
+                    min={1}
+                    max={50}
+                    className="pos-input"
+                    aria-label={`Seats for ${table.name || `Table ${table.id}`}`}
+                    value={tableSeatsDraft[table.id] ?? table.seats ?? 4}
+                    onChange={(event) =>
+                      setTableSeatsDraft((current) => ({
+                        ...current,
+                        [table.id]: Math.max(1, Math.min(50, Number(event.target.value) || 1)),
+                      }))
+                    }
+                    style={{ textAlign: "center", fontWeight: 700 }}
+                  />
                   <select
                     className="pos-input"
                     value={tableAreaDraft[table.id] || table.areaId || "area:main"}
@@ -2437,7 +2515,7 @@ export default function Settings() {
           style={{
             fontSize: 11,
             fontWeight: 800,
-            color: "var(--pos-muted,#9ca3af)",
+            color: "var(--pos-muted,var(--pos-tx-muted))",
             marginBottom: 20,
             textTransform: "uppercase",
             letterSpacing: "0.1em",
@@ -2453,7 +2531,7 @@ export default function Settings() {
         <p
           style={{
             fontSize: 13,
-            color: "var(--pos-tx-sub,#6b7280)",
+            color: "var(--pos-tx-sub,var(--pos-tx-sub))",
             marginBottom: 14,
             marginTop: 0,
           }}
@@ -2473,9 +2551,9 @@ export default function Settings() {
                 alignItems: "center",
                 gap: 10,
                 padding: "10px 12px",
-                border: "1px solid #e5e7eb",
+                border: "1px solid var(--pos-line)",
                 borderRadius: 10,
-                background: mode.enabled ? "#f8fafc" : "#ffffff",
+                background: mode.enabled ? "var(--pos-surface-sunken)" : "var(--pos-surface)",
               }}
             >
               <input
@@ -2484,8 +2562,8 @@ export default function Settings() {
                 onChange={() => toggleServiceMode(mode.id)}
               />
               <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 700, color: "#111827", fontSize: 14 }}>{mode.name}</div>
-                <div style={{ color: "#6b7280", fontSize: 12 }}>
+                <div style={{ fontWeight: 700, color: "var(--pos-tx)", fontSize: 14 }}>{mode.name}</div>
+                <div style={{ color: "var(--pos-tx-sub)", fontSize: 12 }}>
                   {mode.requiresTable ? "Table required" : "No table"}
                   {mode.externalPayment ? " · External payment" : " · In-POS payment"}
                 </div>
@@ -2496,7 +2574,7 @@ export default function Settings() {
                     gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
                     gap: 8,
                     fontSize: 12,
-                    color: "#374151",
+                    color: "var(--pos-tx-sec)",
                   }}
                 >
                   <div>
@@ -2510,7 +2588,7 @@ export default function Settings() {
                       />
                       Supports KOT
                     </label>
-                    <div style={{ color: "#9ca3af", marginLeft: 22 }}>Show kitchen ticket actions</div>
+                    <div style={{ color: "var(--pos-tx-muted)", marginLeft: 22 }}>Show kitchen ticket actions</div>
                   </div>
                   <div>
                     <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -2523,7 +2601,7 @@ export default function Settings() {
                       />
                       Immediate billing
                     </label>
-                    <div style={{ color: "#9ca3af", marginLeft: 22 }}>Pay first, then auto-print flow</div>
+                    <div style={{ color: "var(--pos-tx-muted)", marginLeft: 22 }}>Pay first, then auto-print flow</div>
                   </div>
                   <div>
                     <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -2536,7 +2614,7 @@ export default function Settings() {
                       />
                       Requires customer
                     </label>
-                    <div style={{ color: "#9ca3af", marginLeft: 22 }}>Ask for name or phone before order</div>
+                    <div style={{ color: "var(--pos-tx-muted)", marginLeft: 22 }}>Ask for name or phone before order</div>
                   </div>
                   <div>
                     <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -2549,14 +2627,14 @@ export default function Settings() {
                       />
                       Supports open orders
                     </label>
-                    <div style={{ color: "#9ca3af", marginLeft: 22 }}>
+                    <div style={{ color: "var(--pos-tx-muted)", marginLeft: 22 }}>
                       Allow hold/ready lifecycle before payment
                     </div>
                   </div>
                 </div>
                 {mode.supportsKOT && (
                   <div style={{ marginTop: 10, display: "flex", gap: 8, alignItems: "center" }}>
-                    <span style={{ fontSize: 12, color: "#6b7280" }}>Payment print flow</span>
+                    <span style={{ fontSize: 12, color: "var(--pos-tx-sub)" }}>Payment print flow</span>
                     <select
                       className="pos-input"
                       value={mode.paymentPrintSequence}
@@ -2595,8 +2673,8 @@ export default function Settings() {
                 borderRadius: 8,
                 fontSize: 13,
                 fontWeight: 600,
-                background: serviceModeStatus.includes("✓") ? "#dcfce7" : "#fee2e2",
-                color: serviceModeStatus.includes("✓") ? "#16a34a" : "#dc2626",
+                background: serviceModeStatus.includes("") ? "var(--pos-success-tint)" : "var(--pos-danger-tint)",
+                color: serviceModeStatus.includes("") ? "var(--pos-success)" : "var(--pos-danger)",
               }}
             >
               {serviceModeStatus}
@@ -2611,7 +2689,7 @@ export default function Settings() {
           style={{
             fontSize: 11,
             fontWeight: 800,
-            color: "var(--pos-muted,#9ca3af)",
+            color: "var(--pos-muted,var(--pos-tx-muted))",
             marginBottom: 20,
             textTransform: "uppercase",
             letterSpacing: "0.1em",
@@ -2620,14 +2698,14 @@ export default function Settings() {
             gap: 8,
           }}
         >
-          <span style={{ fontSize: 15 }}>🏷</span>
+          <span style={{ fontSize: 15 }}></span>
           Menu Categories
         </div>
 
         <p
           style={{
             fontSize: 13,
-            color: "var(--pos-tx-sub,#6b7280)",
+            color: "var(--pos-tx-sub,var(--pos-tx-sub))",
             marginBottom: 16,
             marginTop: 0,
           }}
@@ -2656,7 +2734,7 @@ export default function Settings() {
 
         {/* Category list */}
         {categories.length === 0 ? (
-          <div style={{ fontSize: 13, color: "#d1d5db", padding: "12px 0" }}>
+          <div style={{ fontSize: 13, color: "var(--pos-line-strong)", padding: "12px 0" }}>
             No categories yet — add one above.
           </div>
         ) : (
@@ -2670,29 +2748,30 @@ export default function Settings() {
                   gap: 6,
                   padding: "5px 12px 5px 14px",
                   borderRadius: 20,
-                  background: "#fffbeb",
-                  border: "1.5px solid #fcd34d",
+                  background: "var(--pos-saffron-tint)",
+                  border: "1.5px solid var(--pos-saffron-line)",
                   fontSize: 13,
                   fontWeight: 600,
-                  color: "#92400e",
+                  color: "var(--pos-saffron-text)",
                 }}
               >
                 {cat}
                 <button
                   onClick={() => removeCategory(cat)}
                   title={`Remove "${cat}"`}
+                  aria-label={`Remove ${cat}`}
                   style={{
                     background: "none",
                     border: "none",
                     cursor: "pointer",
-                    color: "#d97706",
-                    fontSize: 15,
+                    color: "var(--pos-saffron-deep)",
                     lineHeight: 1,
                     padding: "0 2px",
                     borderRadius: 4,
+                    display: "inline-flex",
                   }}
                 >
-                  ×
+                  <Icon icon={X} size="sm" />
                 </button>
               </div>
             ))}
@@ -2706,7 +2785,7 @@ export default function Settings() {
             gap: 10,
             alignItems: "center",
             paddingTop: 14,
-            borderTop: "1px solid var(--pos-border,#e5e7eb)",
+            borderTop: "1px solid var(--pos-border,var(--pos-line))",
           }}
         >
           <button
@@ -2723,8 +2802,8 @@ export default function Settings() {
                 borderRadius: 8,
                 fontSize: 13,
                 fontWeight: 600,
-                background: categoryStatus.includes("\u2713") ? "#dcfce7" : "#fee2e2",
-                color: categoryStatus.includes("\u2713") ? "#16a34a" : "#dc2626",
+                background: categoryStatus.includes("\u2713") ? "var(--pos-success-tint)" : "var(--pos-danger-tint)",
+                color: categoryStatus.includes("\u2713") ? "var(--pos-success)" : "var(--pos-danger)",
               }}
             >
               {categoryStatus}
@@ -2739,7 +2818,7 @@ export default function Settings() {
           style={{
             fontSize: 11,
             fontWeight: 800,
-            color: "var(--pos-muted,#9ca3af)",
+            color: "var(--pos-muted,var(--pos-tx-muted))",
             marginBottom: 20,
             textTransform: "uppercase",
             letterSpacing: "0.1em",
@@ -2748,14 +2827,14 @@ export default function Settings() {
             gap: 8,
           }}
         >
-          <span style={{ fontSize: 15 }}>📏</span>
+          <span style={{ fontSize: 15 }}></span>
           Menu Variant Options
         </div>
 
         <p
           style={{
             fontSize: 13,
-            color: "var(--pos-tx-sub,#6b7280)",
+            color: "var(--pos-tx-sub,var(--pos-tx-sub))",
             marginBottom: 16,
             marginTop: 0,
           }}
@@ -2782,7 +2861,7 @@ export default function Settings() {
         </div>
 
         {menuVariantOptions.length === 0 ? (
-          <div style={{ fontSize: 13, color: "#d1d5db", padding: "12px 0" }}>
+          <div style={{ fontSize: 13, color: "var(--pos-line-strong)", padding: "12px 0" }}>
             No variant options yet — add one above.
           </div>
         ) : (
@@ -2796,29 +2875,30 @@ export default function Settings() {
                   gap: 6,
                   padding: "5px 12px 5px 14px",
                   borderRadius: 20,
-                  background: "#ecfeff",
-                  border: "1.5px solid #67e8f9",
+                  background: "var(--pos-teal-tint)",
+                  border: "1.5px solid var(--pos-teal-line)",
                   fontSize: 13,
                   fontWeight: 600,
-                  color: "#155e75",
+                  color: "var(--pos-teal-strong)",
                 }}
               >
                 {option}
                 <button
                   onClick={() => removeMenuVariantOption(option)}
                   title={`Remove "${option}"`}
+                  aria-label={`Remove ${option}`}
                   style={{
                     background: "none",
                     border: "none",
                     cursor: "pointer",
-                    color: "#0e7490",
-                    fontSize: 15,
+                    color: "var(--pos-teal)",
                     lineHeight: 1,
                     padding: "0 2px",
                     borderRadius: 4,
+                    display: "inline-flex",
                   }}
                 >
-                  ×
+                  <Icon icon={X} size="sm" />
                 </button>
               </div>
             ))}
@@ -2831,7 +2911,7 @@ export default function Settings() {
             gap: 10,
             alignItems: "center",
             paddingTop: 14,
-            borderTop: "1px solid var(--pos-border,#e5e7eb)",
+            borderTop: "1px solid var(--pos-border,var(--pos-line))",
           }}
         >
           <button
@@ -2848,8 +2928,8 @@ export default function Settings() {
                 borderRadius: 8,
                 fontSize: 13,
                 fontWeight: 600,
-                background: menuVariantStatus.includes("✓") ? "#dcfce7" : "#fee2e2",
-                color: menuVariantStatus.includes("✓") ? "#16a34a" : "#dc2626",
+                background: menuVariantStatus.includes("") ? "var(--pos-success-tint)" : "var(--pos-danger-tint)",
+                color: menuVariantStatus.includes("") ? "var(--pos-success)" : "var(--pos-danger)",
               }}
             >
               {menuVariantStatus}
@@ -2864,7 +2944,7 @@ export default function Settings() {
           style={{
             fontSize: 11,
             fontWeight: 800,
-            color: "var(--pos-muted,#9ca3af)",
+            color: "var(--pos-muted,var(--pos-tx-muted))",
             marginBottom: 20,
             textTransform: "uppercase",
             letterSpacing: "0.1em",
@@ -2873,11 +2953,11 @@ export default function Settings() {
             gap: 8,
           }}
         >
-          <span style={{ fontSize: 15 }}>⏱</span>
+          <Icon icon={Timer} size="sm" />
           Attendance Shift Master
         </div>
 
-        <p style={{ fontSize: 13, color: "#6b7280", marginBottom: 16, lineHeight: 1.6 }}>
+        <p style={{ fontSize: 13, color: "var(--pos-tx-sub)", marginBottom: 16, lineHeight: 1.6 }}>
           Configure standard working hours for each shift. Attendance overtime is computed using
           these values.
         </p>
@@ -2893,7 +2973,7 @@ export default function Settings() {
                 alignItems: "center",
               }}
             >
-              <div style={{ fontSize: 13, fontWeight: 700, color: "var(--pos-tx,#111827)" }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "var(--pos-tx,var(--pos-tx))" }}>
                 {shift.label}
               </div>
               <input
@@ -2906,7 +2986,7 @@ export default function Settings() {
                 className="pos-input"
                 aria-label={`${shift.label} hours`}
               />
-              <span style={{ fontSize: 12, color: "var(--pos-tx-sub,#6b7280)" }}>hours</span>
+              <span style={{ fontSize: 12, color: "var(--pos-tx-sub,var(--pos-tx-sub))" }}>hours</span>
             </div>
           ))}
         </div>
@@ -2917,7 +2997,7 @@ export default function Settings() {
             gap: 10,
             alignItems: "center",
             paddingTop: 14,
-            borderTop: "1px solid var(--pos-border,#e5e7eb)",
+            borderTop: "1px solid var(--pos-border,var(--pos-line))",
           }}
         >
           <button
@@ -2934,8 +3014,8 @@ export default function Settings() {
                 borderRadius: 8,
                 fontSize: 13,
                 fontWeight: 600,
-                background: shiftStatus.includes("✓") ? "#dcfce7" : "#fee2e2",
-                color: shiftStatus.includes("✓") ? "#16a34a" : "#dc2626",
+                background: shiftStatus.includes("") ? "var(--pos-success-tint)" : "var(--pos-danger-tint)",
+                color: shiftStatus.includes("") ? "var(--pos-success)" : "var(--pos-danger)",
               }}
             >
               {shiftStatus}
@@ -2950,7 +3030,7 @@ export default function Settings() {
           style={{
             fontSize: 11,
             fontWeight: 800,
-            color: "var(--pos-muted,#9ca3af)",
+            color: "var(--pos-muted,var(--pos-tx-muted))",
             marginBottom: 20,
             textTransform: "uppercase",
             letterSpacing: "0.1em",
@@ -2959,11 +3039,11 @@ export default function Settings() {
             gap: 8,
           }}
         >
-          <span style={{ fontSize: 15 }}>🗒</span>
+          <span style={{ fontSize: 15 }}></span>
           Audit Log Retention
         </div>
 
-        <p style={{ fontSize: 13, color: "#6b7280", marginBottom: 16, lineHeight: 1.6 }}>
+        <p style={{ fontSize: 13, color: "var(--pos-tx-sub)", marginBottom: 16, lineHeight: 1.6 }}>
           Audit records older than the selected period are <strong>permanently deleted</strong> each
           time the app starts. Choose <em>Never</em> to keep all records indefinitely.
         </p>
@@ -2993,7 +3073,7 @@ export default function Settings() {
             gap: 10,
             alignItems: "center",
             paddingTop: 14,
-            borderTop: "1px solid var(--pos-border,#e5e7eb)",
+            borderTop: "1px solid var(--pos-border,var(--pos-line))",
           }}
         >
           <button
@@ -3010,8 +3090,8 @@ export default function Settings() {
                 borderRadius: 8,
                 fontSize: 13,
                 fontWeight: 600,
-                background: auditStatus.includes("\u2713") ? "#dcfce7" : "#fee2e2",
-                color: auditStatus.includes("\u2713") ? "#16a34a" : "#dc2626",
+                background: auditStatus.includes("\u2713") ? "var(--pos-success-tint)" : "var(--pos-danger-tint)",
+                color: auditStatus.includes("\u2713") ? "var(--pos-success)" : "var(--pos-danger)",
               }}
             >
               {auditStatus}
@@ -3026,7 +3106,7 @@ export default function Settings() {
           style={{
             fontSize: 11,
             fontWeight: 800,
-            color: "var(--pos-muted,#9ca3af)",
+            color: "var(--pos-muted,var(--pos-tx-muted))",
             marginBottom: 20,
             textTransform: "uppercase",
             letterSpacing: "0.1em",
@@ -3035,11 +3115,11 @@ export default function Settings() {
             gap: 8,
           }}
         >
-          <span style={{ fontSize: 15 }}>◷</span>
+          <Icon icon={Clock3} size="sm" />
           Order History Retention
         </div>
 
-        <p style={{ fontSize: 13, color: "#6b7280", marginBottom: 16, lineHeight: 1.6 }}>
+        <p style={{ fontSize: 13, color: "var(--pos-tx-sub)", marginBottom: 16, lineHeight: 1.6 }}>
           Paid orders older than the selected period are <strong>permanently deleted</strong> each
           time the app starts. Choose <em>Never</em> to keep all order history indefinitely.
         </p>
@@ -3068,7 +3148,7 @@ export default function Settings() {
             gap: 10,
             alignItems: "center",
             paddingTop: 14,
-            borderTop: "1px solid var(--pos-border,#e5e7eb)",
+            borderTop: "1px solid var(--pos-border,var(--pos-line))",
           }}
         >
           <button
@@ -3085,8 +3165,8 @@ export default function Settings() {
                 borderRadius: 8,
                 fontSize: 13,
                 fontWeight: 600,
-                background: historyStatus.includes("\u2713") ? "#dcfce7" : "#fee2e2",
-                color: historyStatus.includes("\u2713") ? "#16a34a" : "#dc2626",
+                background: historyStatus.includes("\u2713") ? "var(--pos-success-tint)" : "var(--pos-danger-tint)",
+                color: historyStatus.includes("\u2713") ? "var(--pos-success)" : "var(--pos-danger)",
               }}
             >
               {historyStatus}

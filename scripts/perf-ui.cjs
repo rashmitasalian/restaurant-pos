@@ -546,7 +546,7 @@ const PAGES = [
   {
     name: "Billing",
     hash: "#billing",
-    ready: `document.querySelector("#main-content") && (document.body.innerText.includes("No active order") || ${enabledButtonExpression("Pay", true)} || ${inputPlaceholderExpression("Search item by name")})`,
+    ready: `document.querySelector("#main-content") && (document.body.innerText.includes("No active order") || ${enabledButtonExpression("Settle", true)} || ${inputPlaceholderExpression("Search item by name")})`,
     rows: `document.querySelectorAll("button").length`,
     targetMs: 1000,
   },
@@ -744,7 +744,7 @@ async function runBillingUiWorkflow(win, database) {
       `document.body.innerText.includes("3 items") || document.body.innerText.includes("3 item")`,
       10000,
     );
-    await clickEnabledButton(win, "Pay", { exact: true, timeoutMs: 10000 });
+    await clickEnabledButton(win, "Settle", { exact: true, timeoutMs: 10000 });
     await waitForCondition(
       win,
       `document.body.innerText.includes("Amount Due") || document.querySelector('[aria-label="Collect Payment"]')`,
@@ -1227,7 +1227,7 @@ async function main() {
       iterations: Math.min(opts.iterations, 3),
       warmups: 0,
     });
-    if (writeBenchmarkResult(report, "Login -> Tables -> Billing -> Add Items -> Pay", workflowResult, 3000)) {
+    if (writeBenchmarkResult(report, "Login -> Tables -> Billing -> Add Items -> Settle", workflowResult, 3000)) {
       reviewCount += 1;
     }
     report.line("");

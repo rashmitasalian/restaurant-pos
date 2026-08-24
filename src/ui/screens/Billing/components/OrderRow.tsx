@@ -1,6 +1,7 @@
 import React from "react";
 import type { ServiceMode } from "../../../../shared/serviceModes";
 import styles from "../Billing.module.css";
+import { platformBrand } from "../../../theme/external-brands";
 
 interface OrderRowProps {
   order: any;
@@ -26,21 +27,15 @@ export default function OrderRow({
   const total =
     typeof order?.total === "number"
       ? order.total
-      : (order?.items || []).reduce(
+      : (order.items || []).reduce(
           (s: number, it: any) => s + (it.qty || 0) * (it.rate || 0),
           0,
         );
-  const platformColor = platform.toLowerCase().includes("swiggy")
-    ? "#f97316"
-    : platform.toLowerCase().includes("zomato")
-    ? "#ef4444"
-    : "#7c3aed";
+  const brand = platformBrand(platform);
   const title =
     modeId === "delivery"
-      ? `🚚 ${platform}`
-      : modeId === "takeaway"
-        ? `🛍️ ${order?.meta?.customerName || order?.meta?.parcelName || modeName}`
-        : `🧾 ${order?.meta?.customerName || modeName}`;
+      ? platform
+      : order?.meta?.customerName || order?.meta?.parcelName || modeName;
 
   return (
     <button
@@ -48,15 +43,17 @@ export default function OrderRow({
       className={`${styles.orderButton} ${isActive ? styles.orderActive : ""}`}
     >
       <div className={styles.orderRowTop}>
-        <span
-          className={
-            modeId === "delivery" ? styles.deliveryTitle : styles.takeawayTitle
-          }
-          style={modeId === "delivery" ? { color: platformColor } : undefined}
-        >
+        <span className={modeId === "delivery" ? styles.deliveryTitle : styles.takeawayTitle}>
           {title}
         </span>
-
+        {brand && (
+          <span
+            className={styles.statusBadge}
+            style={{ color: brand.color, background: brand.tint, borderColor: brand.color }}
+          >
+            {brand.name}
+          </span>
+        )}
         {order?.status && order.status !== "open" && (
           <span
             className={`${styles.statusBadge} ${
@@ -67,9 +64,7 @@ export default function OrderRow({
           </span>
         )}
       </div>
-
       {code && <div className={styles.codeMono}>#{code}</div>}
-
       <div className={styles.orderRowMeta}>
         {(order?.items || []).length} items · ₹{total}
       </div>

@@ -2,12 +2,12 @@
   display: grid;
   grid-template-columns: 248px minmax(0, 1fr);
   min-height: 100%;
-  background: var(--pos-bg, #fff);
+  background: var(--pos-bg, var(--pos-surface));
 }
 
 .rail {
-  border-right: 1px solid var(--pos-border, #e5e7eb);
-  background: #fafafa;
+  border-right: 1px solid var(--pos-border, var(--pos-line));
+  background: var(--pos-surface-hover);
   padding: 18px 14px;
   overflow: auto;
 }
@@ -16,13 +16,13 @@
   margin: 0 0 4px;
   font-size: 18px;
   font-weight: 900;
-  color: var(--pos-tx, #111827);
+  color: var(--pos-tx, var(--pos-tx));
 }
 
 .railSub {
   margin: 0 0 18px;
   font-size: 12px;
-  color: var(--pos-tx-sub, #6b7280);
+  color: var(--pos-tx-sub, var(--pos-tx-sub));
 }
 
 .groupLabel {
@@ -31,7 +31,7 @@
   font-weight: 900;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--pos-muted, #9ca3af);
+  color: var(--pos-muted, var(--pos-tx-muted));
 }
 
 .railButton {
@@ -42,7 +42,7 @@
   gap: 10px;
   border: 1px solid transparent;
   background: transparent;
-  color: var(--pos-tx-sec, #374151);
+  color: var(--pos-tx-sec, var(--pos-tx-sec));
   border-radius: 8px;
   padding: 10px 11px;
   font: inherit;
@@ -53,16 +53,15 @@
 }
 
 .railButton:hover {
-  background: #fff7ed;
-  border-color: #fed7aa;
-  color: #92400e;
+  background: var(--pos-teal-tint);
+  border-color: var(--pos-teal-line);
+  color: var(--pos-teal-strong);
 }
 
 .railButtonActive {
-  background: #fffbeb;
-  border-color: #fcd34d;
-  color: #92400e;
-  box-shadow: 0 1px 4px rgba(217, 119, 6, 0.12);
+  background: var(--pos-teal-tint);
+  border-color: var(--pos-teal-line);
+  color: var(--pos-teal-strong);
 }
 
 .sectionIcon {
@@ -72,9 +71,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: #fff;
-  border: 1px solid #e5e7eb;
-  color: #d97706;
+  background: var(--pos-surface);
+  border: 1px solid var(--pos-line);
+  color: var(--pos-teal);
   font-size: 12px;
   font-weight: 900;
   flex: 0 0 auto;
@@ -105,7 +104,7 @@
 
   .rail {
     border-right: none;
-    border-bottom: 1px solid var(--pos-border, #e5e7eb);
+    border-bottom: 1px solid var(--pos-border, var(--pos-line));
     display: flex;
     gap: 8px;
     overflow-x: auto;

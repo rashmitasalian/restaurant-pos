@@ -5,6 +5,7 @@ import { ENV } from "../../../config/env";
 import { RECOVERY_CODE_COUNT } from "../../../shared/auth";
 import { isValidPersonName, normalizeText, validationMessage } from "../../../shared/validation";
 import restoNitiMark from "../../assets/restoniti-icon.png";
+import authStyles from "./Auth.module.css";
 
 export default function SetupScreen({ onComplete }: { onComplete: () => void }) {
   const [username, setUsername] = React.useState("admin");
@@ -78,7 +79,7 @@ export default function SetupScreen({ onComplete }: { onComplete: () => void }) 
     width: "100%",
     padding: "10px 12px",
     borderRadius: 8,
-    border: "1px solid #d1d5db",
+    border: "1px solid var(--pos-line-strong)",
     fontSize: 14,
     outline: "none",
     boxSizing: "border-box",
@@ -88,34 +89,15 @@ export default function SetupScreen({ onComplete }: { onComplete: () => void }) 
     display: "block",
     fontSize: 12,
     fontWeight: 700,
-    color: "#374151",
+    color: "var(--pos-tx-sec)",
     marginBottom: 6,
     textTransform: "uppercase",
     letterSpacing: "0.4px",
   };
 
   return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        minHeight: "100vh",
-        width: "100%",
-        background: "linear-gradient(135deg, #fff7ed 0%, #fef3c7 100%)",
-        padding: 20,
-      }}
-    >
-      <div
-        style={{
-          width: "100%",
-          maxWidth: 500,
-          padding: "36px 28px",
-          borderRadius: 14,
-          boxShadow: "0 4px 24px rgba(0,0,0,0.12)",
-          background: "#fff",
-        }}
-      >
+    <div className={authStyles.screen}>
+      <div className={`${authStyles.card} ${authStyles.cardWide}`}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
           <img
             src={restoNitiMark}
@@ -126,12 +108,12 @@ export default function SetupScreen({ onComplete }: { onComplete: () => void }) 
             <div style={{ fontWeight: 800, fontSize: 18 }}>
               {ENV.APP_NAME || (
                 <>
-                  <span style={{ color: "#111827" }}>Resto</span>
-                  <span style={{ color: "#f59e0b" }}>Niti</span>
+                  <span className={authStyles.brandResto}>Resto</span>
+                  <span className={authStyles.brandNiti}>Niti</span>
                 </>
               )}
             </div>
-            <div style={{ fontSize: 13, color: "#6b7280", marginTop: 2 }}>First-time setup</div>
+            <div style={{ fontSize: 13, color: "var(--pos-tx-sub)", marginTop: 2 }}>First-time setup</div>
           </div>
         </div>
 
@@ -144,7 +126,7 @@ export default function SetupScreen({ onComplete }: { onComplete: () => void }) 
           />
         ) : (
           <form onSubmit={handleSubmit}>
-            <p style={{ fontSize: 13, color: "#6b7280", margin: "12px 0 24px", lineHeight: 1.5 }}>
+            <p style={{ fontSize: 13, color: "var(--pos-tx-sub)", margin: "12px 0 24px", lineHeight: 1.5 }}>
               No accounts exist yet. Create the owner administrator account. The next step will show{" "}
               {RECOVERY_CODE_COUNT} one-time recovery codes for offline password recovery.
             </p>
@@ -191,7 +173,7 @@ export default function SetupScreen({ onComplete }: { onComplete: () => void }) 
                   margin: "0 0 14px",
                   padding: "0 0 0 18px",
                   fontSize: 12,
-                  color: "#dc2626",
+                  color: "var(--pos-danger)",
                   lineHeight: 1.7,
                 }}
               >
@@ -212,7 +194,7 @@ export default function SetupScreen({ onComplete }: { onComplete: () => void }) 
                 style={inputStyle}
               />
               {confirmPassword && password !== confirmPassword && (
-                <span style={{ fontSize: 12, color: "#dc2626", marginTop: 4, display: "block" }}>
+                <span style={{ fontSize: 12, color: "var(--pos-danger)", marginTop: 4, display: "block" }}>
                   Passwords do not match
                 </span>
               )}
@@ -223,11 +205,11 @@ export default function SetupScreen({ onComplete }: { onComplete: () => void }) 
                 style={{
                   padding: "10px 14px",
                   borderRadius: 8,
-                  background: "#fef2f2",
-                  color: "#dc2626",
+                  background: "var(--pos-danger-tint)",
+                  color: "var(--pos-danger)",
                   fontSize: 13,
                   marginBottom: 16,
-                  border: "1px solid #fecaca",
+                  border: "1px solid var(--pos-danger-line)",
                 }}
               >
                 {error}
@@ -242,8 +224,8 @@ export default function SetupScreen({ onComplete }: { onComplete: () => void }) 
                 padding: "12px 0",
                 borderRadius: 9,
                 border: "none",
-                background: allValid ? "linear-gradient(135deg, #059669, #34d399)" : "#d1d5db",
-                color: allValid ? "#fff" : "#9ca3af",
+                background: allValid ? "var(--pos-teal)" : "var(--pos-line-strong)",
+                color: allValid ? "var(--pos-surface)" : "var(--pos-tx-muted)",
                 fontWeight: 800,
                 fontSize: 15,
                 cursor: allValid ? "pointer" : "not-allowed",
@@ -272,7 +254,7 @@ function RecoveryCodesStep({
 }) {
   return (
     <div>
-      <p style={{ fontSize: 13, color: "#6b7280", margin: "12px 0 18px", lineHeight: 1.5 }}>
+      <p style={{ fontSize: 13, color: "var(--pos-tx-sub)", margin: "12px 0 18px", lineHeight: 1.5 }}>
         Save these {RECOVERY_CODE_COUNT} recovery codes now. They are shown only once and each code
         can be used one time to recover the last active admin account.
       </p>
@@ -283,8 +265,8 @@ function RecoveryCodesStep({
           gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
           gap: 8,
           padding: 14,
-          background: "#f9fafb",
-          border: "1px solid #e5e7eb",
+          background: "var(--pos-surface-hover)",
+          border: "1px solid var(--pos-line)",
           borderRadius: 10,
           marginBottom: 16,
         }}
@@ -294,11 +276,11 @@ function RecoveryCodesStep({
             key={code}
             style={{
               padding: "8px 10px",
-              background: "#fff",
-              border: "1px solid #e5e7eb",
+              background: "var(--pos-surface)",
+              border: "1px solid var(--pos-line)",
               borderRadius: 7,
               fontSize: 13,
-              color: "#111827",
+              color: "var(--pos-tx)",
               textAlign: "center",
               userSelect: "text",
             }}
@@ -312,9 +294,9 @@ function RecoveryCodesStep({
         style={{
           padding: "10px 12px",
           borderRadius: 8,
-          background: "#fffbeb",
-          border: "1px solid #fcd34d",
-          color: "#92400e",
+          background: "var(--pos-saffron-tint)",
+          border: "1px solid var(--pos-saffron-line)",
+          color: "var(--pos-saffron-text)",
           fontSize: 13,
           lineHeight: 1.5,
           marginBottom: 16,
@@ -330,7 +312,7 @@ function RecoveryCodesStep({
           alignItems: "flex-start",
           gap: 8,
           fontSize: 13,
-          color: "#374151",
+          color: "var(--pos-tx-sec)",
           marginBottom: 18,
           lineHeight: 1.4,
         }}
@@ -353,8 +335,8 @@ function RecoveryCodesStep({
           padding: "12px 0",
           borderRadius: 9,
           border: "none",
-          background: savedCodes ? "linear-gradient(135deg, #059669, #34d399)" : "#d1d5db",
-          color: savedCodes ? "#fff" : "#9ca3af",
+          background: savedCodes ? "var(--pos-teal)" : "var(--pos-line-strong)",
+          color: savedCodes ? "var(--pos-surface)" : "var(--pos-tx-muted)",
           fontWeight: 800,
           fontSize: 15,
           cursor: savedCodes ? "pointer" : "not-allowed",

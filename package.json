@@ -16,7 +16,7 @@
     "build:electron:system-ca": "cross-env NODE_OPTIONS=--use-system-ca npm run build:electron",
     "build": "rimraf dist dist-electron build && npm run build:renderer && npm run build:electron:system-ca",
     "package": "npm run build",
-    "lint": "eslint --ext .ts,.tsx src/ electron/",
+    "lint": "eslint --ext .ts,.tsx src/ electron/ && node scripts/check-theme-tokens.cjs",
     "test": "jest",
     "perf:seed": "node scripts/perf-seed.cjs",
     "perf:reports": "node scripts/perf-reports.cjs",

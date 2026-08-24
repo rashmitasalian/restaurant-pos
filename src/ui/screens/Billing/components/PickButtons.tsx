@@ -1,6 +1,8 @@
 import React from "react";
 import type { ServiceMode } from "../../../../shared/serviceModes";
 import styles from "../Billing.module.css";
+import { Icon } from "../../../components/ui/Icon";
+import { UtensilsCrossed, Bike, ShoppingBag } from "lucide-react";
 
 interface PickButtonsProps {
   serviceModes: ServiceMode[];
@@ -22,7 +24,11 @@ export default function PickButtons({ serviceModes, onSelectMode }: PickButtonsP
                 : styles.pickTakeaway
           }`}
         >
-          {mode.requiresTable ? "🪑" : mode.id === "delivery" ? "🚚" : "🧾"} {mode.name}
+          <Icon
+            icon={mode.requiresTable ? UtensilsCrossed : mode.id === "delivery" ? Bike : ShoppingBag}
+            size="sm"
+          />
+          {mode.name}
         </button>
       ))}
     </div>

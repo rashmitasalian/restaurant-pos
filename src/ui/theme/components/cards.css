@@ -1,0 +1,129 @@
+.pos-page,
+.pos-page-lg,
+.pos-page-sm {
+  padding: 20px 24px;
+}
+
+.pos-ph {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.pos-ph-title {
+  margin: 0;
+  font-size: var(--pos-type-22);
+  font-weight: 800;
+  color: var(--pos-tx);
+  letter-spacing: -0.3px;
+  line-height: 1.2;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pos-ph-title::before {
+  content: "";
+  display: block;
+  width: 3px;
+  height: 22px;
+  background: var(--pos-teal);
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.pos-ph-sub {
+  margin: 3px 0 0;
+  font-size: var(--pos-type-13);
+  color: var(--pos-tx-sub);
+  font-weight: 400;
+}
+
+.pos-ph-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.pos-card,
+.ui-card {
+  background: var(--pos-surface);
+  border: 1px solid var(--pos-line);
+  border-radius: var(--pos-r-card);
+  box-shadow: var(--pos-shadow-2);
+}
+
+.pos-card-p,
+.ui-card-p {
+  padding: 20px 22px;
+}
+
+.pos-sect-label,
+.ui-overline {
+  font-size: var(--pos-type-11);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--pos-tx-muted);
+  margin-bottom: 12px;
+}
+
+.pos-sect-title {
+  font-size: var(--pos-type-13);
+  font-weight: 700;
+  color: var(--pos-tx-sec);
+  margin-bottom: 12px;
+}
+
+.pos-divider,
+.ui-divider {
+  height: 1px;
+  background: var(--pos-line);
+  margin: 16px 0;
+}
+
+.pos-empty {
+  text-align: center;
+  padding: 48px 24px;
+  color: var(--pos-tx-muted);
+  font-size: var(--pos-type-15);
+  font-weight: 500;
+}
+
+.ui-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  text-align: center;
+  padding: 40px 24px;
+  color: var(--pos-tx-sub);
+}
+
+.ui-empty-title {
+  margin: 0;
+  font-size: var(--pos-type-18);
+  font-weight: 800;
+  color: var(--pos-tx);
+}
+
+.ui-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 1100px) {
+  .pos-page,
+  .pos-page-lg,
+  .pos-page-sm {
+    padding: 16px 18px;
+  }
+}

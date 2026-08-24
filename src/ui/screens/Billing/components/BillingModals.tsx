@@ -122,7 +122,7 @@ export function ConfirmPayModal({
             </div>
           ))}
         </div>
-        <div style={{ marginTop: 12, borderTop: "1px dashed #e5e7eb", paddingTop: 10 }}>
+        <div style={{ marginTop: 12, borderTop: "1px dashed var(--pos-line)", paddingTop: 10 }}>
           <div className={styles.totalsRow}>
             <span>Subtotal</span>
             <span>{formatCurrency(subtotal)}</span>
@@ -326,6 +326,7 @@ interface NewTakeawayProps {
   onClose: () => void;
   onCreate: () => void;
   processing?: boolean;
+  requiresCustomer?: boolean;
 }
 
 export function NewTakeawayModal({
@@ -337,7 +338,17 @@ export function NewTakeawayModal({
   onClose,
   onCreate,
   processing = false,
+  requiresCustomer = false,
 }: NewTakeawayProps) {
+  const hasCustomer = Boolean(name.trim() || phone.trim());
+  const canCreate = !requiresCustomer || hasCustomer;
+
+  const submit = () => {
+    if (canCreate && !processing) {
+      onCreate();
+    }
+  };
+
   return (
     <DialogShell
       ariaLabel="New takeaway order"
@@ -345,12 +356,15 @@ export function NewTakeawayModal({
       onClose={processing ? undefined : onClose}
     >
         <div className={styles.modalHeader}>
-          <span style={{ fontSize: 28 }}>🛍️</span>
+          <span style={{ fontSize: 28 }}></span>
           <h3 className={styles.modalTitle}>New {title} Order</h3>
         </div>
         <div>
           <label className={styles.modalLabel}>
-            Customer Name <span style={{ color: "#9ca3af", fontWeight: 400 }}>(optional)</span>
+            Customer Name
+            {!requiresCustomer ? (
+              <span style={{ color: "var(--pos-tx-muted)", fontWeight: 400 }}> (optional)</span>
+            ) : null}
           </label>
           <input
             type="text"
@@ -358,23 +372,28 @@ export function NewTakeawayModal({
             onChange={(e) => onNameChange(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
-                if (!processing) {
-                  onCreate();
-                }
-}
+                submit();
+              }
               if (e.key === "Escape") {
                 if (!processing) {
                   onClose();
                 }
-}
+              }
             }}
             placeholder="e.g. Priya, Walk-in 1…"
             autoFocus
             className={styles.modalInput}
           />
-          <p className={styles.textMuted}>You can leave this blank for anonymous counter orders</p>
+          <p className={styles.textMuted}>
+            {requiresCustomer
+              ? "Enter a customer name or phone to start this order"
+              : "You can leave this blank for anonymous counter orders"}
+          </p>
           <label className={styles.modalLabel} style={{ marginTop: 14 }}>
-            Customer Phone <span style={{ color: "#9ca3af", fontWeight: 400 }}>(optional)</span>
+            Customer Phone
+            {!requiresCustomer ? (
+              <span style={{ color: "var(--pos-tx-muted)", fontWeight: 400 }}> (optional)</span>
+            ) : null}
           </label>
           <input
             type="tel"
@@ -384,9 +403,7 @@ export function NewTakeawayModal({
             onChange={(e) => onPhoneChange(normalizePhone(e.target.value))}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
-                if (!processing) {
-                  onCreate();
-                }
+                submit();
               }
               if (e.key === "Escape") {
                 if (!processing) {
@@ -397,12 +414,19 @@ export function NewTakeawayModal({
             placeholder="e.g. 9876543210"
             className={styles.modalInput}
           />
+          {requiresCustomer ? (
+            <p className={styles.textMuted}>Name or phone is required</p>
+          ) : null}
         </div>
         <div className={styles.modalFooter}>
           <button onClick={onClose} className={styles.btn} disabled={processing}>
             Cancel
           </button>
-          <button onClick={onCreate} disabled={processing} className={`${styles.btnPrimary} ${styles.modalShadowGreen}`}>
+          <button
+            onClick={submit}
+            disabled={!canCreate || processing}
+            className={`${styles.btnPrimary} ${styles.modalShadowGreen}`}
+          >
             Start Order →
           </button>
         </div>
@@ -424,6 +448,7 @@ interface NewDeliveryProps {
   onClose: () => void;
   onCreate: () => void;
   processing?: boolean;
+  requiresCustomer?: boolean;
 }
 
 export function NewDeliveryModal({
@@ -438,12 +463,15 @@ export function NewDeliveryModal({
   onClose,
   onCreate,
   processing = false,
+  requiresCustomer = false,
 }: NewDeliveryProps) {
   // Track whether a preset button is selected vs. a custom name
   const presets = ["Swiggy", "Zomato"] as const;
   const isPreset = presets.includes(platform as any);
   const [customName, setCustomName] = React.useState(isPreset ? "" : platform);
-  const canCreate = isPreset || customName.trim().length > 0;
+  const hasCustomer = Boolean(customerName.trim() || customerPhone.trim());
+  const canCreate =
+    (isPreset || customName.trim().length > 0) && (!requiresCustomer || hasCustomer);
 
   const handlePreset = (p: string) => {
     onPlatformChange(p);
@@ -468,7 +496,7 @@ export function NewDeliveryModal({
       onClose={processing ? undefined : onClose}
     >
         <div className={styles.modalHeader}>
-          <span style={{ fontSize: 28 }}>🚚</span>
+          <span style={{ fontSize: 28 }}></span>
           <h3 className={styles.modalTitle}>New Delivery Order</h3>
         </div>
         <div className={styles.modalGrid}>
@@ -490,7 +518,7 @@ export function NewDeliveryModal({
                       : ""
                   }`}
                 >
-                  {p === "Swiggy" ? "🟠 " : p === "Zomato" ? "🔴 " : "📦 "}
+                  {p === "Swiggy" ? " " : p === "Zomato" ? " " : " "}
                   {p}
                 </button>
               ))}
@@ -502,13 +530,13 @@ export function NewDeliveryModal({
                 onChange={(e) => handleCustomChange(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
-submit();
-}
+                    submit();
+                  }
                   if (e.key === "Escape") {
-if (!processing) {
-  onClose();
-}
-}
+                    if (!processing) {
+                      onClose();
+                    }
+                  }
                 }}
                 placeholder="Platform name…"
                 autoFocus
@@ -519,7 +547,8 @@ if (!processing) {
           </div>
           <div>
             <label className={styles.modalLabel}>
-              Order Code <span style={{ color: "#9ca3af", fontWeight: 400 }}>(optional)</span>
+              Order Code{" "}
+              <span style={{ color: "var(--pos-tx-muted)", fontWeight: 400 }}>(optional)</span>
             </label>
             <input
               type="text"
@@ -527,22 +556,25 @@ if (!processing) {
               onChange={(e) => onCodeChange(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
-submit();
-}
+                  submit();
+                }
                 if (e.key === "Escape") {
-if (!processing) {
-  onClose();
-}
-}
+                  if (!processing) {
+                    onClose();
+                  }
+                }
               }}
-              placeholder="e.g. #ABC123"
-              autoFocus
+              placeholder="e.g. ABC123"
+              autoFocus={isPreset}
               className={`${styles.modalInput} ${styles.monoInput}`}
             />
           </div>
           <div>
             <label className={styles.modalLabel}>
-              Customer Name <span style={{ color: "#9ca3af", fontWeight: 400 }}>(optional)</span>
+              Customer Name
+              {!requiresCustomer ? (
+                <span style={{ color: "var(--pos-tx-muted)", fontWeight: 400 }}> (optional)</span>
+              ) : null}
             </label>
             <input
               type="text"
@@ -554,7 +586,10 @@ if (!processing) {
           </div>
           <div>
             <label className={styles.modalLabel}>
-              Customer Phone <span style={{ color: "#9ca3af", fontWeight: 400 }}>(optional)</span>
+              Customer Phone
+              {!requiresCustomer ? (
+                <span style={{ color: "var(--pos-tx-muted)", fontWeight: 400 }}> (optional)</span>
+              ) : null}
             </label>
             <input
               type="tel"
@@ -565,6 +600,11 @@ if (!processing) {
               placeholder="e.g. 9876543210"
               className={styles.modalInput}
             />
+            {requiresCustomer ? (
+              <p className={styles.textMuted} style={{ marginTop: 8 }}>
+                Name or phone is required to start
+              </p>
+            ) : null}
           </div>
         </div>
         <div className={styles.modalFooter}>
@@ -670,8 +710,8 @@ export function PrintFailedModal({ amount, method, onRetry, onSkip, processing =
         {/* Payment success banner */}
         <div
           style={{
-            background: "#f0fdf4",
-            border: "1.5px solid #86efac",
+            background: "var(--pos-success-tint)",
+            border: "1.5px solid var(--pos-success-line)",
             borderRadius: 10,
             padding: "14px 18px",
             marginBottom: 18,
@@ -680,10 +720,10 @@ export function PrintFailedModal({ amount, method, onRetry, onSkip, processing =
             gap: 12,
           }}
         >
-          <span style={{ fontSize: 28 }}>✅</span>
+          <span style={{ fontSize: 28 }}></span>
           <div>
-            <div style={{ fontWeight: 800, fontSize: 15, color: "#166534" }}>Payment Recorded</div>
-            <div style={{ fontSize: 13, color: "#15803d", marginTop: 2 }}>
+            <div style={{ fontWeight: 800, fontSize: 15, color: "var(--pos-success-text)" }}>Payment Recorded</div>
+            <div style={{ fontSize: 13, color: "var(--pos-success)", marginTop: 2 }}>
               {amount} collected via {method}
             </div>
           </div>
@@ -692,8 +732,8 @@ export function PrintFailedModal({ amount, method, onRetry, onSkip, processing =
         {/* Print failure notice */}
         <div
           style={{
-            background: "#fff7ed",
-            border: "1.5px solid #fdba74",
+            background: "var(--pos-saffron-tint)",
+            border: "1.5px solid var(--pos-saffron-line)",
             borderRadius: 10,
             padding: "14px 18px",
             marginBottom: 18,
@@ -702,12 +742,12 @@ export function PrintFailedModal({ amount, method, onRetry, onSkip, processing =
             gap: 12,
           }}
         >
-          <span style={{ fontSize: 24 }}>🖨️</span>
+          <span style={{ fontSize: 24 }}></span>
           <div>
-            <div style={{ fontWeight: 700, fontSize: 14, color: "#9a3412" }}>
+            <div style={{ fontWeight: 700, fontSize: 14, color: "var(--pos-saffron-text)" }}>
               Receipt could not be printed
             </div>
-            <div style={{ fontSize: 12, color: "#c2410c", marginTop: 2 }}>
+            <div style={{ fontSize: 12, color: "var(--pos-saffron-deep)", marginTop: 2 }}>
               Check printer connection, then retry.
             </div>
           </div>
@@ -723,7 +763,7 @@ export function PrintFailedModal({ amount, method, onRetry, onSkip, processing =
             Finish (No Receipt)
           </button>
           <button onClick={onRetry} disabled={processing} className={styles.btnPrimary}>
-            {processing ? "Printing..." : "🖨 Retry Print"}
+            {processing ? "Printing..." : " Retry Print"}
           </button>
         </div>
     </DialogShell>

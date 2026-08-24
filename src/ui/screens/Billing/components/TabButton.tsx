@@ -1,5 +1,7 @@
 import React from "react";
+import type { LucideIcon } from "lucide-react";
 import styles from "../Billing.module.css";
+import { Icon } from "../../../components/ui/Icon";
 
 interface TabButtonProps {
   keyName?: string;
@@ -7,6 +9,7 @@ interface TabButtonProps {
   count?: number | null;
   active?: boolean;
   onClick?: () => void;
+  icon?: LucideIcon;
 }
 
 export default function TabButton({
@@ -14,6 +17,7 @@ export default function TabButton({
   count = null,
   active = false,
   onClick,
+  icon,
 }: TabButtonProps) {
   return (
     <button
@@ -22,6 +26,7 @@ export default function TabButton({
       onClick={onClick}
       className={`${styles.tabButton} ${active ? styles.tabActive : ""}`}
     >
+      {icon ? <Icon icon={icon} size="sm" /> : null}
       {label}
       {count !== null && count > 0 && (
         <span className={styles.tabCount}>{count}</span>

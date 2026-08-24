@@ -11,7 +11,9 @@ import { DEFAULT_ROLE, PAGE_LABELS, ROLE_KEYS, ROLES } from "../../../config/rol
 import type { Role } from "../../../config/roles";
 import { isValidPersonName, normalizeText } from "../../../shared/validation";
 import { AuthContext } from "../../context/AuthContext";
-import { useFocusTrap } from "../../hooks/useFocusTrap";
+import { PageHeader } from "../../components/ui/PageHeader";
+import { Button } from "../../components/ui/Button";
+import { Modal } from "../../components/ui/Modal";
 import styles from "./Users.module.css";
 
 function avatarInitials(doc: UserDoc): string {
@@ -116,21 +118,19 @@ export default function UsersScreen() {
 
   return (
     <div className={styles.container}>
-      <div className={styles.pageHeader}>
-        <div>
-          <h2 className={styles.pageTitle}>User Management</h2>
-          <p className={styles.pageSubtitle}>
-            Create and manage staff accounts. Sensitive actions require your admin password.
-          </p>
-        </div>
-        <button
-          className={styles.btnPrimary}
-          onClick={() => setShowCreate(true)}
-          disabled={auth?.session?.role !== "admin"}
-        >
-          + Add User
-        </button>
-      </div>
+      <PageHeader
+        title="User Management"
+        subtitle="Create and manage staff accounts. Sensitive actions require your admin password."
+        actions={
+          <Button
+            variant="primary"
+            onClick={() => setShowCreate(true)}
+            disabled={auth?.session?.role !== "admin"}
+          >
+            Add User
+          </Button>
+        }
+      />
 
       {error && <div className={styles.formError}>{error}</div>}
 
@@ -153,7 +153,7 @@ export default function UsersScreen() {
                   {isSelf(user) && <span className={styles.selfNote}>(you)</span>}
                 </div>
                 <div className={styles.usernameTxt}>@{user.username}</div>
-                <div style={{ marginTop: 4, fontSize: 11, color: "#9ca3af" }}>
+                <div style={{ marginTop: 4, fontSize: 11, color: "var(--pos-tx-muted)" }}>
                   Access: {accessiblePageLabels(user.role)}
                 </div>
               </div>
@@ -300,7 +300,7 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
   };
 
   return (
-    <Modal title="Create new user" onClose={isSubmitting ? () => undefined : onClose}>
+    <Modal open title="Create new user" onClose={isSubmitting ? () => undefined : onClose}>
       <form onSubmit={handleSubmit}>
         <FormField label="Username" htmlFor="create-username">
           <input
@@ -441,7 +441,7 @@ function ResetPasswordModal({
   };
 
   return (
-    <Modal title={`Reset password for @${user.username}`} onClose={isSubmitting ? () => undefined : onClose}>
+    <Modal open title={`Reset password for @${user.username}`} onClose={isSubmitting ? () => undefined : onClose}>
       {success ? (
         <div className={styles.formSuccess}>
           Password updated successfully. The user will need to log in with the new password.
@@ -537,9 +537,9 @@ function ConfirmStatusModal({
   };
 
   return (
-    <Modal title={`${nextActive ? "Enable" : "Disable"} @${user.username}?`} onClose={isSubmitting ? () => undefined : onClose}>
+    <Modal open title={`${nextActive ? "Enable" : "Disable"} @${user.username}?`} onClose={isSubmitting ? () => undefined : onClose}>
       <form onSubmit={handleSubmit}>
-        <p style={{ margin: "0 0 16px", color: "#6b7280", fontSize: 13, lineHeight: 1.5 }}>
+        <p style={{ margin: "0 0 16px", color: "var(--pos-tx-sub)", fontSize: 13, lineHeight: 1.5 }}>
           This will {action} the account for {user.displayName}. Admin verification is required.
         </p>
 
@@ -566,35 +566,6 @@ function ConfirmStatusModal({
         />
       </form>
     </Modal>
-  );
-}
-
-function Modal({
-  title,
-  onClose,
-  children,
-}: {
-  title: string;
-  onClose: () => void;
-  children: React.ReactNode;
-}) {
-  const titleId = React.useId();
-  const dialogRef = useFocusTrap<HTMLDivElement>(true, onClose);
-  return (
-    <div className={styles.overlay} onClick={onClose}>
-      <div
-        ref={dialogRef}
-        className={styles.modal}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        tabIndex={-1}
-        onClick={(event) => event.stopPropagation()}
-      >
-        <h3 id={titleId} className={styles.modalTitle}>{title}</h3>
-        {children}
-      </div>
-    </div>
   );
 }
 

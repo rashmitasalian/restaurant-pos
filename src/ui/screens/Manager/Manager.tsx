@@ -9,6 +9,17 @@ import Attendance from "../Attendance/Attendance";
 import UsersScreen from "../Users/UsersScreen";
 import styles from "./Manager.module.css";
 import { type ManagerSection } from "./managerSections";
+import { Icon } from "../../components/ui/Icon";
+import {
+  ShoppingBasket,
+  UtensilsCrossed,
+  History as HistoryIcon,
+  Users,
+  CalendarCheck,
+  Shield,
+  ScrollText,
+  Settings as SettingsIcon,
+} from "lucide-react";
 
 type ManagerProps = {
   section: ManagerSection;
@@ -19,16 +30,16 @@ const SECTIONS: Array<{
   key: ManagerSection;
   label: string;
   group: "Grocery" | "Admin Tools";
-  icon: string;
+  icon: typeof ShoppingBasket;
 }> = [
-  { key: "grocery", label: "Grocery", group: "Grocery", icon: "GR" },
-  { key: "menu", label: "Menu", group: "Admin Tools", icon: "MN" },
-  { key: "history", label: "History", group: "Admin Tools", icon: "HI" },
-  { key: "staff", label: "Staff", group: "Admin Tools", icon: "ST" },
-  { key: "attendance", label: "Attendance", group: "Admin Tools", icon: "AT" },
-  { key: "users", label: "Users", group: "Admin Tools", icon: "US" },
-  { key: "audit", label: "Audit", group: "Admin Tools", icon: "AU" },
-  { key: "settings", label: "Settings", group: "Admin Tools", icon: "SE" },
+  { key: "grocery", label: "Grocery", group: "Grocery", icon: ShoppingBasket },
+  { key: "menu", label: "Menu", group: "Admin Tools", icon: UtensilsCrossed },
+  { key: "history", label: "History", group: "Admin Tools", icon: HistoryIcon },
+  { key: "staff", label: "Staff", group: "Admin Tools", icon: Users },
+  { key: "attendance", label: "Attendance", group: "Admin Tools", icon: CalendarCheck },
+  { key: "users", label: "Users", group: "Admin Tools", icon: Shield },
+  { key: "audit", label: "Audit", group: "Admin Tools", icon: ScrollText },
+  { key: "settings", label: "Settings", group: "Admin Tools", icon: SettingsIcon },
 ];
 
 export default function Manager({ section, onSectionChange }: ManagerProps) {
@@ -81,7 +92,9 @@ export default function Manager({ section, onSectionChange }: ManagerProps) {
                 onClick={() => onSectionChange(item.key)}
               >
                 <span className={styles.buttonMain}>
-                  <span className={styles.sectionIcon}>{item.icon}</span>
+                  <span className={styles.sectionIcon}>
+                    <Icon icon={item.icon} size="sm" />
+                  </span>
                   <span className={styles.buttonText}>{item.label}</span>
                 </span>
               </button>

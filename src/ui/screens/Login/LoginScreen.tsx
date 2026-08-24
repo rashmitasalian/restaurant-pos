@@ -6,6 +6,7 @@ import { AuthContext } from "../../context/AuthContext";
 import { useFocusTrap } from "../../hooks/useFocusTrap";
 import restoNitiMark from "../../assets/restoniti-icon.png";
 import { Eye, EyeOff } from "lucide-react";
+import authStyles from "./Auth.module.css";
 
 export default function LoginScreen() {
   const auth = React.useContext(AuthContext);
@@ -84,27 +85,10 @@ export default function LoginScreen() {
   const hasRestaurantIdentity = Boolean(branding?.logoDataUrl || restaurantName);
 
   return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        minHeight: "100vh",
-        width: "100%",
-        background: "linear-gradient(135deg, #fff7ed 0%, #fef3c7 100%)",
-        padding: "20px",
-      }}
-    >
+    <div className={authStyles.screen}>
       <form
         onSubmit={handleSubmit}
-        style={{
-          width: "100%",
-          maxWidth: 420,
-          padding: "32px 24px",
-          borderRadius: 12,
-          boxShadow: "0 4px 24px rgba(0,0,0,0.12)",
-          background: "#fff",
-        }}
+        className={authStyles.card}
       >
         <div style={{ marginBottom: 28 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -115,10 +99,10 @@ export default function LoginScreen() {
             />
             <div>
               <div style={{ fontWeight: 900, fontSize: 24, letterSpacing: -0.7 }}>
-                <span style={{ color: "#111827" }}>Resto</span>
-                <span style={{ color: "#f59e0b" }}>Niti</span>
+                <span className={authStyles.brandResto}>Resto</span>
+                <span className={authStyles.brandNiti}>Niti</span>
               </div>
-              <div style={{ fontSize: 12, color: "#6b7280", marginTop: 4, fontWeight: 600 }}>
+              <div style={{ fontSize: 12, color: "var(--pos-tx-sub)", marginTop: 4, fontWeight: 600 }}>
                 Billing, tables, reports & operations
               </div>
             </div>
@@ -132,8 +116,8 @@ export default function LoginScreen() {
                 marginTop: 18,
                 padding: "10px 12px",
                 borderRadius: 10,
-                background: "#f8fafc",
-                border: "1px solid #e5e7eb",
+                background: "var(--pos-surface-sunken)",
+                border: "1px solid var(--pos-line)",
               }}
             >
               {branding?.logoDataUrl && (
@@ -145,8 +129,8 @@ export default function LoginScreen() {
                     height: 34,
                     borderRadius: 8,
                     objectFit: "contain",
-                    background: "#fff",
-                    border: "1px solid #e5e7eb",
+                    background: "var(--pos-surface)",
+                    border: "1px solid var(--pos-line)",
                     padding: 3,
                     flexShrink: 0,
                   }}
@@ -154,16 +138,16 @@ export default function LoginScreen() {
               )}
               <div>
                 {restaurantName && (
-                  <div style={{ fontWeight: 800, fontSize: 14, color: "#111827" }}>
+                  <div style={{ fontWeight: 800, fontSize: 14, color: "var(--pos-tx)" }}>
                     {restaurantName}
                   </div>
                 )}
-                <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>Staff sign-in</div>
+                <div style={{ fontSize: 11, color: "var(--pos-tx-sub)", marginTop: 2 }}>Staff sign-in</div>
               </div>
             </div>
           )}
           {!hasRestaurantIdentity && (
-            <div style={{ fontSize: 12, color: "#6b7280", fontWeight: 700, marginTop: 16 }}>
+            <div style={{ fontSize: 12, color: "var(--pos-tx-sub)", fontWeight: 700, marginTop: 16 }}>
               Staff sign-in
             </div>
           )}
@@ -210,7 +194,7 @@ export default function LoginScreen() {
                 padding: 0,
                 lineHeight: 1,
                 fontSize: 16,
-                color: "#9ca3af",
+                color: "var(--pos-tx-muted)",
                 userSelect: "none",
               }}
             >
@@ -237,8 +221,8 @@ export default function LoginScreen() {
           style={{
             width: "100%",
             padding: "11px 0",
-            background: disabled ? "#e5e7eb" : "#d97706",
-            color: disabled ? "#9ca3af" : "#fff",
+            background: disabled ? "var(--pos-teal-tint)" : "var(--pos-teal)",
+            color: disabled ? "var(--pos-teal-strong)" : "var(--pos-tx-inverse)",
             border: "none",
             borderRadius: 8,
             fontWeight: 700,
@@ -258,7 +242,7 @@ export default function LoginScreen() {
             marginTop: 14,
             border: "none",
             background: "transparent",
-            color: "#92400e",
+            color: "var(--pos-tx-sub)",
             fontSize: 13,
             fontWeight: 700,
             cursor: isSubmitting ? "not-allowed" : "pointer",
@@ -363,16 +347,7 @@ function RecoveryModal({
   return (
     <div
       onClick={isSubmitting ? undefined : onClose}
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(0,0,0,0.45)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: 1000,
-        padding: 16,
-      }}
+      className={authStyles.overlay}
     >
       <div
         ref={dialogRef}
@@ -381,19 +356,12 @@ function RecoveryModal({
         aria-labelledby="recoveryDialogTitle"
         tabIndex={-1}
         onClick={(event) => event.stopPropagation()}
-        style={{
-          width: "100%",
-          maxWidth: 460,
-          background: "#fff",
-          borderRadius: 12,
-          padding: 24,
-          boxShadow: "0 8px 40px rgba(0,0,0,0.16)",
-        }}
+        className={authStyles.overlayCard}
       >
-        <h3 id="recoveryDialogTitle" style={{ margin: "0 0 8px", fontSize: 17, color: "#111827" }}>
+        <h3 id="recoveryDialogTitle" style={{ margin: "0 0 8px", fontSize: 17, color: "var(--pos-tx)" }}>
           Recover admin access
         </h3>
-        <p style={{ margin: "0 0 18px", fontSize: 13, lineHeight: 1.5, color: "#6b7280" }}>
+        <p style={{ margin: "0 0 18px", fontSize: 13, lineHeight: 1.5, color: "var(--pos-tx-sub)" }}>
           Recovery works only for the single last active admin account and requires an unused
           one-time recovery code.
         </p>
@@ -449,7 +417,7 @@ function RecoveryModal({
             </label>
 
             {newPassword && passwordErrors.length > 0 && (
-              <ul style={{ margin: "0 0 14px", paddingLeft: 18, color: "#dc2626", fontSize: 12 }}>
+              <ul style={{ margin: "0 0 14px", paddingLeft: 18, color: "var(--pos-danger)", fontSize: 12 }}>
                 {passwordErrors.map((item) => (
                   <li key={item}>{item}</li>
                 ))}
@@ -515,9 +483,9 @@ function Message({
   children: React.ReactNode;
 }) {
   const colors = {
-    error: { bg: "#fef2f2", border: "#fca5a5", color: "#b91c1c" },
-    warning: { bg: "#fffbeb", border: "#fcd34d", color: "#92400e" },
-    success: { bg: "#d1fae5", border: "#6ee7b7", color: "#065f46" },
+    error: { bg: "var(--pos-danger-tint)", border: "var(--pos-danger-line)", color: "var(--pos-danger-strong)" },
+    warning: { bg: "var(--pos-saffron-tint)", border: "var(--pos-saffron-line)", color: "var(--pos-saffron-text)" },
+    success: { bg: "var(--pos-success-line)", border: "var(--pos-success-line)", color: "var(--pos-success-text)" },
   }[tone];
   return (
     <div
@@ -541,7 +509,7 @@ const labelStyle: React.CSSProperties = {
   display: "block",
   fontSize: 12,
   fontWeight: 700,
-  color: "#374151",
+  color: "var(--pos-tx-sec)",
   marginBottom: 6,
   textTransform: "uppercase",
   letterSpacing: "0.4px",
@@ -551,19 +519,19 @@ function inputStyle(disabled = false): React.CSSProperties {
   return {
     width: "100%",
     padding: "9px 12px",
-    border: "1px solid #d1d5db",
+    border: "1px solid var(--pos-line-strong)",
     borderRadius: 6,
     fontSize: 14,
     boxSizing: "border-box",
     outline: "none",
-    background: disabled ? "#f9fafb" : "#fff",
+    background: disabled ? "var(--pos-surface-hover)" : "var(--pos-surface)",
   };
 }
 
 const primaryButtonStyle: React.CSSProperties = {
   padding: "9px 14px",
-  background: "#d97706",
-  color: "#fff",
+  background: "var(--pos-saffron-deep)",
+  color: "var(--pos-surface)",
   border: "none",
   borderRadius: 8,
   fontWeight: 700,
@@ -573,9 +541,9 @@ const primaryButtonStyle: React.CSSProperties = {
 
 const secondaryButtonStyle: React.CSSProperties = {
   padding: "9px 14px",
-  background: "#fff",
-  color: "#374151",
-  border: "1px solid #d1d5db",
+  background: "var(--pos-surface)",
+  color: "var(--pos-tx-sec)",
+  border: "1px solid var(--pos-line-strong)",
   borderRadius: 8,
   fontWeight: 700,
   fontSize: 13,

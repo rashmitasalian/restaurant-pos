@@ -1,0 +1,68 @@
+.pos-label,
+.ui-label {
+  display: block;
+  font-size: var(--pos-type-12);
+  font-weight: 600;
+  color: var(--pos-tx-sec);
+  margin-bottom: 6px;
+  letter-spacing: 0.02em;
+}
+
+.pos-input,
+.pos-select,
+.ui-input,
+.ui-select {
+  display: block;
+  width: 100%;
+  min-height: var(--pos-hit-dense);
+  padding: 8px 12px;
+  border-radius: var(--pos-r-input);
+  border: 1px solid var(--pos-line-strong);
+  font-size: var(--pos-type-13);
+  color: var(--pos-tx);
+  background: var(--pos-surface);
+  outline: none;
+  transition:
+    border-color var(--pos-motion-fast) var(--pos-ease),
+    box-shadow var(--pos-motion-fast) var(--pos-ease);
+  box-sizing: border-box;
+}
+
+.pos-select,
+.ui-select {
+  cursor: pointer;
+}
+
+.pos-input:focus,
+.pos-select:focus,
+.ui-input:focus,
+.ui-select:focus {
+  border-color: var(--pos-teal);
+  box-shadow: var(--pos-focus-ring);
+}
+
+.pos-input::placeholder,
+.ui-input::placeholder {
+  color: var(--pos-tx-muted);
+}
+
+.pos-input-error,
+.ui-input-error,
+.ui-select-error {
+  border-color: var(--pos-danger) !important;
+}
+
+.pos-field-error,
+.ui-field-error {
+  font-size: var(--pos-type-11);
+  color: var(--pos-danger);
+  margin-top: 4px;
+  font-weight: 500;
+}
+
+.ui-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}

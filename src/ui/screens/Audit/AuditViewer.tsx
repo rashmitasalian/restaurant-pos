@@ -1,5 +1,22 @@
 ﻿import React from "react";
 import { countAudits, getAudits } from "../../../app/db/posRepository";
+import { PageHeader } from "../../components/ui/PageHeader";
+import { Icon } from "../../components/ui/Icon";
+import {
+  CircleDot,
+  Download,
+  IndianRupee,
+  Minus,
+  Pencil,
+  Percent,
+  Plus,
+  PlusCircle,
+  RefreshCw,
+  ChevronLeft,
+  ChevronRight,
+  X,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 export default function AuditViewer() {
   const [items, setItems] = React.useState<any[]>([]);
@@ -88,40 +105,34 @@ export default function AuditViewer() {
     URL.revokeObjectURL(url);
   };
 
-  const getActionColor = (action: string) => {
+  const getActionColor = (action: string): { bg: string; color: string; icon: LucideIcon } => {
     if (action.includes("created")) {
-return { bg: "#f0fdf4", color: "#16a34a", icon: "+" };
-}
+      return { bg: "var(--pos-success-tint)", color: "var(--pos-success)", icon: Plus };
+    }
     if (action.includes("paid")) {
-return { bg: "#dcfce7", color: "#22c55e", icon: "\u20b9" };
-}
+      return { bg: "var(--pos-success-tint)", color: "var(--pos-success)", icon: IndianRupee };
+    }
     if (action.includes("cancelled")) {
-return { bg: "#fee2e2", color: "#dc2626", icon: "\u00d7" };
-}
+      return { bg: "var(--pos-danger-tint)", color: "var(--pos-danger)", icon: X };
+    }
     if (action.includes("removed")) {
-return { bg: "#fee2e2", color: "#dc2626", icon: "\u2212" };
-}
+      return { bg: "var(--pos-danger-tint)", color: "var(--pos-danger)", icon: Minus };
+    }
     if (action.includes("added")) {
-return { bg: "#fef3c7", color: "#d97706", icon: "\u2295" };
-}
+      return { bg: "var(--pos-saffron-tint)", color: "var(--pos-saffron-deep)", icon: PlusCircle };
+    }
     if (action.includes("updated")) {
-return { bg: "#e0f2fe", color: "#0284c7", icon: "\u270f" };
-}
+      return { bg: "var(--pos-teal-tint)", color: "var(--pos-teal)", icon: Pencil };
+    }
     if (action.includes("discount")) {
-return { bg: "#f0fdf4", color: "#16a34a", icon: "%" };
-}
-    return { bg: "#f3f4f6", color: "#6b7280", icon: "\u00b7" };
+      return { bg: "var(--pos-success-tint)", color: "var(--pos-success)", icon: Percent };
+    }
+    return { bg: "var(--pos-surface-sunken)", color: "var(--pos-tx-sub)", icon: CircleDot };
   };
 
   return (
     <div className="pos-page pos-page-lg">
-      {/* Header */}
-      <div className="pos-ph">
-        <div>
-          <h2 className="pos-ph-title">Audit Log</h2>
-          <p className="pos-ph-sub">Track all system activities and transactions</p>
-        </div>
-      </div>
+      <PageHeader title="Audit Log" subtitle="Track all system activities and transactions" />
 
       {/* Filter Controls */}
       <div className="pos-card pos-card-p" style={{ marginBottom: 20 }}>
@@ -196,24 +207,30 @@ return { bg: "#f0fdf4", color: "#16a34a", icon: "%" };
             flexWrap: "wrap",
             alignItems: "center",
             paddingTop: 14,
-            borderTop: "1px solid var(--pos-border,#e5e7eb)",
+            borderTop: "1px solid var(--pos-border,var(--pos-line))",
           }}
         >
           <button onClick={load} disabled={loading} className="pos-btn pos-btn-secondary">
-            {loading ? "Loading…" : "↺ Refresh"}
+            {loading ? (
+              "Loading…"
+            ) : (
+              <>
+                <Icon icon={RefreshCw} size="sm" /> Refresh
+              </>
+            )}
           </button>
           <button
             onClick={() => downloadCSV(pageItems)}
             disabled={pageItems.length === 0}
             className="pos-btn pos-btn-amber-outline"
           >
-            ↓ Export Page CSV
+            <Icon icon={Download} size="sm" /> Export Page CSV
           </button>
           <div
             style={{
               marginLeft: "auto",
               fontSize: 13,
-              color: "var(--pos-muted,#9ca3af)",
+              color: "var(--pos-muted,var(--pos-tx-muted))",
               fontWeight: 500,
             }}
           >
@@ -226,7 +243,7 @@ return { bg: "#f0fdf4", color: "#16a34a", icon: "%" };
       <div className="pos-card" style={{ overflow: "hidden", marginBottom: 16 }}>
         {pageItems.length === 0 ? (
           <div className="pos-empty">
-            <div style={{ fontSize: 16, marginBottom: 8 }}>📭 No audit entries</div>
+            <div style={{ fontSize: 16, marginBottom: 8 }}> No audit entries</div>
             <div style={{ fontSize: 13 }}>
               {filter || dateFrom || dateTo
                 ? "No entries match your filters"
@@ -244,7 +261,7 @@ return { bg: "#f0fdf4", color: "#16a34a", icon: "%" };
                     padding: "14px 18px",
                     borderBottom:
                       idx !== pageItems.length - 1
-                        ? "1px solid var(--pos-border-light,#f3f4f6)"
+                        ? "1px solid var(--pos-border-light,var(--pos-surface-sunken))"
                         : "none",
                     display: "grid",
                     gridTemplateColumns: "40px 1fr auto",
@@ -269,7 +286,7 @@ return { bg: "#f0fdf4", color: "#16a34a", icon: "%" };
                       flexShrink: 0,
                     }}
                   >
-                    {actionColor.icon}
+                    <Icon icon={actionColor.icon} size="md" />
                   </div>
 
                   {/* Content */}
@@ -278,7 +295,7 @@ return { bg: "#f0fdf4", color: "#16a34a", icon: "%" };
                       style={{
                         fontWeight: 700,
                         fontSize: 13,
-                        color: "var(--pos-tx,#111827)",
+                        color: "var(--pos-tx,var(--pos-tx))",
                         marginBottom: 4,
                       }}
                     >
@@ -290,26 +307,26 @@ return { bg: "#f0fdf4", color: "#16a34a", icon: "%" };
                         flexWrap: "wrap",
                         gap: "4px 14px",
                         fontSize: 12,
-                        color: "var(--pos-tx-sub,#6b7280)",
+                        color: "var(--pos-tx-sub,var(--pos-tx-sub))",
                       }}
                     >
                       {a.orderId && (
                         <span>
-                          Order: <b style={{ color: "var(--pos-tx,#111827)" }}>{a.orderId}</b>
+                          Order: <b style={{ color: "var(--pos-tx,var(--pos-tx))" }}>{a.orderId}</b>
                         </span>
                       )}
                       {a.user && (
                         <span>
-                          By: <b style={{ color: "var(--pos-tx,#111827)" }}>{a.user}</b>
+                          By: <b style={{ color: "var(--pos-tx,var(--pos-tx))" }}>{a.user}</b>
                         </span>
                       )}
                       {a.detail && typeof a.detail === "string" && (
-                        <span style={{ color: "var(--pos-muted,#9ca3af)" }}>{a.detail}</span>
+                        <span style={{ color: "var(--pos-muted,var(--pos-tx-muted))" }}>{a.detail}</span>
                       )}
                       {a.detail && typeof a.detail === "object" && (
                         <span
                           style={{
-                            color: "var(--pos-muted,#9ca3af)",
+                            color: "var(--pos-muted,var(--pos-tx-muted))",
                             fontFamily: "monospace",
                             fontSize: 11,
                           }}
@@ -325,7 +342,7 @@ return { bg: "#f0fdf4", color: "#16a34a", icon: "%" };
                   <div
                     style={{
                       fontSize: 11,
-                      color: "var(--pos-muted,#9ca3af)",
+                      color: "var(--pos-muted,var(--pos-tx-muted))",
                       whiteSpace: "nowrap",
                       textAlign: "right",
                       marginTop: 2,
@@ -357,7 +374,7 @@ return { bg: "#f0fdf4", color: "#16a34a", icon: "%" };
           gap: 10,
         }}
       >
-        <div style={{ fontSize: 13, color: "var(--pos-muted,#9ca3af)" }}>
+        <div style={{ fontSize: 13, color: "var(--pos-muted,var(--pos-tx-muted))" }}>
           Page {page} of {totalPages} · {totalCount} records
         </div>
         <div style={{ display: "flex", gap: 8 }}>
@@ -366,14 +383,14 @@ return { bg: "#f0fdf4", color: "#16a34a", icon: "%" };
             disabled={page <= 1 || loading}
             className="pos-btn pos-btn-sm pos-btn-secondary"
           >
-            ← Prev
+            <Icon icon={ChevronLeft} size="sm" /> Prev
           </button>
           <button
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
             disabled={page >= totalPages || loading}
             className="pos-btn pos-btn-sm pos-btn-secondary"
           >
-            Next →
+            Next <Icon icon={ChevronRight} size="sm" />
           </button>
         </div>
       </div>

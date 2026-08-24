@@ -1,18 +1,24 @@
 import React from "react";
 import { getOrderById } from "../../../../app/db/posRepository";
 import type { ServiceMode } from "../../../../shared/serviceModes";
+import { formatKotAge } from "../../../../shared/kotAge";
+import { UtensilsCrossed, Bike, ShoppingBag, User } from "lucide-react";
 import styles from "../Billing.module.css";
 import TabButton from "./TabButton";
 import OrderRow from "./OrderRow";
 import ScrollableList from "./ScrollableList";
+import { TableTile } from "../../../components/ui/TableTile";
 
 interface TableInfo {
   id: number;
   status?: string;
+  occupied?: boolean;
   count?: number;
   total?: number;
   waiter?: string;
   updatedAt?: string;
+  seats?: number;
+  openedAt?: number | null;
 }
 
 interface BillingSidebarProps {
@@ -32,6 +38,19 @@ interface BillingSidebarProps {
   onSelectOrder: (order: any) => void;
   onCreateMode: (mode: ServiceMode) => void;
   formatCurrency: (v: number) => string;
+}
+
+function modeIcon(mode: ServiceMode) {
+  if (mode.requiresTable) {
+    return UtensilsCrossed;
+  }
+  if (mode.icon === "bike" || mode.id === "delivery") {
+    return Bike;
+  }
+  if (mode.icon === "person" || mode.id === "self_service") {
+    return User;
+  }
+  return ShoppingBag;
 }
 
 export default function BillingSidebar({
@@ -68,6 +87,7 @@ export default function BillingSidebar({
               <TabButton
                 key={mode.id}
                 label={mode.name}
+                icon={modeIcon(mode)}
                 count={mode.requiresTable ? null : (modeOrders[mode.id] || []).length}
                 active={view === mode.id}
                 onClick={() => onViewChange(mode.id)}
@@ -80,7 +100,7 @@ export default function BillingSidebar({
             .map((mode) =>
               mode.requiresTable ? (
                 <div key={mode.id} className={styles.tableGrid}>
-                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+                  <div className={styles.areaRail}>
                     {(tableAreas || [])
                       .filter((area) => area.active !== false)
                       .map((area) => (
@@ -88,19 +108,7 @@ export default function BillingSidebar({
                           key={area.id}
                           type="button"
                           onClick={() => onSelectArea(area.id)}
-                          className={styles.tabButton}
-                          style={
-                            selectedAreaId === area.id
-                              ? {
-                                  background: "#fff7ed",
-                                  color: "#92400e",
-                                  border: "1px solid #fdba74",
-                                }
-                              : {
-                                  background: "#fff",
-                                  border: "1px solid #e5e7eb",
-                                }
-                          }
+                          className={`${styles.areaChip} ${selectedAreaId === area.id ? styles.areaChipActive : ""}`}
                         >
                           {area.name}
                         </button>
@@ -110,42 +118,44 @@ export default function BillingSidebar({
                     {(tablesByArea[selectedAreaId] || []).map((info) => {
                       const t = info.id;
                       const active = tableNum === t && activeOrderType === mode.id;
+                      const occupied =
+                        Boolean(info.occupied) || Number(info.count || 0) > 0;
+                      const elapsed =
+                        occupied && info.openedAt ? formatKotAge(info.openedAt) : "";
+                      const state =
+                        !occupied
+                          ? "available"
+                          : info.status === "held" || info.status === "ready"
+                            ? "attention"
+                            : "occupied";
+                      const stateLabel =
+                        state === "attention"
+                          ? "Pending"
+                          : state === "occupied"
+                            ? "Occupied"
+                            : "Available";
+                      const amount =
+                        occupied
+                          ? formatCurrency(info.total || 0).replace(/\.00$/, "")
+                          : undefined;
                       return (
-                        <button
+                        <TableTile
                           key={t}
+                          number={t}
+                          state={state}
+                          stateLabel={stateLabel}
+                          active={active}
+                          seats={info.seats}
+                          itemCount={occupied ? info.count ?? 0 : null}
+                          amountLabel={amount}
+                          elapsed={elapsed || undefined}
                           onClick={() => onLoadTable(t)}
-                          title={
-                            info.status
-                              ? `${info.count} items · ${formatCurrency(info.total || 0)}`
-                              : `Table ${t}`
+                          aria-label={
+                            occupied
+                              ? `Table ${t}, ${stateLabel}, ${info.count || 0} items, ${formatCurrency(info.total || 0)}`
+                              : `Table ${t}, Available${info.seats ? `, ${info.seats} seats` : ""}`
                           }
-                          className={`
-                            ${styles.tableButton}
-                            ${active ? styles.tableActive : ""}
-                            ${info.status === "held" ? styles.tableHeld : ""}
-                            ${info.status ? styles.tableHasOrder : ""}
-                          `}
-                        >
-                          <span>{t}</span>
-                          {info.status && (info.count ?? 0) > 0 && (
-                            <>
-                              <span
-                                className={`${styles.tableItemCount} ${
-                                  info.status === "ready"
-                                    ? styles.statusReady
-                                    : info.status === "held"
-                                      ? styles.statusHeld
-                                      : ""
-                                }`}
-                              >
-                                {info.count}
-                              </span>
-                              <span className={styles.tableTotal}>
-                                {formatCurrency(info.total || 0)}
-                              </span>
-                            </>
-                          )}
-                        </button>
+                        />
                       );
                     })}
                   </div>
@@ -160,10 +170,9 @@ export default function BillingSidebar({
                   </button>
                   <ScrollableList className={styles.panelColumn}>
                     {(modeOrders[mode.id] || []).length === 0 ? (
-                      <div className={styles.emptyPanel}>
-                        <div className={styles.emptyEmoji}>{mode.id === "delivery" ? "🚚" : "🧾"}</div>
-                        No active {mode.name.toLowerCase()} orders
-                      </div>
+                        <div className={styles.emptyPanel}>
+                          No active {mode.name.toLowerCase()} orders
+                        </div>
                     ) : (
                       <div className={styles.gridList}>
                         {(modeOrders[mode.id] || []).map((o: any) => (
