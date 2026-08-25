@@ -882,7 +882,7 @@
 }
 .orderItem {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  grid-template-columns: minmax(0, 1fr) auto 72px 32px;
   align-items: center;
   gap: 10px;
   padding: 12px 12px;
@@ -1462,12 +1462,19 @@
 }
 .menuBoard {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(136px, 1fr));
   gap: 8px;
   flex: 1;
   align-content: start;
   margin-top: 4px;
   min-height: 120px;
+}
+
+@media (min-width: 1600px) {
+  .menuBoard {
+    grid-template-columns: repeat(auto-fill, minmax(124px, 1fr));
+    gap: 10px;
+  }
 }
 
 @media (max-width: 1280px) {
@@ -1549,6 +1556,23 @@
   }
   .bodyRow {
     flex-direction: column;
+  }
+  .ticketPane {
+    width: 100%;
+    flex-shrink: 1;
+    border-left: none;
+    border-top: 1px solid var(--pos-line);
+    max-height: 55vh;
+  }
+  .categoryRail {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 8px;
+  }
+  .categoryRail::-webkit-scrollbar {
+    display: none;
   }
   .sidebar {
     width: 100% !important;
@@ -1683,7 +1707,7 @@
   .orderItem {
     padding: 8px;
     gap: 6px;
-    grid-template-columns: minmax(0, 1fr) auto auto auto;
+    grid-template-columns: minmax(0, 1fr) auto 64px 28px;
   }
   .itemInfo {
     min-width: 0;
@@ -1735,6 +1759,19 @@
   .tabButton {
     padding: 6px 6px;
     font-size: 11px;
+  }
+  .ticketPane {
+    max-height: none;
+  }
+  .ticketActions {
+    flex-direction: column;
+  }
+  .ticketActions > button {
+    width: 100%;
+  }
+  .categoryChip {
+    padding: 6px 10px;
+    font-size: 12px;
   }
 }
 

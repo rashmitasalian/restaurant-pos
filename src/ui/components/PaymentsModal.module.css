@@ -1,0 +1,68 @@
+.dialog {
+  width: 660px;
+  max-width: 96vw;
+  background: var(--pos-surface);
+  border-radius: 14px;
+  box-shadow: var(--pos-shadow-overlay);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 32px);
+}
+
+.bodyRow {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.mainCol {
+  flex: 1;
+  min-width: 0;
+  padding: 18px 20px;
+  border-right: 1px solid var(--pos-surface-sunken);
+}
+
+.summaryCol {
+  width: 200px;
+  flex-shrink: 0;
+  padding: 18px;
+  background: var(--pos-surface-hover);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.methodGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+@media (max-width: 640px) {
+  .dialog {
+    max-height: calc(100vh - 24px);
+    border-radius: var(--pos-r-lg);
+  }
+
+  .bodyRow {
+    flex-direction: column;
+  }
+
+  .mainCol {
+    border-right: none;
+    border-bottom: 1px solid var(--pos-surface-sunken);
+    padding: 16px;
+  }
+
+  .summaryCol {
+    width: 100%;
+    padding: 16px;
+  }
+
+  .methodGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

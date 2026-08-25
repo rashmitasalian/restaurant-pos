@@ -293,4 +293,28 @@
   :global(.rpt-bottom) {
     grid-template-columns: 1fr;
   }
+  :global(.rpt-wrap) {
+    padding: 16px 18px;
+  }
+  :global(.rpt-chart-wrap) {
+    grid-template-columns: 1fr;
+    justify-items: center;
+  }
+}
+
+@media (max-width: 640px) {
+  :global(.rpt-kpi-grid) {
+    grid-template-columns: 1fr;
+  }
+  :global(.rpt-wrap) {
+    padding: 12px 14px;
+  }
+  :global(.rpt-header) {
+    margin-bottom: 18px;
+  }
+  :global(.rpt-search-input) {
+    min-width: 0;
+    max-width: none;
+    width: 100%;
+  }
 }

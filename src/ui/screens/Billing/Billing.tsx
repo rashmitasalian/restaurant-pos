@@ -2106,7 +2106,9 @@ export default function Billing() {
                 <div className={styles.headerMeta}>
                   {(order.items || []).length} item{(order.items || []).length !== 1 ? "s" : ""}
                   {" · "}
-                  {formatKotAge(Number(order.createdAt) || Date.now())}
+                  <span title="Time since this order opened">
+                    open {formatKotAge(Number(order.createdAt) || Date.now())}
+                  </span>
                   {order.status && order.status !== "open" && (
                     <span
                       className={
@@ -2191,12 +2193,24 @@ export default function Billing() {
                 </div>
                 {gstEnabled ? (
                   <>
+                    {totals.priceIncludesTax ? (
+                      <div className={styles.ticketSummaryRow}>
+                        <span>Taxable value</span>
+                        <span>{formatCurrency(totals.taxableSubtotal)}</span>
+                      </div>
+                    ) : null}
                     <div className={styles.ticketSummaryRow}>
-                      <span>CGST ({gstHalfPct})</span>
+                      <span>
+                        CGST ({gstHalfPct}
+                        {totals.priceIncludesTax ? " incl." : ""})
+                      </span>
                       <span>{formatCurrency(cgst)}</span>
                     </div>
                     <div className={styles.ticketSummaryRow}>
-                      <span>SGST ({gstHalfPct})</span>
+                      <span>
+                        SGST ({gstHalfPct}
+                        {totals.priceIncludesTax ? " incl." : ""})
+                      </span>
                       <span>{formatCurrency(sgst)}</span>
                     </div>
                   </>

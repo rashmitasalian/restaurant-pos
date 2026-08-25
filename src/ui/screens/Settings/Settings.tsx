@@ -1655,9 +1655,15 @@ export default function Settings() {
             type="checkbox"
             checked={gstPriceIncludesTax}
             onChange={(event) => setGstPriceIncludesTax(event.target.checked)}
-            style={{ width: 16, height: 16, accentColor: "var(--pos-saffron-deep)" }}
+            style={{ width: 16, height: 16, accentColor: "var(--pos-teal)" }}
           />
-          Menu prices include GST
+          <span>
+            Menu prices include GST
+            <span style={{ display: "block", fontSize: 12, color: "var(--pos-tx-sub)", fontWeight: 500, marginTop: 2 }}>
+              Recommended for Indian restaurants: menu shows the amount guests pay; the bill breaks out taxable value + CGST/SGST.
+              Turn off only if menu rates are tax-exclusive and GST should be added on top.
+            </span>
+          </span>
         </label>
 
         <div

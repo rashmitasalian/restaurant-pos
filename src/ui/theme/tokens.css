@@ -148,4 +148,7 @@
   --pos-rail: 56px;
   --pos-quick-add-visible: 8;
   --pos-category-visible: 6;
+
+  /* Responsive breakpoints (use literal values in @media; documented here for consistency):
+     sm: 480px | md: 640px | lg: 768px | xl: 1024px | 2xl: 1280px */
 }

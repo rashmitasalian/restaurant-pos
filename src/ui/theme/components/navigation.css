@@ -404,3 +404,101 @@
 .pos-profile-logout {
   width: 100%;
 }
+
+/* ── Responsive shell / nav ─────────────────────────────────────────────── */
+
+@media (max-width: 1024px) {
+  .pos-header {
+    padding: 0 12px;
+    gap: 10px;
+  }
+
+  .hdr-nav-btn {
+    padding: 0 10px;
+    gap: 0;
+  }
+
+  .hdr-nav-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .pos-split-view {
+    flex-direction: column;
+  }
+
+  .pos-tables-section {
+    flex: 0 0 auto;
+    max-height: 48vh;
+    border-bottom: 1px solid var(--pos-line);
+  }
+
+  .pos-billing-section {
+    flex: 1;
+    min-height: 0;
+    border-left: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .pos-header {
+    padding: 0 10px;
+    gap: 8px;
+  }
+
+  .pos-brand-name {
+    display: none;
+  }
+
+  .pos-clock-date {
+    display: none;
+  }
+
+  .pos-user-meta {
+    display: none;
+  }
+
+  .hdr-user-btn {
+    padding: 4px 6px;
+  }
+
+  .pos-nav {
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .pos-nav::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .pos-header {
+    height: 52px;
+    padding: 0 8px;
+  }
+
+  .pos-brand-mark {
+    width: 28px;
+    height: 28px;
+  }
+
+  .hdr-nav-btn {
+    padding: 0 8px;
+  }
+
+  .pos-clock {
+    padding: 4px 8px;
+  }
+
+  .pos-tables-section {
+    max-height: 42vh;
+  }
+}

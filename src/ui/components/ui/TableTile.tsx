@@ -93,7 +93,11 @@ export function TableTile({
           ) : (
             <span className="ui-table-tile-amount-empty" aria-hidden="true" />
           )}
-          {footMeta ? <span className="ui-table-tile-foot-meta">{footMeta}</span> : null}
+          {footMeta ? (
+            <span className="ui-table-tile-foot-meta" title={footMeta}>
+              {footMeta}
+            </span>
+          ) : null}
           {isRail && state === "available" && seats ? (
             <span className="ui-table-tile-foot-meta">{seats} seats</span>
           ) : null}

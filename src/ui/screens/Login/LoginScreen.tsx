@@ -102,8 +102,13 @@ export default function LoginScreen() {
                 <span className={authStyles.brandNiti}>Niti</span>
               </div>
               <p className={authStyles.brandTagline}>
-                Billing, tables, reports &amp; operations for the floor.
+                Built for the restaurant floor.
               </p>
+              <ul className={authStyles.brandCapabilities}>
+                <li>Billing</li>
+                <li>KOT &amp; printing</li>
+                <li>Reports &amp; operations</li>
+              </ul>
             </div>
           </div>
           <div className={authStyles.brandPaneFoot}>Secure staff access</div>

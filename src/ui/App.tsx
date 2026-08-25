@@ -415,7 +415,7 @@ function MainContent({
                     }}
                   >
                     <Icon icon={it.icon} size="sm" />
-                    {it.t}
+                    <span className="hdr-nav-label">{it.t}</span>
                   </button>
                 );
               })}

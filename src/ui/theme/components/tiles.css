@@ -167,9 +167,9 @@
 }
 
 .ui-table-tile-rail {
-  min-height: 84px;
+  min-height: 92px;
   gap: 4px;
-  padding: 8px 9px 8px 10px;
+  padding: 9px 9px 10px 10px;
 }
 
 .ui-table-tile:hover:not(:disabled) {
@@ -269,7 +269,7 @@
 .ui-table-tile-rail .ui-table-tile-foot {
   flex-direction: column;
   align-items: flex-start;
-  gap: 2px;
+  gap: 3px;
   min-height: auto;
   margin-top: 2px;
 }
@@ -288,11 +288,18 @@
 .ui-table-tile-rail .ui-table-tile-amount {
   max-width: 100%;
   text-align: left;
+  font-size: 13px;
+  line-height: 1.2;
 }
 
 .ui-table-tile-rail .ui-table-tile-foot-meta {
   max-width: 100%;
   text-align: left;
+  font-size: 10px;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ui-table-tile-ready {
@@ -407,8 +414,8 @@
 /* Order line — compact ticket row */
 .ui-order-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto auto;
-  gap: 6px;
+  grid-template-columns: minmax(0, 1fr) auto 72px 32px;
+  gap: 8px;
   align-items: center;
   padding: 6px 0;
   border-bottom: 1px solid var(--pos-line);
@@ -485,16 +492,18 @@
 }
 
 .ui-order-row-total {
+  width: 72px;
+  min-width: 72px;
+  max-width: 72px;
   font-size: var(--pos-type-13);
   font-weight: 800;
   color: var(--pos-tx);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-  min-width: 0;
-  max-width: 88px;
   overflow: hidden;
   text-overflow: ellipsis;
   text-align: right;
+  justify-self: end;
 }
 
 .ui-order-row-remove {
@@ -526,6 +535,19 @@
 
   .ui-favorite-tile {
     height: 60px;
+  }
+}
+
+@media (max-width: 480px) {
+  .ui-order-row {
+    grid-template-columns: minmax(0, 1fr) auto 56px 24px;
+    gap: 6px;
+    padding: 8px 0;
+  }
+
+  .ui-order-row-total {
+    font-size: 13px;
+    min-width: 56px;
   }
 }
 

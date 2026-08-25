@@ -5,7 +5,7 @@
   align-items: center;
   justify-content: center;
   padding: 28px 24px;
-  background: var(--pos-bg);
+  background: var(--pos-surface-sunken);
   box-sizing: border-box;
 }
 
@@ -86,6 +86,33 @@
   line-height: 1.45;
   color: var(--pos-chrome-tx-muted);
   max-width: 26ch;
+}
+
+.brandCapabilities {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.brandCapabilities li {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--pos-chrome-tx);
+  padding-left: 14px;
+  position: relative;
+}
+
+.brandCapabilities li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.55em;
+  width: 6px;
+  height: 6px;
+  border-radius: 99px;
+  background: var(--pos-saffron);
 }
 
 .brandPaneFoot {
@@ -175,8 +202,10 @@
 .input {
   display: block;
   width: 100%;
+  height: 44px;
   min-height: 44px;
-  padding: 11px 14px;
+  max-height: 44px;
+  padding: 0 14px;
   border-radius: var(--pos-r-input);
   border: 1px solid var(--pos-line-strong);
   font-size: var(--pos-type-13);
@@ -185,6 +214,7 @@
   outline: none;
   box-sizing: border-box;
   font-family: inherit;
+  line-height: normal;
   transition:
     border-color var(--pos-motion-fast) var(--pos-ease),
     box-shadow var(--pos-motion-fast) var(--pos-ease);
@@ -210,6 +240,7 @@
 
 .passwordWrap {
   position: relative;
+  height: 44px;
 }
 
 .passwordInput {
@@ -456,6 +487,12 @@
 }
 
 @media (max-width: 760px) {
+  .screen {
+    padding: 16px 12px;
+    align-items: flex-start;
+    overflow-y: auto;
+  }
+
   .shell {
     grid-template-columns: 1fr;
     min-height: 0;
@@ -477,6 +514,50 @@
 
   .formPane {
     padding: 24px 22px 28px;
+  }
+
+  .card,
+  .cardWide {
+    width: 100%;
+    max-width: 100%;
+    margin: 0 auto;
+  }
+
+  .overlay {
+    padding: 12px;
+    align-items: flex-start;
+    overflow-y: auto;
+  }
+
+  .overlayCard {
+    padding: 20px 18px;
+  }
+
+  .overlayActions {
+    flex-direction: column;
+  }
+
+  .overlayActions .btnPrimary,
+  .overlayActions .btnSecondary {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .screen {
+    padding: 12px 10px;
+  }
+
+  .shell {
+    border-radius: var(--pos-r-lg);
+  }
+
+  .formPane {
+    padding: 20px 18px 24px;
+  }
+
+  .formTitle {
+    font-size: 20px;
   }
 }
 

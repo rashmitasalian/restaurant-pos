@@ -164,7 +164,9 @@ export function OrderItemRow({
         </button>
       </div>
 
-      <div className="ui-order-row-total">{lineTotalLabel}</div>
+      <div className="ui-order-row-total" title={lineTotalLabel}>
+        {lineTotalLabel}
+      </div>
 
       <button
         type="button"

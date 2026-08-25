@@ -1,5 +1,6 @@
 import React from "react";
 import { useFocusTrap } from "../hooks/useFocusTrap";
+import styles from "./PaymentsModal.module.css";
 
 type SingleMethod = "cash" | "card" | "upi" | "voucher" | "other";
 export type PaymentMethod = SingleMethod | "split";
@@ -429,16 +430,7 @@ handleConfirm();
         aria-modal="true"
         aria-label="Collect Payment"
         tabIndex={-1}
-        style={{
-          width: 660,
-          maxWidth: "96vw",
-          background: "var(--pos-surface)",
-          borderRadius: 14,
-          boxShadow: "var(--pos-shadow-overlay)",
-          overflow: "hidden",
-          display: "flex",
-          flexDirection: "column",
-        }}
+        className={styles.dialog}
       >
         {/* ── Header ── */}
         <div
@@ -489,19 +481,12 @@ handleConfirm();
         </div>
 
         {/* ── Body ── */}
-        <div style={{ display: "flex", flex: 1 }}>
+        <div className={styles.bodyRow}>
           {/* Left: method + inputs */}
-          <div style={{ flex: 1, padding: "18px 20px", borderRight: "1px solid var(--pos-surface-sunken)" }}>
+          <div className={styles.mainCol}>
             {/* Method grid */}
             <label style={labelStyle}>Payment Method</label>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(3, 1fr)",
-                gap: 8,
-                marginBottom: 20,
-              }}
-            >
+            <div className={styles.methodGrid}>
               {(["cash", "card", "upi", "split", "voucher", "other"] as PaymentMethod[]).map(
                 (m) => (
                   <button
@@ -702,16 +687,7 @@ handleConfirm();
           </div>
 
           {/* Right: summary + actions */}
-          <div
-            style={{
-              width: 200,
-              padding: 18,
-              background: "var(--pos-surface-hover)",
-              display: "flex",
-              flexDirection: "column",
-              gap: 12,
-            }}
-          >
+          <div className={styles.summaryCol}>
             <label style={labelStyle}>Summary</label>
 
             {/* Amount due */}
