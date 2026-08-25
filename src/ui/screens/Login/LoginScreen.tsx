@@ -59,6 +59,11 @@ export default function LoginScreen() {
     }
     setError(null);
 
+    if (!username.trim() || !password) {
+      setError("Enter username and password.");
+      return;
+    }
+
     submittingRef.current = true;
     setIsSubmitting(true);
     try {
@@ -80,186 +85,118 @@ export default function LoginScreen() {
   };
 
   const isLocked = lockedSeconds > 0;
-  const disabled = isSubmitting || isLocked || !username || !password;
+  // Keep Sign in visually authoritative; only block while submitting or locked.
+  const disabled = isSubmitting || isLocked;
   const restaurantName = (branding?.hotelName || ENV.HOTEL_NAME || "").trim();
   const hasRestaurantIdentity = Boolean(branding?.logoDataUrl || restaurantName);
 
   return (
     <div className={authStyles.screen}>
-      <form
-        onSubmit={handleSubmit}
-        className={authStyles.card}
-      >
-        <div style={{ marginBottom: 28 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <img
-              src={restoNitiMark}
-              alt=""
-              style={{ width: 54, height: 54, borderRadius: 14, display: "block" }}
-            />
+      <div className={authStyles.shell}>
+        <aside className={authStyles.brandPane} aria-hidden="true">
+          <div className={authStyles.brandPaneTop}>
+            <img src={restoNitiMark} alt="" className={authStyles.brandMark} />
             <div>
-              <div style={{ fontWeight: 900, fontSize: 24, letterSpacing: -0.7 }}>
+              <div className={authStyles.brandName}>
                 <span className={authStyles.brandResto}>Resto</span>
                 <span className={authStyles.brandNiti}>Niti</span>
               </div>
-              <div style={{ fontSize: 12, color: "var(--pos-tx-sub)", marginTop: 4, fontWeight: 600 }}>
-                Billing, tables, reports & operations
-              </div>
+              <p className={authStyles.brandTagline}>
+                Billing, tables, reports &amp; operations for the floor.
+              </p>
             </div>
           </div>
-          {hasRestaurantIdentity && (
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                marginTop: 18,
-                padding: "10px 12px",
-                borderRadius: 10,
-                background: "var(--pos-surface-sunken)",
-                border: "1px solid var(--pos-line)",
-              }}
-            >
-              {branding?.logoDataUrl && (
-                <img
-                  src={branding.logoDataUrl}
-                  alt=""
-                  style={{
-                    width: 34,
-                    height: 34,
-                    borderRadius: 8,
-                    objectFit: "contain",
-                    background: "var(--pos-surface)",
-                    border: "1px solid var(--pos-line)",
-                    padding: 3,
-                    flexShrink: 0,
-                  }}
-                />
-              )}
-              <div>
-                {restaurantName && (
-                  <div style={{ fontWeight: 800, fontSize: 14, color: "var(--pos-tx)" }}>
-                    {restaurantName}
-                  </div>
-                )}
-                <div style={{ fontSize: 11, color: "var(--pos-tx-sub)", marginTop: 2 }}>Staff sign-in</div>
+          <div className={authStyles.brandPaneFoot}>Secure staff access</div>
+        </aside>
+
+        <form onSubmit={handleSubmit} className={authStyles.formPane}>
+          <div className={authStyles.formHeader}>
+            <h1 className={authStyles.formTitle}>Sign in</h1>
+            <p className={authStyles.formSubtitle}>Enter your staff credentials to continue</p>
+          </div>
+
+          {hasRestaurantIdentity ? (
+            <div className={authStyles.hotelRow}>
+              {branding?.logoDataUrl ? (
+                <img src={branding.logoDataUrl} alt="" className={authStyles.hotelLogo} />
+              ) : null}
+              <div style={{ minWidth: 0 }}>
+                {restaurantName ? <div className={authStyles.hotelName}>{restaurantName}</div> : null}
+                <div className={authStyles.hotelMeta}>Staff sign-in</div>
               </div>
             </div>
-          )}
-          {!hasRestaurantIdentity && (
-            <div style={{ fontSize: 12, color: "var(--pos-tx-sub)", fontWeight: 700, marginTop: 16 }}>
+          ) : (
+            <div className={authStyles.hotelMeta} style={{ marginBottom: 16 }}>
               Staff sign-in
             </div>
           )}
-        </div>
 
-        <label style={{ display: "block", marginBottom: 14 }}>
-          <span style={labelStyle}>Username</span>
-          <input
-            type="text"
-            value={username}
-            autoComplete="username"
-            autoFocus
-            onChange={(event) => setUsername(event.target.value)}
-            disabled={isSubmitting || isLocked}
-            style={inputStyle(isLocked)}
-          />
-        </label>
-
-        <label style={{ display: "block", marginBottom: 20 }}>
-          <span style={labelStyle}>Password</span>
-          <div style={{ position: "relative" }}>
+          <label className={authStyles.field}>
+            <span className={authStyles.fieldLabel}>Username</span>
             <input
-              type={showPassword ? "text" : "password"}
-              value={password}
-              autoComplete="current-password"
-              onChange={(event) => setPassword(event.target.value)}
+              type="text"
+              value={username}
+              autoComplete="username"
+              autoFocus
+              onChange={(event) => setUsername(event.target.value)}
               disabled={isSubmitting || isLocked}
-              style={{ ...inputStyle(isLocked), paddingRight: 38 }}
+              className={authStyles.input}
             />
-            <button
-              type="button"
-              onClick={() => setShowPassword((v) => !v)}
-              disabled={isSubmitting || isLocked}
-              aria-label={showPassword ? "Hide password" : "Show password"}
-              tabIndex={-1}
-              style={{
-                position: "absolute",
-                right: 8,
-                top: "50%",
-                transform: "translateY(-50%)",
-                background: "none",
-                border: "none",
-                cursor: isSubmitting || isLocked ? "not-allowed" : "pointer",
-                padding: 0,
-                lineHeight: 1,
-                fontSize: 16,
-                color: "var(--pos-tx-muted)",
-                userSelect: "none",
-              }}
-            >
-              {showPassword ? (
-                <EyeOff size={18} strokeWidth={2} />
-              ) : (
-                <Eye size={18} strokeWidth={2} />
-              )}
-            </button>
-          </div>
-        </label>
+          </label>
 
-        {error && <Message tone="error">{error}</Message>}
+          <label className={authStyles.field}>
+            <span className={authStyles.fieldLabel}>Password</span>
+            <div className={authStyles.passwordWrap}>
+              <input
+                type={showPassword ? "text" : "password"}
+                value={password}
+                autoComplete="current-password"
+                onChange={(event) => setPassword(event.target.value)}
+                disabled={isSubmitting || isLocked}
+                className={`${authStyles.input} ${authStyles.passwordInput}`}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                disabled={isSubmitting || isLocked}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                tabIndex={-1}
+                className={authStyles.passwordToggle}
+              >
+                {showPassword ? <EyeOff size={18} strokeWidth={2} /> : <Eye size={18} strokeWidth={2} />}
+              </button>
+            </div>
+          </label>
 
-        {isLocked && (
-          <Message tone="warning">
-            Too many failed attempts. Try again in <strong>{lockedSeconds}s</strong>.
-          </Message>
-        )}
+          {error ? <Message tone="error">{error}</Message> : null}
 
-        <button
-          type="submit"
-          disabled={disabled}
-          style={{
-            width: "100%",
-            padding: "11px 0",
-            background: disabled ? "var(--pos-teal-tint)" : "var(--pos-teal)",
-            color: disabled ? "var(--pos-teal-strong)" : "var(--pos-tx-inverse)",
-            border: "none",
-            borderRadius: 8,
-            fontWeight: 700,
-            fontSize: 15,
-            cursor: disabled ? "not-allowed" : "pointer",
-          }}
-        >
-          {isSubmitting ? "Signing in..." : isLocked ? `Locked (${lockedSeconds}s)` : "Sign in"}
-        </button>
+          {isLocked ? (
+            <Message tone="warning">
+              Too many failed attempts. Try again in <strong>{lockedSeconds}s</strong>.
+            </Message>
+          ) : null}
 
-        <button
-          type="button"
-          onClick={() => setShowRecovery(true)}
-          disabled={isSubmitting}
-          style={{
-            width: "100%",
-            marginTop: 14,
-            border: "none",
-            background: "transparent",
-            color: "var(--pos-tx-sub)",
-            fontSize: 13,
-            fontWeight: 700,
-            cursor: isSubmitting ? "not-allowed" : "pointer",
-            opacity: isSubmitting ? 0.6 : 1,
-            padding: 6,
-          }}
-        >
-          Forgot admin password?
-        </button>
-      </form>
+          <button type="submit" disabled={disabled} className={authStyles.submitBtn}>
+            {isSubmitting ? "Signing in..." : isLocked ? `Locked (${lockedSeconds}s)` : "Sign in"}
+          </button>
 
-      {showRecovery && (
+          <button
+            type="button"
+            onClick={() => setShowRecovery(true)}
+            disabled={isSubmitting}
+            className={authStyles.linkBtn}
+          >
+            Forgot admin password?
+          </button>
+        </form>
+      </div>
+
+      {showRecovery ? (
         <RecoveryModal
           initialUsername={username.trim().toLowerCase()}
           onClose={() => setShowRecovery(false)}
         />
-      )}
+      ) : null}
     </div>
   );
 }
@@ -345,10 +282,7 @@ function RecoveryModal({
   };
 
   return (
-    <div
-      onClick={isSubmitting ? undefined : onClose}
-      className={authStyles.overlay}
-    >
+    <div onClick={isSubmitting ? undefined : onClose} className={authStyles.overlay}>
       <div
         ref={dialogRef}
         role="dialog"
@@ -362,25 +296,23 @@ function RecoveryModal({
           Recover admin access
         </h3>
         <p style={{ margin: "0 0 18px", fontSize: 13, lineHeight: 1.5, color: "var(--pos-tx-sub)" }}>
-          Recovery works only for the single last active admin account and requires an unused
-          one-time recovery code.
+          Recovery works only for the single last active admin account and requires an unused one-time
+          recovery code.
         </p>
 
         {success ? (
           <>
-            <Message tone="success">
-              Password changed. You can sign in with the new password.
-            </Message>
-            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 18 }}>
-              <button type="button" onClick={onClose} style={secondaryButtonStyle}>
+            <Message tone="success">Password changed. You can sign in with the new password.</Message>
+            <div className={authStyles.overlayActions}>
+              <button type="button" onClick={onClose} className={authStyles.btnSecondary}>
                 Back to sign in
               </button>
             </div>
           </>
         ) : (
           <form onSubmit={handleSubmit}>
-            <label style={{ display: "block", marginBottom: 14 }}>
-              <span style={labelStyle}>Admin username</span>
+            <label className={authStyles.field}>
+              <span className={authStyles.fieldLabel}>Admin username</span>
               <input
                 type="text"
                 value={username}
@@ -388,67 +320,67 @@ function RecoveryModal({
                 autoComplete="username"
                 autoFocus
                 disabled={isSubmitting || lockedSeconds > 0}
-                style={inputStyle(lockedSeconds > 0)}
+                className={authStyles.input}
               />
             </label>
 
-            <label style={{ display: "block", marginBottom: 14 }}>
-              <span style={labelStyle}>Recovery code</span>
+            <label className={authStyles.field}>
+              <span className={authStyles.fieldLabel}>Recovery code</span>
               <input
                 type="text"
                 value={recoveryCode}
                 onChange={(event) => setRecoveryCode(event.target.value)}
                 autoComplete="off"
                 disabled={isSubmitting || lockedSeconds > 0}
-                style={{ ...inputStyle(lockedSeconds > 0), fontFamily: "monospace" }}
+                className={`${authStyles.input} ${authStyles.inputMono}`}
               />
             </label>
 
-            <label style={{ display: "block", marginBottom: 14 }}>
-              <span style={labelStyle}>New password</span>
+            <label className={authStyles.field}>
+              <span className={authStyles.fieldLabel}>New password</span>
               <input
                 type="password"
                 value={newPassword}
                 onChange={(event) => setNewPassword(event.target.value)}
                 autoComplete="new-password"
                 disabled={isSubmitting || lockedSeconds > 0}
-                style={inputStyle(lockedSeconds > 0)}
+                className={authStyles.input}
               />
             </label>
 
-            {newPassword && passwordErrors.length > 0 && (
-              <ul style={{ margin: "0 0 14px", paddingLeft: 18, color: "var(--pos-danger)", fontSize: 12 }}>
+            {newPassword && passwordErrors.length > 0 ? (
+              <ul className={authStyles.errorList}>
                 {passwordErrors.map((item) => (
                   <li key={item}>{item}</li>
                 ))}
               </ul>
-            )}
+            ) : null}
 
-            <label style={{ display: "block", marginBottom: 16 }}>
-              <span style={labelStyle}>Confirm new password</span>
+            <label className={authStyles.field}>
+              <span className={authStyles.fieldLabel}>Confirm new password</span>
               <input
                 type="password"
                 value={confirmPassword}
                 onChange={(event) => setConfirmPassword(event.target.value)}
                 autoComplete="new-password"
                 disabled={isSubmitting || lockedSeconds > 0}
-                style={inputStyle(lockedSeconds > 0)}
+                className={authStyles.input}
               />
             </label>
 
-            {error && <Message tone="error">{error}</Message>}
-            {lockedSeconds > 0 && (
+            {error ? <Message tone="error">{error}</Message> : null}
+            {lockedSeconds > 0 ? (
               <Message tone="warning">
                 Too many recovery attempts. Try again in <strong>{lockedSeconds}s</strong>.
               </Message>
-            )}
+            ) : null}
 
-            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 18 }}>
+            <div className={authStyles.overlayActions}>
               <button
                 type="button"
                 onClick={onClose}
                 disabled={isSubmitting}
-                style={secondaryButtonStyle}
+                className={authStyles.btnSecondary}
               >
                 Cancel
               </button>
@@ -463,7 +395,7 @@ function RecoveryModal({
                   !confirmPassword ||
                   passwordErrors.length > 0
                 }
-                style={primaryButtonStyle}
+                className={authStyles.btnPrimary}
               >
                 {isSubmitting ? "Recovering..." : "Recover access"}
               </button>
@@ -482,70 +414,11 @@ function Message({
   tone: "error" | "warning" | "success";
   children: React.ReactNode;
 }) {
-  const colors = {
-    error: { bg: "var(--pos-danger-tint)", border: "var(--pos-danger-line)", color: "var(--pos-danger-strong)" },
-    warning: { bg: "var(--pos-saffron-tint)", border: "var(--pos-saffron-line)", color: "var(--pos-saffron-text)" },
-    success: { bg: "var(--pos-success-line)", border: "var(--pos-success-line)", color: "var(--pos-success-text)" },
-  }[tone];
-  return (
-    <div
-      style={{
-        background: colors.bg,
-        border: `1px solid ${colors.border}`,
-        color: colors.color,
-        borderRadius: 6,
-        padding: "9px 12px",
-        fontSize: 13,
-        marginBottom: 16,
-        lineHeight: 1.4,
-      }}
-    >
-      {children}
-    </div>
-  );
+  const toneClass =
+    tone === "error"
+      ? authStyles.messageError
+      : tone === "warning"
+        ? authStyles.messageWarning
+        : authStyles.messageSuccess;
+  return <div className={`${authStyles.message} ${toneClass}`}>{children}</div>;
 }
-
-const labelStyle: React.CSSProperties = {
-  display: "block",
-  fontSize: 12,
-  fontWeight: 700,
-  color: "var(--pos-tx-sec)",
-  marginBottom: 6,
-  textTransform: "uppercase",
-  letterSpacing: "0.4px",
-};
-
-function inputStyle(disabled = false): React.CSSProperties {
-  return {
-    width: "100%",
-    padding: "9px 12px",
-    border: "1px solid var(--pos-line-strong)",
-    borderRadius: 6,
-    fontSize: 14,
-    boxSizing: "border-box",
-    outline: "none",
-    background: disabled ? "var(--pos-surface-hover)" : "var(--pos-surface)",
-  };
-}
-
-const primaryButtonStyle: React.CSSProperties = {
-  padding: "9px 14px",
-  background: "var(--pos-saffron-deep)",
-  color: "var(--pos-surface)",
-  border: "none",
-  borderRadius: 8,
-  fontWeight: 700,
-  fontSize: 13,
-  cursor: "pointer",
-};
-
-const secondaryButtonStyle: React.CSSProperties = {
-  padding: "9px 14px",
-  background: "var(--pos-surface)",
-  color: "var(--pos-tx-sec)",
-  border: "1px solid var(--pos-line-strong)",
-  borderRadius: 8,
-  fontWeight: 700,
-  fontSize: 13,
-  cursor: "pointer",
-};
