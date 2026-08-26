@@ -7,20 +7,79 @@
   justify-content: center;
   background: var(--pos-overlay);
   z-index: 3000;
+  padding: 16px;
 }
 
 .ui-dialog,
 .pos-dialog {
-  width: min(420px, 95vw);
+  width: min(420px, 100%);
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
   background: var(--pos-surface);
   border-radius: var(--pos-r-dialog);
-  padding: 24px;
+  padding: 16px 18px 18px;
   box-shadow: var(--pos-shadow-overlay);
   border: 1px solid var(--pos-line);
 }
 
 .ui-dialog-lg {
-  width: min(640px, 95vw);
+  width: min(640px, 100%);
+}
+
+.ui-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.ui-dialog-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--pos-tx);
+  line-height: 1.25;
+}
+
+.ui-dialog-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--pos-r-btn);
+  background: transparent;
+  color: var(--pos-tx-sub);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.ui-dialog-close:hover {
+  background: var(--pos-surface-sunken);
+  color: var(--pos-tx);
+  border-color: var(--pos-line);
+}
+
+.ui-dialog-close:focus-visible {
+  outline: 2px solid var(--pos-focus-color);
+  outline-offset: 2px;
+}
+
+.ui-form-stack {
+  display: grid;
+  gap: 10px;
+}
+
+.ui-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+  padding-top: 4px;
 }
 
 .ui-toast-stack {
@@ -63,8 +122,7 @@
 
   .ui-dialog,
   .pos-dialog {
-    padding: 18px 16px;
-    max-height: calc(100vh - 32px);
-    overflow-y: auto;
+    padding: 14px 14px 16px;
+    max-height: calc(100vh - 24px);
   }
 }

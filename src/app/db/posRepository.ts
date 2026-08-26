@@ -526,6 +526,13 @@ export async function getFoodCostSummary(opts?: {
   return api().reports!.foodCostSummary(opts);
 }
 
+export async function getProfitabilitySummary(opts?: {
+  from?: number;
+  to?: number;
+}): Promise<import("../../shared/pos").ProfitabilitySummaryDto> {
+  return api().reports!.profitability(opts);
+}
+
 function groceryApi() {
   const grocery = api().grocery;
   if (!grocery) {
@@ -576,14 +583,20 @@ export async function getGroceryList(id: string): Promise<GroceryListDoc | null>
 export async function createGroceryList(input: {
   title?: string;
   listDate?: number;
+  listType?: GroceryListDoc["listType"];
+  notes?: string | null;
   lines?: Partial<GroceryListDoc["lines"][number]>[];
+  templateId?: string;
+  sourceListId?: string;
 }): Promise<GroceryListDoc> {
   return groceryApi().createList(input);
 }
 
 export async function updateGroceryList(
   id: string,
-  updates: Partial<Pick<GroceryListDoc, "title" | "listDate" | "status" | "lines">>,
+  updates: Partial<
+    Pick<GroceryListDoc, "title" | "listDate" | "listType" | "notes" | "status" | "lines">
+  > & { recordPrint?: boolean },
 ): Promise<GroceryListDoc> {
   return groceryApi().updateList(id, updates);
 }
@@ -619,6 +632,109 @@ export async function updateGroceryPurchase(
 
 export async function deleteGroceryPurchase(id: string): Promise<{ ok: boolean }> {
   return groceryApi().deletePurchase(id);
+}
+
+export async function listGroceryPurchaseHeaders(opts?: {
+  from?: number;
+  to?: number;
+  listId?: string;
+  vendorId?: string;
+  includeVoided?: boolean;
+  limit?: number;
+  offset?: number;
+}) {
+  return groceryApi().listPurchaseHeaders(opts);
+}
+
+export async function voidGroceryPurchaseHeader(id: string) {
+  return groceryApi().voidPurchaseHeader(id);
+}
+
+export async function listBuyingListTemplates() {
+  return groceryApi().listTemplates();
+}
+
+export async function createBuyingListTemplate(input: {
+  name: string;
+  description?: string | null;
+  lines?: any[];
+  sourceListId?: string;
+}) {
+  return groceryApi().createTemplate(input);
+}
+
+export async function deleteBuyingListTemplate(id: string) {
+  return groceryApi().deleteTemplate(id);
+}
+
+function vendorsApi() {
+  const vendors = api().vendors;
+  if (!vendors) throw new Error("pos-vendors-api-unavailable");
+  return vendors;
+}
+
+export async function listVendors(opts?: { includeInactive?: boolean; search?: string }) {
+  return vendorsApi().list(opts);
+}
+
+export async function createVendor(input: {
+  name: string;
+  contactPerson?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  address?: string | null;
+  gstin?: string | null;
+  notes?: string | null;
+}) {
+  return vendorsApi().create(input);
+}
+
+export async function updateVendor(id: string, updates: Record<string, unknown>) {
+  return vendorsApi().update(id, updates);
+}
+
+export async function deleteVendor(id: string) {
+  return vendorsApi().delete(id);
+}
+
+function expensesApi() {
+  const expenses = api().expenses;
+  if (!expenses) throw new Error("pos-expenses-api-unavailable");
+  return expenses;
+}
+
+export async function listExpenseCategories(opts?: { includeInactive?: boolean }) {
+  return expensesApi().listCategories(opts);
+}
+
+export async function listExpenses(opts?: {
+  from?: number;
+  to?: number;
+  categoryId?: string;
+  limit?: number;
+  offset?: number;
+}) {
+  return expensesApi().list(opts);
+}
+
+export async function createExpense(input: {
+  categoryId: string;
+  amount: number;
+  expenseDate?: number;
+  vendorId?: string | null;
+  description?: string | null;
+  paymentMethod?: string | null;
+  invoiceNumber?: string | null;
+}) {
+  return expensesApi().create(input);
+}
+
+export async function updateExpense(id: string, updates: Record<string, unknown>) {
+  return expensesApi().update(id, updates);
+}
+
+export async function voidExpense(id: string) {
+  return expensesApi().void(id);
 }
 
 export type ConfigGstDoc = GstConfigDto;

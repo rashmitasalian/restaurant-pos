@@ -16,13 +16,22 @@ import type {
   AuditDto,
   AttendanceDto,
   AttendanceStatus,
+  BuyingListTemplateDto,
+  BuyingListTemplateLineDto,
   ConfigDto,
   CustomerDto,
+  ExpenseCategoryDto,
+  ExpenseDto,
   FoodCostSummaryDto,
   GroceryItemDto,
   GroceryListDto,
   GroceryListLineDto,
+  GroceryListStatus,
+  GroceryListType,
+  GroceryPurchaseDto,
   GroceryPurchaseLineDto,
+  GroceryPaymentStatus,
+  GroceryPurchaseStatus,
   GroceryUnit,
   MenuItemDto,
   MenuItemVariantDto,
@@ -33,12 +42,14 @@ import type {
   PaymentDto,
   PrintJobDto,
   ProductSalesReportDto,
+  ProfitabilitySummaryDto,
   Role,
   SalesSummaryDto,
   SeatingAreaDto,
   StaffDto,
   TableDto,
   UserDto,
+  VendorDto,
 } from "../../src/shared/pos";
 import {
   STAFF_TEXT_LIMITS,
@@ -406,18 +417,105 @@ function prepareGroceryListLineInput(
   if (!itemName) {
     throw new Error("grocery-item-name-required");
   }
+  const estimatedUnitPrice =
+    input.estimatedUnitPrice === null ||
+    input.estimatedUnitPrice === undefined ||
+    String(input.estimatedUnitPrice).trim() === ""
+      ? null
+      : parseNonNegativeMoney(input.estimatedUnitPrice);
+  const quantity = normalizeQuantity(input.quantity ?? 1);
   return {
     id: input.id || `grocery-list-line:${randomUUID()}`,
     groceryItemId: input.groceryItemId || null,
     itemName,
     category: optionalGroceryText(input.category, 80, "grocery-category-too-long"),
-    quantity: normalizeQuantity(input.quantity ?? 1),
+    quantity,
     unit: normalizeGroceryUnit(input.unit || "unit"),
     vendorHint: optionalGroceryText(input.vendorHint, 120, "grocery-vendor-too-long"),
     sortOrder: Number.isFinite(Number(input.sortOrder))
       ? Math.trunc(Number(input.sortOrder))
       : index,
+    estimatedUnitPrice,
+    estimatedTotal:
+      estimatedUnitPrice !== null ? +(estimatedUnitPrice * quantity).toFixed(2) : null,
+    purchasedQuantity:
+      input.purchasedQuantity === null || input.purchasedQuantity === undefined
+        ? null
+        : Number(input.purchasedQuantity),
+    purchasedUnitPrice:
+      input.purchasedUnitPrice === null || input.purchasedUnitPrice === undefined
+        ? null
+        : parseNonNegativeMoney(input.purchasedUnitPrice),
+    purchasedTotal:
+      input.purchasedTotal === null || input.purchasedTotal === undefined
+        ? null
+        : parseNonNegativeMoney(input.purchasedTotal),
+    lineStatus: (input.lineStatus as GroceryListLineDto["lineStatus"]) || "pending",
   };
+}
+
+function normalizeGroceryListStatus(value: unknown): GroceryListStatus {
+  const status = String(value || "draft");
+  if (status === "printed") return "open";
+  if (status === "purchased") return "completed";
+  if (
+    status === "draft" ||
+    status === "open" ||
+    status === "partial" ||
+    status === "completed" ||
+    status === "cancelled"
+  ) {
+    return status;
+  }
+  return "draft";
+}
+
+function normalizeGroceryListType(value: unknown): GroceryListType {
+  const type = String(value || "regular");
+  if (type === "refill" || type === "emergency" || type === "custom" || type === "regular") {
+    return type;
+  }
+  return "regular";
+}
+
+function derivePaymentStatus(totalPaise: number, amountPaidPaise: number): GroceryPaymentStatus {
+  if (amountPaidPaise <= 0) return "pending";
+  if (amountPaidPaise >= totalPaise) return "paid";
+  return "partial";
+}
+
+function assertAmountPaidValid(totalPaise: number, amountPaidPaise: number) {
+  if (amountPaidPaise < 0) {
+    throw new Error("grocery-amount-paid-invalid");
+  }
+  if (amountPaidPaise > totalPaise) {
+    throw new Error("grocery-amount-paid-exceeds-total");
+  }
+}
+
+function ensureVendorId(
+  database: Database.Database,
+  vendorName: string | null | undefined,
+  actor: string | null,
+  at: number,
+): string | null {
+  const name = normalizeText(vendorName);
+  if (!name) return null;
+  const existing = database
+    .prepare(
+      `SELECT id FROM vendors WHERE deleted_at IS NULL AND name = ? COLLATE NOCASE LIMIT 1`,
+    )
+    .get(name) as { id: string } | undefined;
+  if (existing) return existing.id;
+  const id = `vendor:${randomUUID()}`;
+  database
+    .prepare(
+      `INSERT INTO vendors (id, name, active, created_by, created_at, updated_at, deleted_at)
+       VALUES (?, ?, 1, ?, ?, ?, NULL)`,
+    )
+    .run(id, name, actor, at, at);
+  createAuditRow(database, "vendor.created", "vendor", id, actor, { name, source: "auto" });
+  return id;
 }
 
 function prepareGroceryPurchaseInput(
@@ -3422,7 +3520,15 @@ export const posService = {
   },
 
   createGroceryList(
-    input: { title?: string; listDate?: number; lines?: Partial<GroceryListLineDto>[] },
+    input: {
+      title?: string;
+      listDate?: number;
+      listType?: GroceryListType;
+      notes?: string | null;
+      lines?: Partial<GroceryListLineDto>[];
+      templateId?: string;
+      sourceListId?: string;
+    },
     actor?: string | null,
   ) {
     const at = now();
@@ -3431,37 +3537,88 @@ export const posService = {
       throw new Error("grocery-date-invalid");
     }
     const id = `grocery-list:${randomUUID()}`;
-    const title =
-      normalizeText(input.title) ||
-      `Grocery List ${new Date(listDate).toLocaleDateString("en-IN")}`;
+    const listType = normalizeGroceryListType(input.listType);
+    const hour = new Date(listDate).getHours();
+    const suggestedTitle =
+      hour < 12 ? "Morning Procurement" : hour < 17 ? "Afternoon Refill" : "Evening Refill";
+    const title = normalizeText(input.title) || suggestedTitle;
+    const notes = optionalGroceryText(input.notes, 500, "grocery-notes-too-long");
     return inTransaction((database) => {
-      const sourceLines =
-        input.lines && input.lines.length
-          ? input.lines
-          : (
-              database
-                .prepare("SELECT * FROM grocery_items ORDER BY lower(name) ASC")
-                .all() as any[]
-            ).map((item) => ({
-              groceryItemId: item.id,
-              itemName: item.name,
-              category: item.category,
-              quantity: item.default_quantity,
-              unit: item.default_unit,
-              vendorHint: item.vendor_hint,
-            }));
+      // Explicit `lines: []` means blank list. Omitted lines keep legacy seed-from-items.
+      const linesProvided = Array.isArray(input.lines);
+      let sourceLines: Partial<GroceryListLineDto>[] | undefined = linesProvided
+        ? input.lines
+        : undefined;
+      if ((!sourceLines || !sourceLines.length) && !linesProvided && input.templateId) {
+        sourceLines = (
+          database
+            .prepare(
+              `SELECT * FROM grocery_list_template_lines
+               WHERE template_id = ?
+               ORDER BY sort_order ASC, created_at ASC`,
+            )
+            .all(input.templateId) as any[]
+        ).map((line) => ({
+          groceryItemId: line.grocery_item_id,
+          itemName: line.item_name,
+          category: line.category,
+          quantity: line.default_quantity || 1,
+          unit: line.unit,
+        }));
+      }
+      if ((!sourceLines || !sourceLines.length) && !linesProvided && input.sourceListId) {
+        sourceLines = (
+          database
+            .prepare(
+              `SELECT * FROM grocery_list_lines
+               WHERE list_id = ?
+               ORDER BY sort_order ASC, created_at ASC`,
+            )
+            .all(input.sourceListId) as any[]
+        ).map((line) => ({
+          groceryItemId: line.grocery_item_id,
+          itemName: line.item_name,
+          category: line.category,
+          quantity: line.quantity,
+          unit: line.unit,
+          vendorHint: line.vendor_hint,
+          estimatedUnitPrice:
+            line.estimated_unit_price_paise == null
+              ? null
+              : paiseToRupees(line.estimated_unit_price_paise),
+        }));
+      }
+      if ((!sourceLines || !sourceLines.length) && !linesProvided && !input.templateId && !input.sourceListId) {
+        // Backward-compatible default: seed from reusable items when no source provided.
+        sourceLines = (
+          database.prepare("SELECT * FROM grocery_items WHERE active = 1 ORDER BY lower(name) ASC").all() as any[]
+        ).map((item) => ({
+          groceryItemId: item.id,
+          itemName: item.name,
+          category: item.category,
+          quantity: item.default_quantity,
+          unit: item.default_unit,
+          vendorHint: item.vendor_hint,
+        }));
+      }
+      if (!sourceLines) sourceLines = [];
       const lines = sourceLines.map((line, index) => prepareGroceryListLineInput(line, index));
+      const initialStatus: GroceryListStatus = lines.length ? "open" : "draft";
       database
         .prepare(
-          `INSERT INTO grocery_lists (id, title, list_date, status, created_by, created_at, updated_at)
-           VALUES (?, ?, ?, 'draft', ?, ?, ?)`,
+          `INSERT INTO grocery_lists (
+             id, title, list_date, list_type, status, notes, created_by, updated_by,
+             completed_at, print_count, last_printed_at, created_at, updated_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, 0, NULL, ?, ?)`,
         )
-        .run(id, title, listDate, actor || null, at, at);
+        .run(id, title, listDate, listType, initialStatus, notes, actor || null, actor || null, at, at);
       const insertLine = database.prepare(
         `INSERT INTO grocery_list_lines (
           id, list_id, grocery_item_id, item_name, category, quantity, unit, vendor_hint,
-          sort_order, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          sort_order, estimated_unit_price_paise, estimated_total_paise,
+          purchased_quantity, purchased_unit_price_paise, purchased_total_paise, line_status,
+          created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       );
       lines.forEach((line, index) => {
         insertLine.run(
@@ -3474,12 +3631,21 @@ export const posService = {
           line.unit,
           line.vendorHint || null,
           index,
+          line.estimatedUnitPrice == null ? null : rupeesToPaise(line.estimatedUnitPrice),
+          line.estimatedTotal == null ? null : rupeesToPaise(line.estimatedTotal),
+          line.purchasedQuantity == null ? null : line.purchasedQuantity,
+          line.purchasedUnitPrice == null ? null : rupeesToPaise(line.purchasedUnitPrice),
+          line.purchasedTotal == null ? null : rupeesToPaise(line.purchasedTotal),
+          line.lineStatus || "pending",
           at,
           at,
         );
       });
       createAuditRow(database, "grocery.list.created", "grocery-list", id, actor || null, {
         lineCount: lines.length,
+        listType,
+        templateId: input.templateId || null,
+        sourceListId: input.sourceListId || null,
       });
       return groceryListFromRow(
         database,
@@ -3493,8 +3659,11 @@ export const posService = {
     updates: {
       title?: string;
       listDate?: number;
+      listType?: GroceryListType;
+      notes?: string | null;
       status?: GroceryListDto["status"];
       lines?: Partial<GroceryListLineDto>[];
+      recordPrint?: boolean;
     },
     actor?: string | null,
   ) {
@@ -3510,24 +3679,80 @@ export const posService = {
       if (!Number.isFinite(listDate) || listDate <= 0) {
         throw new Error("grocery-date-invalid");
       }
-      const status = updates.status || current.status;
-      if (!["draft", "printed", "purchased"].includes(status)) {
+      const listType =
+        updates.listType === undefined
+          ? normalizeGroceryListType(current.list_type)
+          : normalizeGroceryListType(updates.listType);
+      const notes =
+        updates.notes === undefined
+          ? current.notes || null
+          : optionalGroceryText(updates.notes, 500, "grocery-notes-too-long");
+      let status = normalizeGroceryListStatus(updates.status || current.status);
+      if (
+        updates.status &&
+        !["draft", "open", "partial", "completed", "cancelled"].includes(updates.status)
+      ) {
         throw new Error("grocery-list-status-invalid");
       }
+      // Legacy UI may still send printed/purchased — normalize.
+      if (updates.status === ("printed" as any)) status = "open";
+      if (updates.status === ("purchased" as any)) status = "completed";
+
+      const at = now();
+      let printCount = Number(current.print_count || 0);
+      let lastPrintedAt = current.last_printed_at || null;
+      if (updates.recordPrint) {
+        printCount += 1;
+        lastPrintedAt = at;
+        createAuditRow(database, "grocery.list.printed", "grocery-list", id, actor || null, {
+          printCount,
+        });
+      }
+      const completedAt =
+        status === "completed"
+          ? current.completed_at || at
+          : status === "cancelled"
+            ? current.completed_at || null
+            : null;
+
       database
         .prepare(
-          "UPDATE grocery_lists SET title = ?, list_date = ?, status = ?, updated_at = ? WHERE id = ?",
+          `UPDATE grocery_lists SET
+             title = ?, list_date = ?, list_type = ?, status = ?, notes = ?,
+             updated_by = ?, completed_at = ?, print_count = ?, last_printed_at = ?, updated_at = ?
+           WHERE id = ?`,
         )
-        .run(title, listDate, status, now(), id);
+        .run(
+          title,
+          listDate,
+          listType,
+          status,
+          notes,
+          actor || null,
+          completedAt,
+          printCount,
+          lastPrintedAt,
+          at,
+          id,
+        );
+
+      if (updates.status === "cancelled" && current.status !== "cancelled") {
+        createAuditRow(database, "grocery.list.cancelled", "grocery-list", id, actor || null, {});
+      }
+      if (updates.status === "completed" && current.status !== "completed") {
+        createAuditRow(database, "grocery.list.completed", "grocery-list", id, actor || null, {});
+      }
+
       if (updates.lines) {
         database.prepare("DELETE FROM grocery_list_lines WHERE list_id = ?").run(id);
         const insertLine = database.prepare(
           `INSERT INTO grocery_list_lines (
             id, list_id, grocery_item_id, item_name, category, quantity, unit, vendor_hint,
-            sort_order, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            sort_order, estimated_unit_price_paise, estimated_total_paise,
+            purchased_quantity, purchased_unit_price_paise, purchased_total_paise, line_status,
+            created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         );
-        const at = now();
         updates.lines
           .map((line, index) => prepareGroceryListLineInput(line, index))
           .forEach((line, index) => {
@@ -3541,6 +3766,12 @@ export const posService = {
               line.unit,
               line.vendorHint || null,
               index,
+              line.estimatedUnitPrice == null ? null : rupeesToPaise(line.estimatedUnitPrice),
+              line.estimatedTotal == null ? null : rupeesToPaise(line.estimatedTotal),
+              line.purchasedQuantity == null ? null : line.purchasedQuantity,
+              line.purchasedUnitPrice == null ? null : rupeesToPaise(line.purchasedUnitPrice),
+              line.purchasedTotal == null ? null : rupeesToPaise(line.purchasedTotal),
+              line.lineStatus || "pending",
               at,
               at,
             );
@@ -3558,9 +3789,13 @@ export const posService = {
 
   deleteGroceryList(id: string, actor?: string | null) {
     return inTransaction((database) => {
-      const current = database.prepare("SELECT id FROM grocery_lists WHERE id = ?").get(id);
+      const current = database.prepare("SELECT * FROM grocery_lists WHERE id = ?").get(id) as any;
       if (!current) {
         throw new Error("grocery-list-not-found");
+      }
+      const status = normalizeGroceryListStatus(current.status);
+      if (status !== "draft") {
+        throw new Error("grocery-list-delete-only-draft");
       }
       database.prepare("DELETE FROM grocery_lists WHERE id = ?").run(id);
       createAuditRow(database, "grocery.list.deleted", "grocery-list", id, actor || null, {});
@@ -3633,15 +3868,41 @@ export const posService = {
     const at = now();
     return inTransaction((database) => {
       assertGroceryPurchaseModeAvailable(database, prepared);
+      const vendorId = ensureVendorId(database, prepared.vendor, actor || null, at);
+      const totalPaise = rupeesToPaise(prepared.totalAmount);
+      assertAmountPaidValid(totalPaise, totalPaise);
+      const purchaseHeaderId = `grocery-purchase-hdr:${randomUUID()}`;
+      database
+        .prepare(
+          `INSERT INTO grocery_purchases (
+             id, buying_list_id, vendor_id, purchase_date, invoice_number, payment_method,
+             status, payment_status, amount_paid_paise, subtotal_paise, tax_paise, total_paise,
+             notes, migration_source, created_by, created_at, updated_at
+           ) VALUES (?, ?, ?, ?, NULL, ?, 'recorded', 'paid', ?, ?, 0, ?, NULL, NULL, ?, ?, ?)`,
+        )
+        .run(
+          purchaseHeaderId,
+          prepared.listId,
+          vendorId,
+          prepared.purchasedAt,
+          prepared.paymentMethod,
+          totalPaise,
+          totalPaise,
+          totalPaise,
+          actor || null,
+          at,
+          at,
+        );
       database
         .prepare(
           `INSERT INTO grocery_purchase_lines (
-            id, list_id, grocery_item_id, item_name, category, quantity, unit, unit_price_paise,
-            total_paise, vendor, payment_method, notes, purchased_at, created_by, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            id, purchase_id, list_id, grocery_item_id, item_name, category, quantity, unit, unit_price_paise,
+            total_paise, vendor, vendor_id, payment_method, notes, purchased_at, created_by, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           id,
+          purchaseHeaderId,
           prepared.listId,
           prepared.groceryItemId,
           prepared.itemName,
@@ -3649,8 +3910,9 @@ export const posService = {
           prepared.quantity,
           prepared.unit,
           prepared.unitPrice === null ? null : rupeesToPaise(prepared.unitPrice),
-          rupeesToPaise(prepared.totalAmount),
+          totalPaise,
           prepared.vendor,
+          vendorId,
           prepared.paymentMethod,
           prepared.notes,
           prepared.purchasedAt,
@@ -3661,6 +3923,7 @@ export const posService = {
       createAuditRow(database, "grocery.purchase.created", "grocery-purchase", id, actor || null, {
         itemName: prepared.itemName,
         totalAmount: prepared.totalAmount,
+        purchaseId: purchaseHeaderId,
       });
       return groceryPurchaseFromRow(
         database.prepare("SELECT * FROM grocery_purchase_lines WHERE id = ?").get(id),
@@ -3741,10 +4004,29 @@ export const posService = {
   deleteGroceryPurchase(id: string, actor?: string | null) {
     return inTransaction((database) => {
       const current = database
-        .prepare("SELECT id FROM grocery_purchase_lines WHERE id = ?")
-        .get(id);
+        .prepare("SELECT * FROM grocery_purchase_lines WHERE id = ?")
+        .get(id) as any;
       if (!current) {
         throw new Error("grocery-purchase-not-found");
+      }
+      // Recorded purchases are voided, never hard-deleted.
+      if (current.purchase_id) {
+        database
+          .prepare(
+            `UPDATE grocery_purchases
+             SET status = 'voided', updated_at = ?
+             WHERE id = ? AND status != 'voided'`,
+          )
+          .run(now(), current.purchase_id);
+        createAuditRow(
+          database,
+          "grocery.purchase.voided",
+          "grocery-purchase",
+          current.purchase_id,
+          actor || null,
+          { lineId: id },
+        );
+        return { ok: true };
       }
       database.prepare("DELETE FROM grocery_purchase_lines WHERE id = ?").run(id);
       createAuditRow(
@@ -3759,9 +4041,560 @@ export const posService = {
     });
   },
 
+  listVendors(opts: { includeInactive?: boolean; search?: string } = {}): VendorDto[] {
+    const clauses: string[] = ["deleted_at IS NULL"];
+    const params: unknown[] = [];
+    if (!opts.includeInactive) {
+      clauses.push("active = 1");
+    }
+    if (opts.search) {
+      clauses.push("(name LIKE ? OR phone LIKE ? OR contact_person LIKE ?)");
+      const q = `%${String(opts.search).trim()}%`;
+      params.push(q, q, q);
+    }
+    return getDb()
+      .prepare(
+        `SELECT * FROM vendors WHERE ${clauses.join(" AND ")} ORDER BY lower(name) ASC`,
+      )
+      .all(...params)
+      .map(vendorFromRow);
+  },
+
+  createVendor(
+    input: {
+      name: string;
+      contactPerson?: string | null;
+      phone?: string | null;
+      email?: string | null;
+      address?: string | null;
+      gstin?: string | null;
+      notes?: string | null;
+    },
+    actor?: string | null,
+  ): VendorDto {
+    const name = normalizeText(input.name);
+    if (!name) throw new Error("vendor-name-required");
+    const at = now();
+    const id = `vendor:${randomUUID()}`;
+    return inTransaction((database) => {
+      const existing = database
+        .prepare(
+          `SELECT id FROM vendors WHERE deleted_at IS NULL AND name = ? COLLATE NOCASE LIMIT 1`,
+        )
+        .get(name);
+      if (existing) throw new Error("vendor-name-duplicate");
+      database
+        .prepare(
+          `INSERT INTO vendors (
+             id, name, contact_person, phone, email, address, gstin, notes,
+             active, created_by, created_at, updated_at, deleted_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, NULL)`,
+        )
+        .run(
+          id,
+          name,
+          optionalGroceryText(input.contactPerson, 120, "vendor-contact-too-long"),
+          optionalGroceryText(input.phone, 40, "vendor-phone-too-long"),
+          optionalGroceryText(input.email, 120, "vendor-email-too-long"),
+          optionalGroceryText(input.address, 300, "vendor-address-too-long"),
+          optionalGroceryText(input.gstin, 20, "vendor-gstin-too-long"),
+          optionalGroceryText(input.notes, 500, "vendor-notes-too-long"),
+          actor || null,
+          at,
+          at,
+        );
+      createAuditRow(database, "vendor.created", "vendor", id, actor || null, { name });
+      return vendorFromRow(database.prepare("SELECT * FROM vendors WHERE id = ?").get(id));
+    });
+  },
+
+  updateVendor(
+    id: string,
+    updates: Partial<VendorDto>,
+    actor?: string | null,
+  ): VendorDto {
+    return inTransaction((database) => {
+      const current = database.prepare("SELECT * FROM vendors WHERE id = ?").get(id) as any;
+      if (!current || current.deleted_at) throw new Error("vendor-not-found");
+      const name =
+        updates.name === undefined ? current.name : normalizeText(updates.name) || current.name;
+      database
+        .prepare(
+          `UPDATE vendors SET
+             name = ?, contact_person = ?, phone = ?, email = ?, address = ?, gstin = ?, notes = ?,
+             active = ?, updated_at = ?
+           WHERE id = ?`,
+        )
+        .run(
+          name,
+          updates.contactPerson === undefined
+            ? current.contact_person
+            : optionalGroceryText(updates.contactPerson, 120, "vendor-contact-too-long"),
+          updates.phone === undefined
+            ? current.phone
+            : optionalGroceryText(updates.phone, 40, "vendor-phone-too-long"),
+          updates.email === undefined
+            ? current.email
+            : optionalGroceryText(updates.email, 120, "vendor-email-too-long"),
+          updates.address === undefined
+            ? current.address
+            : optionalGroceryText(updates.address, 300, "vendor-address-too-long"),
+          updates.gstin === undefined
+            ? current.gstin
+            : optionalGroceryText(updates.gstin, 20, "vendor-gstin-too-long"),
+          updates.notes === undefined
+            ? current.notes
+            : optionalGroceryText(updates.notes, 500, "vendor-notes-too-long"),
+          updates.active === undefined ? current.active : updates.active ? 1 : 0,
+          now(),
+          id,
+        );
+      createAuditRow(database, "vendor.updated", "vendor", id, actor || null, {
+        fields: Object.keys(updates || {}).sort(),
+      });
+      return vendorFromRow(database.prepare("SELECT * FROM vendors WHERE id = ?").get(id));
+    });
+  },
+
+  deleteVendor(id: string, actor?: string | null) {
+    return inTransaction((database) => {
+      const current = database.prepare("SELECT * FROM vendors WHERE id = ?").get(id) as any;
+      if (!current || current.deleted_at) throw new Error("vendor-not-found");
+      database
+        .prepare("UPDATE vendors SET deleted_at = ?, active = 0, updated_at = ? WHERE id = ?")
+        .run(now(), now(), id);
+      createAuditRow(database, "vendor.deleted", "vendor", id, actor || null, {});
+      return { ok: true };
+    });
+  },
+
+  listGroceryPurchaseHeaders(
+    opts: {
+      from?: number;
+      to?: number;
+      listId?: string;
+      vendorId?: string;
+      includeVoided?: boolean;
+      limit?: number;
+      offset?: number;
+    } = {},
+  ): GroceryPurchaseDto[] {
+    const clauses: string[] = [];
+    const params: unknown[] = [];
+    if (!opts.includeVoided) clauses.push("status = 'recorded'");
+    if (opts.from != null) {
+      clauses.push("purchase_date >= ?");
+      params.push(opts.from);
+    }
+    if (opts.to != null) {
+      clauses.push("purchase_date <= ?");
+      params.push(opts.to);
+    }
+    if (opts.listId) {
+      clauses.push("buying_list_id = ?");
+      params.push(opts.listId);
+    }
+    if (opts.vendorId) {
+      clauses.push("vendor_id = ?");
+      params.push(opts.vendorId);
+    }
+    const limit = Math.min(200, Math.max(1, Number(opts.limit || 50)));
+    const offset = Math.max(0, Number(opts.offset || 0));
+    params.push(limit, offset);
+    const database = getDb();
+    const rows = database
+      .prepare(
+        `SELECT p.*, v.name AS vendor_name
+         FROM grocery_purchases p
+         LEFT JOIN vendors v ON v.id = p.vendor_id
+         ${clauses.length ? `WHERE ${clauses.join(" AND ")}` : ""}
+         ORDER BY p.purchase_date DESC, p.created_at DESC
+         LIMIT ? OFFSET ?`,
+      )
+      .all(...params);
+    return rows.map((row: any) => groceryPurchaseHeaderFromRow(database, row));
+  },
+
+  voidGroceryPurchaseHeader(id: string, actor?: string | null) {
+    return inTransaction((database) => {
+      const current = database.prepare("SELECT * FROM grocery_purchases WHERE id = ?").get(id) as any;
+      if (!current) throw new Error("grocery-purchase-not-found");
+      if (current.status === "voided") return { ok: true };
+      database
+        .prepare("UPDATE grocery_purchases SET status = 'voided', updated_at = ? WHERE id = ?")
+        .run(now(), id);
+      createAuditRow(database, "grocery.purchase.voided", "grocery-purchase", id, actor || null, {
+        oldTotalPaise: current.total_paise,
+      });
+      return { ok: true };
+    });
+  },
+
+  listExpenseCategories(opts: { includeInactive?: boolean } = {}): ExpenseCategoryDto[] {
+    const clauses = ["deleted_at IS NULL"];
+    if (!opts.includeInactive) clauses.push("active = 1");
+    return getDb()
+      .prepare(
+        `SELECT * FROM expense_categories WHERE ${clauses.join(" AND ")} ORDER BY sort_order ASC, name ASC`,
+      )
+      .all()
+      .map(expenseCategoryFromRow);
+  },
+
+  listExpenses(
+    opts: { from?: number; to?: number; categoryId?: string; limit?: number; offset?: number } = {},
+  ): ExpenseDto[] {
+    const clauses = ["e.deleted_at IS NULL"];
+    const params: unknown[] = [];
+    if (opts.from != null) {
+      clauses.push("e.expense_date >= ?");
+      params.push(opts.from);
+    }
+    if (opts.to != null) {
+      clauses.push("e.expense_date <= ?");
+      params.push(opts.to);
+    }
+    if (opts.categoryId) {
+      clauses.push("e.category_id = ?");
+      params.push(opts.categoryId);
+    }
+    const limit = Math.min(200, Math.max(1, Number(opts.limit || 50)));
+    const offset = Math.max(0, Number(opts.offset || 0));
+    params.push(limit, offset);
+    return getDb()
+      .prepare(
+        `SELECT e.*, c.name AS category_name, v.name AS vendor_name
+         FROM expenses e
+         JOIN expense_categories c ON c.id = e.category_id
+         LEFT JOIN vendors v ON v.id = e.vendor_id
+         WHERE ${clauses.join(" AND ")}
+         ORDER BY e.expense_date DESC, e.created_at DESC
+         LIMIT ? OFFSET ?`,
+      )
+      .all(...params)
+      .map(expenseFromRow);
+  },
+
+  createExpense(
+    input: {
+      categoryId: string;
+      amount: number;
+      expenseDate?: number;
+      vendorId?: string | null;
+      description?: string | null;
+      paymentMethod?: string | null;
+      invoiceNumber?: string | null;
+    },
+    actor?: string | null,
+  ): ExpenseDto {
+    const amount = parsePositiveMoney(input.amount);
+    if (amount === null) throw new Error("expense-amount-invalid");
+    const expenseDate = Number(input.expenseDate || now());
+    if (!Number.isFinite(expenseDate) || expenseDate <= 0) throw new Error("expense-date-invalid");
+    const id = `expense:${randomUUID()}`;
+    const at = now();
+    return inTransaction((database) => {
+      const category = database
+        .prepare("SELECT id FROM expense_categories WHERE id = ? AND deleted_at IS NULL")
+        .get(input.categoryId);
+      if (!category) throw new Error("expense-category-not-found");
+      database
+        .prepare(
+          `INSERT INTO expenses (
+             id, category_id, amount_paise, expense_date, vendor_id, description,
+             payment_method, invoice_number, recurring_expense_id, created_by, created_at, updated_at, deleted_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, NULL)`,
+        )
+        .run(
+          id,
+          input.categoryId,
+          rupeesToPaise(amount),
+          expenseDate,
+          input.vendorId || null,
+          optionalGroceryText(input.description, 500, "expense-description-too-long"),
+          optionalGroceryText(input.paymentMethod, 40, "expense-payment-method-too-long"),
+          optionalGroceryText(input.invoiceNumber, 80, "expense-invoice-too-long"),
+          actor || null,
+          at,
+          at,
+        );
+      createAuditRow(database, "expense.created", "expense", id, actor || null, { amount });
+      return expenseFromRow(
+        database
+          .prepare(
+            `SELECT e.*, c.name AS category_name, v.name AS vendor_name
+             FROM expenses e
+             JOIN expense_categories c ON c.id = e.category_id
+             LEFT JOIN vendors v ON v.id = e.vendor_id
+             WHERE e.id = ?`,
+          )
+          .get(id),
+      );
+    });
+  },
+
+  updateExpense(id: string, updates: Partial<ExpenseDto>, actor?: string | null): ExpenseDto {
+    return inTransaction((database) => {
+      const current = database.prepare("SELECT * FROM expenses WHERE id = ?").get(id) as any;
+      if (!current || current.deleted_at) throw new Error("expense-not-found");
+      const amount =
+        updates.amount === undefined
+          ? paiseToRupees(current.amount_paise)
+          : parsePositiveMoney(updates.amount);
+      if (amount === null) throw new Error("expense-amount-invalid");
+      const expenseDate =
+        updates.expenseDate === undefined ? current.expense_date : Number(updates.expenseDate);
+      database
+        .prepare(
+          `UPDATE expenses SET
+             category_id = ?, amount_paise = ?, expense_date = ?, vendor_id = ?, description = ?,
+             payment_method = ?, invoice_number = ?, updated_at = ?
+           WHERE id = ?`,
+        )
+        .run(
+          updates.categoryId === undefined ? current.category_id : updates.categoryId,
+          rupeesToPaise(amount),
+          expenseDate,
+          updates.vendorId === undefined ? current.vendor_id : updates.vendorId || null,
+          updates.description === undefined
+            ? current.description
+            : optionalGroceryText(updates.description, 500, "expense-description-too-long"),
+          updates.paymentMethod === undefined
+            ? current.payment_method
+            : optionalGroceryText(updates.paymentMethod, 40, "expense-payment-method-too-long"),
+          updates.invoiceNumber === undefined
+            ? current.invoice_number
+            : optionalGroceryText(updates.invoiceNumber, 80, "expense-invoice-too-long"),
+          now(),
+          id,
+        );
+      createAuditRow(database, "expense.updated", "expense", id, actor || null, {
+        oldAmount: paiseToRupees(current.amount_paise),
+        newAmount: amount,
+      });
+      return expenseFromRow(
+        database
+          .prepare(
+            `SELECT e.*, c.name AS category_name, v.name AS vendor_name
+             FROM expenses e
+             JOIN expense_categories c ON c.id = e.category_id
+             LEFT JOIN vendors v ON v.id = e.vendor_id
+             WHERE e.id = ?`,
+          )
+          .get(id),
+      );
+    });
+  },
+
+  voidExpense(id: string, actor?: string | null) {
+    return inTransaction((database) => {
+      const current = database.prepare("SELECT * FROM expenses WHERE id = ?").get(id) as any;
+      if (!current || current.deleted_at) throw new Error("expense-not-found");
+      database
+        .prepare("UPDATE expenses SET deleted_at = ?, updated_at = ? WHERE id = ?")
+        .run(now(), now(), id);
+      createAuditRow(database, "expense.voided", "expense", id, actor || null, {
+        amount: paiseToRupees(current.amount_paise),
+      });
+      return { ok: true };
+    });
+  },
+
+  listBuyingListTemplates(): BuyingListTemplateDto[] {
+    const database = getDb();
+    return database
+      .prepare(
+        `SELECT * FROM grocery_list_templates
+         WHERE deleted_at IS NULL AND active = 1
+         ORDER BY lower(name) ASC`,
+      )
+      .all()
+      .map((row: any) => buyingListTemplateFromRow(database, row));
+  },
+
+  createBuyingListTemplate(
+    input: {
+      name: string;
+      description?: string | null;
+      lines?: Partial<BuyingListTemplateLineDto>[];
+      sourceListId?: string;
+    },
+    actor?: string | null,
+  ): BuyingListTemplateDto {
+    const name = normalizeText(input.name);
+    if (!name) throw new Error("template-name-required");
+    const id = `grocery-list-template:${randomUUID()}`;
+    const at = now();
+    return inTransaction((database) => {
+      let lines = input.lines || [];
+      if ((!lines || !lines.length) && input.sourceListId) {
+        lines = (
+          database
+            .prepare(
+              `SELECT * FROM grocery_list_lines WHERE list_id = ? ORDER BY sort_order ASC`,
+            )
+            .all(input.sourceListId) as any[]
+        ).map((line) => ({
+          groceryItemId: line.grocery_item_id,
+          itemName: line.item_name,
+          category: line.category,
+          defaultQuantity: line.quantity,
+          unit: line.unit,
+        }));
+      }
+      database
+        .prepare(
+          `INSERT INTO grocery_list_templates (
+             id, name, description, active, created_by, created_at, updated_at, deleted_at
+           ) VALUES (?, ?, ?, 1, ?, ?, ?, NULL)`,
+        )
+        .run(
+          id,
+          name,
+          optionalGroceryText(input.description, 300, "template-description-too-long"),
+          actor || null,
+          at,
+          at,
+        );
+      const insertLine = database.prepare(
+        `INSERT INTO grocery_list_template_lines (
+           id, template_id, grocery_item_id, item_name, category, default_quantity, unit,
+           sort_order, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      );
+      lines.forEach((line, index) => {
+        const itemName = normalizeText(line.itemName);
+        if (!itemName) return;
+        insertLine.run(
+          `grocery-list-template-line:${randomUUID()}`,
+          id,
+          line.groceryItemId || null,
+          itemName,
+          optionalGroceryText(line.category, 80, "grocery-category-too-long"),
+          line.defaultQuantity == null ? null : Number(line.defaultQuantity),
+          normalizeGroceryUnit(line.unit || "unit"),
+          index,
+          at,
+          at,
+        );
+      });
+      createAuditRow(database, "grocery.template.created", "grocery-list-template", id, actor || null, {
+        name,
+      });
+      return buyingListTemplateFromRow(
+        database,
+        database.prepare("SELECT * FROM grocery_list_templates WHERE id = ?").get(id),
+      );
+    });
+  },
+
+  deleteBuyingListTemplate(id: string, actor?: string | null) {
+    return inTransaction((database) => {
+      const current = database
+        .prepare("SELECT * FROM grocery_list_templates WHERE id = ?")
+        .get(id) as any;
+      if (!current || current.deleted_at) throw new Error("template-not-found");
+      database
+        .prepare(
+          "UPDATE grocery_list_templates SET deleted_at = ?, active = 0, updated_at = ? WHERE id = ?",
+        )
+        .run(now(), now(), id);
+      createAuditRow(database, "grocery.template.deleted", "grocery-list-template", id, actor || null, {});
+      return { ok: true };
+    });
+  },
+
+  getProfitabilitySummary(opts: { from?: number; to?: number } = {}): ProfitabilitySummaryDto {
+    const from = Number(opts.from || 0);
+    const to = Number(opts.to || now());
+    const sales = this.getSalesSummary({ from, to });
+    const revenue = Number(
+      sales.subtotal ?? Math.max(0, (sales.total || 0) - (sales.taxTotal || 0)),
+    );
+    const database = getDb();
+    const purchaseRow = database
+      .prepare(
+        `SELECT COALESCE(SUM(total_paise), 0) AS total_paise
+         FROM grocery_purchases
+         WHERE status = 'recorded'
+           AND purchase_date >= ?
+           AND purchase_date <= ?`,
+      )
+      .get(from, to) as { total_paise: number };
+    const purchases = paiseToRupees(purchaseRow.total_paise);
+    const foodCostAmount = purchases;
+    const expenseRows = database
+      .prepare(
+        `SELECT c.id AS category_id, c.name AS category_name, COALESCE(SUM(e.amount_paise), 0) AS amount_paise
+         FROM expenses e
+         JOIN expense_categories c ON c.id = e.category_id
+         WHERE e.deleted_at IS NULL
+           AND e.expense_date >= ?
+           AND e.expense_date <= ?
+         GROUP BY c.id, c.name
+         ORDER BY amount_paise DESC`,
+      )
+      .all(from, to) as Array<{ category_id: string; category_name: string; amount_paise: number }>;
+    const operatingExpenses = expenseRows.reduce(
+      (sum, row) => sum + paiseToRupees(row.amount_paise),
+      0,
+    );
+    const grossContribution = +(revenue - foodCostAmount).toFixed(2);
+    const estimatedOperatingProfit = +(grossContribution - operatingExpenses).toFixed(2);
+    const expenseBreakdown = expenseRows.map((row) => {
+      const amount = paiseToRupees(row.amount_paise);
+      return {
+        categoryId: row.category_id,
+        categoryName: row.category_name,
+        amount: +amount.toFixed(2),
+        percentOfRevenue: revenue > 0 ? +((amount / revenue) * 100).toFixed(1) : null,
+      };
+    });
+    return {
+      from,
+      to,
+      revenue: +revenue.toFixed(2),
+      foodCost: {
+        openingInventory: null,
+        purchases: +purchases.toFixed(2),
+        closingInventory: null,
+        amount: +foodCostAmount.toFixed(2),
+        basis: "purchases",
+      },
+      grossContribution,
+      operatingExpenses: +operatingExpenses.toFixed(2),
+      expenseBreakdown,
+      estimatedOperatingProfit,
+      operatingMarginPercent:
+        revenue > 0 ? +((estimatedOperatingProfit / revenue) * 100).toFixed(1) : null,
+      disclaimer: "Estimate based on recorded sales, purchases and expenses.",
+    };
+  },
+
   getFoodCostSummary(opts: { from?: number; to?: number } = {}): FoodCostSummaryDto {
     const sales = this.getSalesSummary(opts);
-    const purchases = this.listGroceryPurchases({ from: opts.from, to: opts.to, limit: null });
+    const database = getDb();
+    const clauses = ["l.active = 1", "(l.purchase_id IS NULL OR p.status = 'recorded')"];
+    const params: unknown[] = [];
+    if (opts.from != null) {
+      clauses.push("l.purchased_at >= ?");
+      params.push(opts.from);
+    }
+    if (opts.to != null) {
+      clauses.push("l.purchased_at <= ?");
+      params.push(opts.to);
+    }
+    const purchases = (
+      database
+        .prepare(
+          `SELECT l.*
+           FROM grocery_purchase_lines l
+           LEFT JOIN grocery_purchases p ON p.id = l.purchase_id
+           WHERE ${clauses.join(" AND ")}
+           ORDER BY l.purchased_at DESC`,
+        )
+        .all(...params) as any[]
+    ).map(groceryPurchaseFromRow);
     const grocerySpend = purchases.reduce(
       (sum, purchase) => sum + Number(purchase.totalAmount || 0),
       0,
@@ -4815,11 +5648,145 @@ function attendanceFromRow(row: any): AttendanceDto {
   };
 }
 
+function vendorFromRow(row: any): VendorDto {
+  return {
+    _id: row.id,
+    id: row.id,
+    type: "vendor",
+    name: row.name,
+    contactPerson: row.contact_person || null,
+    phone: row.phone || null,
+    email: row.email || null,
+    address: row.address || null,
+    gstin: row.gstin || null,
+    notes: row.notes || null,
+    active: Boolean(row.active),
+    createdBy: row.created_by || null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    deletedAt: row.deleted_at || null,
+  };
+}
+
+function groceryPurchaseHeaderFromRow(database: Database.Database, row: any): GroceryPurchaseDto {
+  const lines = database
+    .prepare(
+      `SELECT * FROM grocery_purchase_lines
+       WHERE purchase_id = ?
+       ORDER BY purchased_at ASC, created_at ASC`,
+    )
+    .all(row.id)
+    .map(groceryPurchaseFromRow);
+  const total = paiseToRupees(row.total_paise);
+  const amountPaid = paiseToRupees(row.amount_paid_paise);
+  return {
+    _id: row.id,
+    id: row.id,
+    type: "grocery-purchase-header",
+    buyingListId: row.buying_list_id || null,
+    vendorId: row.vendor_id || null,
+    vendorName: row.vendor_name || null,
+    purchaseDate: row.purchase_date,
+    invoiceNumber: row.invoice_number || null,
+    paymentMethod: row.payment_method || null,
+    status: (row.status as GroceryPurchaseStatus) || "recorded",
+    paymentStatus: (row.payment_status as GroceryPaymentStatus) || "pending",
+    amountPaid,
+    outstanding: Math.max(0, +(total - amountPaid).toFixed(2)),
+    subtotal: paiseToRupees(row.subtotal_paise),
+    tax: paiseToRupees(row.tax_paise),
+    total,
+    notes: row.notes || null,
+    migrationSource: row.migration_source || null,
+    lines,
+    createdBy: row.created_by || null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function expenseCategoryFromRow(row: any): ExpenseCategoryDto {
+  return {
+    _id: row.id,
+    id: row.id,
+    type: "expense-category",
+    name: row.name,
+    slug: row.slug,
+    sortOrder: Number(row.sort_order || 0),
+    isSystem: Boolean(row.is_system),
+    active: Boolean(row.active),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    deletedAt: row.deleted_at || null,
+  };
+}
+
+function expenseFromRow(row: any): ExpenseDto {
+  return {
+    _id: row.id,
+    id: row.id,
+    type: "expense",
+    categoryId: row.category_id,
+    categoryName: row.category_name || null,
+    amount: paiseToRupees(row.amount_paise),
+    expenseDate: row.expense_date,
+    vendorId: row.vendor_id || null,
+    vendorName: row.vendor_name || null,
+    description: row.description || null,
+    paymentMethod: row.payment_method || null,
+    invoiceNumber: row.invoice_number || null,
+    recurringExpenseId: row.recurring_expense_id || null,
+    createdBy: row.created_by || null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    deletedAt: row.deleted_at || null,
+  };
+}
+
+function buyingListTemplateFromRow(
+  database: Database.Database,
+  row: any,
+): BuyingListTemplateDto {
+  const lines = (
+    database
+      .prepare(
+        `SELECT * FROM grocery_list_template_lines
+         WHERE template_id = ?
+         ORDER BY sort_order ASC, created_at ASC`,
+      )
+      .all(row.id) as any[]
+  ).map(
+    (line): BuyingListTemplateLineDto => ({
+      id: line.id,
+      groceryItemId: line.grocery_item_id || null,
+      itemName: line.item_name,
+      category: line.category || null,
+      defaultQuantity: line.default_quantity == null ? null : Number(line.default_quantity),
+      unit: normalizeGroceryUnit(line.unit),
+      sortOrder: Number(line.sort_order || 0),
+    }),
+  );
+  return {
+    _id: row.id,
+    id: row.id,
+    type: "grocery-list-template",
+    name: row.name,
+    description: row.description || null,
+    active: Boolean(row.active),
+    lines,
+    createdBy: row.created_by || null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    deletedAt: row.deleted_at || null,
+  };
+}
+
 function groceryPurchaseFromRow(row: any): GroceryPurchaseLineDto {
   return {
     _id: row.id,
     id: row.id,
     type: "grocery-purchase",
+    purchaseId: row.purchase_id || null,
     listId: row.list_id || null,
     groceryItemId: row.grocery_item_id || null,
     itemName: row.item_name,
@@ -4832,6 +5799,7 @@ function groceryPurchaseFromRow(row: any): GroceryPurchaseLineDto {
         : paiseToRupees(row.unit_price_paise),
     totalAmount: paiseToRupees(row.total_paise),
     vendor: row.vendor || null,
+    vendorId: row.vendor_id || null,
     paymentMethod: row.payment_method || null,
     notes: row.notes || null,
     purchasedAt: row.purchased_at,
@@ -4852,6 +5820,21 @@ function groceryListLineFromRow(row: any): GroceryListLineDto {
     unit: normalizeGroceryUnit(row.unit),
     vendorHint: row.vendor_hint || null,
     sortOrder: Number(row.sort_order || 0),
+    estimatedUnitPrice:
+      row.estimated_unit_price_paise == null
+        ? null
+        : paiseToRupees(row.estimated_unit_price_paise),
+    estimatedTotal:
+      row.estimated_total_paise == null ? null : paiseToRupees(row.estimated_total_paise),
+    purchasedQuantity:
+      row.purchased_quantity == null ? null : Number(row.purchased_quantity),
+    purchasedUnitPrice:
+      row.purchased_unit_price_paise == null
+        ? null
+        : paiseToRupees(row.purchased_unit_price_paise),
+    purchasedTotal:
+      row.purchased_total_paise == null ? null : paiseToRupees(row.purchased_total_paise),
+    lineStatus: row.line_status || "pending",
   };
 }
 
@@ -4868,9 +5851,15 @@ function groceryListFromRow(database: Database.Database, row: any): GroceryListD
     type: "grocery-list",
     title: row.title,
     listDate: row.list_date,
-    status: row.status,
+    listType: normalizeGroceryListType(row.list_type),
+    status: normalizeGroceryListStatus(row.status),
+    notes: row.notes || null,
     lines,
     createdBy: row.created_by || null,
+    updatedBy: row.updated_by || null,
+    completedAt: row.completed_at || null,
+    printCount: Number(row.print_count || 0),
+    lastPrintedAt: row.last_printed_at || null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

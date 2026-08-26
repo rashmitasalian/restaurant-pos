@@ -4,8 +4,13 @@
   font-size: var(--pos-type-12);
   font-weight: 600;
   color: var(--pos-tx-sec);
-  margin-bottom: 6px;
+  margin-bottom: 4px;
   letter-spacing: 0.02em;
+}
+
+.ui-field > .ui-label,
+.ui-field > .pos-label {
+  margin-bottom: 0;
 }
 
 .pos-input,
@@ -15,8 +20,8 @@
   display: block;
   width: 100%;
   min-height: var(--pos-hit-dense);
-  padding: 8px 12px;
-  border-radius: var(--pos-r-input);
+  padding: 6px 10px;
+  border-radius: var(--pos-r-btn);
   border: 1px solid var(--pos-line-strong);
   font-size: var(--pos-type-13);
   color: var(--pos-tx);
@@ -65,4 +70,55 @@
   flex-direction: column;
   gap: 4px;
   min-width: 0;
+}
+
+.ui-field-compact {
+  gap: 0;
+}
+
+.ui-label-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Single-shape search shell: wrapper owns border/radius; input stays borderless. */
+.ui-input-shell {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: var(--pos-hit-dense);
+  border: 1px solid var(--pos-line-strong);
+  border-radius: var(--pos-r-btn);
+  background: var(--pos-surface);
+  box-sizing: border-box;
+  transition:
+    border-color var(--pos-motion-fast) var(--pos-ease),
+    box-shadow var(--pos-motion-fast) var(--pos-ease);
+}
+
+.ui-input-shell:focus-within {
+  border-color: var(--pos-teal);
+  box-shadow: var(--pos-focus-ring);
+}
+
+.ui-input-shell .ui-input,
+.ui-input-shell .pos-input {
+  border: none;
+  box-shadow: none;
+  background: transparent;
+  border-radius: var(--pos-r-btn);
+  min-height: calc(var(--pos-hit-dense) - 2px);
+}
+
+.ui-input-shell .ui-input:focus,
+.ui-input-shell .pos-input:focus {
+  border: none;
+  box-shadow: none;
 }

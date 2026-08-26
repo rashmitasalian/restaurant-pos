@@ -1,6 +1,7 @@
 import React from "react";
 import AuditViewer from "../Audit/AuditViewer";
 import Grocery from "../Grocery/Grocery";
+import Expenses from "../Expenses/Expenses";
 import History from "../History/History";
 import ItemsEditor from "../ItemsEditor/ItemsEditor";
 import Settings from "../Settings/Settings";
@@ -8,10 +9,11 @@ import Staff from "../Staff/Staff";
 import Attendance from "../Attendance/Attendance";
 import UsersScreen from "../Users/UsersScreen";
 import styles from "./Manager.module.css";
-import { type ManagerSection } from "./managerSections";
+import { type ManagerSection, MANAGER_SECTION_HASH } from "./managerSections";
 import { Icon } from "../../components/ui/Icon";
 import {
   ShoppingBasket,
+  Wallet,
   UtensilsCrossed,
   History as HistoryIcon,
   Users,
@@ -29,23 +31,27 @@ type ManagerProps = {
 const SECTIONS: Array<{
   key: ManagerSection;
   label: string;
-  group: "Grocery" | "Admin Tools";
+  group: "Operations" | "Records" | "Administration";
   icon: typeof ShoppingBasket;
 }> = [
-  { key: "grocery", label: "Grocery", group: "Grocery", icon: ShoppingBasket },
-  { key: "menu", label: "Menu", group: "Admin Tools", icon: UtensilsCrossed },
-  { key: "history", label: "History", group: "Admin Tools", icon: HistoryIcon },
-  { key: "staff", label: "Staff", group: "Admin Tools", icon: Users },
-  { key: "attendance", label: "Attendance", group: "Admin Tools", icon: CalendarCheck },
-  { key: "users", label: "Users", group: "Admin Tools", icon: Shield },
-  { key: "audit", label: "Audit", group: "Admin Tools", icon: ScrollText },
-  { key: "settings", label: "Settings", group: "Admin Tools", icon: SettingsIcon },
+  { key: "grocery", label: "Grocery", group: "Operations", icon: ShoppingBasket },
+  { key: "expenses", label: "Expenses", group: "Operations", icon: Wallet },
+  { key: "menu", label: "Menu", group: "Operations", icon: UtensilsCrossed },
+  { key: "staff", label: "Staff", group: "Operations", icon: Users },
+  { key: "attendance", label: "Attendance", group: "Operations", icon: CalendarCheck },
+  { key: "history", label: "History", group: "Records", icon: HistoryIcon },
+  { key: "audit", label: "Audit", group: "Records", icon: ScrollText },
+  { key: "users", label: "Users", group: "Administration", icon: Shield },
+  { key: "settings", label: "Settings", group: "Administration", icon: SettingsIcon },
 ];
 
 export default function Manager({ section, onSectionChange }: ManagerProps) {
   const renderSection = () => {
     if (section === "grocery") {
       return <Grocery />;
+    }
+    if (section === "expenses") {
+      return <Expenses />;
     }
     if (section === "menu") {
       return <ItemsEditor />;
@@ -89,7 +95,10 @@ export default function Manager({ section, onSectionChange }: ManagerProps) {
                   section === item.key ? styles.railButtonActive : ""
                 }`}
                 aria-current={section === item.key ? "page" : undefined}
-                onClick={() => onSectionChange(item.key)}
+                onClick={() => {
+                  onSectionChange(item.key);
+                  window.location.hash = MANAGER_SECTION_HASH[item.key];
+                }}
               >
                 <span className={styles.buttonMain}>
                   <span className={styles.sectionIcon}>

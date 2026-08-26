@@ -23,6 +23,8 @@ function createMockDb() {
     payments: [] as any[],
     groceryRows: [] as any[],
     groceryConflictRow: undefined as any,
+    groceryPurchaseTotalPaise: 0,
+    expenseBreakdownRows: [] as any[],
     productLineRows: [] as any[],
     auditRows: [] as any[],
     auditCount: 0,
@@ -44,6 +46,9 @@ function createMockDb() {
           }
           if (sql.includes("FROM grocery_purchase_lines")) {
             return db.groceryRows;
+          }
+          if (sql.includes("FROM expenses e") && sql.includes("JOIN expense_categories")) {
+            return db.expenseBreakdownRows;
           }
           if (sql.includes("FROM audit_logs")) {
             return db.auditRows;
@@ -72,6 +77,9 @@ function createMockDb() {
           }
           if (sql.includes("SELECT subtotal_paise") && sql.includes("FROM orders WHERE id = ?")) {
             return db.orderSummaryRows.get(String(params[0]));
+          }
+          if (sql.includes("FROM grocery_purchases") && sql.includes("SUM(total_paise)")) {
+            return { total_paise: db.groceryPurchaseTotalPaise };
           }
           if (sql.includes("FROM grocery_purchase_lines")) {
             if (/WHERE id = \? AND active = 1/.test(sql)) {
@@ -455,6 +463,63 @@ describe("posService strict SQLite APIs", () => {
         totalAmount: 120,
       }),
     ).toThrow("grocery-quantity-invalid");
+  });
+
+  it("computes estimated operating profit from sales, purchases, and expenses without double-counting food cost", () => {
+    mockDb.payments = [
+      { order_id: "order:1", method: "cash", amount_paise: 118000, split_json: null },
+    ];
+    mockDb.orderSummaryRows.set("order:1", {
+      subtotal_paise: 100000,
+      tax_total_paise: 18000,
+      discount_total_paise: 0,
+      total_paise: 118000,
+    });
+    mockDb.groceryPurchaseTotalPaise = 25000;
+    mockDb.expenseBreakdownRows = [
+      { category_id: "expense-cat:rent", category_name: "Rent", amount_paise: 30000 },
+      { category_id: "expense-cat:power", category_name: "Electricity", amount_paise: 10000 },
+    ];
+
+    const summary = posService.getProfitabilitySummary({ from: 1000, to: 2000 });
+
+    expect(summary).toMatchObject({
+      revenue: 1000,
+      foodCost: {
+        purchases: 250,
+        amount: 250,
+        basis: "purchases",
+        openingInventory: null,
+        closingInventory: null,
+      },
+      grossContribution: 750,
+      operatingExpenses: 400,
+      estimatedOperatingProfit: 350,
+      operatingMarginPercent: 35,
+      disclaimer: "Estimate based on recorded sales, purchases and expenses.",
+    });
+    expect(summary.expenseBreakdown).toEqual([
+      {
+        categoryId: "expense-cat:rent",
+        categoryName: "Rent",
+        amount: 300,
+        percentOfRevenue: 30,
+      },
+      {
+        categoryId: "expense-cat:power",
+        categoryName: "Electricity",
+        amount: 100,
+        percentOfRevenue: 10,
+      },
+    ]);
+    expect(summary.expenseBreakdown.some((row) => /grocery|food/i.test(row.categoryName))).toBe(
+      false,
+    );
+    const purchaseQuery = mockDb.calls.find(
+      (call: any) => call.sql.includes("FROM grocery_purchases") && call.sql.includes("SUM"),
+    );
+    expect(purchaseQuery!.sql).toContain("status = 'recorded'");
+    expect(purchaseQuery!.params).toEqual([1000, 2000]);
   });
 
   it("blocks normal line updates that reduce already-sent KOT quantity", () => {

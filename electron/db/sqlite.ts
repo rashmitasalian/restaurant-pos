@@ -1,5 +1,6 @@
 import "../env";
 import { app } from "electron";
+import { randomUUID } from "crypto";
 import fs from "fs";
 import path from "path";
 
@@ -441,7 +442,8 @@ function runSchema(database: SqliteDatabase) {
       vendor_hint TEXT,
       active INTEGER NOT NULL DEFAULT 1,
       created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL
+      updated_at INTEGER NOT NULL,
+      deleted_at INTEGER
     );
 
     CREATE INDEX IF NOT EXISTS idx_grocery_items_active_name
@@ -451,14 +453,24 @@ function runSchema(database: SqliteDatabase) {
       id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
       list_date INTEGER NOT NULL,
-      status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'printed', 'purchased')),
+      list_type TEXT NOT NULL DEFAULT 'regular'
+        CHECK (list_type IN ('regular', 'refill', 'emergency', 'custom')),
+      status TEXT NOT NULL DEFAULT 'draft'
+        CHECK (status IN ('draft', 'open', 'partial', 'completed', 'cancelled')),
+      notes TEXT,
       created_by TEXT REFERENCES users(username) ON UPDATE CASCADE ON DELETE SET NULL,
+      updated_by TEXT REFERENCES users(username) ON UPDATE CASCADE ON DELETE SET NULL,
+      completed_at INTEGER,
+      print_count INTEGER NOT NULL DEFAULT 0,
+      last_printed_at INTEGER,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     );
 
     CREATE INDEX IF NOT EXISTS idx_grocery_lists_date
       ON grocery_lists(list_date DESC);
+    CREATE INDEX IF NOT EXISTS idx_grocery_lists_status_date
+      ON grocery_lists(status, list_date DESC);
 
     CREATE TABLE IF NOT EXISTS grocery_list_lines (
       id TEXT PRIMARY KEY,
@@ -470,6 +482,13 @@ function runSchema(database: SqliteDatabase) {
       unit TEXT NOT NULL,
       vendor_hint TEXT,
       sort_order INTEGER NOT NULL DEFAULT 0,
+      estimated_unit_price_paise INTEGER,
+      estimated_total_paise INTEGER,
+      purchased_quantity REAL,
+      purchased_unit_price_paise INTEGER,
+      purchased_total_paise INTEGER,
+      line_status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (line_status IN ('pending', 'partial', 'purchased', 'skipped')),
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     );
@@ -477,8 +496,57 @@ function runSchema(database: SqliteDatabase) {
     CREATE INDEX IF NOT EXISTS idx_grocery_list_lines_list
       ON grocery_list_lines(list_id, sort_order);
 
+    CREATE TABLE IF NOT EXISTS vendors (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL COLLATE NOCASE,
+      contact_person TEXT,
+      phone TEXT,
+      email TEXT,
+      address TEXT,
+      gstin TEXT,
+      notes TEXT,
+      active INTEGER NOT NULL DEFAULT 1,
+      created_by TEXT REFERENCES users(username) ON UPDATE CASCADE ON DELETE SET NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      deleted_at INTEGER
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_vendors_name_active
+      ON vendors(name) WHERE deleted_at IS NULL;
+
+    CREATE TABLE IF NOT EXISTS grocery_purchases (
+      id TEXT PRIMARY KEY,
+      buying_list_id TEXT REFERENCES grocery_lists(id) ON DELETE SET NULL,
+      vendor_id TEXT REFERENCES vendors(id) ON UPDATE CASCADE ON DELETE SET NULL,
+      purchase_date INTEGER NOT NULL,
+      invoice_number TEXT,
+      payment_method TEXT,
+      status TEXT NOT NULL DEFAULT 'recorded'
+        CHECK (status IN ('recorded', 'voided')),
+      payment_status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (payment_status IN ('pending', 'partial', 'paid')),
+      amount_paid_paise INTEGER NOT NULL DEFAULT 0 CHECK (amount_paid_paise >= 0),
+      subtotal_paise INTEGER NOT NULL DEFAULT 0 CHECK (subtotal_paise >= 0),
+      tax_paise INTEGER NOT NULL DEFAULT 0 CHECK (tax_paise >= 0),
+      total_paise INTEGER NOT NULL DEFAULT 0 CHECK (total_paise >= 0),
+      notes TEXT,
+      migration_source TEXT,
+      created_by TEXT REFERENCES users(username) ON UPDATE CASCADE ON DELETE SET NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_grocery_purchases_date
+      ON grocery_purchases(purchase_date DESC);
+    CREATE INDEX IF NOT EXISTS idx_grocery_purchases_list
+      ON grocery_purchases(buying_list_id, purchase_date DESC);
+    CREATE INDEX IF NOT EXISTS idx_grocery_purchases_vendor
+      ON grocery_purchases(vendor_id, purchase_date DESC);
+
     CREATE TABLE IF NOT EXISTS grocery_purchase_lines (
       id TEXT PRIMARY KEY,
+      purchase_id TEXT REFERENCES grocery_purchases(id) ON DELETE CASCADE,
       list_id TEXT REFERENCES grocery_lists(id) ON DELETE SET NULL,
       grocery_item_id TEXT REFERENCES grocery_items(id) ON UPDATE CASCADE ON DELETE SET NULL,
       item_name TEXT NOT NULL,
@@ -488,6 +556,7 @@ function runSchema(database: SqliteDatabase) {
       unit_price_paise INTEGER,
       total_paise INTEGER NOT NULL CHECK (total_paise >= 0),
       vendor TEXT,
+      vendor_id TEXT REFERENCES vendors(id) ON UPDATE CASCADE ON DELETE SET NULL,
       payment_method TEXT,
       notes TEXT,
       purchased_at INTEGER NOT NULL,
@@ -501,6 +570,74 @@ function runSchema(database: SqliteDatabase) {
       ON grocery_purchase_lines(active, purchased_at DESC);
     CREATE INDEX IF NOT EXISTS idx_grocery_purchase_lines_item
       ON grocery_purchase_lines(grocery_item_id, active, purchased_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_grocery_purchase_lines_purchase
+      ON grocery_purchase_lines(purchase_id);
+
+    CREATE TABLE IF NOT EXISTS expense_categories (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL COLLATE NOCASE,
+      slug TEXT NOT NULL,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      is_system INTEGER NOT NULL DEFAULT 0,
+      active INTEGER NOT NULL DEFAULT 1,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      deleted_at INTEGER
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_expense_categories_slug
+      ON expense_categories(slug) WHERE deleted_at IS NULL;
+
+    CREATE TABLE IF NOT EXISTS expenses (
+      id TEXT PRIMARY KEY,
+      category_id TEXT NOT NULL REFERENCES expense_categories(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+      amount_paise INTEGER NOT NULL CHECK (amount_paise >= 0),
+      expense_date INTEGER NOT NULL,
+      vendor_id TEXT REFERENCES vendors(id) ON UPDATE CASCADE ON DELETE SET NULL,
+      description TEXT,
+      payment_method TEXT,
+      invoice_number TEXT,
+      recurring_expense_id TEXT,
+      created_by TEXT REFERENCES users(username) ON UPDATE CASCADE ON DELETE SET NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      deleted_at INTEGER
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_expenses_date
+      ON expenses(expense_date DESC);
+    CREATE INDEX IF NOT EXISTS idx_expenses_category_date
+      ON expenses(category_id, expense_date DESC);
+
+    CREATE TABLE IF NOT EXISTS grocery_list_templates (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL COLLATE NOCASE,
+      description TEXT,
+      active INTEGER NOT NULL DEFAULT 1,
+      created_by TEXT REFERENCES users(username) ON UPDATE CASCADE ON DELETE SET NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      deleted_at INTEGER
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_grocery_list_templates_active_name
+      ON grocery_list_templates(active, name);
+
+    CREATE TABLE IF NOT EXISTS grocery_list_template_lines (
+      id TEXT PRIMARY KEY,
+      template_id TEXT NOT NULL REFERENCES grocery_list_templates(id) ON DELETE CASCADE,
+      grocery_item_id TEXT REFERENCES grocery_items(id) ON UPDATE CASCADE ON DELETE SET NULL,
+      item_name TEXT NOT NULL,
+      category TEXT,
+      default_quantity REAL,
+      unit TEXT NOT NULL,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_grocery_list_template_lines_template
+      ON grocery_list_template_lines(template_id, sort_order);
   `);
 
   const existing = database
@@ -723,6 +860,377 @@ function runSchema(database: SqliteDatabase) {
     `);
   });
 
+  runMigration(database, 13, "Rebuild grocery_lists lifecycle and print counters", () => {
+    if (columnExists(database, "grocery_lists", "list_type")) {
+      return;
+    }
+    // Must disable FKs: grocery_list_lines / grocery_purchase_lines reference grocery_lists.
+    database.pragma("foreign_keys = OFF");
+    try {
+      database.exec(`
+        CREATE TABLE grocery_lists_new (
+          id TEXT PRIMARY KEY,
+          title TEXT NOT NULL,
+          list_date INTEGER NOT NULL,
+          list_type TEXT NOT NULL DEFAULT 'regular'
+            CHECK (list_type IN ('regular', 'refill', 'emergency', 'custom')),
+          status TEXT NOT NULL DEFAULT 'draft'
+            CHECK (status IN ('draft', 'open', 'partial', 'completed', 'cancelled')),
+          notes TEXT,
+          created_by TEXT REFERENCES users(username) ON UPDATE CASCADE ON DELETE SET NULL,
+          updated_by TEXT REFERENCES users(username) ON UPDATE CASCADE ON DELETE SET NULL,
+          completed_at INTEGER,
+          print_count INTEGER NOT NULL DEFAULT 0,
+          last_printed_at INTEGER,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        );
+
+        INSERT INTO grocery_lists_new (
+          id, title, list_date, list_type, status, notes, created_by, updated_by,
+          completed_at, print_count, last_printed_at, created_at, updated_at
+        )
+        SELECT
+          id,
+          title,
+          list_date,
+          'regular',
+          CASE status
+            WHEN 'printed' THEN 'open'
+            WHEN 'purchased' THEN 'completed'
+            ELSE 'draft'
+          END,
+          NULL,
+          created_by,
+          NULL,
+          CASE WHEN status = 'purchased' THEN updated_at ELSE NULL END,
+          CASE WHEN status = 'printed' THEN 1 ELSE 0 END,
+          CASE WHEN status = 'printed' THEN updated_at ELSE NULL END,
+          created_at,
+          updated_at
+        FROM grocery_lists;
+
+        DROP TABLE grocery_lists;
+        ALTER TABLE grocery_lists_new RENAME TO grocery_lists;
+
+        CREATE INDEX IF NOT EXISTS idx_grocery_lists_date
+          ON grocery_lists(list_date DESC);
+        CREATE INDEX IF NOT EXISTS idx_grocery_lists_status_date
+          ON grocery_lists(status, list_date DESC);
+      `);
+    } finally {
+      database.pragma("foreign_keys = ON");
+    }
+  });
+
+  runMigration(database, 14, "Add planned vs purchased fields on grocery_list_lines", () => {
+    addColumnIfMissing(database, "grocery_list_lines", "estimated_unit_price_paise", "INTEGER");
+    addColumnIfMissing(database, "grocery_list_lines", "estimated_total_paise", "INTEGER");
+    addColumnIfMissing(database, "grocery_list_lines", "purchased_quantity", "REAL");
+    addColumnIfMissing(database, "grocery_list_lines", "purchased_unit_price_paise", "INTEGER");
+    addColumnIfMissing(database, "grocery_list_lines", "purchased_total_paise", "INTEGER");
+    addColumnIfMissing(
+      database,
+      "grocery_list_lines",
+      "line_status",
+      "TEXT NOT NULL DEFAULT 'pending'",
+    );
+  });
+
+  runMigration(database, 15, "Add vendors master and link purchase lines", () => {
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS vendors (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL COLLATE NOCASE,
+        contact_person TEXT,
+        phone TEXT,
+        email TEXT,
+        address TEXT,
+        gstin TEXT,
+        notes TEXT,
+        active INTEGER NOT NULL DEFAULT 1,
+        created_by TEXT REFERENCES users(username) ON UPDATE CASCADE ON DELETE SET NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        deleted_at INTEGER
+      );
+
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_vendors_name_active
+        ON vendors(name) WHERE deleted_at IS NULL;
+    `);
+    addColumnIfMissing(database, "grocery_purchase_lines", "vendor_id", "TEXT");
+    addColumnIfMissing(database, "grocery_items", "deleted_at", "INTEGER");
+
+    const at = Date.now();
+    const vendorRows = database
+      .prepare(
+        `SELECT DISTINCT trim(vendor) AS vendor_name
+         FROM grocery_purchase_lines
+         WHERE vendor IS NOT NULL AND trim(vendor) != ''`,
+      )
+      .all() as Array<{ vendor_name: string }>;
+
+    const insertVendor = database.prepare(
+      `INSERT INTO vendors (id, name, active, created_at, updated_at, deleted_at)
+       VALUES (?, ?, 1, ?, ?, NULL)
+       ON CONFLICT(id) DO NOTHING`,
+    );
+    const findVendor = database.prepare(
+      `SELECT id FROM vendors WHERE deleted_at IS NULL AND name = ? COLLATE NOCASE LIMIT 1`,
+    );
+    const updateLines = database.prepare(
+      `UPDATE grocery_purchase_lines
+       SET vendor_id = ?
+       WHERE vendor_id IS NULL AND trim(COALESCE(vendor, '')) = ?`,
+    );
+
+    for (const row of vendorRows) {
+      const name = String(row.vendor_name || "").trim();
+      if (!name) continue;
+      let existing = findVendor.get(name) as { id: string } | undefined;
+      if (!existing) {
+        const id = `vendor:${randomUUID()}`;
+        insertVendor.run(id, name, at, at);
+        existing = { id };
+      }
+      updateLines.run(existing.id, name);
+    }
+  });
+
+  runMigration(database, 16, "Add grocery_purchases headers without merging uncertain rows", () => {
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS grocery_purchases (
+        id TEXT PRIMARY KEY,
+        buying_list_id TEXT REFERENCES grocery_lists(id) ON DELETE SET NULL,
+        vendor_id TEXT REFERENCES vendors(id) ON UPDATE CASCADE ON DELETE SET NULL,
+        purchase_date INTEGER NOT NULL,
+        invoice_number TEXT,
+        payment_method TEXT,
+        status TEXT NOT NULL DEFAULT 'recorded'
+          CHECK (status IN ('recorded', 'voided')),
+        payment_status TEXT NOT NULL DEFAULT 'pending'
+          CHECK (payment_status IN ('pending', 'partial', 'paid')),
+        amount_paid_paise INTEGER NOT NULL DEFAULT 0 CHECK (amount_paid_paise >= 0),
+        subtotal_paise INTEGER NOT NULL DEFAULT 0 CHECK (subtotal_paise >= 0),
+        tax_paise INTEGER NOT NULL DEFAULT 0 CHECK (tax_paise >= 0),
+        total_paise INTEGER NOT NULL DEFAULT 0 CHECK (total_paise >= 0),
+        notes TEXT,
+        migration_source TEXT,
+        created_by TEXT REFERENCES users(username) ON UPDATE CASCADE ON DELETE SET NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_grocery_purchases_date
+        ON grocery_purchases(purchase_date DESC);
+      CREATE INDEX IF NOT EXISTS idx_grocery_purchases_list
+        ON grocery_purchases(buying_list_id, purchase_date DESC);
+      CREATE INDEX IF NOT EXISTS idx_grocery_purchases_vendor
+        ON grocery_purchases(vendor_id, purchase_date DESC);
+    `);
+    addColumnIfMissing(database, "grocery_purchase_lines", "purchase_id", "TEXT");
+
+    if (!columnExists(database, "grocery_purchase_lines", "purchase_id")) {
+      return;
+    }
+
+    const at = Date.now();
+    const insertPurchase = database.prepare(
+      `INSERT INTO grocery_purchases (
+         id, buying_list_id, vendor_id, purchase_date, invoice_number, payment_method,
+         status, payment_status, amount_paid_paise, subtotal_paise, tax_paise, total_paise,
+         notes, migration_source, created_by, created_at, updated_at
+       ) VALUES (?, ?, ?, ?, NULL, ?, 'recorded', 'paid', ?, ?, 0, ?, NULL, 'legacy_grocery_purchase', ?, ?, ?)`,
+    );
+    const linkLines = database.prepare(
+      `UPDATE grocery_purchase_lines SET purchase_id = ? WHERE id = ? AND purchase_id IS NULL`,
+    );
+
+    // Group only by (list_id, vendor_id) when list_id is present — never by date.
+    const grouped = database
+      .prepare(
+        `SELECT list_id, vendor_id,
+                MIN(purchased_at) AS purchase_date,
+                MAX(payment_method) AS payment_method,
+                MAX(created_by) AS created_by,
+                SUM(total_paise) AS total_paise,
+                GROUP_CONCAT(id) AS line_ids
+         FROM grocery_purchase_lines
+         WHERE purchase_id IS NULL AND list_id IS NOT NULL
+         GROUP BY list_id, COALESCE(vendor_id, '')`,
+      )
+      .all() as Array<{
+        list_id: string;
+        vendor_id: string | null;
+        purchase_date: number;
+        payment_method: string | null;
+        created_by: string | null;
+        total_paise: number;
+        line_ids: string;
+      }>;
+
+    for (const group of grouped) {
+      const purchaseId = `grocery-purchase-hdr:${randomUUID()}`;
+      const total = Number(group.total_paise || 0);
+      insertPurchase.run(
+        purchaseId,
+        group.list_id,
+        group.vendor_id || null,
+        Number(group.purchase_date || at),
+        group.payment_method || null,
+        total,
+        total,
+        total,
+        group.created_by || null,
+        at,
+        at,
+      );
+      for (const lineId of String(group.line_ids || "").split(",")) {
+        if (lineId) linkLines.run(purchaseId, lineId);
+      }
+    }
+
+    // Orphan lines (no list_id): one header each — never merge.
+    const orphans = database
+      .prepare(
+        `SELECT id, vendor_id, purchased_at, payment_method, created_by, total_paise
+         FROM grocery_purchase_lines
+         WHERE purchase_id IS NULL`,
+      )
+      .all() as Array<{
+        id: string;
+        vendor_id: string | null;
+        purchased_at: number;
+        payment_method: string | null;
+        created_by: string | null;
+        total_paise: number;
+      }>;
+
+    for (const orphan of orphans) {
+      const purchaseId = `grocery-purchase-hdr:${randomUUID()}`;
+      const total = Number(orphan.total_paise || 0);
+      insertPurchase.run(
+        purchaseId,
+        null,
+        orphan.vendor_id || null,
+        Number(orphan.purchased_at || at),
+        orphan.payment_method || null,
+        total,
+        total,
+        total,
+        orphan.created_by || null,
+        at,
+        at,
+      );
+      linkLines.run(purchaseId, orphan.id);
+    }
+
+    database.exec(`
+      CREATE INDEX IF NOT EXISTS idx_grocery_purchase_lines_purchase
+        ON grocery_purchase_lines(purchase_id);
+    `);
+  });
+
+  runMigration(database, 17, "Add expense categories and expenses", () => {
+    const at = Date.now();
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS expense_categories (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL COLLATE NOCASE,
+        slug TEXT NOT NULL,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        is_system INTEGER NOT NULL DEFAULT 0,
+        active INTEGER NOT NULL DEFAULT 1,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        deleted_at INTEGER
+      );
+
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_expense_categories_slug
+        ON expense_categories(slug) WHERE deleted_at IS NULL;
+
+      CREATE TABLE IF NOT EXISTS expenses (
+        id TEXT PRIMARY KEY,
+        category_id TEXT NOT NULL REFERENCES expense_categories(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+        amount_paise INTEGER NOT NULL CHECK (amount_paise >= 0),
+        expense_date INTEGER NOT NULL,
+        vendor_id TEXT REFERENCES vendors(id) ON UPDATE CASCADE ON DELETE SET NULL,
+        description TEXT,
+        payment_method TEXT,
+        invoice_number TEXT,
+        recurring_expense_id TEXT,
+        created_by TEXT REFERENCES users(username) ON UPDATE CASCADE ON DELETE SET NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        deleted_at INTEGER
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_expenses_date
+        ON expenses(expense_date DESC);
+      CREATE INDEX IF NOT EXISTS idx_expenses_category_date
+        ON expenses(category_id, expense_date DESC);
+    `);
+
+    const seed = [
+      ["Staff", "staff", 1],
+      ["Rent", "rent", 2],
+      ["Electricity", "electricity", 3],
+      ["Water", "water", 4],
+      ["Gas", "gas", 5],
+      ["Maintenance", "maintenance", 6],
+      ["Packaging", "packaging", 7],
+      ["Cleaning", "cleaning", 8],
+      ["Transportation", "transportation", 9],
+      ["Internet / Phone", "internet-phone", 10],
+      ["Software / Subscription", "software-subscription", 11],
+      ["Marketing", "marketing", 12],
+      ["Miscellaneous", "miscellaneous", 13],
+    ] as const;
+
+    const insertCategory = database.prepare(
+      `INSERT INTO expense_categories (id, name, slug, sort_order, is_system, active, created_at, updated_at, deleted_at)
+       VALUES (?, ?, ?, ?, 1, 1, ?, ?, NULL)
+       ON CONFLICT(id) DO NOTHING`,
+    );
+    for (const [name, slug, sortOrder] of seed) {
+      insertCategory.run(`expense-category:${slug}`, name, slug, sortOrder, at, at);
+    }
+  });
+
+  runMigration(database, 18, "Add grocery list templates", () => {
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS grocery_list_templates (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL COLLATE NOCASE,
+        description TEXT,
+        active INTEGER NOT NULL DEFAULT 1,
+        created_by TEXT REFERENCES users(username) ON UPDATE CASCADE ON DELETE SET NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        deleted_at INTEGER
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_grocery_list_templates_active_name
+        ON grocery_list_templates(active, name);
+
+      CREATE TABLE IF NOT EXISTS grocery_list_template_lines (
+        id TEXT PRIMARY KEY,
+        template_id TEXT NOT NULL REFERENCES grocery_list_templates(id) ON DELETE CASCADE,
+        grocery_item_id TEXT REFERENCES grocery_items(id) ON UPDATE CASCADE ON DELETE SET NULL,
+        item_name TEXT NOT NULL,
+        category TEXT,
+        default_quantity REAL,
+        unit TEXT NOT NULL,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_grocery_list_template_lines_template
+        ON grocery_list_template_lines(template_id, sort_order);
+    `);
+  });
+
   // Startup self-healing for pre-existing/partially migrated databases:
   // ensure area_id exists even if migration 12 was marked applied while the column was missing.
   addColumnIfMissing(database, "tables", "area_id", `TEXT NOT NULL DEFAULT '${DEFAULT_SEATING_AREA_ID}'`);
@@ -739,6 +1247,27 @@ function runSchema(database: SqliteDatabase) {
   database.exec(`
     CREATE INDEX IF NOT EXISTS idx_tables_area_sort
       ON tables(area_id, sort_order, id);
+  `);
+
+  // Grocery procurement columns: if migration 13 failed under FK constraints, later
+  // migrations never ran while base CREATE IF NOT EXISTS already added empty vendor/purchase tables.
+  addColumnIfMissing(database, "grocery_purchase_lines", "vendor_id", "TEXT");
+  addColumnIfMissing(database, "grocery_purchase_lines", "purchase_id", "TEXT");
+  addColumnIfMissing(database, "grocery_items", "deleted_at", "INTEGER");
+  addColumnIfMissing(database, "grocery_list_lines", "estimated_unit_price_paise", "INTEGER");
+  addColumnIfMissing(database, "grocery_list_lines", "estimated_total_paise", "INTEGER");
+  addColumnIfMissing(database, "grocery_list_lines", "purchased_quantity", "REAL");
+  addColumnIfMissing(database, "grocery_list_lines", "purchased_unit_price_paise", "INTEGER");
+  addColumnIfMissing(database, "grocery_list_lines", "purchased_total_paise", "INTEGER");
+  addColumnIfMissing(
+    database,
+    "grocery_list_lines",
+    "line_status",
+    "TEXT NOT NULL DEFAULT 'pending'",
+  );
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS idx_grocery_purchase_lines_purchase
+      ON grocery_purchase_lines(purchase_id);
   `);
 }
 

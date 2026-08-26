@@ -540,6 +540,81 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
     return posService.deleteGroceryPurchase(id, user.username);
   });
 
+  ipcMain.handle("pos:grocery:purchase-headers:list", (event, token: string | null, opts) => {
+    requireSession(event, token, ADMIN_ROLES);
+    return posService.listGroceryPurchaseHeaders(opts || {});
+  });
+
+  ipcMain.handle("pos:grocery:purchase-headers:void", (event, token: string | null, id: string) => {
+    const user = requireSession(event, token, ADMIN_ROLES);
+    return posService.voidGroceryPurchaseHeader(id, user.username);
+  });
+
+  ipcMain.handle("pos:vendors:list", (event, token: string | null, opts) => {
+    requireSession(event, token, ADMIN_ROLES);
+    return posService.listVendors(opts || {});
+  });
+
+  ipcMain.handle("pos:vendors:create", (event, token: string | null, payload) => {
+    const user = requireSession(event, token, ADMIN_ROLES);
+    return posService.createVendor(payload, user.username);
+  });
+
+  ipcMain.handle("pos:vendors:update", (event, token: string | null, id: string, updates) => {
+    const user = requireSession(event, token, ADMIN_ROLES);
+    return posService.updateVendor(id, updates, user.username);
+  });
+
+  ipcMain.handle("pos:vendors:delete", (event, token: string | null, id: string) => {
+    const user = requireSession(event, token, ADMIN_ROLES);
+    return posService.deleteVendor(id, user.username);
+  });
+
+  ipcMain.handle("pos:expenses:categories:list", (event, token: string | null, opts) => {
+    requireSession(event, token, ADMIN_ROLES);
+    return posService.listExpenseCategories(opts || {});
+  });
+
+  ipcMain.handle("pos:expenses:list", (event, token: string | null, opts) => {
+    requireSession(event, token, ADMIN_ROLES);
+    return posService.listExpenses(opts || {});
+  });
+
+  ipcMain.handle("pos:expenses:create", (event, token: string | null, payload) => {
+    const user = requireSession(event, token, ADMIN_ROLES);
+    return posService.createExpense(payload, user.username);
+  });
+
+  ipcMain.handle("pos:expenses:update", (event, token: string | null, id: string, updates) => {
+    const user = requireSession(event, token, ADMIN_ROLES);
+    return posService.updateExpense(id, updates, user.username);
+  });
+
+  ipcMain.handle("pos:expenses:void", (event, token: string | null, id: string) => {
+    const user = requireSession(event, token, ADMIN_ROLES);
+    return posService.voidExpense(id, user.username);
+  });
+
+  ipcMain.handle("pos:grocery:templates:list", (event, token: string | null) => {
+    requireSession(event, token, ADMIN_ROLES);
+    return posService.listBuyingListTemplates();
+  });
+
+  ipcMain.handle("pos:grocery:templates:create", (event, token: string | null, payload) => {
+    const user = requireSession(event, token, ADMIN_ROLES);
+    return posService.createBuyingListTemplate(payload, user.username);
+  });
+
+  ipcMain.handle("pos:grocery:templates:delete", (event, token: string | null, id: string) => {
+    const user = requireSession(event, token, ADMIN_ROLES);
+    return posService.deleteBuyingListTemplate(id, user.username);
+  });
+
+  ipcMain.handle("pos:reports:profitability", (event, token: string | null, opts) => {
+    requireSession(event, token, ADMIN_ROLES);
+    return posService.getProfitabilitySummary(opts || {});
+  });
+
   ipcMain.handle(
     "pos:audit:create",
     (

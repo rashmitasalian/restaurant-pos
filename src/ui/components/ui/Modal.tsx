@@ -1,5 +1,7 @@
 import React from "react";
+import { X } from "lucide-react";
 import { useFocusTrap } from "../../hooks/useFocusTrap";
+import { Icon } from "./Icon";
 
 export function Modal({
   open,
@@ -29,12 +31,17 @@ export function Modal({
         className={`ui-dialog${large ? " ui-dialog-lg" : ""}`}
         onClick={(event) => event.stopPropagation()}
       >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-          <h3 id="ui-dialog-title" style={{ margin: 0, fontSize: 17, fontWeight: 800 }}>
+        <div className="ui-dialog-header">
+          <h3 id="ui-dialog-title" className="ui-dialog-title">
             {title}
           </h3>
-          <button type="button" className="ui-btn ui-btn-ghost" onClick={onClose} aria-label="Close">
-            Close
+          <button
+            type="button"
+            className="ui-dialog-close"
+            onClick={onClose}
+            aria-label="Close"
+          >
+            <Icon icon={X} size="md" />
           </button>
         </div>
         {children}

@@ -3,11 +3,12 @@ import {
   getSalesSummary,
   getPaymentBreakdown,
   getProductSalesReport,
+  getProfitabilitySummary,
   getConfigGst,
   getConfigBranding,
 } from "../../../app/db/posRepository";
 import { ENV } from "../../../config/env";
-import type { ProductSalesReportDto } from "../../../shared/pos";
+import type { ProductSalesReportDto, ProfitabilitySummaryDto } from "../../../shared/pos";
 import {
   DEFAULT_GST_CONFIG,
   formatGstRate,
@@ -19,13 +20,20 @@ import { DataTable } from "../../components/ui/DataTable";
 import { Button } from "../../components/ui/Button";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { Stat } from "../../components/ui/Stat";
+import { SegmentedControl } from "../../components/ui/SegmentedControl";
 import { Icon } from "../../components/ui/Icon";
 import { FileDown } from "lucide-react";
 import "./Reports.module.css";
 
 type RangePreset = "today" | "yesterday" | "thisWeek" | "thisMonth" | "custom";
+type ReportTab = "sales" | "profitability";
 type CategoryMetric = "sales" | "units";
 type ItemSort = "units" | "sales" | "name";
+
+const REPORT_TABS = [
+  { id: "sales", label: "Sales" },
+  { id: "profitability", label: "Profitability" },
+];
 
 const ITEM_PAGE_SIZE = 25;
 
@@ -174,6 +182,9 @@ export default function Reports() {
   const initRange = getPresetRange("today");
   const [fromTs, setFromTs] = React.useState(initRange.from);
   const [toTs, setToTs] = React.useState(initRange.to);
+  const [reportTab, setReportTab] = React.useState<ReportTab>("sales");
+  const [profitability, setProfitability] = React.useState<ProfitabilitySummaryDto | null>(null);
+  const [profitLoading, setProfitLoading] = React.useState(false);
 
   React.useEffect(() => {
     setVisibleItemCount(ITEM_PAGE_SIZE);
@@ -205,6 +216,9 @@ export default function Reports() {
   };
 
   React.useEffect(() => {
+    if (reportTab !== "sales") {
+      return;
+    }
     (async () => {
       try {
         setLoading(true);
@@ -258,7 +272,25 @@ export default function Reports() {
         setLoading(false);
       }
     })();
-  }, [fromTs, toTs]);
+  }, [fromTs, toTs, reportTab]);
+
+  React.useEffect(() => {
+    if (reportTab !== "profitability") {
+      return;
+    }
+    (async () => {
+      try {
+        setProfitLoading(true);
+        const summary = await getProfitabilitySummary({ from: fromTs, to: toTs });
+        setProfitability(summary);
+      } catch (e) {
+        console.error("Failed to load profitability:", e);
+        setProfitability(null);
+      } finally {
+        setProfitLoading(false);
+      }
+    })();
+  }, [fromTs, toTs, reportTab]);
 
   const cashPercent = sales > 0 ? Math.round((cashAmount / sales) * 100) : 0;
   const upiPercent = sales > 0 ? Math.round((upiAmount / sales) * 100) : 0;
@@ -585,13 +617,26 @@ setToTs(d.getTime());
               </>
             )}
 
-            <Button variant="primary" onClick={handleExport} disabled={loading || exporting}>
-              {exporting ? "Saving…" : <><Icon icon={FileDown} size="sm" /> Export PDF</>}
-            </Button>
+            {reportTab === "sales" && (
+              <Button variant="primary" onClick={handleExport} disabled={loading || exporting}>
+                {exporting ? "Saving…" : <><Icon icon={FileDown} size="sm" /> Export PDF</>}
+              </Button>
+            )}
             </div>
           }
         />
 
+        <div className="rpt-tabs">
+          <SegmentedControl
+            ariaLabel="Report sections"
+            options={REPORT_TABS}
+            value={reportTab}
+            onChange={(id) => setReportTab(id as ReportTab)}
+          />
+        </div>
+
+        {reportTab === "sales" && (
+          <>
         <div className="rpt-kpi-grid">
           <Stat
             primary
@@ -830,6 +875,79 @@ setToTs(d.getTime());
             )}
           </div>
         </div>
+          </>
+        )}
+
+        {reportTab === "profitability" && (
+          <div className="rpt-profit">
+            {profitLoading ? (
+              <div className="rpt-empty-state">Loading profitability…</div>
+            ) : !profitability ? (
+              <div className="rpt-empty-state">Could not load profitability for this range</div>
+            ) : (
+              <>
+                <div className="rpt-kpi-grid rpt-profit-kpi">
+                  <Stat
+                    primary
+                    label="Revenue"
+                    value={formatCurrency(profitability.revenue)}
+                    sub={rangeLabel(preset, fromTs, toTs)}
+                  />
+                  <Stat
+                    label="Food Cost"
+                    value={formatCurrency(profitability.foodCost.amount)}
+                    sub={
+                      profitability.foodCost.basis === "purchases"
+                        ? "Based on recorded purchases. Inventory adjustment unavailable."
+                        : "Inventory-adjusted food cost"
+                    }
+                  />
+                  <Stat
+                    label="Gross Contribution"
+                    value={formatCurrency(profitability.grossContribution)}
+                    sub="Revenue − Food Cost"
+                  />
+                  <Stat
+                    label="Operating Expenses"
+                    value={formatCurrency(profitability.operatingExpenses)}
+                    sub="Recorded operating costs"
+                  />
+                  <Stat
+                    primary
+                    label="Estimated Operating Profit"
+                    value={formatCurrency(profitability.estimatedOperatingProfit)}
+                    sub={
+                      profitability.operatingMarginPercent != null
+                        ? `${profitability.operatingMarginPercent}% operating margin`
+                        : "Gross contribution − operating expenses"
+                    }
+                  />
+                </div>
+
+                <p className="rpt-profit-disclaimer">{profitability.disclaimer}</p>
+
+                <div className="rpt-card" style={{ padding: 0 }}>
+                  <div className="rpt-section-title">Expense Breakdown</div>
+                  {profitability.expenseBreakdown.length === 0 ? (
+                    <div className="rpt-empty-state">No costs recorded for this range</div>
+                  ) : (
+                    <div className="rpt-profit-breakdown">
+                      {profitability.expenseBreakdown.map((row) => (
+                        <div key={row.categoryId} className="rpt-profit-row">
+                          <span className="rpt-profit-cat">{row.categoryName}</span>
+                          <span className="rpt-profit-amt">{formatCurrency(row.amount)}</span>
+                          <span className="rpt-profit-pct">
+                            {row.percentOfRevenue != null ? `${row.percentOfRevenue}% of revenue` : "—"}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

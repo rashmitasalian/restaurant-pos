@@ -89,13 +89,13 @@
 .formGrid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
+  gap: 10px;
 }
 
 .formGridWide {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 12px;
+  gap: 10px;
 }
 
 .span2 {
@@ -229,11 +229,13 @@
 }
 
 .addItemPanel {
-  margin-bottom: 12px;
-  padding: 12px;
-  border: 1px solid var(--pos-border-light, var(--pos-surface-sunken));
-  border-radius: 8px;
-  background: var(--pos-saffron-tint);
+  margin-bottom: 10px;
+  padding: 10px;
+  border: 1px solid var(--pos-line);
+  border-radius: var(--pos-r-btn);
+  background: var(--pos-surface-sunken);
+  display: grid;
+  gap: 8px;
 }
 
 .addItemFields {
@@ -321,12 +323,12 @@
 .listLine {
   display: grid;
   grid-template-columns: minmax(220px, 2fr) minmax(90px, 0.6fr) minmax(96px, 0.7fr) minmax(210px, 210px);
-  gap: 10px;
-  align-items: end;
+  gap: 8px;
+  align-items: center;
   min-width: 0;
-  padding: 12px;
+  padding: 8px 10px;
   border: 1px solid var(--pos-border-light, var(--pos-surface-sunken));
-  border-radius: 8px;
+  border-radius: var(--pos-r-btn);
   background: var(--pos-surface);
 }
 
@@ -546,7 +548,8 @@
 
   .formGrid,
   .formGridWide,
-  .listLine {
+  .listLine,
+  .modalFormRow {
     grid-template-columns: 1fr;
   }
 
@@ -576,4 +579,228 @@
   .listLineActions {
     flex-wrap: wrap;
   }
+
+  .toolbarRow {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .sessionCard {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .sessionActions {
+    justify-content: flex-start;
+  }
+
+  .editorHeader {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .editorPane {
+    padding: 14px;
+  }
+}
+
+/* Buying Lists dashboard + editor */
+
+.modalForm {
+  gap: 10px;
+}
+
+.modalFormRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.modalStartFrom {
+  display: grid;
+  gap: 6px;
+}
+
+.modalStartFrom .recordModeOptions {
+  justify-content: flex-start;
+}
+
+.toolbarRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.todaySummary {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.todaySummary strong {
+  color: var(--pos-tx, var(--pos-tx));
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.todaySummary span {
+  color: var(--pos-tx-sub, var(--pos-tx-sub));
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.filterBar {
+  display: flex;
+  align-items: end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.presetRow {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.historyStack {
+  display: grid;
+  gap: 12px;
+}
+
+.dayGroup {
+  display: grid;
+  gap: 8px;
+}
+
+.dayHeading {
+  margin: 0;
+  color: var(--pos-muted, var(--pos-tx-muted));
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.sessionStack {
+  display: grid;
+  gap: 8px;
+}
+
+.sessionCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--pos-border, var(--pos-line));
+  border-radius: var(--pos-r-btn);
+  background: var(--pos-surface);
+}
+
+.sessionMain {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.sessionTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.sessionTitle {
+  margin: 0;
+  color: var(--pos-tx, var(--pos-tx));
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.sessionMeta {
+  color: var(--pos-tx-sub, var(--pos-tx-sub));
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.sessionStats {
+  color: var(--pos-tx-sec, var(--pos-tx-sec));
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.sessionActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.editorToolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.varianceUp {
+  color: var(--pos-danger-text, var(--pos-danger));
+  font-weight: 800;
+}
+
+.varianceDown {
+  color: var(--pos-success-text, var(--pos-success));
+  font-weight: 800;
+}
+
+.editorOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  background: color-mix(in srgb, var(--pos-bg, #0f172a) 35%, transparent);
+  padding: 18px;
+}
+
+.editorPane {
+  display: flex;
+  flex-direction: column;
+  width: min(1100px, 100%);
+  max-height: 100%;
+  margin: 0 auto;
+  overflow: hidden;
+  border: 1px solid var(--pos-border, var(--pos-line));
+  border-radius: 12px;
+  background: var(--pos-bg, var(--pos-surface));
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.18);
+  padding: 18px 20px;
+}
+
+.editorHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--pos-border-light, var(--pos-surface-sunken));
+  flex-shrink: 0;
+}
+
+.editorTitle {
+  margin: 0;
+  color: var(--pos-tx, var(--pos-tx));
+  font-size: 20px;
+  font-weight: 900;
+}
+
+.editorBody {
+  display: grid;
+  gap: 14px;
+  overflow: auto;
+  padding-top: 14px;
+  min-height: 0;
 }

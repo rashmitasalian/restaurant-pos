@@ -250,6 +250,19 @@ export type GroceryPriceHintDto = {
   averageUnit?: GroceryUnit | null;
 };
 
+export type GroceryListStatus = "draft" | "open" | "partial" | "completed" | "cancelled";
+export type GroceryListType = "regular" | "refill" | "emergency" | "custom";
+export type GroceryListLineStatus = "pending" | "partial" | "purchased" | "skipped";
+export type GroceryPurchaseStatus = "recorded" | "voided";
+export type GroceryPaymentStatus = "pending" | "partial" | "paid";
+export type GroceryPaymentMethod =
+  | "cash"
+  | "upi"
+  | "card"
+  | "bank_transfer"
+  | "credit"
+  | "other";
+
 export type GroceryItemDto = {
   _id: string;
   id: string;
@@ -262,6 +275,7 @@ export type GroceryItemDto = {
   active: boolean;
   createdAt: number;
   updatedAt: number;
+  deletedAt?: number | null;
   priceHint?: GroceryPriceHintDto;
 };
 
@@ -274,6 +288,12 @@ export type GroceryListLineDto = {
   unit: GroceryUnit;
   vendorHint?: string | null;
   sortOrder?: number;
+  estimatedUnitPrice?: number | null;
+  estimatedTotal?: number | null;
+  purchasedQuantity?: number | null;
+  purchasedUnitPrice?: number | null;
+  purchasedTotal?: number | null;
+  lineStatus?: GroceryListLineStatus;
 };
 
 export type GroceryListDto = {
@@ -282,17 +302,25 @@ export type GroceryListDto = {
   type: "grocery-list";
   title: string;
   listDate: number;
-  status: "draft" | "printed" | "purchased";
+  listType: GroceryListType;
+  status: GroceryListStatus;
+  notes?: string | null;
   lines: GroceryListLineDto[];
   createdBy?: string | null;
+  updatedBy?: string | null;
+  completedAt?: number | null;
+  printCount: number;
+  lastPrintedAt?: number | null;
   createdAt: number;
   updatedAt: number;
 };
 
+/** @deprecated Prefer GroceryPurchaseDto header + lines. Kept for line-level IPC compatibility. */
 export type GroceryPurchaseLineDto = {
   _id: string;
   id: string;
   type: "grocery-purchase";
+  purchaseId?: string | null;
   listId?: string | null;
   groceryItemId?: string | null;
   itemName: string;
@@ -302,6 +330,7 @@ export type GroceryPurchaseLineDto = {
   unitPrice?: number | null;
   totalAmount: number;
   vendor?: string | null;
+  vendorId?: string | null;
   paymentMethod?: string | null;
   notes?: string | null;
   purchasedAt: number;
@@ -309,6 +338,107 @@ export type GroceryPurchaseLineDto = {
   createdAt: number;
   updatedAt: number;
   active: boolean;
+};
+
+export type VendorDto = {
+  _id: string;
+  id: string;
+  type: "vendor";
+  name: string;
+  contactPerson?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  address?: string | null;
+  gstin?: string | null;
+  notes?: string | null;
+  active: boolean;
+  createdBy?: string | null;
+  createdAt: number;
+  updatedAt: number;
+  deletedAt?: number | null;
+};
+
+export type GroceryPurchaseDto = {
+  _id: string;
+  id: string;
+  type: "grocery-purchase-header";
+  buyingListId?: string | null;
+  vendorId?: string | null;
+  vendorName?: string | null;
+  purchaseDate: number;
+  invoiceNumber?: string | null;
+  paymentMethod?: string | null;
+  status: GroceryPurchaseStatus;
+  paymentStatus: GroceryPaymentStatus;
+  amountPaid: number;
+  outstanding: number;
+  subtotal: number;
+  tax: number;
+  total: number;
+  notes?: string | null;
+  migrationSource?: string | null;
+  lines: GroceryPurchaseLineDto[];
+  createdBy?: string | null;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type ExpenseCategoryDto = {
+  _id: string;
+  id: string;
+  type: "expense-category";
+  name: string;
+  slug: string;
+  sortOrder: number;
+  isSystem: boolean;
+  active: boolean;
+  createdAt: number;
+  updatedAt: number;
+  deletedAt?: number | null;
+};
+
+export type ExpenseDto = {
+  _id: string;
+  id: string;
+  type: "expense";
+  categoryId: string;
+  categoryName?: string | null;
+  amount: number;
+  expenseDate: number;
+  vendorId?: string | null;
+  vendorName?: string | null;
+  description?: string | null;
+  paymentMethod?: string | null;
+  invoiceNumber?: string | null;
+  recurringExpenseId?: string | null;
+  createdBy?: string | null;
+  createdAt: number;
+  updatedAt: number;
+  deletedAt?: number | null;
+};
+
+export type BuyingListTemplateLineDto = {
+  id: string;
+  groceryItemId?: string | null;
+  itemName: string;
+  category?: string | null;
+  defaultQuantity?: number | null;
+  unit: GroceryUnit;
+  sortOrder?: number;
+};
+
+export type BuyingListTemplateDto = {
+  _id: string;
+  id: string;
+  type: "grocery-list-template";
+  name: string;
+  description?: string | null;
+  active: boolean;
+  lines: BuyingListTemplateLineDto[];
+  createdBy?: string | null;
+  createdAt: number;
+  updatedAt: number;
+  deletedAt?: number | null;
 };
 
 export type PosDoc =
@@ -324,7 +454,12 @@ export type PosDoc =
   | PrintJobDto
   | GroceryItemDto
   | GroceryListDto
-  | GroceryPurchaseLineDto;
+  | GroceryPurchaseLineDto
+  | GroceryPurchaseDto
+  | VendorDto
+  | ExpenseDto
+  | ExpenseCategoryDto
+  | BuyingListTemplateDto;
 
 export type SalesSummaryDto = {
   total: number;
@@ -372,6 +507,30 @@ export type FoodCostSummaryDto = {
     amount: number;
     purchaseCount: number;
   }>;
+};
+
+export type ProfitabilitySummaryDto = {
+  from: number;
+  to: number;
+  revenue: number;
+  foodCost: {
+    openingInventory: number | null;
+    purchases: number;
+    closingInventory: number | null;
+    amount: number;
+    basis: "purchases" | "inventory_adjusted";
+  };
+  grossContribution: number;
+  operatingExpenses: number;
+  expenseBreakdown: Array<{
+    categoryId: string;
+    categoryName: string;
+    amount: number;
+    percentOfRevenue: number | null;
+  }>;
+  estimatedOperatingProfit: number;
+  operatingMarginPercent: number | null;
+  disclaimer: string;
 };
 
 export type PaidOrderQueryDto = {

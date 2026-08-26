@@ -138,6 +138,7 @@ declare global {
         productSales: (opts?: any) => Promise<any>;
         orderHistory: (opts?: any) => Promise<any[]>;
         foodCostSummary: (opts?: any) => Promise<any>;
+        profitability: (opts?: any) => Promise<any>;
       };
       grocery?: {
         listItems: (opts?: any) => Promise<any[]>;
@@ -153,6 +154,24 @@ declare global {
         createPurchase: (payload: any) => Promise<any>;
         updatePurchase: (id: string, updates: any) => Promise<any>;
         deletePurchase: (id: string) => Promise<any>;
+        listPurchaseHeaders: (opts?: any) => Promise<any[]>;
+        voidPurchaseHeader: (id: string) => Promise<any>;
+        listTemplates: () => Promise<any[]>;
+        createTemplate: (payload: any) => Promise<any>;
+        deleteTemplate: (id: string) => Promise<any>;
+      };
+      vendors?: {
+        list: (opts?: any) => Promise<any[]>;
+        create: (payload: any) => Promise<any>;
+        update: (id: string, updates: any) => Promise<any>;
+        delete: (id: string) => Promise<any>;
+      };
+      expenses?: {
+        listCategories: (opts?: any) => Promise<any[]>;
+        list: (opts?: any) => Promise<any[]>;
+        create: (payload: any) => Promise<any>;
+        update: (id: string, updates: any) => Promise<any>;
+        void: (id: string) => Promise<any>;
       };
       audit?: {
         create: (

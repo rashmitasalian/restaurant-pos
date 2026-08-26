@@ -190,6 +190,7 @@ contextBridge.exposeInMainWorld("pos", {
     productSales: (opts?: any) => authInvoke("pos:reports:product-sales", opts),
     orderHistory: (opts?: any) => authInvoke("pos:reports:order-history", opts),
     foodCostSummary: (opts?: any) => authInvoke("pos:reports:food-cost-summary", opts),
+    profitability: (opts?: any) => authInvoke("pos:reports:profitability", opts),
   },
   grocery: {
     listItems: (opts?: any) => authInvoke("pos:grocery:items:list", opts),
@@ -206,6 +207,24 @@ contextBridge.exposeInMainWorld("pos", {
     updatePurchase: (id: string, updates: any) =>
       authInvoke("pos:grocery:purchases:update", id, updates),
     deletePurchase: (id: string) => authInvoke("pos:grocery:purchases:delete", id),
+    listPurchaseHeaders: (opts?: any) => authInvoke("pos:grocery:purchase-headers:list", opts),
+    voidPurchaseHeader: (id: string) => authInvoke("pos:grocery:purchase-headers:void", id),
+    listTemplates: () => authInvoke("pos:grocery:templates:list"),
+    createTemplate: (payload: any) => authInvoke("pos:grocery:templates:create", payload),
+    deleteTemplate: (id: string) => authInvoke("pos:grocery:templates:delete", id),
+  },
+  vendors: {
+    list: (opts?: any) => authInvoke("pos:vendors:list", opts),
+    create: (payload: any) => authInvoke("pos:vendors:create", payload),
+    update: (id: string, updates: any) => authInvoke("pos:vendors:update", id, updates),
+    delete: (id: string) => authInvoke("pos:vendors:delete", id),
+  },
+  expenses: {
+    listCategories: (opts?: any) => authInvoke("pos:expenses:categories:list", opts),
+    list: (opts?: any) => authInvoke("pos:expenses:list", opts),
+    create: (payload: any) => authInvoke("pos:expenses:create", payload),
+    update: (id: string, updates: any) => authInvoke("pos:expenses:update", id, updates),
+    void: (id: string) => authInvoke("pos:expenses:void", id),
   },
   audit: {
     create: (action: string, orderId?: string | null, user?: string | null, detail?: any) =>

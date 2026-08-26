@@ -1,3 +1,4 @@
+export { Drawer } from "./Drawer";
 export { Icon } from "./Icon";
 export { Button } from "./Button";
 export { Card } from "./Card";

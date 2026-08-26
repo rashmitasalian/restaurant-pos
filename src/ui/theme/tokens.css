@@ -97,7 +97,7 @@
   --pos-space-6: 24px;
   --pos-space-8: 32px;
 
-  /* 6 / 8 / 10 shape language (max 10px) */
+  /* 6 / 8 / 10 shape language (max 10px) — inputs/buttons share btn radius */
   --pos-r-sm: 6px;
   --pos-r-md: 8px;
   --pos-r-lg: 10px;
@@ -105,7 +105,7 @@
   --pos-r-pill: 99px;
   --pos-r-card: var(--pos-r-lg);
   --pos-r-btn: var(--pos-r-md);
-  --pos-r-input: var(--pos-r-md);
+  --pos-r-input: var(--pos-r-btn);
   --pos-r-badge: var(--pos-r-pill);
 
   --pos-type-11: 11px;
