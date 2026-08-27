@@ -1,8 +1,10 @@
 import React from "react";
 import {
+  listGroceryLists,
   listGroceryPurchaseHeaders,
   listGroceryPurchases,
   voidGroceryPurchaseHeader,
+  type GroceryListDoc,
   type GroceryPurchaseLineDoc,
 } from "../../../../app/db/posRepository";
 import type { GroceryPurchaseDto } from "../../../../shared/pos";
@@ -13,6 +15,8 @@ import { DataTable } from "../../../components/ui/DataTable";
 import { Drawer } from "../../../components/ui/Drawer";
 import { EmptyState } from "../../../components/ui/EmptyState";
 import { Input } from "../../../components/ui/Input";
+import { Modal } from "../../../components/ui/Modal";
+import { Select } from "../../../components/ui/Select";
 import {
   formatCurrency,
   formatListDate,
@@ -22,6 +26,7 @@ import {
   type HistoryPreset,
 } from "../groceryUtils";
 import styles from "../Grocery.module.css";
+import { RecordPurchaseFlow } from "./RecordPurchaseFlow";
 
 function shortId(id?: string | null) {
   if (!id) return "—";
@@ -46,6 +51,10 @@ export function PurchasesView() {
   const [selected, setSelected] = React.useState<GroceryPurchaseDto | null>(null);
   const [lines, setLines] = React.useState<GroceryPurchaseLineDoc[]>([]);
   const [linesLoading, setLinesLoading] = React.useState(false);
+  const [pickListOpen, setPickListOpen] = React.useState(false);
+  const [openLists, setOpenLists] = React.useState<GroceryListDoc[]>([]);
+  const [pickedListId, setPickedListId] = React.useState("");
+  const [purchaseListId, setPurchaseListId] = React.useState<string | null>(null);
 
   const applyPreset = (next: HistoryPreset) => {
     setPreset(next);
@@ -75,6 +84,21 @@ export function PurchasesView() {
   React.useEffect(() => {
     void load();
   }, [load]);
+
+  const openRecordPurchase = async () => {
+    try {
+      const range = getHistoryRange("active");
+      const lists = await listGroceryLists({ from: range.from, to: range.to, limit: 80 });
+      const eligible = lists.filter(
+        (list) => list.status !== "cancelled" && list.status !== "completed",
+      );
+      setOpenLists(eligible);
+      setPickedListId(eligible[0]?.id || "");
+      setPickListOpen(true);
+    } catch (error) {
+      setStatus(validationMessage(error, "Could not load buying lists"));
+    }
+  };
 
   const openDetail = async (header: GroceryPurchaseDto) => {
     setSelected(header);
@@ -112,7 +136,7 @@ export function PurchasesView() {
     setSaving(true);
     try {
       await voidGroceryPurchaseHeader(header.id);
-      setStatus("Purchase voided");
+      setStatus("Purchase voided — linked buying list updated");
       if (selected?.id === header.id) {
         setSelected(null);
         setLines([]);
@@ -125,8 +149,25 @@ export function PurchasesView() {
     }
   };
 
+  const recordedSpend = headers
+    .filter((h) => h.status !== "voided")
+    .reduce((sum, h) => sum + Number(h.total || 0), 0);
+
   return (
     <div className={styles.listPage}>
+      <div className={styles.toolbarRow}>
+        <div className={styles.todaySummary}>
+          <strong>Purchases</strong>
+          <span>
+            {headers.filter((h) => h.status !== "voided").length} recorded ·{" "}
+            {formatCurrency(recordedSpend)} spend in range
+          </span>
+        </div>
+        <Button variant="primary" onClick={() => void openRecordPurchase()}>
+          + Record Purchase
+        </Button>
+      </div>
+
       {status && <div className={styles.status}>{status}</div>}
 
       <div className={styles.dateControls}>
@@ -178,7 +219,9 @@ export function PurchasesView() {
       ) : headers.length === 0 ? (
         <EmptyState
           title="No purchases in this range"
-          text="Record purchases from a buying list, or widen the date filter."
+          text="Record a purchase from an open buying list, or widen the date filter."
+          actionLabel="+ Record Purchase"
+          onAction={() => void openRecordPurchase()}
         />
       ) : (
         <DataTable
@@ -186,13 +229,13 @@ export function PurchasesView() {
           rows={headers.map((header) => [
             <div key={`${header.id}-date`}>
               {formatListDate(header.purchaseDate)}
-                  {header.migrationSource === "legacy_grocery_purchase" ? (
+              {header.migrationSource === "legacy_grocery_purchase" ? (
                 <div style={{ marginTop: 4 }}>
                   <Badge tone="attention">Legacy purchase</Badge>
                 </div>
               ) : null}
             </div>,
-            header.vendorName || "—",
+            header.vendorName || "Not specified",
             formatCurrency(header.total),
             <Badge key={`${header.id}-pay`} tone={paymentTone(header.paymentStatus)}>
               {header.paymentStatus}
@@ -246,7 +289,7 @@ export function PurchasesView() {
               <div className={styles.kpi}>
                 <div className={styles.kpiLabel}>Vendor</div>
                 <div className={styles.kpiValue} style={{ fontSize: 16 }}>
-                  {selected.vendorName || "—"}
+                  {selected.vendorName || "Not specified"}
                 </div>
               </div>
               <div className={styles.kpi}>
@@ -259,9 +302,6 @@ export function PurchasesView() {
             <div className={styles.actions}>
               <Badge tone={paymentTone(selected.paymentStatus)}>{selected.paymentStatus}</Badge>
               <Badge tone={selected.status === "voided" ? "danger" : "success"}>{selected.status}</Badge>
-              {selected.migrationSource === "legacy_grocery_purchase" ? (
-                <Badge tone="attention">Legacy</Badge>
-              ) : null}
             </div>
             <div className="pos-sect-label">Line items</div>
             {linesLoading ? (
@@ -281,6 +321,54 @@ export function PurchasesView() {
           </div>
         )}
       </Drawer>
+
+      <Modal open={pickListOpen} title="Record Purchase" onClose={() => setPickListOpen(false)}>
+        <div className="ui-form-stack">
+          {openLists.length === 0 ? (
+            <div className={styles.hint}>
+              No open buying lists in the active range. Create or reopen a list first.
+            </div>
+          ) : (
+            <Select
+              label="Buying list"
+              value={pickedListId}
+              onChange={(e) => setPickedListId(e.target.value)}
+            >
+              {openLists.map((list) => (
+                <option key={list.id} value={list.id}>
+                  {list.title} · {formatListDate(list.listDate)} · {list.status}
+                </option>
+              ))}
+            </Select>
+          )}
+          <div className="ui-form-actions">
+            <Button variant="secondary" onClick={() => setPickListOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              disabled={!pickedListId}
+              onClick={() => {
+                setPickListOpen(false);
+                setPurchaseListId(pickedListId);
+              }}
+            >
+              Continue
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {purchaseListId && (
+        <RecordPurchaseFlow
+          listId={purchaseListId}
+          onClose={() => setPurchaseListId(null)}
+          onChanged={async () => {
+            await load();
+            setStatus("Purchase recorded");
+          }}
+        />
+      )}
     </div>
   );
 }

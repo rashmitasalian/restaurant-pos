@@ -487,7 +487,17 @@ function recalcGroceryListStatus(database: Database.Database, listId: string | n
   const list = database.prepare("SELECT * FROM grocery_lists WHERE id = ?").get(listId) as any;
   if (!list) return;
   const current = normalizeGroceryListStatus(list.status);
-  if (current === "cancelled" || current === "draft") return;
+  if (current === "cancelled") return;
+  // Draft stays draft until a purchase exists — then promote via derivation below.
+  if (current === "draft") {
+    const anyPurchase = database
+      .prepare(
+        `SELECT id FROM grocery_purchases
+         WHERE buying_list_id = ? AND status = 'recorded' LIMIT 1`,
+      )
+      .get(listId) as { id: string } | undefined;
+    if (!anyPurchase) return;
+  }
 
   const lines = database
     .prepare(

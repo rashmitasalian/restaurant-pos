@@ -804,3 +804,233 @@
   padding-top: 14px;
   min-height: 0;
 }
+
+.purchasedCell {
+  display: flex;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--pos-tx-sub);
+}
+
+.vendorPicker {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: end;
+}
+
+.moreWrap {
+  position: relative;
+}
+
+.moreMenu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 20;
+  min-width: 180px;
+  display: grid;
+  gap: 2px;
+  padding: 6px;
+  border: 1px solid var(--pos-line);
+  border-radius: var(--pos-r-sm);
+  background: var(--pos-surface);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.12);
+}
+
+.moreItem {
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--pos-tx);
+  cursor: pointer;
+}
+
+.moreItem:hover {
+  background: var(--pos-surface-hover);
+}
+
+.moreDanger {
+  color: var(--pos-danger);
+}
+
+.progressTrack {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--pos-surface-sunken);
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.progressFill {
+  height: 100%;
+  background: var(--pos-saffron);
+}
+
+.modeChooser {
+  display: grid;
+  gap: 14px;
+}
+
+.modeChooserLead {
+  margin: 0;
+  color: var(--pos-tx-sub);
+  font-size: 13px;
+}
+
+.modeChooserGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.modeCard {
+  display: grid;
+  gap: 8px;
+  text-align: left;
+  padding: 16px;
+  border: 1px solid var(--pos-line);
+  border-radius: var(--pos-r-md);
+  background: var(--pos-surface);
+  cursor: pointer;
+  font: inherit;
+  color: var(--pos-tx);
+}
+
+.modeCard:hover:not(:disabled) {
+  border-color: var(--pos-saffron-line);
+  background: var(--pos-saffron-tint);
+}
+
+.modeCard:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.modeCard strong {
+  font-size: 15px;
+}
+
+.modeCard span {
+  font-size: 13px;
+  color: var(--pos-tx-sub);
+  line-height: 1.45;
+}
+
+.purchaseSummaryBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-top: 8px;
+  border-top: 1px solid var(--pos-border-light, var(--pos-surface-sunken));
+  font-weight: 700;
+}
+
+.purchasePane {
+  width: min(1280px, 100%);
+}
+
+.purchaseZones {
+  display: grid;
+  grid-template-columns: minmax(200px, 0.9fr) minmax(280px, 1.4fr) minmax(200px, 0.9fr);
+  gap: 14px;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+  padding-top: 14px;
+}
+
+.purchaseZonesStatus {
+  grid-column: 1 / -1;
+}
+
+.purchaseZone {
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--pos-border-light, var(--pos-surface-sunken));
+  border-radius: var(--pos-r-sm);
+  padding: 12px;
+  background: var(--pos-surface);
+}
+
+.zoneTitle {
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pos-tx-muted);
+}
+
+.purchaseItemList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.purchaseItemBtn {
+  width: 100%;
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  text-align: left;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  padding: 8px;
+  cursor: pointer;
+  font: inherit;
+  color: var(--pos-tx);
+}
+
+.purchaseItemBtn:hover {
+  background: var(--pos-surface-hover);
+}
+
+.purchaseItemBtnActive {
+  border-color: var(--pos-saffron-line);
+  background: var(--pos-saffron-tint);
+}
+
+.purchaseItemCheck {
+  font-weight: 800;
+  color: var(--pos-saffron-deep, var(--pos-saffron));
+}
+
+.purchaseItemBtn span {
+  display: grid;
+  gap: 2px;
+}
+
+.hintList {
+  margin: 0;
+  padding-left: 16px;
+  color: var(--pos-tx-sub);
+  font-size: 12px;
+  display: grid;
+  gap: 4px;
+}
+
+@media (max-width: 960px) {
+  .purchaseZones {
+    grid-template-columns: 1fr;
+  }
+
+  .modeChooserGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .vendorPicker {
+    grid-template-columns: 1fr;
+  }
+}

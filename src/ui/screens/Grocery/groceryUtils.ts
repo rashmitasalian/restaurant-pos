@@ -14,8 +14,40 @@ export const GROCERY_TABS: Array<{ id: GroceryTab; label: string }> = [
   { id: "lists", label: "Buying Lists" },
   { id: "purchases", label: "Purchases" },
   { id: "vendors", label: "Vendors" },
-  { id: "items", label: "Items" },
+  { id: "items", label: "Grocery Items" },
 ];
+
+/** Whole-list purchase sentinel (matches electron/services/posService). */
+export const LIST_TOTAL_ITEM_NAME = "Buying List Total";
+export const LIST_TOTAL_CATEGORY = "List Total";
+
+export const GROCERY_UNITS = ["kg", "g", "L", "ml", "unit", "packet", "box", "dozen", "bunch"] as const;
+export const GROCERY_PAYMENT_METHODS = ["cash", "upi", "card", "online", "other"] as const;
+
+export function groceryRecordKey(line: { groceryItemId?: string | null; itemName: string }) {
+  return `${line.groceryItemId || ""}::${String(line.itemName || "")
+    .trim()
+    .toLowerCase()}`;
+}
+
+export function isListTotalPurchase(purchase: { itemName?: string | null; category?: string | null }) {
+  return (
+    String(purchase.itemName || "").trim().toLowerCase() === LIST_TOTAL_ITEM_NAME.toLowerCase() &&
+    String(purchase.category || "").trim().toLowerCase() === LIST_TOTAL_CATEGORY.toLowerCase()
+  );
+}
+
+export function parseMoney(value: string) {
+  if (value.trim() === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+export function lineProgress(lines: Array<{ lineStatus?: string | null }>) {
+  const actionable = lines.filter((l) => l.lineStatus !== "skipped");
+  const purchased = actionable.filter((l) => l.lineStatus === "purchased").length;
+  return { total: actionable.length, purchased, pct: actionable.length ? purchased / actionable.length : 0 };
+}
 
 export function groceryTabFromHash(hash: string): GroceryTab {
   const normalized = String(hash || "").toLowerCase();
