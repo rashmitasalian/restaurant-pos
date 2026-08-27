@@ -13,7 +13,6 @@ import { DataTable } from "../../../components/ui/DataTable";
 import { Drawer } from "../../../components/ui/Drawer";
 import { EmptyState } from "../../../components/ui/EmptyState";
 import { Input } from "../../../components/ui/Input";
-import { PageHeader } from "../../../components/ui/PageHeader";
 import {
   formatCurrency,
   formatListDate,
@@ -128,11 +127,6 @@ export function PurchasesView() {
 
   return (
     <div className={styles.listPage}>
-      <PageHeader
-        title="Purchases"
-        subtitle="Financial records linked to vendors. Void instead of delete."
-      />
-
       {status && <div className={styles.status}>{status}</div>}
 
       <div className={styles.dateControls}>
@@ -192,9 +186,9 @@ export function PurchasesView() {
           rows={headers.map((header) => [
             <div key={`${header.id}-date`}>
               {formatListDate(header.purchaseDate)}
-              {header.migrationSource === "legacy_grocery_purchase" ? (
+                  {header.migrationSource === "legacy_grocery_purchase" ? (
                 <div style={{ marginTop: 4 }}>
-                  <Badge tone="attention">Legacy</Badge>
+                  <Badge tone="attention">Legacy purchase</Badge>
                 </div>
               ) : null}
             </div>,

@@ -117,7 +117,7 @@ type UIOrder = {
 
 const samples: UIOrder[] = [];
 
-export default function History() {
+export default function History({ embedded = false }: { embedded?: boolean }) {
   const { showToast } = useToast();
   const [search, setSearch] = React.useState("");
   const [gstConfig, setGstConfig] = React.useState(() => normalizeGstConfig(DEFAULT_GST_CONFIG));
@@ -809,7 +809,8 @@ export default function History() {
   };
 
   return (
-    <div className="pos-page">
+    <div className={embedded ? undefined : "pos-page"}>
+      {!embedded && (
       <PageHeader
         title="Order History"
         subtitle={
@@ -863,6 +864,47 @@ loadFirstPage(pageSize, search, fromTs, toTs);
           </>
         }
       />
+      )}
+      {embedded && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14, alignItems: "center" }}>
+          <input
+            placeholder="Search order, method…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                loadFirstPage(pageSize, search, fromTs, toTs);
+              }
+            }}
+            className="pos-input"
+            style={{ width: 200 }}
+          />
+          <button
+            onClick={() => loadFirstPage(pageSize, search, fromTs, toTs)}
+            className="pos-btn pos-btn-secondary"
+          >
+            Search
+          </button>
+          <button
+            onClick={handleExport}
+            disabled={exporting}
+            className="pos-btn pos-btn-secondary"
+          >
+            {exporting
+              ? "Exporting..."
+              : selected.length > 0
+                ? `Export Selected PDF (${selected.length})`
+                : "Export PDF"}
+          </button>
+          <button
+            onClick={openDeleteAllConfirm}
+            className="pos-btn pos-btn-danger"
+            disabled={deleteAllCountLoading || deletingAll}
+          >
+            {deletingAll ? "Deleting..." : "Delete All"}
+          </button>
+        </div>
+      )}
 
       {/* Row 2: date-range filter bar */}
       <div

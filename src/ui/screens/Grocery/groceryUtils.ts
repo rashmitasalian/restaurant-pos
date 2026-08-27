@@ -1,14 +1,13 @@
 import type { GroceryListStatus, GroceryListType } from "../../../shared/pos";
 
-export type GroceryTab = "lists" | "purchases" | "vendors" | "items" | "insights";
-export type HistoryPreset = "today" | "7d" | "30d" | "custom";
+export type GroceryTab = "lists" | "purchases" | "vendors" | "items";
+export type HistoryPreset = "active" | "today" | "7d" | "30d" | "custom";
 
 export const GROCERY_TAB_HASH: Record<GroceryTab, string> = {
-  lists: "#manager-grocery-lists",
-  purchases: "#manager-grocery-purchases",
-  vendors: "#manager-grocery-vendors",
-  items: "#manager-grocery-items",
-  insights: "#manager-grocery-insights",
+  lists: "#manage-grocery-lists",
+  purchases: "#manage-grocery-purchases",
+  vendors: "#manage-grocery-vendors",
+  items: "#manage-grocery-items",
 };
 
 export const GROCERY_TABS: Array<{ id: GroceryTab; label: string }> = [
@@ -16,7 +15,6 @@ export const GROCERY_TABS: Array<{ id: GroceryTab; label: string }> = [
   { id: "purchases", label: "Purchases" },
   { id: "vendors", label: "Vendors" },
   { id: "items", label: "Items" },
-  { id: "insights", label: "Insights" },
 ];
 
 export function groceryTabFromHash(hash: string): GroceryTab {
@@ -24,8 +22,9 @@ export function groceryTabFromHash(hash: string): GroceryTab {
   if (normalized.includes("purchase")) return "purchases";
   if (normalized.includes("vendor")) return "vendors";
   if (normalized.includes("item") || normalized.includes("template")) return "items";
+  // Insights retired — route old hashes to lists
   if (normalized.includes("insight") || normalized.includes("summary") || normalized.includes("spend")) {
-    return "insights";
+    return "lists";
   }
   return "lists";
 }
@@ -42,8 +41,16 @@ export function endOfDay(date: Date) {
   return copy;
 }
 
+/** Active = last 7 days through +14 days (includes scheduled lists). */
 export function getHistoryRange(preset: HistoryPreset): { from: number; to: number } {
   const now = new Date();
+  if (preset === "active") {
+    const from = new Date(now);
+    from.setDate(from.getDate() - 6);
+    const to = new Date(now);
+    to.setDate(to.getDate() + 14);
+    return { from: startOfDay(from).getTime(), to: endOfDay(to).getTime() };
+  }
   if (preset === "7d") {
     const from = new Date(now);
     from.setDate(from.getDate() - 6);
@@ -93,14 +100,25 @@ export function formatDayHeading(ts: number) {
   const day = startOfDay(new Date(ts)).getTime();
   const today = startOfDay(new Date()).getTime();
   const yesterday = today - 24 * 60 * 60 * 1000;
+  if (day > today) {
+    return new Date(ts)
+      .toLocaleDateString("en-IN", {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+      })
+      .toUpperCase();
+  }
   if (day === today) return "Today";
   if (day === yesterday) return "Yesterday";
-  return new Date(ts).toLocaleDateString("en-IN", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  }).toUpperCase();
+  return new Date(ts)
+    .toLocaleDateString("en-IN", {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    })
+    .toUpperCase();
 }
 
 export function statusLabel(status: GroceryListStatus | string) {

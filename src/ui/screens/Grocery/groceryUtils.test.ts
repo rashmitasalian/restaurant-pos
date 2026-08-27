@@ -12,8 +12,9 @@ describe("groceryUtils", () => {
     expect(groceryTabFromHash("#manager-grocery-vendors")).toBe("vendors");
     expect(groceryTabFromHash("#manager-grocery-items")).toBe("items");
     expect(groceryTabFromHash("#manager-grocery-templates")).toBe("items");
-    expect(groceryTabFromHash("#manager-grocery-insights")).toBe("insights");
-    expect(groceryTabFromHash("#manager-grocery-summary")).toBe("insights");
+    expect(groceryTabFromHash("#manager-grocery-insights")).toBe("lists");
+    expect(groceryTabFromHash("#manager-grocery-summary")).toBe("lists");
+    expect(groceryTabFromHash("#manage-grocery-lists")).toBe("lists");
     expect(groceryTabFromHash("#manager-grocery")).toBe("lists");
   });
 

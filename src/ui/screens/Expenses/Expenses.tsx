@@ -5,7 +5,6 @@ import {
   createExpense,
   voidExpense,
 } from "../../../app/db/posRepository";
-import { PageHeader } from "../../components/ui/PageHeader";
 import { Button } from "../../components/ui/Button";
 import { Stat } from "../../components/ui/Stat";
 import { DataTable } from "../../components/ui/DataTable";
@@ -13,6 +12,7 @@ import { EmptyState } from "../../components/ui/EmptyState";
 import { Modal } from "../../components/ui/Modal";
 import { Input } from "../../components/ui/Input";
 import { Select } from "../../components/ui/Select";
+import { ManageShell } from "../Manager/ManageShell";
 import "./Expenses.module.css";
 
 type ExpenseRow = {
@@ -155,17 +155,16 @@ export default function Expenses() {
   };
 
   return (
-    <div className="pos-page pos-page-sm">
-      <PageHeader
-        title="Expenses"
-        subtitle="Operating costs outside grocery procurement."
-        actions={
-          <Button variant="primary" onClick={() => setAddOpen(true)}>
-            Add Expense
-          </Button>
-        }
-      />
-
+    <ManageShell
+      title="Expenses"
+      description="Operating costs outside grocery procurement."
+      width="operational"
+      primaryAction={
+        <Button variant="primary" onClick={() => setAddOpen(true)}>
+          Add Expense
+        </Button>
+      }
+    >
       {status && <div className="pos-sect-title exp-status">{status}</div>}
 
       <div className="exp-toolbar">
@@ -344,6 +343,6 @@ export default function Expenses() {
           </div>
         </div>
       </Modal>
-    </div>
+    </ManageShell>
   );
 }

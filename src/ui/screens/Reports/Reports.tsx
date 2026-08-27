@@ -145,7 +145,7 @@ function escapeHtml(value: unknown) {
   });
 }
 
-export default function Reports() {
+export default function Reports({ embedded = false }: { embedded?: boolean }) {
   const [sales, setSales] = React.useState(0);
   const [subtotalSales, setSubtotalSales] = React.useState(0);
   const [discountTotal, setDiscountTotal] = React.useState(0);
@@ -548,83 +548,95 @@ export default function Reports() {
     { key: "custom", label: "Custom" },
   ];
 
-  return (
-    <div style={{ background: "var(--pos-bg, var(--pos-surface))", minHeight: "100%", padding: 0 }}>
+  const rangeControls = (
+    <div className="rpt-controls">
+      {PRESETS.map(({ key, label }) => (
+        <button
+          key={key}
+          className={`rpt-preset-btn${preset === key ? " active" : ""}`}
+          aria-pressed={preset === key}
+          onClick={() => {
+            setPreset(key);
+            if (key !== "custom") {
+              const r = getPresetRange(key);
+              setFromTs(r.from);
+              setToTs(r.to);
+            }
+          }}
+        >
+          {label}
+        </button>
+      ))}
 
-      <div className="rpt-wrap">
-        <PageHeader
-          title="Reports"
-          subtitle={
+      {preset === "custom" && (
+        <>
+          <input
+            type="date"
+            className="rpt-date-input"
+            value={toInputDate(fromTs)}
+            max={toInputDate(toTs)}
+            onChange={(e) => {
+              const d = new Date(e.target.value);
+              d.setHours(0, 0, 0, 0);
+              if (!isNaN(d.getTime())) {
+                setFromTs(d.getTime());
+              }
+            }}
+          />
+          <span style={{ fontSize: 11, color: "var(--pos-tx-sec)" }}>–</span>
+          <input
+            type="date"
+            className="rpt-date-input"
+            value={toInputDate(toTs)}
+            min={toInputDate(fromTs)}
+            max={toInputDate(Date.now())}
+            onChange={(e) => {
+              const d = new Date(e.target.value);
+              d.setHours(23, 59, 59, 999);
+              if (!isNaN(d.getTime())) {
+                setToTs(d.getTime());
+              }
+            }}
+          />
+        </>
+      )}
+
+      {reportTab === "sales" && (
+        <Button variant="primary" onClick={handleExport} disabled={loading || exporting}>
+          {exporting ? (
+            "Saving…"
+          ) : (
             <>
-              {rangeLabel(preset, fromTs, toTs)} ·{" "}
-              {new Date().toLocaleDateString("en-IN", {
-                weekday: "long",
-                day: "numeric",
-                month: "long",
-              })}
+              <Icon icon={FileDown} size="sm" /> Export PDF
             </>
-          }
-          actions={
-            <div className="rpt-controls">
-            {PRESETS.map(({ key, label }) => (
-              <button
-                key={key}
-                className={`rpt-preset-btn${preset === key ? " active" : ""}`}
-                aria-pressed={preset === key}
-                onClick={() => {
-                  setPreset(key);
-                  if (key !== "custom") {
-                    const r = getPresetRange(key);
-                    setFromTs(r.from);
-                    setToTs(r.to);
-                  }
-                }}
-              >
-                {label}
-              </button>
-            ))}
+          )}
+        </Button>
+      )}
+    </div>
+  );
 
-            {preset === "custom" && (
+  return (
+    <div style={{ background: embedded ? "transparent" : "var(--pos-bg, var(--pos-surface))", minHeight: embedded ? undefined : "100%", padding: 0 }}>
+
+      <div className="rpt-wrap" style={embedded ? { padding: 0 } : undefined}>
+        {embedded ? (
+          <div style={{ marginBottom: 14 }}>{rangeControls}</div>
+        ) : (
+          <PageHeader
+            title="Reports"
+            subtitle={
               <>
-                <input
-                  type="date"
-                  className="rpt-date-input"
-                  value={toInputDate(fromTs)}
-                  max={toInputDate(toTs)}
-                  onChange={(e) => {
-                    const d = new Date(e.target.value);
-                    d.setHours(0, 0, 0, 0);
-                    if (!isNaN(d.getTime())) {
-setFromTs(d.getTime());
-}
-                  }}
-                />
-                <span style={{ fontSize: 11, color: "var(--pos-tx-sec)" }}>–</span>
-                <input
-                  type="date"
-                  className="rpt-date-input"
-                  value={toInputDate(toTs)}
-                  min={toInputDate(fromTs)}
-                  max={toInputDate(Date.now())}
-                  onChange={(e) => {
-                    const d = new Date(e.target.value);
-                    d.setHours(23, 59, 59, 999);
-                    if (!isNaN(d.getTime())) {
-setToTs(d.getTime());
-}
-                  }}
-                />
+                {rangeLabel(preset, fromTs, toTs)} ·{" "}
+                {new Date().toLocaleDateString("en-IN", {
+                  weekday: "long",
+                  day: "numeric",
+                  month: "long",
+                })}
               </>
-            )}
-
-            {reportTab === "sales" && (
-              <Button variant="primary" onClick={handleExport} disabled={loading || exporting}>
-                {exporting ? "Saving…" : <><Icon icon={FileDown} size="sm" /> Export PDF</>}
-              </Button>
-            )}
-            </div>
-          }
-        />
+            }
+            actions={rangeControls}
+          />
+        )}
 
         <div className="rpt-tabs">
           <SegmentedControl

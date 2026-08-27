@@ -86,7 +86,12 @@ function mergeShiftConfig(input: AttendanceShiftConfig[]) {
   });
 }
 
-export default function Settings() {
+export default function Settings({
+  embedded = false,
+}: {
+  embedded?: boolean;
+  focusSection?: string;
+} = {}) {
   const auth = React.useContext(AuthContext);
   const [kitchenIp, setKitchenIp] = React.useState("");
   const [counterIp, setCounterIp] = React.useState("");
@@ -1237,11 +1242,16 @@ export default function Settings() {
   );
 
   return (
-    <div className="pos-page pos-page-sm">
-      <PageHeader title="Settings" subtitle="Configure your POS system" />
+    <div className={embedded ? undefined : "pos-page pos-page-sm"}>
+      {!embedded && <PageHeader title="Settings" subtitle="Configure your POS system" />}
 
       {auth?.session?.role === "admin" && (
-        <div className="pos-card pos-card-p" style={{ marginBottom: 24 }}>
+        <div
+          className="pos-card pos-card-p"
+          style={{ marginBottom: 24 }}
+          data-settings-sec="identity"
+          id="settings-sec-identity"
+        >
           <div
             style={{
               fontSize: 11,
@@ -1340,7 +1350,12 @@ export default function Settings() {
       )}
 
       {/* Business Identity Section */}
-      <div className="pos-card pos-card-p" style={{ marginBottom: 24 }}>
+      <div
+        className="pos-card pos-card-p"
+        style={{ marginBottom: 24 }}
+        data-settings-sec="identity"
+        id={auth?.session?.role === "admin" ? undefined : "settings-sec-identity"}
+      >
         <div
           style={{
             fontSize: 11,
@@ -1525,7 +1540,11 @@ export default function Settings() {
       </div>
 
       {/* GST Section */}
-      <div className="pos-card pos-card-p" style={{ marginBottom: 24 }}>
+      <div
+        className="pos-card pos-card-p"
+        style={{ marginBottom: 24 }}
+        data-settings-sec="identity"
+      >
         <div
           style={{
             fontSize: 11,
@@ -1721,7 +1740,12 @@ export default function Settings() {
       </div>
 
       {/* Printers Section */}
-      <div className="pos-card pos-card-p" style={{ marginBottom: 24 }}>
+      <div
+        className="pos-card pos-card-p"
+        style={{ marginBottom: 24 }}
+        data-settings-sec="hardware"
+        id="settings-sec-hardware"
+      >
         <div
           style={{
             fontSize: 11,
@@ -1862,7 +1886,11 @@ export default function Settings() {
       </div>
 
       {/* Print Queue Section */}
-      <div className="pos-card pos-card-p" style={{ marginBottom: 24 }}>
+      <div
+        className="pos-card pos-card-p"
+        style={{ marginBottom: 24 }}
+        data-settings-sec="hardware"
+      >
         <div
           style={{
             fontSize: 11,
@@ -1984,7 +2012,11 @@ export default function Settings() {
       </div>
 
       {/* Backup Section */}
-      <div className="pos-card pos-card-p" style={{ marginBottom: 24 }}>
+      <div
+        className="pos-card pos-card-p"
+        style={{ marginBottom: 24 }}
+        data-settings-sec="hardware"
+      >
         <div
           style={{
             fontSize: 11,
@@ -2068,7 +2100,11 @@ export default function Settings() {
       </div>
 
       {/* Update & Support Section */}
-      <div className="pos-card pos-card-p" style={{ marginBottom: 24 }}>
+      <div
+        className="pos-card pos-card-p"
+        style={{ marginBottom: 24 }}
+        data-settings-sec="hardware"
+      >
         <div
           style={{
             fontSize: 11,
@@ -2247,8 +2283,12 @@ export default function Settings() {
         </div>
       </div>
 
-      {/* â”€â”€ Tables Section â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
-      <div className="pos-card pos-card-p">
+      {/* ── Tables Section ─────────────────────────────────────────────── */}
+      <div
+        className="pos-card pos-card-p"
+        data-settings-sec="operations"
+        id="settings-sec-operations"
+      >
         <div
           style={{
             fontSize: 11,
@@ -2516,7 +2556,11 @@ export default function Settings() {
       </div>
 
       {/* ── Service Modes Section ─────────────────────────────────────── */}
-      <div className="pos-card pos-card-p" style={{ marginTop: 24 }}>
+      <div
+        className="pos-card pos-card-p"
+        style={{ marginTop: 24 }}
+        data-settings-sec="operations"
+      >
         <div
           style={{
             fontSize: 11,
@@ -2690,7 +2734,11 @@ export default function Settings() {
       </div>
 
       {/* ── Categories Section ─────────────────────────────────────────── */}
-      <div className="pos-card pos-card-p" style={{ marginTop: 24 }}>
+      <div
+        className="pos-card pos-card-p"
+        style={{ marginTop: 24 }}
+        data-settings-sec="operations"
+      >
         <div
           style={{
             fontSize: 11,
@@ -2819,7 +2867,11 @@ export default function Settings() {
       </div>
 
       {/* ── Menu Variant Options Section ───────────────────────────────── */}
-      <div className="pos-card pos-card-p" style={{ marginTop: 24 }}>
+      <div
+        className="pos-card pos-card-p"
+        style={{ marginTop: 24 }}
+        data-settings-sec="operations"
+      >
         <div
           style={{
             fontSize: 11,
@@ -2945,7 +2997,11 @@ export default function Settings() {
       </div>
 
       {/* Attendance Shift Master Section */}
-      <div className="pos-card pos-card-p" style={{ marginBottom: 24 }}>
+      <div
+        className="pos-card pos-card-p"
+        style={{ marginBottom: 24 }}
+        data-settings-sec="operations"
+      >
         <div
           style={{
             fontSize: 11,
@@ -3031,7 +3087,12 @@ export default function Settings() {
       </div>
 
       {/* Audit Retention Section */}
-      <div className="pos-card pos-card-p" style={{ marginBottom: 24 }}>
+      <div
+        className="pos-card pos-card-p"
+        style={{ marginBottom: 24 }}
+        data-settings-sec="retention"
+        id="settings-sec-retention"
+      >
         <div
           style={{
             fontSize: 11,
@@ -3107,7 +3168,11 @@ export default function Settings() {
       </div>
 
       {/* Order History Retention Section */}
-      <div className="pos-card pos-card-p" style={{ marginBottom: 24 }}>
+      <div
+        className="pos-card pos-card-p"
+        style={{ marginBottom: 24 }}
+        data-settings-sec="retention"
+      >
         <div
           style={{
             fontSize: 11,

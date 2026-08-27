@@ -17,7 +17,6 @@ import { DataTable } from "../../../components/ui/DataTable";
 import { EmptyState } from "../../../components/ui/EmptyState";
 import { Input } from "../../../components/ui/Input";
 import { Modal } from "../../../components/ui/Modal";
-import { PageHeader } from "../../../components/ui/PageHeader";
 import { Select } from "../../../components/ui/Select";
 import { formatCurrency } from "../groceryUtils";
 import styles from "../Grocery.module.css";
@@ -188,26 +187,19 @@ export function ItemsView() {
 
   return (
     <div className={styles.listPage}>
-      <PageHeader
-        title="Reusable Items"
-        subtitle="Catalog defaults for building buying lists."
-        actions={
-          <Button variant="primary" onClick={openCreateItem}>
-            + Add Item
-          </Button>
-        }
-      />
-
-      {status && <div className={styles.status}>{status}</div>}
-
-      <div className={styles.dateControls}>
+      <div className={styles.toolbarRow}>
         <Input
           placeholder="Search items…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           style={{ maxWidth: 260 }}
         />
+        <Button variant="primary" onClick={openCreateItem}>
+          + Add Item
+        </Button>
       </div>
+
+      {status && <div className={styles.status}>{status}</div>}
 
       {loading ? (
         <div className={styles.status}>Loading items…</div>
@@ -241,15 +233,17 @@ export function ItemsView() {
       )}
 
       <div className={`pos-card pos-card-p ${styles.templateCard}`}>
-        <PageHeader
-          title="Templates"
-          subtitle="Starters for new buying lists."
-          actions={
-            <Button variant="secondary" onClick={() => setTemplateModalOpen(true)}>
-              + Blank Template
-            </Button>
-          }
-        />
+        <div className={styles.toolbarRow}>
+          <div>
+            <strong>Templates</strong>
+            <p className={styles.hint} style={{ margin: "4px 0 0" }}>
+              Starters for new buying lists.
+            </p>
+          </div>
+          <Button variant="secondary" onClick={() => setTemplateModalOpen(true)}>
+            + Blank Template
+          </Button>
+        </div>
         <p className={styles.hint} style={{ marginTop: 0, marginBottom: 12 }}>
           Create a blank template here, or use “Save as template” from a buying list detail to capture its lines.
         </p>

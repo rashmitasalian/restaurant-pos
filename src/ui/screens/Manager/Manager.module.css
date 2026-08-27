@@ -1,89 +1,135 @@
 .managerRoot {
   display: grid;
-  grid-template-columns: 248px minmax(0, 1fr);
-  min-height: 100%;
-  background: var(--pos-bg, var(--pos-surface));
+  grid-template-columns: 220px minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+  background: var(--pos-bg);
 }
 
 .rail {
-  border-right: 1px solid var(--pos-border, var(--pos-line));
-  background: var(--pos-surface-hover);
-  padding: 18px 14px;
+  border-right: 1px solid var(--pos-line);
+  background: var(--pos-surface);
+  padding: 16px 10px;
   overflow: auto;
 }
 
-.railTitle {
-  margin: 0 0 4px;
-  font-size: 18px;
-  font-weight: 900;
-  color: var(--pos-tx, var(--pos-tx));
+.railBrand {
+  padding: 0 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
 }
 
-.railSub {
-  margin: 0 0 18px;
-  font-size: 12px;
-  color: var(--pos-tx-sub, var(--pos-tx-sub));
+.jumpBtn {
+  font-size: 11px !important;
+  padding: 4px 8px !important;
+  color: var(--pos-tx-muted) !important;
+}
+
+.managerRootSolo {
+  height: 100%;
+  min-height: 0;
+  background: var(--pos-bg);
+}
+
+.embedBody {
+  margin: -4px 0 0;
+}
+
+.embedBody :global(.pos-page),
+.embedBody :global(.pos-page-sm),
+.embedBody :global(.pos-page-lg) {
+  padding: 0;
+}
+
+.settingsEmbed :global(.pos-ph) {
+  display: none;
+}
+
+.settingsEmbed :global(.pos-page),
+.settingsEmbed :global(.pos-page-sm) {
+  padding: 0;
+}
+
+.settingsEmbed[data-settings-focus="identity"] :global([data-settings-sec]:not([data-settings-sec="identity"])),
+.settingsEmbed[data-settings-focus="hardware"] :global([data-settings-sec]:not([data-settings-sec="hardware"])),
+.settingsEmbed[data-settings-focus="operations"] :global([data-settings-sec]:not([data-settings-sec="operations"])),
+.settingsEmbed[data-settings-focus="retention"] :global([data-settings-sec]:not([data-settings-sec="retention"])) {
+  display: none;
+}
+
+.manage-dense :global(.ui-table th),
+.manage-dense :global(.ui-table td),
+[data-dense="true"] :global(.ui-table th),
+[data-dense="true"] :global(.ui-table td) {
+  padding: 8px 10px;
+}
+
+.railTitle {
+  margin: 0;
+  font-size: var(--pos-type-13);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--pos-tx-muted);
 }
 
 .groupLabel {
-  margin: 18px 8px 8px;
+  margin: 16px 8px 6px;
   font-size: 10px;
-  font-weight: 900;
+  font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--pos-muted, var(--pos-tx-muted));
+  color: var(--pos-tx-muted);
 }
 
 .railButton {
   width: 100%;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 10px;
   border: 1px solid transparent;
+  border-left: 3px solid transparent;
   background: transparent;
-  color: var(--pos-tx-sec, var(--pos-tx-sec));
-  border-radius: 8px;
-  padding: 10px 11px;
+  color: var(--pos-tx-sec);
+  border-radius: 0 var(--pos-r-sm) var(--pos-r-sm) 0;
+  padding: 9px 10px 9px 8px;
   font: inherit;
-  font-size: 13px;
-  font-weight: 700;
+  font-size: var(--pos-type-13);
+  font-weight: 600;
   cursor: pointer;
   text-align: left;
 }
 
 .railButton:hover {
-  background: var(--pos-teal-tint);
-  border-color: var(--pos-teal-line);
-  color: var(--pos-teal-strong);
+  background: var(--pos-surface-hover);
+  color: var(--pos-tx);
 }
 
 .railButtonActive {
   background: var(--pos-teal-tint);
-  border-color: var(--pos-teal-line);
+  border-left-color: var(--pos-saffron);
   color: var(--pos-teal-strong);
+  font-weight: 700;
 }
 
 .sectionIcon {
-  width: 24px;
-  height: 24px;
-  border-radius: 7px;
+  width: 20px;
+  height: 20px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: var(--pos-surface);
-  border: 1px solid var(--pos-line);
-  color: var(--pos-teal);
-  font-size: 12px;
-  font-weight: 900;
+  color: inherit;
   flex: 0 0 auto;
+  opacity: 0.85;
 }
 
 .buttonMain {
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 8px;
 }
 
 .buttonText {
@@ -94,25 +140,58 @@
 
 .content {
   min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.peopleRoot {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.peopleTabs {
+  flex: 0 0 auto;
+  padding: 12px 24px;
+  border-bottom: 1px solid var(--pos-line);
+  background: var(--pos-bg);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.peopleContext {
+  margin: 0;
+  font-size: var(--pos-type-13);
+  color: var(--pos-tx-sub);
+}
+
+.peopleBody {
+  flex: 1;
+  min-height: 0;
   overflow: auto;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1024px) {
   .managerRoot {
     grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
   }
 
   .rail {
     border-right: none;
-    border-bottom: 1px solid var(--pos-border, var(--pos-line));
+    border-bottom: 1px solid var(--pos-line);
     display: flex;
-    gap: 8px;
+    align-items: center;
+    gap: 4px;
     overflow-x: auto;
-    padding: 12px;
+    padding: 10px 12px;
   }
 
-  .railTitle,
-  .railSub,
+  .railBrand,
   .groupLabel {
     display: none;
   }
@@ -121,5 +200,13 @@
     width: auto;
     white-space: nowrap;
     flex: 0 0 auto;
+    border-left: none;
+    border-radius: var(--pos-r-sm);
+    border-bottom: 2px solid transparent;
+  }
+
+  .railButtonActive {
+    border-bottom-color: var(--pos-saffron);
+    border-left-color: transparent;
   }
 }

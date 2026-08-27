@@ -15,7 +15,6 @@ import { Drawer } from "../../../components/ui/Drawer";
 import { EmptyState } from "../../../components/ui/EmptyState";
 import { Input } from "../../../components/ui/Input";
 import { Modal } from "../../../components/ui/Modal";
-import { PageHeader } from "../../../components/ui/PageHeader";
 import { formatCurrency, formatListDate } from "../groceryUtils";
 import styles from "../Grocery.module.css";
 
@@ -37,7 +36,6 @@ const EMPTY_FORM: VendorForm = {
 
 type VendorDetailStats = {
   purchases: GroceryPurchaseDto[];
-  outstanding: number;
   purchaseCount: number;
   totalSpend: number;
 };
@@ -152,13 +150,9 @@ export function VendorsView() {
         limit: 50,
       })) as GroceryPurchaseDto[];
       const active = headers.filter((h) => h.status !== "voided");
-      const outstanding = active
-        .filter((h) => h.paymentStatus !== "paid")
-        .reduce((sum, h) => sum + Number(h.outstanding ?? h.total ?? 0), 0);
       const totalSpend = active.reduce((sum, h) => sum + Number(h.total || 0), 0);
       setDetail({
         purchases: headers.slice(0, 20),
-        outstanding,
         purchaseCount: active.length,
         totalSpend,
       });
@@ -179,26 +173,19 @@ export function VendorsView() {
 
   return (
     <div className={styles.listPage}>
-      <PageHeader
-        title="Vendors"
-        subtitle="Suppliers for grocery procurement."
-        actions={
-          <Button variant="primary" onClick={openCreate}>
-            + Add Vendor
-          </Button>
-        }
-      />
-
-      {status && <div className={styles.status}>{status}</div>}
-
-      <div className={styles.dateControls}>
+      <div className={styles.toolbarRow}>
         <Input
           placeholder="Search vendors…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           style={{ maxWidth: 280 }}
         />
+        <Button variant="primary" onClick={openCreate}>
+          + Add Vendor
+        </Button>
       </div>
+
+      {status && <div className={styles.status}>{status}</div>}
 
       {loading ? (
         <div className={styles.status}>Loading vendors…</div>
@@ -290,7 +277,7 @@ export function VendorsView() {
           <div className={styles.status}>Loading vendor activity…</div>
         ) : (
           <div className={styles.stack}>
-            <div className={styles.kpiGrid} style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
+            <div className={styles.kpiGrid} style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
               <div className={styles.kpi}>
                 <div className={styles.kpiLabel}>Purchases</div>
                 <div className={styles.kpiValue}>{detail.purchaseCount}</div>
@@ -298,10 +285,6 @@ export function VendorsView() {
               <div className={styles.kpi}>
                 <div className={styles.kpiLabel}>Total spend</div>
                 <div className={styles.kpiValue}>{formatCurrency(detail.totalSpend)}</div>
-              </div>
-              <div className={styles.kpi}>
-                <div className={styles.kpiLabel}>Outstanding</div>
-                <div className={styles.kpiValue}>{formatCurrency(detail.outstanding)}</div>
               </div>
             </div>
 

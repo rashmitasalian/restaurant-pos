@@ -53,3 +53,42 @@
   text-align: center;
   color: var(--pos-tx-muted);
 }
+
+.ui-table-dense th,
+.ui-table-dense td {
+  padding: 8px 10px;
+}
+
+.ui-table-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.ui-table-check {
+  width: 36px;
+  text-align: center;
+}
+
+.ui-table-sort {
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-weight: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  padding: 0;
+  cursor: pointer;
+}
+
+.ui-table-sort:hover {
+  color: var(--pos-tx);
+}
+
+.ui-table-row-click {
+  cursor: pointer;
+}
+
+.ui-table tbody tr[data-selected="true"] td {
+  background: var(--pos-teal-tint);
+}

@@ -127,4 +127,46 @@ Preserve window events `select-table`, `orders-changed`, `branding-changed`, `se
 
 Preserve localStorage keys `currentOrderId`, `currentTable`, `lastPage`, `tablesLayoutMode`.
 
-Preserve Billing shortcuts `T`, `K`, `P`, `B`, `C`, `U`, `Ctrl+Z`, and `1-6` favorites.
+Preserve Billing shortcuts `T`, `K`, `P`, `B`, `C`, `U`, `Ctrl+K` (Manage command palette; must not steal plain `K` on Billing), `Ctrl+Z`, and `1-6` favorites.
+
+Reports live under Manage (`#reports`); top-nav Reports appears only for reports-without-manager roles.
+
+## Manage back-office contract (frozen)
+
+Manage extends Billing/Tables — it does not invent a second visual language. Tables, Billing and KOT Queue are not modified by Manage work. Existing token values are read-only; shared primitives are extended additively only.
+
+### Visual identity
+
+RestoNiti must not resemble a generic SaaS admin dashboard. Prefer operational density: tables for registers, compact type, restrained spacing, shallow navigation (Area → Section → Tab), drawers for inspection, full panes for heavy editing, modals for confirm/pick. Never nest overlays.
+
+Avoid: excessive cards, card grids as default, giant KPI tiles, decorative charts, pill-heavy nav, centered web-page columns, nested cards, gradients, glassmorphism, oversized headings, excess whitespace.
+
+Sign-off gates: (1) Could this be mistaken for a generic SaaS dashboard? (2) Does it belong beside Billing and Tables?
+
+### Layout
+
+- App chrome fixed (unchanged).
+- Manage rail collapses 240px ↔ 56px; visually recedes; active = restrained tint + saffron edge (not filled pills).
+- Section header + tabs + toolbar = **one continuous workspace header** (hairline separators only; no card chrome on those bands).
+- Only the content region scrolls.
+- One visually dominant primary action when the context has one — do not invent actions (e.g. Audit has none).
+- Content widths: reading/form ~880–960px left-aligned; operational ~1200–1400px; data-dense 100%. Never center a narrow column on wide desktops.
+- Four surfaces only: workspace → content → interactive → overlay. Do not invent a fifth to separate content; use spacing/type/dividers first.
+- Density (comfortable/compact), when present, lives under View and is scoped to Manage only.
+- `KpiRow`: max four headline values, inline (not dashboard tiles). Supporting primitive, not every screen's layout.
+
+### Overlay allocation
+
+- Drawer — inspect, light edit, quick actions.
+- Full pane — heavy editors (buying list editor, large purchase entry).
+- Modal — confirm, destroy, tiny forms, pickers.
+- Never drawer↔modal nesting.
+
+### Grocery domain
+
+- Buying list status is **service-derived**. Clients may only send `draft→open` and `→cancelled`. `partial` / `completed` are rejected from clients.
+- Prefer "pending" over "remaining" in procurement summaries.
+- Never show a single "savings" number when qty and rate both changed.
+- Unlinked purchases are first-class (`buying_list_id` optional).
+- Void is the only way to remove a recorded purchase from profitability.
+- v1 Expenses = operating expenses only (no CapEx / prepaid / accruals model).

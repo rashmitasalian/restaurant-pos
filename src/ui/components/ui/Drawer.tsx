@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import styles from "./Drawer.module.css";
 import { Icon } from "./Icon";
+import { useFocusTrap } from "../../hooks/useFocusTrap";
 
 type DrawerProps = {
   open: boolean;
@@ -14,24 +15,19 @@ type DrawerProps = {
 };
 
 export function Drawer({ open, title, onClose, children, footer, wide }: DrawerProps) {
-  React.useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  const panelRef = useFocusTrap<HTMLElement>(open, onClose);
 
   if (!open) return null;
 
   return createPortal(
     <div className={styles.overlay} onClick={onClose} role="presentation">
       <aside
+        ref={panelRef}
         className={`${styles.panel} ${wide ? styles.wide : ""}`}
         role="dialog"
         aria-modal="true"
         aria-label={title}
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
       >
         <header className={styles.header}>

@@ -35,13 +35,18 @@ type ListCardModel = GroceryListDoc & {
   purchased: number;
 };
 
+function dayLabel(dayKey: number, todayStart: number) {
+  if (dayKey > todayStart) return `Scheduled · ${formatDayHeading(dayKey)}`;
+  return formatDayHeading(dayKey);
+}
+
 export function BuyingListsView() {
   const [lists, setLists] = React.useState<ListCardModel[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [status, setStatus] = React.useState<string | null>(null);
-  const [preset, setPreset] = React.useState<HistoryPreset>("today");
-  const [fromTs, setFromTs] = React.useState(() => getHistoryRange("today").from);
-  const [toTs, setToTs] = React.useState(() => getHistoryRange("today").to);
+  const [preset, setPreset] = React.useState<HistoryPreset>("active");
+  const [fromTs, setFromTs] = React.useState(() => getHistoryRange("active").from);
+  const [toTs, setToTs] = React.useState(() => getHistoryRange("active").to);
   const [search, setSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("all");
   const [newOpen, setNewOpen] = React.useState(false);
@@ -60,19 +65,27 @@ export function BuyingListsView() {
   const load = React.useCallback(async () => {
     setLoading(true);
     try {
-      const [rawLists, headers, tpls] = await Promise.all([
+      const [rawLists, tpls] = await Promise.all([
         listGroceryLists({ from: fromTs, to: toTs, limit: 100 }),
-        listGroceryPurchaseHeaders({ from: fromTs, to: toTs, limit: 200 }),
         listBuyingListTemplates(),
       ]);
+      // Spend is linked by buying_list_id — query headers for those lists, not by date filter
+      const headers =
+        rawLists.length === 0
+          ? []
+          : await Promise.all(
+              rawLists.map((list) =>
+                listGroceryPurchaseHeaders({ listId: list.id, includeVoided: false, limit: 50 }),
+              ),
+            );
       const spendByList = new Map<string, number>();
-      for (const header of headers as any[]) {
-        if (header.status === "voided" || !header.buyingListId) continue;
+      headers.flat().forEach((header: any) => {
+        if (header.status === "voided" || !header.buyingListId) return;
         spendByList.set(
           header.buyingListId,
           (spendByList.get(header.buyingListId) || 0) + Number(header.total || 0),
         );
-      }
+      });
       setLists(
         rawLists.map((list) => ({
           ...list,
@@ -94,10 +107,12 @@ export function BuyingListsView() {
 
   const todayStart = startOfDay(new Date()).getTime();
   const todayLists = lists.filter(
-    (list) => startOfDay(new Date(list.listDate)).getTime() === todayStart && list.status !== "cancelled",
+    (list) =>
+      startOfDay(new Date(list.listDate)).getTime() === todayStart && list.status !== "cancelled",
   );
   const todayPlanned = todayLists.reduce((s, l) => s + l.planned, 0);
   const todayPurchased = todayLists.reduce((s, l) => s + l.purchased, 0);
+  const todayPending = Math.max(0, todayPlanned - todayPurchased);
 
   const filtered = lists.filter((list) => {
     if (statusFilter !== "all" && list.status !== statusFilter) return false;
@@ -118,8 +133,17 @@ export function BuyingListsView() {
       bucket.push(list);
       map.set(key, bucket);
     }
-    return Array.from(map.entries()).sort((a, b) => Number(b[0]) - Number(a[0]));
-  }, [filtered]);
+    // Future days first (scheduled), then today, then past
+    return Array.from(map.entries()).sort((a, b) => {
+      const aN = Number(a[0]);
+      const bN = Number(b[0]);
+      const aFuture = aN > todayStart;
+      const bFuture = bN > todayStart;
+      if (aFuture !== bFuture) return aFuture ? -1 : 1;
+      if (aFuture && bFuture) return aN - bN;
+      return bN - aN;
+    });
+  }, [filtered, todayStart]);
 
   const primaryAction = (list: ListCardModel) => {
     if (list.status === "completed" || list.status === "cancelled") {
@@ -136,7 +160,7 @@ export function BuyingListsView() {
           <span>
             {todayLists.length} session{todayLists.length === 1 ? "" : "s"} ·{" "}
             {formatCurrency(todayPlanned)} planned · {formatCurrency(todayPurchased)} purchased ·{" "}
-            {formatCurrency(Math.max(0, todayPlanned - todayPurchased))} remaining
+            {formatCurrency(todayPending)} pending
           </span>
         </div>
         <Button variant="primary" onClick={() => setNewOpen(true)}>
@@ -150,6 +174,7 @@ export function BuyingListsView() {
         <div className={styles.presetRow}>
           {(
             [
+              ["active", "Active"],
               ["today", "Today"],
               ["7d", "7 Days"],
               ["30d", "30 Days"],
@@ -206,8 +231,12 @@ export function BuyingListsView() {
         <div className={styles.status}>Loading buying lists…</div>
       ) : filtered.length === 0 ? (
         <EmptyState
-          title="No buying lists yet"
-          text="Create a morning or evening procurement list, optionally from a template."
+          title={lists.length === 0 ? "No buying lists in this range" : "No lists match filters"}
+          text={
+            lists.length === 0
+              ? "Create a morning or evening procurement list. Scheduled (future) lists appear under Active."
+              : "Try another date range or clear the status filter."
+          }
           actionLabel="+ New Buying List"
           onAction={() => setNewOpen(true)}
         />
@@ -215,9 +244,7 @@ export function BuyingListsView() {
         <div className={styles.historyStack}>
           {grouped.map(([dayKey, dayLists]) => (
             <section key={dayKey} className={styles.dayGroup}>
-              {preset !== "today" && (
-                <h3 className={styles.dayHeading}>{formatDayHeading(Number(dayKey))}</h3>
-              )}
+              <h3 className={styles.dayHeading}>{dayLabel(Number(dayKey), todayStart)}</h3>
               <div className={styles.sessionStack}>
                 {dayLists.map((list) => {
                   const action = primaryAction(list);
@@ -241,11 +268,7 @@ export function BuyingListsView() {
                         <Button variant="secondary" size="sm" onClick={action.run}>
                           {action.label}
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setDetailId(list.id)}
-                        >
+                        <Button variant="ghost" size="sm" onClick={() => setDetailId(list.id)}>
                           Details
                         </Button>
                       </div>
@@ -266,6 +289,11 @@ export function BuyingListsView() {
         onCreated={async (list) => {
           setNewOpen(false);
           setStatus(`Created ${list.title}`);
+          // Ensure Active/custom range includes the new list date
+          const listDay = startOfDay(new Date(list.listDate)).getTime();
+          if (listDay < fromTs || listDay > toTs) {
+            applyPreset("active");
+          }
           await load();
           setEditId(list.id);
         }}

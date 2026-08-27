@@ -97,7 +97,7 @@ function getVariantPriceLabel(variants: VariantDraft[]) {
   return min === max ? `₹${min}` : `₹${min} - ₹${max}`;
 }
 
-export default function ItemsEditor() {
+export default function ItemsEditor({ embedded = false }: { embedded?: boolean }) {
   const { showToast: _showToast } = useToast();
   const showToast = (msg: string, kind: "ok" | "err" = "ok") =>
     _showToast(msg, kind === "err" ? "error" : "success");
@@ -293,7 +293,7 @@ export default function ItemsEditor() {
       return;
     }
     if (it.available === false) {
-      showToast("Unavailable items cannot be favorites", "error");
+      showToast("Unavailable items cannot be favorites", "err");
       return;
     }
     favoriteUpdatingRef.current = true;
@@ -314,7 +314,7 @@ export default function ItemsEditor() {
       });
       showToast(nextFavorite ? "Added to favorites" : "Removed from favorites");
     } catch (e) {
-      showToast("Failed to update favorite", "error");
+      showToast("Failed to update favorite", "err");
     } finally {
       favoriteUpdatingRef.current = false;
       setFavoriteUpdatingId(null);
@@ -555,7 +555,8 @@ export default function ItemsEditor() {
   };
 
   return (
-    <div className="pos-page">
+    <div className={embedded ? undefined : "pos-page"}>
+      {!embedded && (
       <PageHeader
         title="Menu"
         subtitle={`${items.length} item${items.length !== 1 ? "s" : ""} · edit prices inline, then Save All`}
@@ -565,6 +566,14 @@ export default function ItemsEditor() {
           </button>
         }
       />
+      )}
+      {embedded && (
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+          <button onClick={() => setModalOpen(true)} className="pos-btn pos-btn-primary">
+            + Add Item
+          </button>
+        </div>
+      )}
 
       {/* Search bar */}
       <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>

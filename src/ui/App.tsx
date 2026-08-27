@@ -34,7 +34,6 @@ import restoNitiMark from "./assets/restoniti-icon.png";
 const Tables = React.lazy(() => import("./screens/Tables/Tables"));
 const Billing = React.lazy(() => import("./screens/Billing/Billing"));
 const KOTQueue = React.lazy(() => import("./screens/KOTQueue/KOTQueue"));
-const Reports = React.lazy(() => import("./screens/Reports/Reports"));
 const Customers = React.lazy(() => import("./screens/Customers/Customers"));
 const Manager = React.lazy(() => import("./screens/Manager/Manager"));
 const LoginScreen = React.lazy(() => import("./screens/Login/LoginScreen"));
@@ -150,6 +149,12 @@ function MainContent({
       : allowedPages.filter((p) => p !== "tables");
 
     const fallbackPage: Page = effectiveAllowedPages.includes("billing") ? "billing" : "kot";
+    const canManager = effectiveAllowedPages.includes("manager");
+    const canReports = effectiveAllowedPages.includes("reports");
+    const reportsOnly = canReports && !canManager;
+
+    const canOpenManager = (section: ManagerSection | null) =>
+      canManager || (reportsOnly && (!section || section === "reports"));
 
     const getInitial = (): Page => {
       const hash = (typeof window !== "undefined" && window.location.hash) || "";
@@ -158,17 +163,24 @@ function MainContent({
         "#customers": "customers",
         "#tables": "tables",
         "#kot": "kot",
-        "#reports": "reports",
         "#manager": "manager",
       };
-      if (managerSectionFromHash(hash)) {
+      const section = managerSectionFromHash(hash);
+      if (section) {
+        if (canOpenManager(section)) return "manager";
+        return fallbackPage;
+      }
+      if (hash === "#reports" && canOpenManager("reports")) {
         return "manager";
       }
       if (hashPageMap[hash]) {
         return hashPageMap[hash];
       }
       const saved = typeof window !== "undefined" ? window.localStorage.getItem("lastPage") : null;
-      const validPages = Object.values(hashPageMap) as Page[];
+      const validPages = [...Object.values(hashPageMap), "manager"] as Page[];
+      if (saved === "reports" && canOpenManager("reports")) {
+        return "manager";
+      }
       if (saved && validPages.includes(saved as Page)) {
         if (!hasTableMode && saved === "tables") {
           return fallbackPage;
@@ -181,7 +193,7 @@ function MainContent({
     const [page, setPage] = React.useState<Page>(getInitial);
     const [managerSection, setManagerSection] = React.useState<ManagerSection>(() => {
       const hash = (typeof window !== "undefined" && window.location.hash) || "";
-      return managerSectionFromHash(hash) || "grocery";
+      return managerSectionFromHash(hash) || "overview";
     });
     const firstScreenLoggedRef = React.useRef(false);
     const [now, setNow] = React.useState(new Date());
@@ -254,21 +266,26 @@ function MainContent({
           "#customers": "customers",
           "#tables": "tables",
           "#kot": "kot",
-          "#reports": "reports",
           "#manager": "manager",
         };
         const sectionTarget = managerSectionFromHash(window.location.hash);
-        const target = sectionTarget ? "manager" : hashPageMap[window.location.hash];
+        if (sectionTarget) {
+          if (canOpenManager(sectionTarget)) {
+            setManagerSection(reportsOnly ? "reports" : sectionTarget);
+            setPage("manager");
+            return;
+          }
+          window.location.hash = fallbackPage === "billing" ? "#billing" : "#kot";
+          setPage(fallbackPage);
+          return;
+        }
+        const target = hashPageMap[window.location.hash];
         if (!target) {
           return;
         }
         if (effectiveAllowedPages.includes(target)) {
-          if (sectionTarget) {
-            setManagerSection(sectionTarget);
-          }
           setPage(target);
         } else {
-          // Silently redirect unauthorised hash navigation to the best available page.
           window.location.hash = fallbackPage === "billing" ? "#billing" : "#kot";
           setPage(fallbackPage);
         }
@@ -301,7 +318,7 @@ function MainContent({
         window.removeEventListener("select-table", onSelectTable as EventListener);
         window.removeEventListener("hashchange", onHash);
       };
-    }, [effectiveAllowedPages, fallbackPage]);
+    }, [effectiveAllowedPages, fallbackPage, canManager, reportsOnly]);
 
     React.useEffect(() => {
       try {
@@ -312,11 +329,12 @@ function MainContent({
           kot: "#kot",
           reports: "#reports",
           customers: "#customers",
-          manager: MANAGER_SECTION_HASH[managerSection],
+          manager: MANAGER_SECTION_HASH[reportsOnly ? "reports" : managerSection],
         }[page];
         const currentHash = window.location.hash;
         const currentManagerSection = managerSectionFromHash(currentHash);
-        if (!(page === "manager" && currentManagerSection === managerSection)) {
+        const expectedSection = reportsOnly ? "reports" : managerSection;
+        if (!(page === "manager" && currentManagerSection === expectedSection)) {
           window.location.hash = hash || (fallbackPage === "billing" ? "#billing" : "#kot");
         }
         // if navigating away from tables, hide inline billing
@@ -326,7 +344,7 @@ function MainContent({
       } catch (e) {
         // ignore storage errors
       }
-    }, [page, managerSection, fallbackPage]);
+    }, [page, managerSection, fallbackPage, reportsOnly]);
 
     // User menu (dropdown) state + outside click handler
     const userMenuRef = React.useRef<HTMLDivElement | null>(null);
@@ -400,9 +418,15 @@ function MainContent({
           </div>
           <nav id="main-nav" className="pos-nav" aria-label="Main navigation">
             {navItems
-              .filter((n) => effectiveAllowedPages.includes(n.k))
+              .filter((n) => {
+                if (n.k === "reports") return reportsOnly;
+                return effectiveAllowedPages.includes(n.k);
+              })
               .map((it) => {
-                const active = page === it.k;
+                const active =
+                  it.k === "reports"
+                    ? page === "manager" && managerSection === "reports"
+                    : page === it.k;
                 return (
                   <button
                     key={it.k}
@@ -410,7 +434,13 @@ function MainContent({
                     className={`hdr-nav-btn${active ? " hdr-active" : ""}`}
                     aria-current={active ? "page" : undefined}
                     onClick={() => {
-                      setPage(it.k as any);
+                      if (it.k === "reports") {
+                        setManagerSection("reports");
+                        setPage("manager");
+                        window.location.hash = "#reports";
+                        return;
+                      }
+                      setPage(it.k as Page);
                       window.location.hash = `#${it.k}`;
                     }}
                   >
@@ -513,11 +543,12 @@ function MainContent({
                   {page === "billing" && effectiveAllowedPages.includes("billing") && <Billing />}
                   {page === "kot" && effectiveAllowedPages.includes("kot") && <KOTQueue />}
                   {page === "customers" && effectiveAllowedPages.includes("customers") && <Customers />}
-                  {page === "reports" && effectiveAllowedPages.includes("reports") && <Reports />}
-                  {page === "manager" && effectiveAllowedPages.includes("manager") && (
+                  {page === "manager" && canOpenManager(managerSection) && (
                     <Manager
-                      section={managerSection}
+                      section={reportsOnly ? "reports" : managerSection}
+                      reportsOnly={reportsOnly}
                       onSectionChange={(section) => {
+                        if (reportsOnly && section !== "reports") return;
                         setManagerSection(section);
                         setPage("manager");
                       }}

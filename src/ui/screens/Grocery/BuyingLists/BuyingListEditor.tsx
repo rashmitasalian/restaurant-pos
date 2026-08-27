@@ -5,6 +5,7 @@ import {
   createVendor,
   getGroceryList,
   listGroceryItems,
+  listGroceryPurchaseHeaders,
   listGroceryPurchases,
   listVendors,
   updateGroceryList,
@@ -144,11 +145,12 @@ export function BuyingListEditor({ listId, onClose, onChanged }: Props) {
   const load = React.useCallback(async () => {
     setLoading(true);
     try {
-      const [doc, groceryItems, purchaseLines, vendorRows] = await Promise.all([
+      const [doc, groceryItems, purchaseLines, vendorRows, purchaseHeaders] = await Promise.all([
         getGroceryList(listId),
         listGroceryItems(),
         listGroceryPurchases({ listId, limit: 200 }),
         listVendors({ includeInactive: false }),
+        listGroceryPurchaseHeaders({ listId, includeVoided: true, limit: 100 }),
       ]);
       if (!doc) throw new Error("Buying list not found");
       setList(doc);
@@ -156,10 +158,18 @@ export function BuyingListEditor({ listId, onClose, onChanged }: Props) {
       setTitle(doc.title);
       setNotes(doc.notes || "");
       setItems(groceryItems);
-      setPurchases(purchaseLines);
+      const voidedHeaderIds = new Set(
+        (purchaseHeaders as any[])
+          .filter((h) => h.status === "voided")
+          .map((h) => h.id),
+      );
+      const activePurchases = purchaseLines.filter(
+        (p: any) => !p.purchaseId || !voidedHeaderIds.has(p.purchaseId),
+      );
+      setPurchases(activePurchases);
       setVendors(vendorRows as VendorDto[]);
-      const hasTotal = purchaseLines.some(isListTotalPurchase);
-      const hasItem = purchaseLines.some((p) => !isListTotalPurchase(p));
+      const hasTotal = activePurchases.some(isListTotalPurchase);
+      const hasItem = activePurchases.some((p) => !isListTotalPurchase(p));
       setRecordMode(hasTotal ? "total" : "item");
       if (hasItem && hasTotal) setStatus("Mixed purchase modes detected for this list.");
     } catch (error) {
@@ -366,7 +376,7 @@ export function BuyingListEditor({ listId, onClose, onChanged }: Props) {
             }
           : candidate,
       );
-      await persist(nextLines, list.status === "draft" || list.status === "open" ? "partial" : list.status);
+      // Record purchase first — service updates line status and derives list status
       await createGroceryPurchase({
         listId: list.id,
         groceryItemId: line.groceryItemId || null,
@@ -381,6 +391,7 @@ export function BuyingListEditor({ listId, onClose, onChanged }: Props) {
         notes: normalizeText(purchaseForm.notes) || null,
         purchasedAt: fromInputDate(purchaseForm.purchasedDate),
       });
+      await persist(nextLines);
       if (normalizeText(purchaseForm.vendor)) {
         const name = normalizeText(purchaseForm.vendor);
         if (!vendors.some((v) => v.name.toLowerCase() === name.toLowerCase())) {
@@ -422,7 +433,6 @@ export function BuyingListEditor({ listId, onClose, onChanged }: Props) {
     setSaving(true);
     setStatus(null);
     try {
-      await persist(lines, list.status === "draft" || list.status === "open" ? "partial" : list.status);
       await createGroceryPurchase({
         listId: list.id,
         groceryItemId: null,
@@ -437,6 +447,7 @@ export function BuyingListEditor({ listId, onClose, onChanged }: Props) {
         notes: normalizeText(totalForm.notes) || null,
         purchasedAt: fromInputDate(totalForm.purchasedDate),
       });
+      await persist(lines);
       if (normalizeText(totalForm.vendor)) {
         const name = normalizeText(totalForm.vendor);
         if (!vendors.some((v) => v.name.toLowerCase() === name.toLowerCase())) {

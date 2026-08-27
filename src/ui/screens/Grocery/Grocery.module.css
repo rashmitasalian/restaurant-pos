@@ -762,7 +762,7 @@
   inset: 0;
   z-index: 80;
   display: flex;
-  background: color-mix(in srgb, var(--pos-bg, #0f172a) 35%, transparent);
+  background: var(--pos-overlay);
   padding: 18px;
 }
 
@@ -774,7 +774,7 @@
   margin: 0 auto;
   overflow: hidden;
   border: 1px solid var(--pos-border, var(--pos-line));
-  border-radius: 12px;
+  border-radius: var(--pos-r-dialog);
   background: var(--pos-bg, var(--pos-surface));
   box-shadow: 0 18px 48px rgba(15, 23, 42, 0.18);
   padding: 18px 20px;

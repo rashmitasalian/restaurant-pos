@@ -478,6 +478,67 @@ function normalizeGroceryListType(value: unknown): GroceryListType {
   return "regular";
 }
 
+/**
+ * Buying-list status is derived from purchase activity (except draft/open/cancelled).
+ * Call inside the same transaction as purchase create/void/line updates.
+ */
+function recalcGroceryListStatus(database: Database.Database, listId: string | null | undefined) {
+  if (!listId) return;
+  const list = database.prepare("SELECT * FROM grocery_lists WHERE id = ?").get(listId) as any;
+  if (!list) return;
+  const current = normalizeGroceryListStatus(list.status);
+  if (current === "cancelled" || current === "draft") return;
+
+  const lines = database
+    .prepare(
+      `SELECT line_status FROM grocery_list_lines WHERE list_id = ? ORDER BY sort_order ASC`,
+    )
+    .all(listId) as Array<{ line_status: string }>;
+
+  const wholeListPurchase = database
+    .prepare(
+      `SELECT p.id FROM grocery_purchases p
+       JOIN grocery_purchase_lines l ON l.purchase_id = p.id
+       WHERE p.buying_list_id = ? AND p.status = 'recorded'
+         AND lower(l.item_name) = lower(?) AND lower(coalesce(l.category, '')) = lower(?)
+       LIMIT 1`,
+    )
+    .get(listId, GROCERY_LIST_TOTAL_ITEM_NAME, GROCERY_LIST_TOTAL_CATEGORY) as
+    | { id: string }
+    | undefined;
+
+  const actionable = lines.filter((line) => line.line_status !== "skipped");
+  const purchasedCount = actionable.filter((line) => line.line_status === "purchased").length;
+  const anyPurchaseHeader = database
+    .prepare(
+      `SELECT id FROM grocery_purchases
+       WHERE buying_list_id = ? AND status = 'recorded' LIMIT 1`,
+    )
+    .get(listId) as { id: string } | undefined;
+
+  let next: GroceryListStatus = current === "completed" ? "completed" : "open";
+  if (wholeListPurchase || (actionable.length > 0 && purchasedCount === actionable.length)) {
+    next = "completed";
+  } else if (purchasedCount > 0 || anyPurchaseHeader) {
+    next = "partial";
+  } else if (current === "completed") {
+    // Voided everything — reopen
+    next = "open";
+  }
+
+  if (next === current) return;
+  const at = now();
+  const completedAt = next === "completed" ? list.completed_at || at : null;
+  database
+    .prepare(`UPDATE grocery_lists SET status = ?, completed_at = ?, updated_at = ? WHERE id = ?`)
+    .run(next, completedAt, at, listId);
+  if (next === "completed" && current !== "completed") {
+    createAuditRow(database, "grocery.list.completed", "grocery-list", listId, null, {
+      derived: true,
+    });
+  }
+}
+
 function derivePaymentStatus(totalPaise: number, amountPaidPaise: number): GroceryPaymentStatus {
   if (amountPaidPaise <= 0) return "pending";
   if (amountPaidPaise >= totalPaise) return "paid";
@@ -3688,9 +3749,14 @@ export const posService = {
           ? current.notes || null
           : optionalGroceryText(updates.notes, 500, "grocery-notes-too-long");
       let status = normalizeGroceryListStatus(updates.status || current.status);
+      if (updates.status === "partial") {
+        throw new Error("grocery-list-status-derived");
+      }
       if (
         updates.status &&
-        !["draft", "open", "partial", "completed", "cancelled"].includes(updates.status)
+        !["draft", "open", "completed", "cancelled"].includes(updates.status) &&
+        updates.status !== ("printed" as any) &&
+        updates.status !== ("purchased" as any)
       ) {
         throw new Error("grocery-list-status-invalid");
       }
@@ -3925,6 +3991,49 @@ export const posService = {
         totalAmount: prepared.totalAmount,
         purchaseId: purchaseHeaderId,
       });
+      if (prepared.listId) {
+        const isWholeList =
+          normalizeText(prepared.itemName).toLowerCase() ===
+            GROCERY_LIST_TOTAL_ITEM_NAME.toLowerCase() &&
+          normalizeText(prepared.category).toLowerCase() ===
+            GROCERY_LIST_TOTAL_CATEGORY.toLowerCase();
+        if (isWholeList) {
+          database
+            .prepare(
+              `UPDATE grocery_list_lines
+               SET line_status = 'purchased', updated_at = ?
+               WHERE list_id = ? AND line_status != 'skipped'`,
+            )
+            .run(at, prepared.listId);
+        } else if (prepared.groceryItemId || prepared.itemName) {
+          database
+            .prepare(
+              `UPDATE grocery_list_lines
+               SET line_status = 'purchased',
+                   purchased_quantity = ?,
+                   purchased_unit_price_paise = ?,
+                   purchased_total_paise = ?,
+                   updated_at = ?
+               WHERE list_id = ?
+                 AND (
+                   (? IS NOT NULL AND grocery_item_id = ?)
+                   OR lower(item_name) = lower(?)
+                 )
+                 AND line_status != 'skipped'`,
+            )
+            .run(
+              prepared.quantity,
+              prepared.unitPrice == null ? null : rupeesToPaise(prepared.unitPrice),
+              totalPaise,
+              at,
+              prepared.listId,
+              prepared.groceryItemId,
+              prepared.groceryItemId,
+              prepared.itemName,
+            );
+        }
+        recalcGroceryListStatus(database, prepared.listId);
+      }
       return groceryPurchaseFromRow(
         database.prepare("SELECT * FROM grocery_purchase_lines WHERE id = ?").get(id),
       );
@@ -4220,9 +4329,57 @@ export const posService = {
       const current = database.prepare("SELECT * FROM grocery_purchases WHERE id = ?").get(id) as any;
       if (!current) throw new Error("grocery-purchase-not-found");
       if (current.status === "voided") return { ok: true };
+      const at = now();
       database
         .prepare("UPDATE grocery_purchases SET status = 'voided', updated_at = ? WHERE id = ?")
-        .run(now(), id);
+        .run(at, id);
+      const listId = current.buying_list_id as string | null;
+      if (listId) {
+        const purchaseLines = database
+          .prepare(
+            `SELECT grocery_item_id, item_name, category FROM grocery_purchase_lines WHERE purchase_id = ?`,
+          )
+          .all(id) as Array<{ grocery_item_id: string | null; item_name: string; category: string | null }>;
+        const isWholeList = purchaseLines.some(
+          (line) =>
+            normalizeText(line.item_name).toLowerCase() ===
+              GROCERY_LIST_TOTAL_ITEM_NAME.toLowerCase() &&
+            normalizeText(line.category).toLowerCase() ===
+              GROCERY_LIST_TOTAL_CATEGORY.toLowerCase(),
+        );
+        if (isWholeList) {
+          database
+            .prepare(
+              `UPDATE grocery_list_lines
+               SET line_status = 'pending',
+                   purchased_quantity = NULL,
+                   purchased_unit_price_paise = NULL,
+                   purchased_total_paise = NULL,
+                   updated_at = ?
+               WHERE list_id = ? AND line_status = 'purchased'`,
+            )
+            .run(at, listId);
+        } else {
+          for (const line of purchaseLines) {
+            database
+              .prepare(
+                `UPDATE grocery_list_lines
+                 SET line_status = 'pending',
+                     purchased_quantity = NULL,
+                     purchased_unit_price_paise = NULL,
+                     purchased_total_paise = NULL,
+                     updated_at = ?
+                 WHERE list_id = ?
+                   AND (
+                     (? IS NOT NULL AND grocery_item_id = ?)
+                     OR lower(item_name) = lower(?)
+                   )`,
+              )
+              .run(at, listId, line.grocery_item_id, line.grocery_item_id, line.item_name);
+          }
+        }
+        recalcGroceryListStatus(database, listId);
+      }
       createAuditRow(database, "grocery.purchase.voided", "grocery-purchase", id, actor || null, {
         oldTotalPaise: current.total_paise,
       });

@@ -1,6 +1,5 @@
 import React from "react";
-import { SegmentedControl } from "../../components/ui/SegmentedControl";
-import styles from "./Grocery.module.css";
+import { ManageShell } from "../Manager/ManageShell";
 import {
   GROCERY_TAB_HASH,
   GROCERY_TABS,
@@ -11,7 +10,6 @@ import { BuyingListsView } from "./BuyingLists/BuyingListsView";
 import { PurchasesView } from "./Purchases/PurchasesView";
 import { VendorsView } from "./Vendors/VendorsView";
 import { ItemsView } from "./Items/ItemsView";
-import { InsightsView } from "./Insights/InsightsView";
 
 export default function Grocery() {
   const [tab, setTab] = React.useState<GroceryTab>(() =>
@@ -31,24 +29,18 @@ export default function Grocery() {
   };
 
   return (
-    <div className={styles.root}>
-      <div className={styles.header}>
-        <div>
-          <h1 className={styles.title}>Grocery</h1>
-          <p className={styles.subtitle}>Buying lists plan what to buy. Vendors attach when you record purchases.</p>
-        </div>
-        <SegmentedControl
-          ariaLabel="Grocery sections"
-          options={GROCERY_TABS}
-          value={tab}
-          onChange={selectTab}
-        />
-      </div>
+    <ManageShell
+      title="Grocery"
+      description="Procurement and purchasing"
+      tabs={GROCERY_TABS}
+      tab={tab}
+      onTabChange={selectTab}
+      width="operational"
+    >
       {tab === "lists" && <BuyingListsView />}
       {tab === "purchases" && <PurchasesView />}
       {tab === "vendors" && <VendorsView />}
       {tab === "items" && <ItemsView />}
-      {tab === "insights" && <InsightsView />}
-    </div>
+    </ManageShell>
   );
 }
