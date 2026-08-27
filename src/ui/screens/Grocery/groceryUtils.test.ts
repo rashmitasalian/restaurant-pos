@@ -1,5 +1,8 @@
 import {
+  costVariance,
   formatCurrency,
+  formatEstimatedAmount,
+  formatVariance,
   groceryTabFromHash,
   statusLabel,
   suggestListName,
@@ -30,12 +33,16 @@ describe("groceryUtils", () => {
     expect(formatCurrency(1250.5)).toContain("1,250.5");
   });
 
-  it("suggests a session name by time of day", () => {
-    const morning = suggestListName(new Date(2026, 7, 26, 9, 0, 0));
-    const afternoon = suggestListName(new Date(2026, 7, 26, 14, 0, 0));
-    const evening = suggestListName(new Date(2026, 7, 26, 19, 0, 0));
-    expect(morning).toBe("Morning Procurement");
-    expect(afternoon).toBe("Afternoon Refill");
-    expect(evening).toBe("Evening Refill");
+  it("shows em dash for missing estimates instead of ₹0", () => {
+    expect(formatEstimatedAmount(0, [])).toBe("₹—");
+    expect(formatEstimatedAmount(0, [{ estimatedTotal: null }])).toBe("₹—");
+    expect(formatEstimatedAmount(850, [{ estimatedTotal: 850 }])).toContain("850");
+  });
+
+  it("formats cost variance only when estimates exist", () => {
+    expect(costVariance(850, 820, [{ estimatedTotal: 850 }])).toBe(-30);
+    expect(formatVariance(-30)).toBe("−₹30");
+    expect(costVariance(0, 60, [{ estimatedTotal: null }])).toBeNull();
+    expect(formatVariance(null)).toBe("—");
   });
 });

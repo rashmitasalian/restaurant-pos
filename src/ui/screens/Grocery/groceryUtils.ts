@@ -210,3 +210,50 @@ export function suggestListName(date = new Date()) {
 export function plannedTotal(lines: Array<{ estimatedTotal?: number | null; quantity?: number }>) {
   return lines.reduce((sum, line) => sum + Number(line.estimatedTotal || 0), 0);
 }
+
+/** True when at least one line has a usable estimated total. */
+export function hasEstimatedCost(
+  lines: Array<{ estimatedTotal?: number | null }>,
+): boolean {
+  return lines.some((line) => line.estimatedTotal != null && Number(line.estimatedTotal) > 0);
+}
+
+/** Show ₹— when estimates are missing so ₹0 does not read as “nothing planned”. */
+export function formatEstimatedAmount(
+  amount: number,
+  lines: Array<{ estimatedTotal?: number | null }>,
+) {
+  if (!hasEstimatedCost(lines)) return "₹—";
+  return formatCurrency(amount);
+}
+
+/**
+ * Actual − estimated. Negative = under estimate.
+ * Null when there is no estimate to compare against.
+ */
+export function costVariance(
+  estimated: number,
+  purchased: number,
+  lines: Array<{ estimatedTotal?: number | null }>,
+): number | null {
+  if (!hasEstimatedCost(lines)) return null;
+  return +(purchased - estimated).toFixed(2);
+}
+
+export function formatVariance(variance: number | null) {
+  if (variance == null) return "—";
+  if (variance === 0) return formatCurrency(0);
+  const sign = variance > 0 ? "+" : "−";
+  return `${sign}${formatCurrency(Math.abs(variance))}`;
+}
+
+export function itemsPendingCount(lines: Array<{ lineStatus?: string | null }>) {
+  const progress = lineProgress(lines);
+  return Math.max(0, progress.total - progress.purchased);
+}
+
+/** List fully purchased by item progress (not by rupee remaining). */
+export function isFullyPurchased(lines: Array<{ lineStatus?: string | null }>) {
+  const progress = lineProgress(lines);
+  return progress.total > 0 && progress.purchased >= progress.total;
+}

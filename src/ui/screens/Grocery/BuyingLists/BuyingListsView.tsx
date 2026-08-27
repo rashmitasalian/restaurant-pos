@@ -21,9 +21,15 @@ import styles from "../Grocery.module.css";
 import {
   formatCurrency,
   formatDayHeading,
+  formatEstimatedAmount,
+  formatListDate,
   formatListTime,
+  formatVariance,
   fromInputDate,
   getHistoryRange,
+  costVariance,
+  itemsPendingCount,
+  isFullyPurchased,
   lineProgress,
   listTypeLabel,
   plannedTotal,
@@ -270,9 +276,14 @@ export function BuyingListsView() {
     (list) =>
       startOfDay(new Date(list.listDate)).getTime() === todayStart && list.status !== "cancelled",
   );
-  const todayPlanned = todayLists.reduce((s, l) => s + l.planned, 0);
   const todayPurchased = todayLists.reduce((s, l) => s + l.purchased, 0);
-  const todayPending = Math.max(0, todayPlanned - todayPurchased);
+  const todayActive = todayLists.filter(
+    (list) => list.status !== "completed" && list.status !== "cancelled",
+  ).length;
+  const todayItemsPending = todayLists.reduce(
+    (sum, list) => sum + itemsPendingCount(list.lines || []),
+    0,
+  );
 
   const filtered = lists.filter((list) => {
     if (statusFilter !== "all" && list.status !== statusFilter) return false;
@@ -317,9 +328,12 @@ export function BuyingListsView() {
         <div className={styles.todaySummary}>
           <strong>Buying Lists</strong>
           <span>
-            Today · {todayLists.length} session{todayLists.length === 1 ? "" : "s"} ·{" "}
-            {formatCurrency(todayPlanned)} planned · {formatCurrency(todayPurchased)} purchased ·{" "}
-            {formatCurrency(todayPending)} pending
+            Today · {todayLists.length} list{todayLists.length === 1 ? "" : "s"}
+            {todayLists.length > 0
+              ? ` · ${todayActive} active · ${formatCurrency(todayPurchased)} purchased · ${todayItemsPending} item${
+                  todayItemsPending === 1 ? "" : "s"
+                } pending`
+              : ""}
           </span>
         </div>
         <Button variant="primary" onClick={() => setNewOpen(true)}>
@@ -407,8 +421,13 @@ export function BuyingListsView() {
               <div className={styles.sessionStack}>
                 {dayLists.map((list) => {
                   const progress = lineProgress(list.lines || []);
-                  const remaining = Math.max(0, list.planned - list.purchased);
+                  const pendingItems = itemsPendingCount(list.lines || []);
+                  const completeByItems = isFullyPurchased(list.lines || []);
+                  const variance = costVariance(list.planned, list.purchased, list.lines || []);
                   const terminal = list.status === "completed" || list.status === "cancelled";
+                  const canRecordPurchase = !terminal && (list.lines || []).length > 0;
+                  const listDay = startOfDay(new Date(list.listDate)).getTime();
+                  const showDateInMeta = listDay !== todayStart;
                   return (
                     <article key={list.id} className={styles.sessionCard}>
                       <div className={styles.sessionMain}>
@@ -417,6 +436,7 @@ export function BuyingListsView() {
                           <Badge tone={statusTone(list.status)}>{statusLabel(list.status)}</Badge>
                         </div>
                         <div className={styles.sessionMeta}>
+                          {showDateInMeta ? `${formatListDate(list.listDate)} · ` : ""}
                           {formatListTime(list.createdAt || list.listDate)}
                           {list.createdBy ? ` · ${list.createdBy}` : ""}
                           {` · ${listTypeLabel(list.listType)}`}
@@ -425,9 +445,20 @@ export function BuyingListsView() {
                             : ` · ${list.lines.length} items`}
                         </div>
                         <div className={styles.sessionStats}>
-                          Planned {formatCurrency(list.planned)}
-                          {" · "}Purchased {formatCurrency(list.purchased)}
-                          {" · "}Remaining {formatCurrency(remaining)}
+                          {completeByItems || terminal ? (
+                            <>
+                              Planned {formatEstimatedAmount(list.planned, list.lines || [])}
+                              {" · "}Purchased {formatCurrency(list.purchased)}
+                              {" · "}Variance {formatVariance(variance)}
+                            </>
+                          ) : (
+                            <>
+                              Estimated {formatEstimatedAmount(list.planned, list.lines || [])}
+                              {" · "}Purchased {formatCurrency(list.purchased)}
+                              {" · "}
+                              {pendingItems} item{pendingItems === 1 ? "" : "s"} pending
+                            </>
+                          )}
                         </div>
                       </div>
                       <div className={styles.sessionActions} data-more-for={list.id}>
@@ -440,13 +471,15 @@ export function BuyingListsView() {
                             <Button variant="primary" size="sm" onClick={() => setEditId(list.id)}>
                               Continue
                             </Button>
-                            <Button
-                              variant="secondary"
-                              size="sm"
-                              onClick={() => openPurchase(list.id)}
-                            >
-                              Record Purchase
-                            </Button>
+                            {canRecordPurchase ? (
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => openPurchase(list.id)}
+                              >
+                                Record Purchase
+                              </Button>
+                            ) : null}
                           </>
                         )}
                         <div className={styles.moreWrap}>

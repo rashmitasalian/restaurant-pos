@@ -9,9 +9,14 @@ import { Drawer } from "../../../components/ui/Drawer";
 import { Button } from "../../../components/ui/Button";
 import { Badge } from "../../../components/ui/Badge";
 import {
+  costVariance,
   formatCurrency,
+  formatEstimatedAmount,
   formatListDate,
   formatListTime,
+  formatVariance,
+  isFullyPurchased,
+  itemsPendingCount,
   lineProgress,
   listTypeLabel,
   plannedTotal,
@@ -39,6 +44,12 @@ type Props = {
   onRecordPurchase?: (id: string) => void;
   onChanged: () => void | Promise<void>;
 };
+
+function lineStateLabel(line: GroceryListDoc["lines"][number]) {
+  if (line.lineStatus === "purchased" || line.purchasedQuantity != null) return "Purchased";
+  if (line.lineStatus === "skipped") return "Skipped";
+  return "Pending";
+}
 
 export function BuyingListDetail({
   listId,
@@ -85,8 +96,10 @@ export function BuyingListDetail({
     .filter((p) => p.status !== "voided")
     .reduce((sum, p) => sum + Number(p.total || 0), 0);
   const planned = plannedTotal(list?.lines || []);
-  const remaining = Math.max(0, planned - purchasedTotal);
   const progress = lineProgress(list?.lines || []);
+  const pendingItems = itemsPendingCount(list?.lines || []);
+  const variance = costVariance(planned, purchasedTotal, list?.lines || []);
+  const fulfilled = isFullyPurchased(list?.lines || []);
   const open = Boolean(listId);
   const editable = list && list.status !== "completed" && list.status !== "cancelled";
   const activePurchases = purchases.filter((p) => p.status !== "voided");
@@ -105,7 +118,7 @@ export function BuyingListDetail({
                 Continue
               </Button>
             ) : null}
-            {editable && onRecordPurchase ? (
+            {editable && list.lines.length > 0 && onRecordPurchase ? (
               <Button variant="secondary" size="sm" onClick={() => onRecordPurchase(list.id)}>
                 Record Purchase
               </Button>
@@ -132,21 +145,6 @@ export function BuyingListDetail({
             {list.printCount > 0 ? ` · Printed ${list.printCount}×` : ""}
           </div>
 
-          <div className={styles.kpiGrid} style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
-            <div className={styles.kpi}>
-              <div className={styles.kpiLabel}>Planned</div>
-              <div className={styles.kpiValue}>{formatCurrency(planned)}</div>
-            </div>
-            <div className={styles.kpi}>
-              <div className={styles.kpiLabel}>Purchased</div>
-              <div className={styles.kpiValue}>{formatCurrency(purchasedTotal)}</div>
-            </div>
-            <div className={styles.kpi}>
-              <div className={styles.kpiLabel}>Remaining</div>
-              <div className={styles.kpiValue}>{formatCurrency(remaining)}</div>
-            </div>
-          </div>
-
           <section>
             <h3 className={styles.dayHeading}>Progress</h3>
             <div className={styles.progressTrack} aria-hidden>
@@ -157,9 +155,37 @@ export function BuyingListDetail({
             </div>
             <div className={styles.hint}>
               {progress.purchased} / {progress.total} items purchased
-              {planned > 0
-                ? ` · ${formatCurrency(purchasedTotal)} / ${formatCurrency(planned)}`
+              {!fulfilled && pendingItems > 0
+                ? ` · ${pendingItems} item${pendingItems === 1 ? "" : "s"} pending`
                 : ""}
+            </div>
+          </section>
+
+          <section>
+            <h3 className={styles.dayHeading}>Financial summary</h3>
+            <div className={styles.kpiGrid} style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
+              <div className={styles.kpi}>
+                <div className={styles.kpiLabel}>
+                  {fulfilled || list.status === "completed" ? "Planned / Estimated" : "Estimated"}
+                </div>
+                <div className={styles.kpiValue}>
+                  {formatEstimatedAmount(planned, list.lines || [])}
+                </div>
+              </div>
+              <div className={styles.kpi}>
+                <div className={styles.kpiLabel}>Actual purchased</div>
+                <div className={styles.kpiValue}>{formatCurrency(purchasedTotal)}</div>
+              </div>
+              <div className={styles.kpi}>
+                <div className={styles.kpiLabel}>
+                  {fulfilled || list.status === "completed" ? "Variance" : "Items pending"}
+                </div>
+                <div className={styles.kpiValue}>
+                  {fulfilled || list.status === "completed"
+                    ? formatVariance(variance)
+                    : String(pendingItems)}
+                </div>
+              </div>
             </div>
           </section>
 
@@ -173,6 +199,7 @@ export function BuyingListDetail({
                   <thead>
                     <tr>
                       <th>Item</th>
+                      <th>Status</th>
                       <th>Planned</th>
                       <th>Purchased</th>
                       <th>Est.</th>
@@ -186,6 +213,7 @@ export function BuyingListDetail({
                           <strong>{line.itemName}</strong>
                           {line.category ? <div className={styles.hint}>{line.category}</div> : null}
                         </td>
+                        <td>{lineStateLabel(line)}</td>
                         <td>
                           {line.quantity} {line.unit}
                         </td>
@@ -221,13 +249,14 @@ export function BuyingListDetail({
                     <div className={styles.sessionMain}>
                       <div className={styles.sessionTitleRow}>
                         <h4 className={styles.sessionTitle}>
-                          {purchase.vendorName || "Not specified"}
+                          {purchase.id.length > 12 ? purchase.id.slice(-8).toUpperCase() : purchase.id}
                         </h4>
                         <Badge tone="success">Recorded</Badge>
                       </div>
                       <div className={styles.sessionMeta}>
+                        {purchase.vendorName || "Not specified"}
+                        {" · "}
                         {formatListDate(purchase.purchaseDate)}
-                        {purchase.invoiceNumber ? ` · Inv ${purchase.invoiceNumber}` : ""}
                         {purchase.paymentMethod ? ` · ${purchase.paymentMethod}` : ""}
                       </div>
                       <div className={styles.sessionStats}>
