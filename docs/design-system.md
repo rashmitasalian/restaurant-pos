@@ -152,7 +152,8 @@ Sign-off gates: (1) Could this be mistaken for a generic SaaS dashboard? (2) Doe
 - One visually dominant primary action when the context has one — do not invent actions (e.g. Audit has none).
 - Content widths: reading/form ~880–960px left-aligned; operational ~1200–1400px; data-dense 100%. Never center a narrow column on wide desktops.
 - Four surfaces only: workspace → content → interactive → overlay. Do not invent a fifth to separate content; use spacing/type/dividers first.
-- Density (comfortable/compact), when present, lives under View and is scoped to Manage only.
+- Manage header contract: title (+ description) left; **one primary action** top-right when the section has a create/add action. Filters and secondary tools sit in the content toolbar band (or below tabs), not in a lonely full-width row.
+- Density View toggle was removed — it only adjusted table padding and added chrome without clear benefit.
 - `KpiRow`: max four headline values, inline (not dashboard tiles). Supporting primitive, not every screen's layout.
 
 ### Overlay allocation

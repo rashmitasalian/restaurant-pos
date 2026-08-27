@@ -6,7 +6,6 @@ import { Input } from "../../components/ui/Input";
 import { Select } from "../../components/ui/Select";
 import { DataTable } from "../../components/ui/DataTable";
 import { ManageShell } from "../Manager/ManageShell";
-import { useManageDensity } from "../Manager/ManageDensity";
 import {
   CircleDot,
   Download,
@@ -60,7 +59,6 @@ function detailText(detail: unknown): string {
 }
 
 export default function AuditViewer() {
-  const { dense } = useManageDensity();
   const [items, setItems] = React.useState<any[]>([]);
   const [totalCount, setTotalCount] = React.useState(0);
   const [loading, setLoading] = React.useState(false);
@@ -271,7 +269,6 @@ export default function AuditViewer() {
         rows={rows}
         sortValues={sortValues}
         loading={loading}
-        dense={dense}
         empty={
           filter || dateFrom || dateTo
             ? "No entries match your filters"

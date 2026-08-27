@@ -59,13 +59,6 @@
   display: none;
 }
 
-.manage-dense :global(.ui-table th),
-.manage-dense :global(.ui-table td),
-[data-dense="true"] :global(.ui-table th),
-[data-dense="true"] :global(.ui-table td) {
-  padding: 8px 10px;
-}
-
 .railTitle {
   margin: 0;
   font-size: var(--pos-type-13);

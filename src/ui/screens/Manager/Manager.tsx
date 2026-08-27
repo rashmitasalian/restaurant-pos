@@ -11,7 +11,6 @@ import UsersScreen from "../Users/UsersScreen";
 import Reports from "../Reports/Reports";
 import Overview from "./Overview";
 import { ManageShell } from "./ManageShell";
-import { ManageDensityProvider, useManageDensity } from "./ManageDensity";
 import { CommandPalette, buildManageCommands } from "./CommandPalette";
 import styles from "./Manager.module.css";
 import {
@@ -110,6 +109,26 @@ function PeopleSection() {
   );
 }
 
+function MenuSection() {
+  const addItemRef = React.useRef<(() => void) | null>(null);
+  return (
+    <ManageShell
+      title="Menu"
+      description="Edit items and prices"
+      width="full"
+      primaryAction={
+        <Button variant="primary" onClick={() => addItemRef.current?.()}>
+          + Add Item
+        </Button>
+      }
+    >
+      <div className={styles.embedBody}>
+        <ItemsEditor embedded addItemRef={addItemRef} />
+      </div>
+    </ManageShell>
+  );
+}
+
 function SettingsSection() {
   const [tab, setTab] = React.useState("identity");
 
@@ -131,7 +150,6 @@ function SettingsSection() {
 
 function ManagerInner({ section, onSectionChange, reportsOnly }: ManagerProps) {
   const [paletteOpen, setPaletteOpen] = React.useState(false);
-  const { dense } = useManageDensity();
 
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -162,19 +180,11 @@ function ManagerInner({ section, onSectionChange, reportsOnly }: ManagerProps) {
     if (section === "overview") return <Overview onNavigate={onSectionChange} />;
     if (section === "grocery") return <Grocery />;
     if (section === "expenses") return <Expenses />;
-    if (section === "menu") {
-      return (
-        <ManageShell title="Menu" description="Edit items and prices" width="full">
-          <div className={styles.embedBody}>
-            <ItemsEditor embedded />
-          </div>
-        </ManageShell>
-      );
-    }
+    if (section === "menu") return <MenuSection />;
     if (section === "people") return <PeopleSection />;
     if (section === "reports") {
       return (
-        <ManageShell title="Reports" description="Sales and profitability" width="full" showViewMenu={!reportsOnly}>
+        <ManageShell title="Reports" description="Sales and profitability" width="full">
           <Reports embedded />
         </ManageShell>
       );
@@ -195,7 +205,7 @@ function ManagerInner({ section, onSectionChange, reportsOnly }: ManagerProps) {
 
   if (reportsOnly) {
     return (
-      <div className={styles.managerRootSolo} data-dense={dense || undefined}>
+      <div className={styles.managerRootSolo}>
         {renderSection()}
         <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} items={commands} />
       </div>
@@ -205,7 +215,7 @@ function ManagerInner({ section, onSectionChange, reportsOnly }: ManagerProps) {
   let currentGroup: string | null = null;
 
   return (
-    <div className={styles.managerRoot} data-dense={dense || undefined}>
+    <div className={styles.managerRoot}>
       <aside className={styles.rail} aria-label="Manage navigation">
         <div className={styles.railBrand}>
           <h2 className={styles.railTitle}>Manage</h2>
@@ -245,9 +255,5 @@ function ManagerInner({ section, onSectionChange, reportsOnly }: ManagerProps) {
 }
 
 export default function Manager(props: ManagerProps) {
-  return (
-    <ManageDensityProvider>
-      <ManagerInner {...props} />
-    </ManageDensityProvider>
-  );
+  return <ManagerInner {...props} />;
 }

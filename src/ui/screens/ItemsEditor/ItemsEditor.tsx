@@ -97,7 +97,14 @@ function getVariantPriceLabel(variants: VariantDraft[]) {
   return min === max ? `₹${min}` : `₹${min} - ₹${max}`;
 }
 
-export default function ItemsEditor({ embedded = false }: { embedded?: boolean }) {
+export default function ItemsEditor({
+  embedded = false,
+  addItemRef,
+}: {
+  embedded?: boolean;
+  /** When set (Manage Menu), Add Item lives in ManageShell primaryAction */
+  addItemRef?: React.MutableRefObject<(() => void) | null>;
+}) {
   const { showToast: _showToast } = useToast();
   const showToast = (msg: string, kind: "ok" | "err" = "ok") =>
     _showToast(msg, kind === "err" ? "error" : "success");
@@ -113,6 +120,15 @@ export default function ItemsEditor({ embedded = false }: { embedded?: boolean }
   const [modalAvailable, setModalAvailable] = React.useState(true);
   const [modalVariants, setModalVariants] = React.useState<VariantDraft[]>([]);
   const [modalSaving, setModalSaving] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!addItemRef) return;
+    addItemRef.current = () => setModalOpen(true);
+    return () => {
+      addItemRef.current = null;
+    };
+  }, [addItemRef]);
+
   // Inline edit map: itemId -> draft field overrides.
   const [editMap, setEditMap] = React.useState<
     Record<
@@ -566,13 +582,6 @@ export default function ItemsEditor({ embedded = false }: { embedded?: boolean }
           </button>
         }
       />
-      )}
-      {embedded && (
-        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
-          <button onClick={() => setModalOpen(true)} className="pos-btn pos-btn-primary">
-            + Add Item
-          </button>
-        </div>
       )}
 
       {/* Search bar */}

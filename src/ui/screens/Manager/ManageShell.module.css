@@ -45,58 +45,6 @@
   flex-wrap: wrap;
 }
 
-.viewMenu {
-  position: relative;
-}
-
-.viewBtn {
-  border: 1px solid var(--pos-line);
-  background: var(--pos-surface);
-  color: var(--pos-tx-sec);
-  border-radius: var(--pos-r-sm);
-  padding: 7px 12px;
-  font: inherit;
-  font-size: var(--pos-type-13);
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.viewBtn:hover {
-  background: var(--pos-surface-hover);
-  color: var(--pos-tx);
-}
-
-.viewDropdown {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 4px);
-  min-width: 160px;
-  background: var(--pos-surface);
-  border: 1px solid var(--pos-line);
-  border-radius: var(--pos-r-md);
-  box-shadow: var(--pos-shadow-2);
-  padding: 6px;
-  z-index: 20;
-}
-
-.viewOption {
-  width: 100%;
-  display: block;
-  border: none;
-  background: transparent;
-  text-align: left;
-  font: inherit;
-  font-size: var(--pos-type-13);
-  color: var(--pos-tx);
-  padding: 8px 10px;
-  border-radius: var(--pos-r-sm);
-  cursor: pointer;
-}
-
-.viewOption:hover {
-  background: var(--pos-teal-tint);
-}
-
 .tabsRow {
   padding-bottom: 12px;
   border-top: 1px solid var(--pos-line);

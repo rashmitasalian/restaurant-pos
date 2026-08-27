@@ -287,7 +287,7 @@ export function BuyingListEditor({ listId, onClose, onChanged, onRecordPurchase 
             <Button variant="secondary" onClick={printList} disabled={saving || !list}>
               Print
             </Button>
-            <Button variant="ghost" onClick={exportPdf} disabled={saving || !list}>
+            <Button variant="secondary" onClick={exportPdf} disabled={saving || !list}>
               PDF
             </Button>
             {canPurchase && onRecordPurchase ? (

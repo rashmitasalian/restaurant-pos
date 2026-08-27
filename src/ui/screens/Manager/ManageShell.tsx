@@ -1,6 +1,5 @@
 import React from "react";
 import { SegmentedControl } from "../../components/ui/SegmentedControl";
-import { useManageDensity, type ManageDensity } from "./ManageDensity";
 import styles from "./ManageShell.module.css";
 
 export type ManageShellWidth = "form" | "operational" | "full";
@@ -13,72 +12,22 @@ export type ManageShellTab = {
 type ManageShellProps = {
   title: string;
   description?: string;
+  /** Dominant create/primary control — sits top-right with the title */
   primaryAction?: React.ReactNode;
   tabs?: ManageShellTab[];
   tab?: string;
   onTabChange?: (id: string) => void;
   toolbar?: React.ReactNode;
   width?: ManageShellWidth;
-  showViewMenu?: boolean;
   children: React.ReactNode;
 };
 
-function ViewMenu() {
-  const { density, setDensity } = useManageDensity();
-  const [open, setOpen] = React.useState(false);
-  const ref = React.useRef<HTMLDivElement>(null);
-
-  React.useEffect(() => {
-    if (!open) return;
-    const onDoc = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
-  }, [open]);
-
-  const pick = (next: ManageDensity) => {
-    setDensity(next);
-    setOpen(false);
-  };
-
-  return (
-    <div className={styles.viewMenu} ref={ref}>
-      <button
-        type="button"
-        className={styles.viewBtn}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
-      >
-        View
-      </button>
-      {open ? (
-        <div className={styles.viewDropdown} role="menu">
-          <button
-            type="button"
-            role="menuitemradio"
-            aria-checked={density === "comfortable"}
-            className={styles.viewOption}
-            onClick={() => pick("comfortable")}
-          >
-            {density === "comfortable" ? "● " : "○ "}Comfortable
-          </button>
-          <button
-            type="button"
-            role="menuitemradio"
-            aria-checked={density === "compact"}
-            className={styles.viewOption}
-            onClick={() => pick("compact")}
-          >
-            {density === "compact" ? "● " : "○ "}Compact
-          </button>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
+/**
+ * Manage workspace chrome.
+ * Header contract: title (+ description) left · primaryAction right.
+ * Tabs / toolbar are optional bands below. Density “View” control was removed —
+ * it only nudged table padding and cluttered every section header.
+ */
 export function ManageShell({
   title,
   description,
@@ -88,7 +37,6 @@ export function ManageShell({
   onTabChange,
   toolbar,
   width = "operational",
-  showViewMenu = true,
   children,
 }: ManageShellProps) {
   const widthClass =
@@ -102,10 +50,7 @@ export function ManageShell({
             <h1 className={`pos-ph-title ${styles.title}`}>{title}</h1>
             {description ? <p className={styles.description}>{description}</p> : null}
           </div>
-          <div className={styles.primaryAction}>
-            {primaryAction}
-            {showViewMenu ? <ViewMenu /> : null}
-          </div>
+          {primaryAction ? <div className={styles.primaryAction}>{primaryAction}</div> : null}
         </div>
         {tabs && tabs.length > 0 && tab && onTabChange ? (
           <div className={styles.tabsRow}>
