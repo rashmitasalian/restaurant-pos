@@ -21,28 +21,50 @@ export function PortalMenu({
   const menuRef = React.useRef<HTMLDivElement>(null);
   const [style, setStyle] = React.useState<React.CSSProperties>({ visibility: "hidden" });
 
-  React.useLayoutEffect(() => {
-    if (!open) {
-      return;
-    }
+  const updatePosition = React.useCallback(() => {
     const anchor = anchorRef.current;
     if (!anchor) {
       return;
     }
     const rect = anchor.getBoundingClientRect();
+    if (rect.bottom < 0 || rect.top > window.innerHeight || rect.right < 0 || rect.left > window.innerWidth) {
+      onClose();
+      return;
+    }
     const menuWidth = Math.max(minWidth, menuRef.current?.offsetWidth || minWidth);
+    const menuHeight = menuRef.current?.offsetHeight || 0;
     const left =
       align === "right"
         ? Math.max(8, rect.right - menuWidth)
         : Math.min(rect.left, window.innerWidth - menuWidth - 8);
-    const top = Math.min(rect.bottom + 4, window.innerHeight - 8);
+    let top = rect.bottom + 4;
+    if (menuHeight > 0 && top + menuHeight > window.innerHeight - 8) {
+      const above = rect.top - menuHeight - 4;
+      if (above >= 8) {
+        top = above;
+      }
+    }
     setStyle({
       visibility: "visible",
       top,
       left,
       minWidth,
     });
-  }, [align, anchorRef, minWidth, open]);
+  }, [align, anchorRef, minWidth, onClose]);
+
+  React.useLayoutEffect(() => {
+    if (!open) {
+      return;
+    }
+    updatePosition();
+    const onScrollOrResize = () => updatePosition();
+    window.addEventListener("scroll", onScrollOrResize, true);
+    window.addEventListener("resize", onScrollOrResize);
+    return () => {
+      window.removeEventListener("scroll", onScrollOrResize, true);
+      window.removeEventListener("resize", onScrollOrResize);
+    };
+  }, [open, updatePosition]);
 
   React.useEffect(() => {
     if (!open) {

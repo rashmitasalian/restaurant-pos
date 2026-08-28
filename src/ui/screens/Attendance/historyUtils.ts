@@ -1,5 +1,6 @@
 import type { AttendanceStatus } from "../../../shared/pos";
 import type { AttendanceDoc, StaffDoc } from "../../../app/db/posRepository";
+import { normalizeText } from "../../../shared/validation";
 import { filterStaffBySearch } from "../People/peopleUtils";
 
 export type HistoryPeriod = "week" | "month" | "custom";
@@ -250,7 +251,7 @@ export function buildAttendanceMatrix(
     return {
       staffId: member.id,
       employee: member.name,
-      role: member.designation || "—",
+      role: normalizeText(member.designation),
       cells,
       totals,
     };

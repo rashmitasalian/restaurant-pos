@@ -16,6 +16,8 @@ type CellMenuProps<T extends string> = {
   ariaLabel: string;
   tone?: string;
   align?: "left" | "right";
+  disabled?: boolean;
+  disabledTitle?: string;
 };
 
 const TONE_CLASS: Record<string, string> = {
@@ -34,9 +36,21 @@ export default function CellMenu<T extends string>({
   ariaLabel,
   tone,
   align = "left",
+  disabled = false,
+  disabledTitle,
 }: CellMenuProps<T>) {
   const [open, setOpen] = React.useState(false);
   const triggerRef = React.useRef<HTMLButtonElement>(null);
+
+  if (disabled) {
+    return (
+      <div className={menuStyles.root}>
+        <span className={menuStyles.disabledLabel} title={disabledTitle}>
+          {label}
+        </span>
+      </div>
+    );
+  }
 
   return (
     <div className={menuStyles.root}>

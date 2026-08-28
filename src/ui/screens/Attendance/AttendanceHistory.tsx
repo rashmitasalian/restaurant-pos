@@ -332,7 +332,7 @@ export default function AttendanceHistory({ embedded = false }: { embedded?: boo
                   <tr key={row.staffId}>
                     <td className={styles.stickyCol}>
                       <div className={styles.employeeName}>{row.employee}</div>
-                      <div className={styles.employeeRole}>{row.role}</div>
+                      {row.role ? <div className={styles.employeeRole}>{row.role}</div> : null}
                     </td>
                     {resolvedRange.days.map((day) => {
                       const cell = row.cells[day];

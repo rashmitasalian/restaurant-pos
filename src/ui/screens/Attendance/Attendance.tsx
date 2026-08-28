@@ -29,6 +29,13 @@ import {
 } from "./attendanceDisplay";
 import CellMenu from "./components/CellMenu";
 import { NoteEditor, OvertimeEditor } from "./components/AttendanceEditors";
+import {
+  attendanceFieldHint,
+  canMarkLate,
+  canRecordOvertime,
+  canSetShift,
+  isWorkingAttendanceStatus,
+} from "./attendanceRules";
 type AttendanceRow = {
   id?: string;
   staffId: string;
@@ -152,7 +159,7 @@ function buildInitialRows(staff: StaffDoc[], records: AttendanceDoc[], attendanc
       id: record?.id,
       staffId: member.id,
       employee: member.name,
-      role: member.designation || "-",
+      role: normalizeText(member.designation),
       shiftId: record?.shiftId || member.defaultShiftId || "morning",
       status: record?.status ?? null,
       isLate: Boolean(record?.isLate),
@@ -208,12 +215,10 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [moreOpen, setMoreOpen] = React.useState(false);
-  const [bulkOpen, setBulkOpen] = React.useState(false);
   const [otEditor, setOtEditor] = React.useState<{ index: number; employee: string } | null>(null);
   const [noteEditor, setNoteEditor] = React.useState<{ index: number; employee: string } | null>(null);
   const [holidays, setHolidays] = React.useState<string[]>([]);
   const dateInputRef = React.useRef<HTMLInputElement>(null);
-  const bulkRef = React.useRef<HTMLButtonElement>(null);
   const moreButtonRef = React.useRef<HTMLButtonElement>(null);
   const focusedRowRef = React.useRef(0);
 
@@ -263,8 +268,10 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
           }
           const next = { ...row, ...patch, dirty: true };
           if (patch.status !== undefined) {
-            if (patch.status !== "present" && patch.status !== "half-day") {
+            if (!isWorkingAttendanceStatus(patch.status)) {
               next.isLate = false;
+              next.overtimeMinutes = 0;
+              next.manualOvertime = false;
             }
           }
           if (patch.overtimeMinutes !== undefined) {
@@ -511,8 +518,9 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
 
   return (
     <div className={embedded ? styles.rootEmbedded : styles.root}>
-      <div className={styles.toolbar}>
-        <div className={styles.contextBar}>
+      <div className={styles.stickyChrome}>
+        <div className={styles.toolbar}>
+          <div className={styles.contextBar}>
           <div className={styles.contextPrimary}>
             <div className={styles.dateNav}>
               <button
@@ -609,46 +617,28 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
 
           <div className={styles.stripActions}>
             <button
-              ref={bulkRef}
               type="button"
-              className={styles.stripBtn}
-              aria-haspopup="menu"
-              aria-expanded={bulkOpen}
-              onClick={() => {
-                setBulkOpen((open) => !open);
-                setMoreOpen(false);
-              }}
+              className={`${styles.stripBtn} ${styles.stripBtnPrimary}`}
+              onClick={() => markAll("present")}
             >
               Mark all present
             </button>
-            <PortalMenu open={bulkOpen} anchorRef={bulkRef} onClose={() => setBulkOpen(false)}>
-              <PortalMenuItem
-                onClick={() => {
-                  markAll("present");
-                  setBulkOpen(false);
-                }}
+            <button
+              type="button"
+              className={styles.stripBtn}
+              onClick={() => markAll("absent")}
+            >
+              Mark all absent
+            </button>
+            {isRestaurantHoliday ? (
+              <button
+                type="button"
+                className={styles.stripBtn}
+                onClick={() => markAll("holiday", true)}
               >
-                Mark all present
-              </PortalMenuItem>
-              <PortalMenuItem
-                onClick={() => {
-                  markAll("absent");
-                  setBulkOpen(false);
-                }}
-              >
-                Mark all absent
-              </PortalMenuItem>
-              {isRestaurantHoliday ? (
-                <PortalMenuItem
-                  onClick={() => {
-                    markAll("holiday", true);
-                    setBulkOpen(false);
-                  }}
-                >
-                  Mark all holiday
-                </PortalMenuItem>
-              ) : null}
-            </PortalMenu>
+                Mark all holiday
+              </button>
+            ) : null}
 
             <button
               ref={moreButtonRef}
@@ -659,7 +649,6 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
               aria-expanded={moreOpen}
               onClick={() => {
                 setMoreOpen((open) => !open);
-                setBulkOpen(false);
               }}
             >
               <MoreHorizontal size={18} />
@@ -717,6 +706,7 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
           </div>
         </div>
       </div>
+      </div>
 
       {error && (
         <div className={styles.errorPanel} role="alert">
@@ -755,7 +745,9 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
               {filteredRows.map((row, viewIndex) => {
                 const index = rows.findIndex((candidate) => candidate.staffId === row.staffId);
                 const tone = statusTone(row.status);
-                const lateEnabled = row.status === "present" || row.status === "half-day";
+                const lateEnabled = canMarkLate(row.status);
+                const otEnabled = canRecordOvertime(row.status);
+                const shiftEnabled = canSetShift(row.status);
                 return (
                   <tr
                     key={row.staffId}
@@ -763,7 +755,7 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
                   >
                     <td className={styles.colEmployee}>
                       <div className={styles.employeeName}>{row.employee}</div>
-                      <div className={styles.employeeRole}>{row.role}</div>
+                      {row.role ? <div className={styles.employeeRole}>{row.role}</div> : null}
                       {row.scheduledOff ? (
                         <div className={styles.scheduledOffBadge}>Scheduled off</div>
                       ) : null}
@@ -775,6 +767,8 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
                       <CellMenu
                         label={getShiftLabel(row.shiftId)}
                         ariaLabel={`Shift for ${row.employee}`}
+                        disabled={!shiftEnabled}
+                        disabledTitle={attendanceFieldHint("shift", row.status)}
                         options={shiftOptions.map((option) => ({
                           value: option.value,
                           label: option.label,
@@ -813,7 +807,7 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
                         }}
                         aria-label={`Late for ${row.employee}`}
                         aria-pressed={row.isLate}
-                        title={lateEnabled ? "Mark as late" : "Late applies to Present or Half Day only"}
+                        title={lateEnabled ? "Mark as late" : attendanceFieldHint("late", row.status)}
                       >
                         Late
                       </button>
@@ -821,12 +815,17 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
                     <td className={styles.colOt}>
                       <button
                         type="button"
-                        className={styles.quietCellBtn}
+                        className={`${styles.quietCellBtn} ${!otEnabled ? styles.quietCellBtnDisabled : ""}`}
+                        disabled={!otEnabled}
                         onClick={() => {
+                          if (!otEnabled) {
+                            return;
+                          }
                           focusedRowRef.current = viewIndex;
                           setOtEditor({ index, employee: row.employee });
                         }}
                         aria-label={`Overtime for ${row.employee}`}
+                        title={otEnabled ? "Edit overtime" : attendanceFieldHint("ot", row.status)}
                       >
                         {formatOvertimeHours(row.overtimeMinutes)}
                       </button>

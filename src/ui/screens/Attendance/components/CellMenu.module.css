@@ -137,3 +137,15 @@
   background: transparent;
   border: 1px dashed var(--pos-line);
 }
+
+.disabledLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 4px 8px;
+  margin: -4px -8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--pos-tx-muted);
+}

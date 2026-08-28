@@ -1,28 +1,38 @@
 .root {
   padding: 18px 24px 88px;
   min-height: 100%;
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 12px;
 }
 
 .rootEmbedded {
   padding: 0 0 72px;
   min-height: 0;
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 12px;
 }
 
-.toolbar {
+.stickyChrome {
   position: sticky;
   top: 0;
   z-index: 12;
+  display: grid;
+  gap: 12px;
+  padding-bottom: 4px;
   background: var(--pos-bg, var(--pos-surface));
+  box-shadow: 0 1px 0 var(--pos-line);
+}
+
+.toolbar {
   border: 1px solid var(--pos-border, var(--pos-line));
   border-radius: 12px;
   box-shadow: var(--pos-shadow-xs);
   padding: 14px 16px;
   display: grid;
   gap: 12px;
+  background: var(--pos-surface);
 }
 
 .contextBar {
@@ -176,6 +186,16 @@
   background: var(--pos-surface-hover);
 }
 
+.stripBtnPrimary {
+  border-color: var(--pos-primary, var(--pos-teal));
+  background: color-mix(in srgb, var(--pos-primary, var(--pos-teal)) 10%, var(--pos-surface));
+  color: var(--pos-primary, var(--pos-teal));
+}
+
+.stripBtnPrimary:hover {
+  background: color-mix(in srgb, var(--pos-primary, var(--pos-teal)) 16%, var(--pos-surface));
+}
+
 .menuWrap {
   position: relative;
 }
@@ -224,11 +244,13 @@
 }
 
 .gridWrap {
+  flex: 1;
+  min-height: 0;
   border: 1px solid var(--pos-border, var(--pos-line));
   border-radius: 12px;
   overflow: auto;
   background: var(--pos-surface);
-  max-height: calc(100vh - 320px);
+  max-height: calc(100vh - 340px);
 }
 
 .grid {
@@ -279,10 +301,16 @@
   cursor: pointer;
 }
 
-.quietCellBtn:hover {
+.quietCellBtn:hover:not(:disabled) {
   background: var(--pos-surface-hover);
   border-color: var(--pos-line);
   color: var(--pos-tx);
+}
+
+.quietCellBtnDisabled,
+.quietCellBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .noteBtn {
@@ -328,6 +356,7 @@
   color: var(--pos-muted, var(--pos-tx-muted));
   text-transform: uppercase;
   letter-spacing: 0.08em;
+  box-shadow: 0 1px 0 var(--pos-line);
 }
 
 .grid td {
@@ -373,7 +402,8 @@
 .saveBar {
   position: sticky;
   bottom: 0;
-  z-index: 11;
+  z-index: 14;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -383,7 +413,7 @@
   border: 1px solid var(--pos-line);
   border-radius: 12px;
   background: var(--pos-surface);
-  box-shadow: var(--pos-shadow-xs);
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.06);
 }
 
 .saveBarActive {
