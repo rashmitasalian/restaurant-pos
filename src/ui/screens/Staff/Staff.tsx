@@ -4,12 +4,15 @@ import {
   createStaff,
   createUser,
   deleteStaff,
+  getConfigShifts,
   getStaff,
   listStaff,
   updateStaff,
   updateUser,
+  type AttendanceShiftConfig,
   type StaffDoc,
 } from "../../../app/db/posRepository";
+import { WEEKDAY_OPTIONS } from "../../../shared/attendanceSchedule";
 import {
   STAFF_TEXT_LIMITS,
   isValidDateOnly,
@@ -75,6 +78,8 @@ type StaffForm = {
   salary: string;
   address: string;
   notes: string;
+  defaultShiftId: string;
+  weeklyOffDays: number[];
 };
 
 const emptyForm: StaffForm = {
@@ -85,6 +90,8 @@ const emptyForm: StaffForm = {
   salary: "",
   address: "",
   notes: "",
+  defaultShiftId: "morning",
+  weeklyOffDays: [],
 };
 
 function imageSrc(photo?: PhotoDraft | Pick<StaffDoc, "photoMime" | "photoBase64"> | null) {
@@ -219,9 +226,44 @@ function toPayload(form: StaffForm, photo: PhotoDraft | null) {
     salary,
     address: normalizeText(form.address) || null,
     notes: normalizeText(form.notes) || null,
+    defaultShiftId: form.defaultShiftId || "morning",
+    weeklyOffDays: form.weeklyOffDays,
     photoMime: photo?.photoMime || null,
     photoBase64: photo?.photoBase64 || null,
   };
+}
+
+function toggleWeeklyOffDay(days: number[], day: number) {
+  return days.includes(day) ? days.filter((entry) => entry !== day) : [...days, day].sort((a, b) => a - b);
+}
+
+function WeeklyOffField({
+  value,
+  onChange,
+}: {
+  value: number[];
+  onChange: (days: number[]) => void;
+}) {
+  return (
+    <FieldShell id="staff-weekly-off" label="Weekly Off">
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        {WEEKDAY_OPTIONS.map((option) => {
+          const active = value.includes(option.value);
+          return (
+            <button
+              key={option.value}
+              type="button"
+              className={`pos-btn pos-btn-sm ${active ? "pos-btn-primary" : "pos-btn-secondary"}`}
+              onClick={() => onChange(toggleWeeklyOffDay(value, option.value))}
+              aria-pressed={active}
+            >
+              {option.label.slice(0, 3)}
+            </button>
+          );
+        })}
+      </div>
+    </FieldShell>
+  );
 }
 
 function formatSalary(value: StaffDoc["salary"]) {
@@ -540,6 +582,11 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
     staffName: string;
   } | null>(null);
   const [createAccountFor, setCreateAccountFor] = React.useState<StaffDoc | null>(null);
+  const [shiftOptions, setShiftOptions] = React.useState<AttendanceShiftConfig[]>([
+    { id: "morning", label: "Morning", hours: 8 },
+    { id: "evening", label: "Evening", hours: 8 },
+    { id: "night", label: "Night", hours: 8 },
+  ]);
   const savingRef = React.useRef(false);
   const savingEditRef = React.useRef(false);
   const statusChangingRef = React.useRef<string | null>(null);
@@ -559,6 +606,14 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
   React.useEffect(() => {
     loadStaff();
   }, [loadStaff]);
+
+  React.useEffect(() => {
+    void getConfigShifts().then((shifts) => {
+      if (shifts.length > 0) {
+        setShiftOptions(shifts);
+      }
+    });
+  }, []);
 
   React.useEffect(() => {
     registerAddStaff?.(() => {
@@ -688,6 +743,8 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
         salary: full.salary === null || full.salary === undefined ? "" : String(full.salary),
         address: full.address || "",
         notes: full.notes || "",
+        defaultShiftId: full.defaultShiftId || "morning",
+        weeklyOffDays: full.weeklyOffDays || [],
       });
       setEditPhoto(
         full.photoMime && full.photoBase64
@@ -1323,6 +1380,24 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
               min={0}
               step="0.01"
             />
+            <FieldShell id="staff-default-shift" label="Default Shift">
+              <select
+                id="staff-default-shift"
+                className="pos-select"
+                value={form.defaultShiftId}
+                onChange={(event) => setField("defaultShiftId", event.target.value)}
+              >
+                {shiftOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </FieldShell>
+            <WeeklyOffField
+              value={form.weeklyOffDays}
+              onChange={(weeklyOffDays) => setForm((current) => ({ ...current, weeklyOffDays }))}
+            />
             <StaffTextArea
               id="staff-address"
               label="Address"
@@ -1447,6 +1522,24 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
               onChange={(value) => setEditField("salary", value)}
               min={0}
               step="0.01"
+            />
+            <FieldShell id="staff-edit-default-shift" label="Default Shift">
+              <select
+                id="staff-edit-default-shift"
+                className="pos-select"
+                value={editForm.defaultShiftId}
+                onChange={(event) => setEditField("defaultShiftId", event.target.value)}
+              >
+                {shiftOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </FieldShell>
+            <WeeklyOffField
+              value={editForm.weeklyOffDays}
+              onChange={(weeklyOffDays) => setEditForm((current) => ({ ...current, weeklyOffDays }))}
             />
             <StaffTextArea
               id="staff-edit-address"

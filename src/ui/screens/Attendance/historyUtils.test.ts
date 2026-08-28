@@ -33,14 +33,15 @@ describe("historyUtils", () => {
   });
 
   it("maps status codes", () => {
-    expect(statusCode("present")).toBe("P");
-    expect(statusCode("week-off")).toBe("WO");
+    expect(statusCode({ status: "present" })).toBe("P");
+    expect(statusCode({ status: "present", isLate: true })).toBe("P*");
     expect(statusCode(null)).toBe("—");
   });
 
   it("labels empty cells as not recorded", () => {
     expect(statusCellTitle(null)).toBe("Not recorded");
-    expect(statusCellTitle("absent")).toBe("Absent");
+    expect(statusCellTitle({ status: "absent" })).toBe("Absent");
+    expect(statusCellTitle({ status: "present", isLate: true })).toBe("Present (late)");
   });
 
   it("builds matrix totals from attendance records", () => {
@@ -55,6 +56,7 @@ describe("historyUtils", () => {
         staffName: "Bhaskar",
         attendanceDate: "2026-08-01",
         status: "present",
+        isLate: true,
         overtimeMinutes: 90,
       },
       {
@@ -77,6 +79,7 @@ describe("historyUtils", () => {
     const matrix = buildAttendanceMatrix(staff, records, ["2026-08-01", "2026-08-02"], "");
     expect(matrix.rows).toHaveLength(2);
     expect(matrix.rows[0].totals.present).toBe(1);
+    expect(matrix.rows[0].totals.late).toBe(1);
     expect(matrix.rows[0].totals.absent).toBe(1);
     expect(matrix.rows[0].totals.overtimeMinutes).toBe(90);
     expect(matrix.summary.present).toBe(1);

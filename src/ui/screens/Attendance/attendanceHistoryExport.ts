@@ -30,20 +30,22 @@ export function exportAttendanceHistoryExcel(input: {
   records: AttendanceDoc[];
   shiftLabel: string;
 }) {
-  const summaryHeader = ["Employee", "Present", "Absent", "Leave", "OT Hours"];
+  const summaryHeader = ["Employee", "Present", "Absent", "Half Day", "Leave", "Late", "OT Hours"];
   const summaryLines = input.matrix.rows.map((row) =>
     [
       row.employee,
       row.totals.present,
       row.totals.absent,
+      row.totals.halfDay,
       row.totals.leave,
+      row.totals.late,
       formatOtHoursTotal(row.totals.overtimeMinutes),
     ]
       .map(csvCell)
       .join(","),
   );
 
-  const detailHeader = ["Date", "Employee", "Shift", "Status", "OT Hours", "Note"];
+  const detailHeader = ["Date", "Employee", "Shift", "Status", "Late", "OT Hours", "Note"];
   const detailLines = [...input.records]
     .sort((left, right) => {
       const dateCompare = String(left.attendanceDate).localeCompare(String(right.attendanceDate));
@@ -58,6 +60,7 @@ export function exportAttendanceHistoryExcel(input: {
         record.staffName,
         record.shiftId || "—",
         statusLabel(record.status),
+        record.isLate ? "Yes" : "No",
         formatOtHoursTotal(record.overtimeMinutes),
         record.remarks || "",
       ]

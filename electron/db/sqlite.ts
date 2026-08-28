@@ -279,6 +279,8 @@ function runSchema(database: SqliteDatabase) {
       notes TEXT,
       photo_mime TEXT,
       photo_base64 TEXT,
+      weekly_off_days TEXT NOT NULL DEFAULT '[]',
+      default_shift_id TEXT NOT NULL DEFAULT 'morning',
       active INTEGER NOT NULL DEFAULT 1,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
@@ -291,8 +293,9 @@ function runSchema(database: SqliteDatabase) {
       id TEXT PRIMARY KEY,
       staff_id TEXT NOT NULL REFERENCES staff(id) ON UPDATE CASCADE ON DELETE RESTRICT,
       attendance_date TEXT NOT NULL,
-      shift_id TEXT,
-      status TEXT NOT NULL CHECK (status IN ('present', 'absent', 'half-day', 'leave', 'holiday', 'week-off', 'late')),
+      shift_id TEXT NOT NULL DEFAULT 'morning',
+      status TEXT NOT NULL CHECK (status IN ('present', 'absent', 'half-day', 'leave', 'holiday')),
+      is_late INTEGER NOT NULL DEFAULT 0,
       check_in_time TEXT,
       check_out_time TEXT,
       break_minutes INTEGER NOT NULL DEFAULT 0,
@@ -798,7 +801,8 @@ function runSchema(database: SqliteDatabase) {
         staff_id TEXT NOT NULL REFERENCES staff(id) ON UPDATE CASCADE ON DELETE RESTRICT,
         attendance_date TEXT NOT NULL,
         shift_id TEXT,
-        status TEXT NOT NULL CHECK (status IN ('present', 'absent', 'half-day', 'leave', 'holiday', 'week-off', 'late')),
+        status TEXT NOT NULL CHECK (status IN ('present', 'absent', 'half-day', 'leave', 'holiday')),
+        is_late INTEGER NOT NULL DEFAULT 0,
         check_in_time TEXT,
         check_out_time TEXT,
         break_minutes INTEGER NOT NULL DEFAULT 0,
@@ -1244,7 +1248,8 @@ function runSchema(database: SqliteDatabase) {
         staff_id TEXT NOT NULL REFERENCES staff(id) ON UPDATE CASCADE ON DELETE RESTRICT,
         attendance_date TEXT NOT NULL,
         shift_id TEXT NOT NULL DEFAULT 'morning',
-        status TEXT NOT NULL CHECK (status IN ('present', 'absent', 'half-day', 'leave', 'holiday', 'week-off', 'late')),
+        status TEXT NOT NULL CHECK (status IN ('present', 'absent', 'half-day', 'leave', 'holiday')),
+        is_late INTEGER NOT NULL DEFAULT 0,
         check_in_time TEXT,
         check_out_time TEXT,
         break_minutes INTEGER NOT NULL DEFAULT 0,
@@ -1271,6 +1276,71 @@ function runSchema(database: SqliteDatabase) {
 
       DROP TABLE attendance_records;
       ALTER TABLE attendance_records_v19 RENAME TO attendance_records;
+
+      CREATE INDEX IF NOT EXISTS idx_attendance_staff ON attendance_records(staff_id);
+      CREATE INDEX IF NOT EXISTS idx_attendance_date ON attendance_records(attendance_date);
+      CREATE INDEX IF NOT EXISTS idx_attendance_status ON attendance_records(status);
+    `);
+  });
+
+  runMigration(database, 20, "Attendance model: is_late, staff schedule, remove week-off/late status", () => {
+    addColumnIfMissing(database, "staff", "weekly_off_days", "TEXT NOT NULL DEFAULT '[]'");
+    addColumnIfMissing(database, "staff", "default_shift_id", "TEXT NOT NULL DEFAULT 'morning'");
+    database.prepare("UPDATE staff SET default_shift_id = 'morning' WHERE default_shift_id IS NULL OR trim(default_shift_id) = ''").run();
+    database.prepare("UPDATE staff SET weekly_off_days = '[]' WHERE weekly_off_days IS NULL OR trim(weekly_off_days) = ''").run();
+
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS attendance_records_v20 (
+        id TEXT PRIMARY KEY,
+        staff_id TEXT NOT NULL REFERENCES staff(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+        attendance_date TEXT NOT NULL,
+        shift_id TEXT NOT NULL DEFAULT 'morning',
+        status TEXT NOT NULL CHECK (status IN ('present', 'absent', 'half-day', 'leave', 'holiday')),
+        is_late INTEGER NOT NULL DEFAULT 0,
+        check_in_time TEXT,
+        check_out_time TEXT,
+        break_minutes INTEGER NOT NULL DEFAULT 0,
+        worked_minutes INTEGER NOT NULL DEFAULT 0,
+        overtime_minutes INTEGER NOT NULL DEFAULT 0,
+        remarks TEXT,
+        created_by TEXT REFERENCES users(username) ON UPDATE CASCADE ON DELETE SET NULL,
+        created_on INTEGER NOT NULL,
+        updated_by TEXT REFERENCES users(username) ON UPDATE CASCADE ON DELETE SET NULL,
+        updated_on INTEGER NOT NULL,
+        UNIQUE(staff_id, attendance_date, shift_id)
+      );
+
+      INSERT INTO attendance_records_v20 (
+        id, staff_id, attendance_date, shift_id, status, is_late, check_in_time, check_out_time,
+        break_minutes, worked_minutes, overtime_minutes, remarks,
+        created_by, created_on, updated_by, updated_on
+      )
+      SELECT
+        id,
+        staff_id,
+        attendance_date,
+        COALESCE(NULLIF(trim(shift_id), ''), 'morning'),
+        CASE
+          WHEN status = 'late' THEN 'present'
+          WHEN status = 'week-off' THEN 'absent'
+          ELSE status
+        END,
+        CASE WHEN status = 'late' THEN 1 ELSE 0 END,
+        check_in_time,
+        check_out_time,
+        break_minutes,
+        worked_minutes,
+        overtime_minutes,
+        remarks,
+        created_by,
+        created_on,
+        updated_by,
+        updated_on
+      FROM attendance_records
+      WHERE status IN ('present', 'absent', 'half-day', 'leave', 'holiday', 'late');
+
+      DROP TABLE attendance_records;
+      ALTER TABLE attendance_records_v20 RENAME TO attendance_records;
 
       CREATE INDEX IF NOT EXISTS idx_attendance_staff ON attendance_records(staff_id);
       CREATE INDEX IF NOT EXISTS idx_attendance_date ON attendance_records(attendance_date);

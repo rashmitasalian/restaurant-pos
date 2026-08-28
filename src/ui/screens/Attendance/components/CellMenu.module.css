@@ -108,6 +108,11 @@
   background: var(--pos-danger, #dc2626);
 }
 
+.toneEmpty .statusDot {
+  background: transparent;
+  border: 1px dashed var(--pos-line);
+}
+
 .toneLate .statusDot,
 .statusDotLate {
   background: var(--pos-warning, #d97706);
@@ -128,7 +133,7 @@
   background: #7c3aed;
 }
 
-.toneWeekOff .statusDot,
-.statusDotWeekOff {
-  background: #6b7280;
+.statusDotEmpty {
+  background: transparent;
+  border: 1px dashed var(--pos-line);
 }

@@ -9,9 +9,7 @@ export type AttendanceStatus =
   | "absent"
   | "half-day"
   | "leave"
-  | "holiday"
-  | "week-off"
-  | "late";
+  | "holiday";
 export type GroceryUnit =
   | "g"
   | "kg"
@@ -168,6 +166,9 @@ export type StaffDto = {
   /** Linked RestoNiti login account, if any */
   linkedUsername?: string | null;
   linkedAccountActive?: boolean | null;
+  /** 0=Sunday … 6=Saturday */
+  weeklyOffDays?: number[];
+  defaultShiftId?: string | null;
 };
 
 export type AttendanceDto = {
@@ -178,6 +179,7 @@ export type AttendanceDto = {
   attendanceDate: string;
   shiftId?: string | null;
   status: AttendanceStatus;
+  isLate?: boolean;
   checkInTime?: string | null;
   checkOutTime?: string | null;
   breakMinutes: number;

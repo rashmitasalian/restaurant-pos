@@ -2,6 +2,7 @@ import React from "react";
 import { ChevronLeft, ChevronRight, MoreHorizontal, StickyNote } from "lucide-react";
 import {
   copyAttendance,
+  getConfigHolidays,
   getConfigShifts,
   listAttendance,
   listStaff,
@@ -10,6 +11,7 @@ import {
   type AttendanceDoc,
   type StaffDoc,
 } from "../../../app/db/posRepository";
+import { isHolidayDate, isWeeklyOffDay } from "../../../shared/attendanceSchedule";
 import { normalizeText, todayDateOnly, validationMessage } from "../../../shared/validation";
 import type { AttendanceStatus } from "../../../shared/pos";
 import { useToast } from "../../context/ToastContext";
@@ -22,7 +24,7 @@ import { formatOvertimeHours } from "../People/peopleUtils";
 import {
   formatAttendanceDate,
   shiftAttendanceDate,
-  statusLabel,
+  attendanceStatusLabel,
   statusTone,
 } from "./attendanceDisplay";
 import CellMenu from "./components/CellMenu";
@@ -33,7 +35,9 @@ type AttendanceRow = {
   employee: string;
   role: string;
   shiftId: string;
-  status: AttendanceStatus;
+  status: AttendanceStatus | null;
+  isLate: boolean;
+  scheduledOff: boolean;
   checkInTime: string;
   checkOutTime: string;
   breakMinutes: number;
@@ -54,19 +58,26 @@ type ShiftOption = {
 const STATUS_DOT_CLASS: Record<string, string> = {
   present: menuStyles.statusDotPresent,
   absent: menuStyles.statusDotAbsent,
-  late: menuStyles.statusDotLate,
   halfDay: menuStyles.statusDotHalfDay,
   leave: menuStyles.statusDotLeave,
   holiday: menuStyles.statusDotHoliday,
-  weekOff: menuStyles.statusDotWeekOff,
+  empty: menuStyles.statusDotEmpty,
 };
 
-function StatusDisplay({ status }: { status: AttendanceStatus }) {
+function StatusDisplay({ status, isLate = false }: { status: AttendanceStatus | null; isLate?: boolean }) {
+  if (!status) {
+    return (
+      <>
+        <span className={`${menuStyles.statusDot} ${STATUS_DOT_CLASS.empty}`} aria-hidden />
+        Not set
+      </>
+    );
+  }
   const tone = statusTone(status);
   return (
     <>
       <span className={`${menuStyles.statusDot} ${STATUS_DOT_CLASS[tone] || ""}`} aria-hidden />
-      {statusLabel(status)}
+      {attendanceStatusLabel(status, isLate)}
     </>
   );
 }
@@ -77,8 +88,6 @@ const STATUS_OPTIONS: Array<{ value: AttendanceStatus; label: string }> = [
   { value: "half-day", label: "Half Day" },
   { value: "leave", label: "Leave" },
   { value: "holiday", label: "Holiday" },
-  { value: "week-off", label: "Week Off" },
-  { value: "late", label: "Late" },
 ];
 
 const DEFAULT_SHIFT_OPTIONS: ShiftOption[] = [
@@ -101,6 +110,9 @@ function yesterdayDateOnly(fromDate: string) {
 
 function validateRow(row: AttendanceRow) {
   const errors: string[] = [];
+  if (row.dirty && !row.status) {
+    errors.push("Choose a status before saving.");
+  }
   if (row.status === "leave" && !normalizeText(row.remarks)) {
     errors.push(validationMessage("attendance-remarks-required-for-leave"));
   }
@@ -132,7 +144,7 @@ function toShiftOptions(shifts: AttendanceShiftConfig[] | null | undefined): Shi
   return mapped.length > 0 ? mapped : DEFAULT_SHIFT_OPTIONS;
 }
 
-function buildInitialRows(staff: StaffDoc[], records: AttendanceDoc[]) {
+function buildInitialRows(staff: StaffDoc[], records: AttendanceDoc[], attendanceDate: string) {
   const byStaff = new Map(records.map((record) => [record.staffId, record]));
   return staff.map((member) => {
     const record = byStaff.get(member.id);
@@ -141,8 +153,10 @@ function buildInitialRows(staff: StaffDoc[], records: AttendanceDoc[]) {
       staffId: member.id,
       employee: member.name,
       role: member.designation || "-",
-      shiftId: record?.shiftId || "morning",
-      status: record?.status || "absent",
+      shiftId: record?.shiftId || member.defaultShiftId || "morning",
+      status: record?.status ?? null,
+      isLate: Boolean(record?.isLate),
+      scheduledOff: isWeeklyOffDay(member.weeklyOffDays, attendanceDate),
       checkInTime: record?.checkInTime || "",
       checkOutTime: record?.checkOutTime || "",
       breakMinutes: Number(record?.breakMinutes || 0),
@@ -197,6 +211,7 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
   const [bulkOpen, setBulkOpen] = React.useState(false);
   const [otEditor, setOtEditor] = React.useState<{ index: number; employee: string } | null>(null);
   const [noteEditor, setNoteEditor] = React.useState<{ index: number; employee: string } | null>(null);
+  const [holidays, setHolidays] = React.useState<string[]>([]);
   const dateInputRef = React.useRef<HTMLInputElement>(null);
   const bulkRef = React.useRef<HTMLButtonElement>(null);
   const moreButtonRef = React.useRef<HTMLButtonElement>(null);
@@ -206,14 +221,16 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
     setLoading(true);
     setError(null);
     try {
-      const [staff, records, shifts] = await Promise.all([
+      const [staff, records, shifts, holidayDates] = await Promise.all([
         listStaff({ includeInactive: false }),
         listAttendance({ date: attendanceDate }),
         getConfigShifts(),
+        getConfigHolidays(),
       ]);
       const resolvedShiftOptions = toShiftOptions(shifts);
       setShiftOptions(resolvedShiftOptions);
-      setRows(buildInitialRows(staff, records));
+      setHolidays(holidayDates);
+      setRows(buildInitialRows(staff, records, attendanceDate));
     } catch (loadError) {
       const message = validationMessage(loadError, "Could not load attendance.");
       try {
@@ -222,7 +239,7 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
           const shifts = await getConfigShifts();
           const resolvedShiftOptions = toShiftOptions(shifts);
           setShiftOptions(resolvedShiftOptions);
-          setRows(buildInitialRows(staff, []));
+          setRows(buildInitialRows(staff, [], attendanceDate));
         }
       } catch {
         // keep original error
@@ -245,6 +262,11 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
             return row;
           }
           const next = { ...row, ...patch, dirty: true };
+          if (patch.status !== undefined) {
+            if (patch.status !== "present" && patch.status !== "half-day") {
+              next.isLate = false;
+            }
+          }
           if (patch.overtimeMinutes !== undefined) {
             next.manualOvertime = true;
           }
@@ -289,25 +311,38 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
   const hasUnsaved = dirtyCount > 0;
   const hasActiveFilters = Boolean(search) || shiftFilter !== "all" || editedOnly;
 
+  const isRestaurantHoliday = isHolidayDate(holidays, attendanceDate);
+
   const summary = React.useMemo(() => {
-    const totalOvertime = rows.reduce((sum, row) => sum + Number(row.overtimeMinutes || 0), 0);
+    const recorded = rows.filter((row) => row.status);
+    const totalOvertime = recorded.reduce((sum, row) => sum + Number(row.overtimeMinutes || 0), 0);
     return {
-      present: rows.filter((row) => row.status === "present").length,
-      absent: rows.filter((row) => row.status === "absent").length,
-      late: rows.filter((row) => row.status === "late").length,
-      leave: rows.filter((row) => row.status === "leave").length,
-      holiday: rows.filter((row) => row.status === "holiday").length,
-      weekOff: rows.filter((row) => row.status === "week-off").length,
+      present: recorded.filter((row) => row.status === "present").length,
+      absent: recorded.filter((row) => row.status === "absent").length,
+      late: recorded.filter((row) => row.isLate).length,
+      leave: recorded.filter((row) => row.status === "leave").length,
+      halfDay: recorded.filter((row) => row.status === "half-day").length,
+      holiday: recorded.filter((row) => row.status === "holiday").length,
+      unrecorded: rows.filter((row) => !row.status).length,
+      scheduledOff: rows.filter((row) => row.scheduledOff && !row.status).length,
       total: rows.length,
       overtimeHours: (totalOvertime / 60).toFixed(2),
     };
   }, [rows]);
 
   const markAll = React.useCallback(
-    (status: AttendanceStatus) => {
+    (status: AttendanceStatus, includeScheduledOff = false) => {
       setRows((previous) =>
         previous.map((row) => {
-          const next = { ...row, status, dirty: true };
+          if (row.scheduledOff && !includeScheduledOff) {
+            return row;
+          }
+          const next = {
+            ...row,
+            status,
+            dirty: true,
+            isLate: status === "present" || status === "half-day" ? row.isLate : false,
+          };
           next.errors = validateRow(next);
           return next;
         }),
@@ -340,7 +375,7 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
     }
     setSaving(true);
     try {
-      const dirtyRows = nextRows.filter((row) => row.dirty);
+      const dirtyRows = nextRows.filter((row) => row.dirty && row.status);
       if (dirtyRows.length === 0) {
         showToast("No changes to save.", "info");
         return;
@@ -351,7 +386,8 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
           id: row.id,
           staffId: row.staffId,
           shiftId: row.shiftId,
-          status: row.status,
+          status: row.status!,
+          isLate: row.isLate,
           checkInTime: row.checkInTime || null,
           checkOutTime: row.checkOutTime || null,
           breakMinutes: row.breakMinutes,
@@ -380,15 +416,19 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
   }, []);
 
   const exportExcel = React.useCallback(() => {
-    const header = ["Employee", "Role", "Shift", "Status", "Overtime Hours", "Note"];
+    const header = ["Employee", "Role", "Shift", "Status", "Late", "Overtime Hours", "Note"];
     const lines = [header.join(",")];
     rows.forEach((row) => {
+      if (!row.status) {
+        return;
+      }
       lines.push(
         [
           row.employee,
           row.role,
           getShiftLabel(row.shiftId),
           row.status,
+          row.isLate ? "Yes" : "No",
           (row.overtimeMinutes / 60).toFixed(2),
           row.remarks,
         ]
@@ -406,6 +446,7 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
 
   const exportPdf = React.useCallback(async () => {
     const bodyRows = rows
+      .filter((row) => row.status)
       .map(
         (row) =>
           `<tr>
@@ -413,6 +454,7 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
             <td>${row.role}</td>
             <td>${getShiftLabel(row.shiftId)}</td>
             <td>${row.status}</td>
+            <td>${row.isLate ? "Yes" : "No"}</td>
             <td>${(row.overtimeMinutes / 60).toFixed(2)}</td>
             <td>${row.remarks || "-"}</td>
           </tr>`,
@@ -430,7 +472,7 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
       <p>Date: ${attendanceDate}</p>
       <table>
       <thead><tr>
-        <th>Employee</th><th>Role</th><th>Shift</th><th>Status</th><th>OT Hours</th><th>Note</th>
+        <th>Employee</th><th>Role</th><th>Shift</th><th>Status</th><th>Late</th><th>OT Hours</th><th>Note</th>
       </tr></thead>
       <tbody>${bodyRows}</tbody></table>
     </body></html>`;
@@ -534,6 +576,12 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
           </div>
         </div>
 
+        {isRestaurantHoliday ? (
+          <div className={styles.holidayBanner} role="status">
+            Restaurant holiday — mark staff as Holiday or skip unscheduled workers.
+          </div>
+        ) : null}
+
         <div className={styles.statusStrip}>
           <div className={styles.summaryStats} aria-label="Attendance summary">
             <span className={styles.stat}>
@@ -543,13 +591,16 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
               <strong>{summary.absent}</strong> Absent
             </span>
             <span className={styles.stat}>
-              <strong>{summary.late}</strong> Late
+              <strong>{summary.halfDay}</strong> Half Day
             </span>
             <span className={styles.stat}>
               <strong>{summary.leave}</strong> Leave
             </span>
             <span className={styles.stat}>
-              <strong>{summary.weekOff}</strong> Week Off
+              <strong>{summary.late}</strong> Late
+            </span>
+            <span className={styles.stat}>
+              <strong>{summary.unrecorded}</strong> Not set
             </span>
             <span className={styles.stat}>
               <strong>{summary.overtimeHours}h</strong> OT
@@ -587,6 +638,16 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
               >
                 Mark all absent
               </PortalMenuItem>
+              {isRestaurantHoliday ? (
+                <PortalMenuItem
+                  onClick={() => {
+                    markAll("holiday", true);
+                    setBulkOpen(false);
+                  }}
+                >
+                  Mark all holiday
+                </PortalMenuItem>
+              ) : null}
             </PortalMenu>
 
             <button
@@ -685,6 +746,7 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
                 <th className={styles.colEmployee}>Employee</th>
                 <th className={styles.colShift}>Shift</th>
                 <th className={styles.colStatus}>Status</th>
+                <th className={styles.colLate}>Late</th>
                 <th className={styles.colOt}>OT</th>
                 <th className={styles.colNote}>Note</th>
               </tr>
@@ -693,11 +755,18 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
               {filteredRows.map((row, viewIndex) => {
                 const index = rows.findIndex((candidate) => candidate.staffId === row.staffId);
                 const tone = statusTone(row.status);
+                const lateEnabled = row.status === "present" || row.status === "half-day";
                 return (
-                  <tr key={row.staffId} className={row.dirty ? styles.rowDirty : undefined}>
+                  <tr
+                    key={row.staffId}
+                    className={`${row.dirty ? styles.rowDirty : ""} ${row.scheduledOff ? styles.rowScheduledOff : ""}`.trim()}
+                  >
                     <td className={styles.colEmployee}>
                       <div className={styles.employeeName}>{row.employee}</div>
                       <div className={styles.employeeRole}>{row.role}</div>
+                      {row.scheduledOff ? (
+                        <div className={styles.scheduledOffBadge}>Scheduled off</div>
+                      ) : null}
                       {row.errors.length > 0 ? (
                         <div className={styles.rowError}>{row.errors[0]}</div>
                       ) : null}
@@ -719,7 +788,7 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
                     </td>
                     <td className={styles.colStatus}>
                       <CellMenu
-                        label={<StatusDisplay status={row.status} />}
+                        label={<StatusDisplay status={row.status} isLate={row.isLate} />}
                         ariaLabel={`Status for ${row.employee}`}
                         tone={tone}
                         options={STATUS_OPTIONS.map((option) => ({
@@ -729,9 +798,25 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
                         }))}
                         onSelect={(status) => {
                           focusedRowRef.current = viewIndex;
-                          setRowField(index, { status });
+                          setRowField(index, { status: status as AttendanceStatus });
                         }}
                       />
+                    </td>
+                    <td className={styles.colLate}>
+                      <button
+                        type="button"
+                        className={`${styles.lateToggle} ${row.isLate ? styles.lateToggleOn : ""}`}
+                        disabled={!lateEnabled}
+                        onClick={() => {
+                          focusedRowRef.current = viewIndex;
+                          setRowField(index, { isLate: !row.isLate });
+                        }}
+                        aria-label={`Late for ${row.employee}`}
+                        aria-pressed={row.isLate}
+                        title={lateEnabled ? "Mark as late" : "Late applies to Present or Half Day only"}
+                      >
+                        Late
+                      </button>
                     </td>
                     <td className={styles.colOt}>
                       <button

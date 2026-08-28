@@ -66,6 +66,11 @@ import {
   parsePositiveMoney,
 } from "../../src/shared/validation";
 import {
+  normalizeHolidayDates,
+  normalizeWeeklyOffDays,
+  serializeWeeklyOffDays,
+} from "../../src/shared/attendanceSchedule";
+import {
   DEFAULT_GST_CONFIG,
   calculateGstTotalsPaise,
   isValidGstin,
@@ -105,8 +110,6 @@ const ATTENDANCE_STATUSES = new Set<AttendanceStatus>([
   "half-day",
   "leave",
   "holiday",
-  "week-off",
-  "late",
 ]);
 const DEFAULT_SHIFT_MINUTES = 8 * 60;
 const DEFAULT_SEATING_AREA_ID = "area:main";
@@ -875,6 +878,11 @@ type AttendanceShiftConfig = {
   hours: number;
 };
 
+type AttendanceConfig = {
+  shifts: AttendanceShiftConfig[];
+  holidays: string[];
+};
+
 function defaultAttendanceShifts(): AttendanceShiftConfig[] {
   return [
     { id: "morning", label: "Morning", hours: 8 },
@@ -908,7 +916,7 @@ function assertAttendanceConfig(input: Record<string, unknown>) {
   if (!shifts.length) {
     throw new Error("attendance-shift-invalid");
   }
-  return { shifts };
+  return { shifts, holidays: normalizeHolidayDates((input as any)?.holidays) };
 }
 
 function getAttendanceShiftHours(database: Database.Database, shiftId?: string | null) {
@@ -5063,6 +5071,8 @@ export const posService = {
     notes?: string | null;
     photoMime?: string | null;
     photoBase64?: string | null;
+    weeklyOffDays?: number[] | null;
+    defaultShiftId?: string | null;
   }) {
     const prepared = prepareStaffInput(input);
     const id = `staff:${randomUUID()}`;
@@ -5073,8 +5083,8 @@ export const posService = {
       .prepare(
         `INSERT INTO staff (
           id, name, phone, designation, joining_date, salary_paise, address, notes,
-          photo_mime, photo_base64, active, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+          photo_mime, photo_base64, weekly_off_days, default_shift_id, active, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
       )
       .run(
         id,
@@ -5087,6 +5097,8 @@ export const posService = {
         prepared.notes,
         prepared.photoMime,
         prepared.photoBase64,
+        prepared.weeklyOffDays,
+        prepared.defaultShiftId,
         at,
         at,
       );
@@ -5118,6 +5130,12 @@ export const posService = {
       notes: updates.notes === undefined ? current.notes : updates.notes,
       photoMime: updates.photoMime === undefined ? current.photo_mime : updates.photoMime,
       photoBase64: updates.photoBase64 === undefined ? current.photo_base64 : updates.photoBase64,
+      weeklyOffDays:
+        updates.weeklyOffDays === undefined
+          ? normalizeWeeklyOffDays(current.weekly_off_days)
+          : updates.weeklyOffDays,
+      defaultShiftId:
+        updates.defaultShiftId === undefined ? current.default_shift_id : updates.defaultShiftId,
     });
     assertUniqueActiveStaffPhone(database, prepared.phone, id);
     const nextActive =
@@ -5126,7 +5144,8 @@ export const posService = {
       .prepare(
         `UPDATE staff
          SET name = ?, phone = ?, designation = ?, joining_date = ?, salary_paise = ?,
-             address = ?, notes = ?, photo_mime = ?, photo_base64 = ?, active = ?, updated_at = ?
+             address = ?, notes = ?, photo_mime = ?, photo_base64 = ?,
+             weekly_off_days = ?, default_shift_id = ?, active = ?, updated_at = ?
          WHERE id = ?`,
       )
       .run(
@@ -5139,6 +5158,8 @@ export const posService = {
         prepared.notes,
         prepared.photoMime,
         prepared.photoBase64,
+        prepared.weeklyOffDays,
+        prepared.defaultShiftId,
         nextActive,
         now(),
         id,
@@ -5289,6 +5310,7 @@ export const posService = {
         staffId: string;
         shiftId?: string | null;
         status: AttendanceStatus;
+        isLate?: boolean;
         checkInTime?: string | null;
         checkOutTime?: string | null;
         breakMinutes?: number;
@@ -5310,6 +5332,7 @@ export const posService = {
         }
         assertAttendanceStaffExists(database, staffId);
         const status = normalizeAttendanceStatus(row.status);
+        const isLate = normalizeAttendanceLate(row.isLate, status);
         const shiftKey = normalizeText(row.shiftId) || "morning";
         const shiftId = shiftKey;
         const checkInTime = normalizeAttendanceTime(row.checkInTime);
@@ -5345,13 +5368,14 @@ export const posService = {
           database
             .prepare(
               `UPDATE attendance_records
-               SET shift_id = ?, status = ?, check_in_time = ?, check_out_time = ?, break_minutes = ?,
+               SET shift_id = ?, status = ?, is_late = ?, check_in_time = ?, check_out_time = ?, break_minutes = ?,
                    worked_minutes = ?, overtime_minutes = ?, remarks = ?, updated_by = ?, updated_on = ?
                WHERE id = ?`,
             )
             .run(
               shiftId,
               status,
+              isLate ? 1 : 0,
               checkInTime,
               checkOutTime,
               breakMinutes,
@@ -5373,10 +5397,10 @@ export const posService = {
             database
               .prepare(
                 `INSERT INTO attendance_records (
-                  id, staff_id, attendance_date, shift_id, status, check_in_time, check_out_time,
+                  id, staff_id, attendance_date, shift_id, status, is_late, check_in_time, check_out_time,
                   break_minutes, worked_minutes, overtime_minutes, remarks,
                   created_by, created_on, updated_by, updated_on
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
               )
               .run(
                 targetId,
@@ -5384,6 +5408,7 @@ export const posService = {
                 attendanceDate,
                 shiftId,
                 status,
+                isLate ? 1 : 0,
                 checkInTime,
                 checkOutTime,
                 breakMinutes,
@@ -5430,13 +5455,14 @@ export const posService = {
       const at = now();
       const upsert = database.prepare(`
         INSERT INTO attendance_records (
-          id, staff_id, attendance_date, shift_id, status, check_in_time, check_out_time,
+          id, staff_id, attendance_date, shift_id, status, is_late, check_in_time, check_out_time,
           break_minutes, worked_minutes, overtime_minutes, remarks,
           created_by, created_on, updated_by, updated_on
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(staff_id, attendance_date, shift_id) DO UPDATE SET
           shift_id = excluded.shift_id,
           status = excluded.status,
+          is_late = excluded.is_late,
           check_in_time = excluded.check_in_time,
           check_out_time = excluded.check_out_time,
           break_minutes = excluded.break_minutes,
@@ -5453,6 +5479,7 @@ export const posService = {
           targetDate,
           row.shift_id,
           row.status,
+          Number(row.is_late || 0) ? 1 : 0,
           row.check_in_time,
           row.check_out_time,
           row.break_minutes,
@@ -5742,6 +5769,8 @@ function prepareStaffInput(input: {
   notes?: unknown;
   photoMime?: unknown;
   photoBase64?: unknown;
+  weeklyOffDays?: unknown;
+  defaultShiftId?: unknown;
 }) {
   const name = normalizeText(input.name);
   const phone = normalizePhone(input.phone);
@@ -5751,6 +5780,7 @@ function prepareStaffInput(input: {
   if (!isValidIndianMobile(phone)) {
     throw new Error("staff-phone-invalid");
   }
+  const defaultShiftId = normalizeText(input.defaultShiftId).toLowerCase() || "morning";
   return {
     name,
     phone,
@@ -5768,6 +5798,8 @@ function prepareStaffInput(input: {
       "staff-address-too-long",
     ),
     notes: optionalLimitedText(input.notes, STAFF_TEXT_LIMITS.notes, "staff-notes-too-long"),
+    weeklyOffDays: serializeWeeklyOffDays(normalizeWeeklyOffDays(input.weeklyOffDays)),
+    defaultShiftId,
     ...prepareStaffPhoto(input.photoMime, input.photoBase64),
   };
 }
@@ -5797,6 +5829,13 @@ function normalizeAttendanceStatus(value: unknown): AttendanceStatus {
     throw new Error("attendance-status-invalid");
   }
   return status;
+}
+
+function normalizeAttendanceLate(value: unknown, status: AttendanceStatus): boolean {
+  if (status !== "present" && status !== "half-day") {
+    return false;
+  }
+  return value === true || value === 1 || value === "1";
 }
 
 function normalizeAttendanceTime(value: unknown) {
@@ -5937,6 +5976,8 @@ function staffFromRow(row: any): StaffDto {
     linkedAccountActive: row.linked_user_active === undefined || row.linked_user_active === null
       ? null
       : Boolean(row.linked_user_active),
+    weeklyOffDays: normalizeWeeklyOffDays(row.weekly_off_days),
+    defaultShiftId: row.default_shift_id || "morning",
   };
 }
 
@@ -5949,6 +5990,7 @@ function attendanceFromRow(row: any): AttendanceDto {
     attendanceDate: row.attendance_date,
     shiftId: row.shift_id || null,
     status: row.status,
+    isLate: Boolean(Number(row.is_late || 0)),
     checkInTime: row.check_in_time || null,
     checkOutTime: row.check_out_time || null,
     breakMinutes: Number(row.break_minutes || 0),

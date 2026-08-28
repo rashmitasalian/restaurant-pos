@@ -216,12 +216,17 @@
 
 .summaryColPresent,
 .summaryCellPresent {
-  right: 204px;
+  right: 272px;
   box-shadow: -1px 0 0 var(--pos-line);
 }
 
 .summaryColAbsent,
 .summaryCellAbsent {
+  right: 204px;
+}
+
+.summaryColHalfDay,
+.summaryCellHalfDay {
   right: 136px;
 }
 

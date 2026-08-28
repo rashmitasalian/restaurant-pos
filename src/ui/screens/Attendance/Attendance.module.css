@@ -412,6 +412,62 @@
   background: var(--pos-saffron-text, var(--pos-warning-text));
 }
 
+.holidayBanner {
+  margin: 0 0 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--pos-line);
+  border-radius: 10px;
+  background: var(--pos-saffron-tint, #fffbeb);
+  color: var(--pos-tx);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.rowScheduledOff td {
+  opacity: 0.72;
+}
+
+.scheduledOffBadge {
+  margin-top: 4px;
+  display: inline-flex;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--pos-surface-sunken);
+  color: var(--pos-tx-sub);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.colLate {
+  width: 72px;
+}
+
+.lateToggle {
+  min-width: 56px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--pos-line);
+  border-radius: 8px;
+  background: var(--pos-surface);
+  color: var(--pos-tx-muted);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.lateToggle:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.lateToggleOn {
+  border-color: var(--pos-primary, var(--pos-teal));
+  background: color-mix(in srgb, var(--pos-primary, var(--pos-teal)) 12%, var(--pos-surface));
+  color: var(--pos-primary, var(--pos-teal));
+}
+
 @media (max-width: 900px) {
   .root {
     padding: 16px 16px 88px;

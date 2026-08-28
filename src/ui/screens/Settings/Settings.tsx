@@ -19,6 +19,8 @@ import {
   getConfigHistory,
   setConfigHistory,
   getConfigShifts,
+  getConfigHolidays,
+  setConfigHolidays,
   setConfigShifts,
   regenerateRecoveryCodes,
   getConfigGst,
@@ -180,6 +182,10 @@ export default function Settings({
   );
   const [shiftStatus, setShiftStatus] = React.useState<string | null>(null);
   const [savingShifts, setSavingShifts] = React.useState(false);
+  const [attendanceHolidays, setAttendanceHolidays] = React.useState<string[]>([]);
+  const [holidayDraft, setHolidayDraft] = React.useState("");
+  const [holidayStatus, setHolidayStatus] = React.useState<string | null>(null);
+  const [savingHolidays, setSavingHolidays] = React.useState(false);
 
   // ── Categories config ────────────────────────────────────────────────────────
   const [categories, setCategories] = React.useState<string[]>([]);
@@ -323,6 +329,9 @@ export default function Settings({
       try {
         const shifts = await getConfigShifts();
         setAttendanceShifts(mergeShiftConfig(shifts));
+      } catch (e) {}
+      try {
+        setAttendanceHolidays(await getConfigHolidays());
       } catch (e) {}
       try {
         const gstCfg = normalizeGstConfig(await getConfigGst());
@@ -1145,6 +1154,32 @@ export default function Settings({
     }
     setSavingShifts(false);
     endAction("attendance.shifts.save");
+  };
+
+  const addHolidayDraft = () => {
+    const date = holidayDraft.trim();
+    if (!date) {
+      return;
+    }
+    setAttendanceHolidays((previous) => [...new Set([...previous, date])].sort());
+    setHolidayDraft("");
+  };
+
+  const saveHolidayConfig = async () => {
+    if (!beginAction("attendance.holidays.save")) {
+      return;
+    }
+    setSavingHolidays(true);
+    setHolidayStatus(null);
+    try {
+      await setConfigHolidays(attendanceHolidays);
+      setHolidayStatus("Saved ");
+      setTimeout(() => setHolidayStatus(null), 3000);
+    } catch (e: any) {
+      setHolidayStatus("Save failed: " + (e?.message || String(e)));
+    }
+    setSavingHolidays(false);
+    endAction("attendance.holidays.save");
   };
 
   const regenerateAdminRecoveryCodes = async () => {
@@ -3086,6 +3121,106 @@ export default function Settings({
               {shiftStatus}
             </div>
           )}
+        </div>
+      </div>
+
+      <div className="pos-card pos-card-p" style={{ marginBottom: 24 }} data-settings-sec="attendance-holidays">
+        <div
+          style={{
+            fontSize: 11,
+            fontWeight: 800,
+            color: "var(--pos-muted,var(--pos-tx-muted))",
+            marginBottom: 20,
+            textTransform: "uppercase",
+            letterSpacing: "0.1em",
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
+          <Icon icon={Timer} size="sm" />
+          Attendance Holidays
+        </div>
+
+        <p style={{ fontSize: 13, color: "var(--pos-tx-sub)", marginBottom: 16, lineHeight: 1.6 }}>
+          Restaurant-wide closed days. Daily attendance shows a holiday reminder on these dates.
+        </p>
+
+        <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 16, flexWrap: "wrap" }}>
+          <input
+            type="date"
+            className="pos-input"
+            value={holidayDraft}
+            onChange={(event) => setHolidayDraft(event.target.value)}
+            aria-label="Holiday date"
+          />
+          <button type="button" className="pos-btn pos-btn-secondary" onClick={addHolidayDraft}>
+            Add date
+          </button>
+        </div>
+
+        <div style={{ display: "grid", gap: 8, marginBottom: 20 }}>
+          {attendanceHolidays.length === 0 ? (
+            <div style={{ fontSize: 13, color: "var(--pos-tx-sub)" }}>No holidays configured yet.</div>
+          ) : (
+            attendanceHolidays.map((date) => (
+              <div
+                key={date}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  padding: "8px 12px",
+                  border: "1px solid var(--pos-line)",
+                  borderRadius: 8,
+                }}
+              >
+                <span style={{ fontSize: 13, fontWeight: 600 }}>{date}</span>
+                <button
+                  type="button"
+                  className="pos-btn pos-btn-secondary pos-btn-sm"
+                  onClick={() =>
+                    setAttendanceHolidays((previous) => previous.filter((entry) => entry !== date))
+                  }
+                >
+                  Remove
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            gap: 10,
+            alignItems: "center",
+            paddingTop: 14,
+            borderTop: "1px solid var(--pos-border,var(--pos-line))",
+          }}
+        >
+          <button
+            onClick={saveHolidayConfig}
+            disabled={savingHolidays}
+            className="pos-btn pos-btn-primary"
+          >
+            {savingHolidays ? "Saving..." : "Save Holidays"}
+          </button>
+          {holidayStatus ? (
+            <div
+              style={{
+                padding: "8px 12px",
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 600,
+                background: holidayStatus.includes("Saved") ? "var(--pos-success-tint)" : "var(--pos-danger-tint)",
+                color: holidayStatus.includes("Saved") ? "var(--pos-success)" : "var(--pos-danger)",
+              }}
+            >
+              {holidayStatus}
+            </div>
+          ) : null}
         </div>
       </div>
 

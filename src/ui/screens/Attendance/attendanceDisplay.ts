@@ -21,21 +21,15 @@ export function statusLabel(status: AttendanceStatus): string {
   if (status === "half-day") {
     return "Half Day";
   }
-  if (status === "week-off") {
-    return "Week Off";
-  }
-  if (status === "late") {
-    return "Late";
-  }
   return status.charAt(0).toUpperCase() + status.slice(1);
 }
 
-export function statusTone(status: AttendanceStatus): string {
+export function statusTone(status: AttendanceStatus | null): string {
+  if (!status) {
+    return "empty";
+  }
   if (status === "present") {
     return "present";
-  }
-  if (status === "late") {
-    return "late";
   }
   if (status === "half-day") {
     return "halfDay";
@@ -46,8 +40,15 @@ export function statusTone(status: AttendanceStatus): string {
   if (status === "holiday") {
     return "holiday";
   }
-  if (status === "week-off") {
-    return "weekOff";
-  }
   return "absent";
+}
+
+export function attendanceStatusLabel(status: AttendanceStatus | null, isLate = false): string {
+  if (!status) {
+    return "Not set";
+  }
+  if (isLate && (status === "present" || status === "half-day")) {
+    return `${statusLabel(status)} (late)`;
+  }
+  return statusLabel(status);
 }

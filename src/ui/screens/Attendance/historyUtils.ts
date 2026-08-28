@@ -4,14 +4,18 @@ import { filterStaffBySearch } from "../People/peopleUtils";
 
 export type HistoryPeriod = "week" | "month" | "custom";
 
+export type HistoryDayCell = {
+  status: AttendanceStatus | null;
+  isLate?: boolean;
+};
+
 export type HistoryTotals = {
   present: number;
   absent: number;
-  late: number;
   leave: number;
   halfDay: number;
   holiday: number;
-  weekOff: number;
+  late: number;
   overtimeMinutes: number;
 };
 
@@ -19,7 +23,7 @@ export type HistoryMatrixRow = {
   staffId: string;
   employee: string;
   role: string;
-  cells: Record<string, AttendanceStatus | null>;
+  cells: Record<string, HistoryDayCell | null>;
   totals: HistoryTotals;
 };
 
@@ -107,57 +111,45 @@ export function formatDayHeader(dateOnly: string, period: HistoryPeriod) {
   return String(date.getDate());
 }
 
-export function statusCode(status: AttendanceStatus | null | undefined) {
-  if (!status) {
+export function statusCode(cell: HistoryDayCell | null | undefined) {
+  if (!cell?.status) {
     return "—";
   }
-  if (status === "present") {
-    return "P";
+  if (cell.status === "present") {
+    return cell.isLate ? "P*" : "P";
   }
-  if (status === "absent") {
+  if (cell.status === "absent") {
     return "A";
   }
-  if (status === "half-day") {
-    return "H";
+  if (cell.status === "half-day") {
+    return cell.isLate ? "H*" : "H";
   }
-  if (status === "leave") {
+  if (cell.status === "leave") {
     return "L";
   }
-  if (status === "week-off") {
-    return "WO";
-  }
-  if (status === "late") {
-    return "LT";
-  }
-  if (status === "holiday") {
+  if (cell.status === "holiday") {
     return "Ho";
   }
   return "—";
 }
 
-export function statusCellTitle(status: AttendanceStatus | null | undefined) {
-  if (!status) {
+export function statusCellTitle(cell: HistoryDayCell | null | undefined) {
+  if (!cell?.status) {
     return "Not recorded";
   }
-  if (status === "present") {
-    return "Present";
+  if (cell.status === "present") {
+    return cell.isLate ? "Present (late)" : "Present";
   }
-  if (status === "absent") {
+  if (cell.status === "absent") {
     return "Absent";
   }
-  if (status === "half-day") {
-    return "Half Day";
+  if (cell.status === "half-day") {
+    return cell.isLate ? "Half Day (late)" : "Half Day";
   }
-  if (status === "leave") {
+  if (cell.status === "leave") {
     return "Leave";
   }
-  if (status === "week-off") {
-    return "Week Off";
-  }
-  if (status === "late") {
-    return "Late";
-  }
-  if (status === "holiday") {
+  if (cell.status === "holiday") {
     return "Holiday";
   }
   return "Not recorded";
@@ -167,30 +159,36 @@ function emptyTotals(): HistoryTotals {
   return {
     present: 0,
     absent: 0,
-    late: 0,
     leave: 0,
     halfDay: 0,
     holiday: 0,
-    weekOff: 0,
+    late: 0,
     overtimeMinutes: 0,
   };
 }
 
-function addStatusToTotals(totals: HistoryTotals, status: AttendanceStatus, overtimeMinutes: number) {
+function addStatusToTotals(
+  totals: HistoryTotals,
+  status: AttendanceStatus,
+  isLate: boolean,
+  overtimeMinutes: number,
+) {
   if (status === "present") {
     totals.present += 1;
+    if (isLate) {
+      totals.late += 1;
+    }
   } else if (status === "absent") {
     totals.absent += 1;
-  } else if (status === "late") {
-    totals.late += 1;
   } else if (status === "leave") {
     totals.leave += 1;
   } else if (status === "half-day") {
     totals.halfDay += 1;
+    if (isLate) {
+      totals.late += 1;
+    }
   } else if (status === "holiday") {
     totals.holiday += 1;
-  } else if (status === "week-off") {
-    totals.weekOff += 1;
   }
   totals.overtimeMinutes += Math.max(0, Number(overtimeMinutes || 0));
 }
@@ -202,15 +200,7 @@ function pickRecordForDay(records: AttendanceDoc[]) {
   if (records.length === 1) {
     return records[0];
   }
-  const priority: AttendanceStatus[] = [
-    "present",
-    "late",
-    "half-day",
-    "leave",
-    "holiday",
-    "week-off",
-    "absent",
-  ];
+  const priority: AttendanceStatus[] = ["present", "half-day", "leave", "holiday", "absent"];
   return [...records].sort((left, right) => {
     const leftIndex = priority.indexOf(left.status);
     const rightIndex = priority.indexOf(right.status);
@@ -235,23 +225,27 @@ export function buildAttendanceMatrix(
 
   const summary = emptyTotals();
   const rows = visibleStaff.map((member) => {
-    const cells: Record<string, AttendanceStatus | null> = {};
+    const cells: Record<string, HistoryDayCell | null> = {};
     const totals = emptyTotals();
     days.forEach((day) => {
       const record = pickRecordForDay(byStaffDate.get(`${member.id}|${day}`) || []);
-      const status = record?.status || null;
-      cells[day] = status;
-      if (status) {
-        addStatusToTotals(totals, status, record?.overtimeMinutes || 0);
+      if (!record) {
+        cells[day] = null;
+        return;
       }
+      const cell: HistoryDayCell = {
+        status: record.status,
+        isLate: Boolean(record.isLate),
+      };
+      cells[day] = cell;
+      addStatusToTotals(totals, record.status, Boolean(record.isLate), record.overtimeMinutes || 0);
     });
     summary.present += totals.present;
     summary.absent += totals.absent;
-    summary.late += totals.late;
     summary.leave += totals.leave;
     summary.halfDay += totals.halfDay;
     summary.holiday += totals.holiday;
-    summary.weekOff += totals.weekOff;
+    summary.late += totals.late;
     summary.overtimeMinutes += totals.overtimeMinutes;
     return {
       staffId: member.id,

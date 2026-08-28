@@ -21,11 +21,10 @@ type CellMenuProps<T extends string> = {
 const TONE_CLASS: Record<string, string> = {
   present: menuStyles.tonePresent,
   absent: menuStyles.toneAbsent,
-  late: menuStyles.toneLate,
   halfDay: menuStyles.toneHalfDay,
   leave: menuStyles.toneLeave,
   holiday: menuStyles.toneHoliday,
-  weekOff: menuStyles.toneWeekOff,
+  empty: menuStyles.toneEmpty,
 };
 
 export default function CellMenu<T extends string>({

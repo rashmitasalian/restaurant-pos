@@ -317,6 +317,8 @@ export async function createStaff(staff: {
   notes?: string | null;
   photoMime?: string | null;
   photoBase64?: string | null;
+  weeklyOffDays?: number[] | null;
+  defaultShiftId?: string | null;
 }): Promise<StaffDoc> {
   return staffApi().create(staff);
 }
@@ -419,6 +421,7 @@ export async function upsertAttendanceRows(input: {
     staffId: string;
     shiftId?: string | null;
     status: AttendanceStatus;
+    isLate?: boolean;
     checkInTime?: string | null;
     checkOutTime?: string | null;
     breakMinutes?: number;
@@ -1021,27 +1024,58 @@ export type AttendanceShiftConfig = {
   hours: number;
 };
 
-export async function getConfigShifts(): Promise<AttendanceShiftConfig[]> {
+export type AttendanceConfig = {
+  shifts: AttendanceShiftConfig[];
+  holidays: string[];
+};
+
+export async function getAttendanceConfig(): Promise<AttendanceConfig> {
   const cfg = await api().settings!.get("config:attendance");
   const shifts = Array.isArray((cfg as any)?.shifts) ? (cfg as any).shifts : [];
-  return shifts
-    .map((entry: any) => ({
-      id: String(entry?.id || "").trim().toLowerCase(),
-      label: String(entry?.label || "").trim(),
-      hours: Number(entry?.hours || 0),
-    }))
-    .filter(
-      (entry: AttendanceShiftConfig) =>
-        entry.id &&
-        entry.label &&
-        entry.id !== "half-day" &&
-        entry.id !== "half" &&
-        entry.hours > 0,
-    );
+  const holidays = Array.isArray((cfg as any)?.holidays) ? (cfg as any).holidays : [];
+  return {
+    shifts: shifts
+      .map((entry: any) => ({
+        id: String(entry?.id || "").trim().toLowerCase(),
+        label: String(entry?.label || "").trim(),
+        hours: Number(entry?.hours || 0),
+      }))
+      .filter(
+        (entry: AttendanceShiftConfig) =>
+          entry.id &&
+          entry.label &&
+          entry.id !== "half-day" &&
+          entry.id !== "half" &&
+          entry.hours > 0,
+      ),
+    holidays: holidays
+      .map((entry: unknown) => String(entry || "").trim())
+      .filter(Boolean),
+  };
+}
+
+export async function getConfigShifts(): Promise<AttendanceShiftConfig[]> {
+  const config = await getAttendanceConfig();
+  return config.shifts;
+}
+
+export async function getConfigHolidays(): Promise<string[]> {
+  const config = await getAttendanceConfig();
+  return config.holidays;
+}
+
+export async function setAttendanceConfig(config: AttendanceConfig): Promise<void> {
+  await api().settings!.set("config:attendance", config);
 }
 
 export async function setConfigShifts(shifts: AttendanceShiftConfig[]): Promise<void> {
-  await api().settings!.set("config:attendance", { shifts });
+  const current = await getAttendanceConfig();
+  await setAttendanceConfig({ ...current, shifts });
+}
+
+export async function setConfigHolidays(holidays: string[]): Promise<void> {
+  const current = await getAttendanceConfig();
+  await setAttendanceConfig({ ...current, holidays });
 }
 
 export async function pruneOrderHistory(): Promise<number> {

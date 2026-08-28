@@ -322,6 +322,7 @@ export default function AttendanceHistory({ embedded = false }: { embedded?: boo
                   ))}
                   <th className={`${styles.summaryCol} ${styles.summaryColPresent}`}>Present</th>
                   <th className={`${styles.summaryCol} ${styles.summaryColAbsent}`}>Absent</th>
+                  <th className={`${styles.summaryCol} ${styles.summaryColHalfDay}`}>Half Day</th>
                   <th className={`${styles.summaryCol} ${styles.summaryColLeave}`}>Leave</th>
                   <th className={`${styles.summaryCol} ${styles.summaryColOt}`}>OT</th>
                 </tr>
@@ -334,19 +335,20 @@ export default function AttendanceHistory({ embedded = false }: { embedded?: boo
                       <div className={styles.employeeRole}>{row.role}</div>
                     </td>
                     {resolvedRange.days.map((day) => {
-                      const status = row.cells[day];
+                      const cell = row.cells[day];
                       return (
                         <td
                           key={`${row.staffId}-${day}`}
-                          className={`${styles.dayCell} ${status ? styles.dayCellRecorded : styles.dayCellEmpty}`}
-                          title={statusCellTitle(status)}
+                          className={`${styles.dayCell} ${cell?.status ? styles.dayCellRecorded : styles.dayCellEmpty}`}
+                          title={statusCellTitle(cell)}
                         >
-                          {statusCode(status)}
+                          {statusCode(cell)}
                         </td>
                       );
                     })}
                     <td className={`${styles.summaryCell} ${styles.summaryCellPresent}`}>{row.totals.present}</td>
                     <td className={`${styles.summaryCell} ${styles.summaryCellAbsent}`}>{row.totals.absent}</td>
+                    <td className={`${styles.summaryCell} ${styles.summaryCellHalfDay}`}>{row.totals.halfDay}</td>
                     <td className={`${styles.summaryCell} ${styles.summaryCellLeave}`}>{row.totals.leave}</td>
                     <td className={`${styles.summaryCell} ${styles.summaryCellOt}`}>
                       {formatOtHoursTotal(row.totals.overtimeMinutes)}h
@@ -358,11 +360,10 @@ export default function AttendanceHistory({ embedded = false }: { embedded?: boo
           </div>
           <div className={styles.legend} aria-label="Status legend">
             <span>P Present</span>
+            <span>P* Present (late)</span>
             <span>A Absent</span>
             <span>H Half Day</span>
             <span>L Leave</span>
-            <span>WO Week Off</span>
-            <span>LT Late</span>
             <span>Ho Holiday</span>
             <span className={styles.legendMuted}>— Not recorded</span>
           </div>
