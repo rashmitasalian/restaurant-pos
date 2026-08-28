@@ -14,6 +14,7 @@ import { normalizeText, todayDateOnly, validationMessage } from "../../../shared
 import type { AttendanceStatus } from "../../../shared/pos";
 import { useToast } from "../../context/ToastContext";
 import { Button } from "../../components/ui/Button";
+import { PortalMenu, PortalMenuItem } from "../../components/ui/PortalMenu";
 import { useAttendanceShortcuts } from "./hooks/useAttendanceShortcuts";
 import styles from "./Attendance.module.css";
 import menuStyles from "./components/CellMenu.module.css";
@@ -197,8 +198,8 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
   const [otEditor, setOtEditor] = React.useState<{ index: number; employee: string } | null>(null);
   const [noteEditor, setNoteEditor] = React.useState<{ index: number; employee: string } | null>(null);
   const dateInputRef = React.useRef<HTMLInputElement>(null);
-  const moreRef = React.useRef<HTMLDivElement>(null);
-  const bulkRef = React.useRef<HTMLDivElement>(null);
+  const bulkRef = React.useRef<HTMLButtonElement>(null);
+  const moreButtonRef = React.useRef<HTMLButtonElement>(null);
   const focusedRowRef = React.useRef(0);
 
   const loadData = React.useCallback(async () => {
@@ -235,22 +236,6 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
   React.useEffect(() => {
     loadData();
   }, [loadData]);
-
-  React.useEffect(() => {
-    if (!moreOpen && !bulkOpen) {
-      return;
-    }
-    const onPointerDown = (event: MouseEvent) => {
-      if (moreOpen && !moreRef.current?.contains(event.target as Node)) {
-        setMoreOpen(false);
-      }
-      if (bulkOpen && !bulkRef.current?.contains(event.target as Node)) {
-        setBulkOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", onPointerDown);
-    return () => document.removeEventListener("mousedown", onPointerDown);
-  }, [bulkOpen, moreOpen]);
 
   const setRowField = React.useCallback(
     (index: number, patch: Partial<AttendanceRow>) => {
@@ -303,11 +288,6 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
   const dirtyCount = rows.filter((row) => row.dirty).length;
   const hasUnsaved = dirtyCount > 0;
   const hasActiveFilters = Boolean(search) || shiftFilter !== "all" || editedOnly;
-
-  const closeMenus = React.useCallback(() => {
-    setMoreOpen(false);
-    setBulkOpen(false);
-  }, []);
 
   const summary = React.useMemo(() => {
     const totalOvertime = rows.reduce((sum, row) => sum + Number(row.overtimeMinutes || 0), 0);
@@ -492,7 +472,6 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
       <div className={styles.toolbar}>
         <div className={styles.contextBar}>
           <div className={styles.contextPrimary}>
-            <h2 className={styles.sectionTitle}>Attendance</h2>
             <div className={styles.dateNav}>
               <button
                 type="button"
@@ -578,124 +557,102 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
           </div>
 
           <div className={styles.stripActions}>
-            <div className={styles.menuWrap} ref={bulkRef}>
-              <button
-                type="button"
-                className={styles.stripBtn}
-                aria-haspopup="menu"
-                aria-expanded={bulkOpen}
+            <button
+              ref={bulkRef}
+              type="button"
+              className={styles.stripBtn}
+              aria-haspopup="menu"
+              aria-expanded={bulkOpen}
+              onClick={() => {
+                setBulkOpen((open) => !open);
+                setMoreOpen(false);
+              }}
+            >
+              Mark all present
+            </button>
+            <PortalMenu open={bulkOpen} anchorRef={bulkRef} onClose={() => setBulkOpen(false)}>
+              <PortalMenuItem
                 onClick={() => {
-                  setBulkOpen((open) => !open);
-                  setMoreOpen(false);
-                }}
-              >
-                Mark all present
-              </button>
-              {bulkOpen ? (
-                <div className={styles.menu} role="menu">
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className={styles.menuItem}
-                    onClick={() => {
-                      markAll("present");
-                      closeMenus();
-                    }}
-                  >
-                    Mark all present
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className={styles.menuItem}
-                    onClick={() => {
-                      markAll("absent");
-                      closeMenus();
-                    }}
-                  >
-                    Mark all absent
-                  </button>
-                </div>
-              ) : null}
-            </div>
-
-            <div className={styles.menuWrap} ref={moreRef}>
-              <button
-                type="button"
-                className={styles.iconMenuBtn}
-                aria-label="More actions"
-                aria-haspopup="menu"
-                aria-expanded={moreOpen}
-                onClick={() => {
-                  setMoreOpen((open) => !open);
+                  markAll("present");
                   setBulkOpen(false);
                 }}
               >
-                <MoreHorizontal size={18} />
-              </button>
-              {moreOpen ? (
-                <div className={`${styles.menu} ${styles.menuRight}`} role="menu">
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className={styles.menuItem}
-                    onClick={() => {
-                      void copyYesterday();
-                      closeMenus();
-                    }}
-                    disabled={saving}
-                  >
-                    Copy yesterday
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className={styles.menuItem}
-                    onClick={() => {
-                      exportExcel();
-                      closeMenus();
-                    }}
-                  >
-                    Export CSV
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className={styles.menuItem}
-                    onClick={() => {
-                      void exportPdf();
-                      closeMenus();
-                    }}
-                  >
-                    Export PDF
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className={styles.menuItem}
-                    onClick={() => {
-                      setEditedOnly((value) => !value);
-                      closeMenus();
-                    }}
-                  >
-                    {editedOnly ? "Show all rows" : "Show edited only"}
-                  </button>
-                  {hasActiveFilters ? (
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className={styles.menuItem}
-                      onClick={() => {
-                        clearFilters();
-                        closeMenus();
-                      }}
-                    >
-                      Reset filters
-                    </button>
-                  ) : null}
-                </div>
+                Mark all present
+              </PortalMenuItem>
+              <PortalMenuItem
+                onClick={() => {
+                  markAll("absent");
+                  setBulkOpen(false);
+                }}
+              >
+                Mark all absent
+              </PortalMenuItem>
+            </PortalMenu>
+
+            <button
+              ref={moreButtonRef}
+              type="button"
+              className={styles.iconMenuBtn}
+              aria-label="More actions"
+              aria-haspopup="menu"
+              aria-expanded={moreOpen}
+              onClick={() => {
+                setMoreOpen((open) => !open);
+                setBulkOpen(false);
+              }}
+            >
+              <MoreHorizontal size={18} />
+            </button>
+            <PortalMenu
+              open={moreOpen}
+              anchorRef={moreButtonRef}
+              align="right"
+              onClose={() => setMoreOpen(false)}
+            >
+              <PortalMenuItem
+                disabled={saving}
+                onClick={() => {
+                  void copyYesterday();
+                  setMoreOpen(false);
+                }}
+              >
+                Copy yesterday
+              </PortalMenuItem>
+              <PortalMenuItem
+                onClick={() => {
+                  exportExcel();
+                  setMoreOpen(false);
+                }}
+              >
+                Export CSV
+              </PortalMenuItem>
+              <PortalMenuItem
+                onClick={() => {
+                  void exportPdf();
+                  setMoreOpen(false);
+                }}
+              >
+                Export PDF
+              </PortalMenuItem>
+              <PortalMenuItem
+                onClick={() => {
+                  setEditedOnly((value) => !value);
+                  setMoreOpen(false);
+                }}
+              >
+                {editedOnly ? "Show all rows" : "Show edited only"}
+              </PortalMenuItem>
+              {hasActiveFilters ? (
+                <PortalMenuItem
+                  onClick={() => {
+                    clearFilters();
+                    setMoreOpen(false);
+                  }}
+                >
+                  Reset filters
+                </PortalMenuItem>
               ) : null}
-            </div>
+            </PortalMenu>
           </div>
         </div>
       </div>

@@ -2,19 +2,27 @@ import React from "react";
 import { ManageShell } from "../Manager/ManageShell";
 import {
   PEOPLE_TAB_HASH,
-  PEOPLE_TABS,
   peopleTabFromHash,
   type PeopleTab,
 } from "../Manager/managerSections";
 import Attendance from "../Attendance/Attendance";
+import AttendanceHistory from "../Attendance/AttendanceHistory";
 import Staff from "../Staff/Staff";
 import UsersScreen from "../Users/UsersScreen";
 import { Button } from "../../components/ui/Button";
+
+const ATTENDANCE_VIEW_TABS = [
+  { id: "daily", label: "Daily" },
+  { id: "history", label: "History" },
+];
+
+type AttendanceView = "daily" | "history";
 
 export default function People() {
   const [tab, setTab] = React.useState<PeopleTab>(() =>
     peopleTabFromHash(typeof window !== "undefined" ? window.location.hash : ""),
   );
+  const [attendanceView, setAttendanceView] = React.useState<AttendanceView>("daily");
   const addStaffRef = React.useRef<(() => void) | null>(null);
   const addUserRef = React.useRef<(() => void) | null>(null);
 
@@ -31,12 +39,6 @@ export default function People() {
     }
   }, []);
 
-  const selectTab = (next: string) => {
-    const id = next as PeopleTab;
-    setTab(id);
-    window.location.hash = PEOPLE_TAB_HASH[id];
-  };
-
   const primaryAction =
     tab === "roster" ? (
       <Button variant="primary" onClick={() => addStaffRef.current?.()}>
@@ -48,17 +50,27 @@ export default function People() {
       </Button>
     ) : undefined;
 
+  const title =
+    tab === "attendance" ? "Attendance" : tab === "roster" ? "Roster" : "Accounts";
+  const description =
+    tab === "attendance"
+      ? "Mark daily attendance and review history"
+      : tab === "roster"
+        ? "Manage staff profiles and employment"
+        : "Manage login accounts and access";
+
   return (
     <ManageShell
-      title="People"
-      description="Manage attendance, staff and access"
-      tabs={PEOPLE_TABS}
-      tab={tab}
-      onTabChange={selectTab}
+      title={title}
+      description={description}
       primaryAction={primaryAction}
+      tabs={tab === "attendance" ? ATTENDANCE_VIEW_TABS : undefined}
+      tab={tab === "attendance" ? attendanceView : undefined}
+      onTabChange={tab === "attendance" ? (next) => setAttendanceView(next as AttendanceView) : undefined}
       width="operational"
     >
-      {tab === "attendance" && <Attendance embedded />}
+      {tab === "attendance" && attendanceView === "daily" && <Attendance embedded />}
+      {tab === "attendance" && attendanceView === "history" && <AttendanceHistory embedded />}
       {tab === "roster" && <Staff embedded registerAddStaff={(fn) => { addStaffRef.current = fn; }} />}
       {tab === "accounts" && <UsersScreen embedded registerAddUser={(fn) => { addUserRef.current = fn; }} />}
     </ManageShell>

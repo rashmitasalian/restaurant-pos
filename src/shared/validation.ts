@@ -158,6 +158,13 @@ export function todayDateOnly(): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 }
 
+/** Clip a read-only attendance range so future days are never queried. */
+export function clipAttendanceQueryRange(fromDate: string, toDate: string) {
+  const today = todayDateOnly();
+  const clippedTo = toDate > today ? today : toDate;
+  return { fromDate, toDate: clippedTo, empty: fromDate > clippedTo };
+}
+
 export function parsePositiveMoney(value: unknown): number | null {
   const num = typeof value === "number" ? value : Number(String(value ?? "").trim());
   return Number.isFinite(num) && num > 0 ? num : null;

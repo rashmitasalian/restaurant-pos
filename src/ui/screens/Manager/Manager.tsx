@@ -14,6 +14,9 @@ import styles from "./Manager.module.css";
 import {
   type ManagerSection,
   MANAGER_SECTION_HASH,
+  PEOPLE_TAB_HASH,
+  peopleTabFromHash,
+  type PeopleTab,
 } from "./managerSections";
 import { Icon } from "../../components/ui/Icon";
 import { Button } from "../../components/ui/Button";
@@ -23,10 +26,12 @@ import {
   Wallet,
   UtensilsCrossed,
   History as HistoryIcon,
-  Users,
   ScrollText,
   Settings as SettingsIcon,
   BarChart3,
+  CalendarDays,
+  Users,
+  Shield,
 } from "lucide-react";
 
 type ManagerProps = {
@@ -39,18 +44,27 @@ type ManagerProps = {
 const SECTIONS: Array<{
   key: ManagerSection;
   label: string;
-  group: " " | "Operations" | "People" | "Business" | "System";
+  group: " " | "Operations" | "Business" | "System";
   icon: typeof ShoppingBasket;
 }> = [
   { key: "overview", label: "Overview", group: " ", icon: LayoutDashboard },
   { key: "grocery", label: "Grocery", group: "Operations", icon: ShoppingBasket },
   { key: "expenses", label: "Expenses", group: "Operations", icon: Wallet },
   { key: "menu", label: "Menu", group: "Operations", icon: UtensilsCrossed },
-  { key: "people", label: "People", group: "People", icon: Users },
   { key: "reports", label: "Reports", group: "Business", icon: BarChart3 },
   { key: "history", label: "History", group: "Business", icon: HistoryIcon },
   { key: "audit", label: "Audit", group: "System", icon: ScrollText },
   { key: "settings", label: "Settings", group: "System", icon: SettingsIcon },
+];
+
+const PEOPLE_RAIL: Array<{
+  tab: PeopleTab;
+  label: string;
+  icon: typeof CalendarDays;
+}> = [
+  { tab: "attendance", label: "Attendance", icon: CalendarDays },
+  { tab: "roster", label: "Roster", icon: Users },
+  { tab: "accounts", label: "Accounts", icon: Shield },
 ];
 
 const SETTINGS_TABS = [
@@ -101,6 +115,17 @@ function SettingsSection() {
 
 function ManagerInner({ section, onSectionChange, reportsOnly }: ManagerProps) {
   const [paletteOpen, setPaletteOpen] = React.useState(false);
+  const [peopleTab, setPeopleTab] = React.useState<PeopleTab>(() =>
+    peopleTabFromHash(typeof window !== "undefined" ? window.location.hash : ""),
+  );
+
+  React.useEffect(() => {
+    const onHash = () => {
+      setPeopleTab(peopleTabFromHash(window.location.hash));
+    };
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
 
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -119,6 +144,12 @@ function ManagerInner({ section, onSectionChange, reportsOnly }: ManagerProps) {
   const navigate = (next: ManagerSection) => {
     onSectionChange(next);
     window.location.hash = MANAGER_SECTION_HASH[next];
+  };
+
+  const navigatePeopleTab = (tab: PeopleTab) => {
+    onSectionChange("people");
+    setPeopleTab(tab);
+    window.location.hash = PEOPLE_TAB_HASH[tab];
   };
 
   const commands = React.useMemo(() => {
@@ -165,6 +196,14 @@ function ManagerInner({ section, onSectionChange, reportsOnly }: ManagerProps) {
 
   let currentGroup: string | null = null;
 
+  const renderGroupLabel = (group: string) => {
+    if (currentGroup === group || !group.trim()) {
+      return null;
+    }
+    currentGroup = group;
+    return <div className={styles.groupLabel}>{group}</div>;
+  };
+
   return (
     <div className={styles.managerRoot}>
       <aside className={styles.rail} aria-label="Manage navigation">
@@ -174,30 +213,61 @@ function ManagerInner({ section, onSectionChange, reportsOnly }: ManagerProps) {
             Jump (Ctrl+K)
           </Button>
         </div>
-        {SECTIONS.map((item) => {
-          const showGroup = currentGroup !== item.group && item.group.trim() !== "";
-          currentGroup = item.group;
-          return (
-            <React.Fragment key={item.key}>
-              {showGroup && <div className={styles.groupLabel}>{item.group}</div>}
-              <button
-                type="button"
-                className={`${styles.railButton} ${
-                  section === item.key ? styles.railButtonActive : ""
-                }`}
-                aria-current={section === item.key ? "page" : undefined}
-                onClick={() => navigate(item.key)}
-              >
-                <span className={styles.buttonMain}>
-                  <span className={styles.sectionIcon} aria-hidden="true">
-                    <Icon icon={item.icon} size="sm" />
-                  </span>
-                  <span className={styles.buttonText}>{item.label}</span>
+        {SECTIONS.slice(0, 4).map((item) => (
+          <React.Fragment key={item.key}>
+            {renderGroupLabel(item.group)}
+            <button
+              type="button"
+              className={`${styles.railButton} ${section === item.key ? styles.railButtonActive : ""}`}
+              aria-current={section === item.key ? "page" : undefined}
+              onClick={() => navigate(item.key)}
+            >
+              <span className={styles.buttonMain}>
+                <span className={styles.sectionIcon} aria-hidden="true">
+                  <Icon icon={item.icon} size="sm" />
                 </span>
-              </button>
-            </React.Fragment>
-          );
-        })}
+                <span className={styles.buttonText}>{item.label}</span>
+              </span>
+            </button>
+          </React.Fragment>
+        ))}
+        {renderGroupLabel("People")}
+        {PEOPLE_RAIL.map((item) => (
+          <button
+            key={item.tab}
+            type="button"
+            className={`${styles.railButton} ${
+              section === "people" && peopleTab === item.tab ? styles.railButtonActive : ""
+            }`}
+            aria-current={section === "people" && peopleTab === item.tab ? "page" : undefined}
+            onClick={() => navigatePeopleTab(item.tab)}
+          >
+            <span className={styles.buttonMain}>
+              <span className={styles.sectionIcon} aria-hidden="true">
+                <Icon icon={item.icon} size="sm" />
+              </span>
+              <span className={styles.buttonText}>{item.label}</span>
+            </span>
+          </button>
+        ))}
+        {SECTIONS.slice(4).map((item) => (
+          <React.Fragment key={item.key}>
+            {renderGroupLabel(item.group)}
+            <button
+              type="button"
+              className={`${styles.railButton} ${section === item.key ? styles.railButtonActive : ""}`}
+              aria-current={section === item.key ? "page" : undefined}
+              onClick={() => navigate(item.key)}
+            >
+              <span className={styles.buttonMain}>
+                <span className={styles.sectionIcon} aria-hidden="true">
+                  <Icon icon={item.icon} size="sm" />
+                </span>
+                <span className={styles.buttonText}>{item.label}</span>
+              </span>
+            </button>
+          </React.Fragment>
+        ))}
       </aside>
       <section className={styles.content}>{renderSection()}</section>
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} items={commands} />

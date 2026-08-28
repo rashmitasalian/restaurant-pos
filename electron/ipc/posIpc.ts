@@ -431,6 +431,10 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
     requireSession(event, token, ADMIN_ROLES);
     return posService.listAttendance(input || {});
   });
+  ipcMain.handle("pos:attendance:listRange", (event, token: string | null, input) => {
+    requireSession(event, token, ADMIN_ROLES);
+    return posService.listAttendanceRange(input || {});
+  });
   ipcMain.handle("pos:attendance:upsert", (event, token: string | null, input) => {
     const user = requireSession(event, token, ADMIN_ROLES);
     return posService.upsertAttendanceRows(input || {}, user.username);

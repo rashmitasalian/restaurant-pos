@@ -123,6 +123,7 @@ declare global {
       };
       attendance?: {
         list: (input: any) => Promise<any[]>;
+        listRange: (input: any) => Promise<any[]>;
         upsert: (input: any) => Promise<any[]>;
         copy: (fromDate: string, toDate: string) => Promise<any[]>;
         delete: (id: string) => Promise<any>;

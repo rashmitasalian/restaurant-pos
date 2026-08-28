@@ -199,44 +199,11 @@
 }
 
 .menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  z-index: 20;
-  min-width: 180px;
-  padding: 4px;
-  border: 1px solid var(--pos-line);
-  border-radius: 10px;
-  background: var(--pos-surface);
-  box-shadow: var(--pos-shadow-md, 0 8px 24px rgba(0, 0, 0, 0.12));
+  display: none;
 }
 
 .menuRight {
-  left: auto;
-  right: 0;
-}
-
-.menuItem {
-  display: block;
-  width: 100%;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  padding: 9px 10px;
-  text-align: left;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--pos-tx);
-  cursor: pointer;
-}
-
-.menuItem:hover:not(:disabled) {
-  background: var(--pos-surface-hover);
-}
-
-.menuItem:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+  display: none;
 }
 
 .errorPanel {

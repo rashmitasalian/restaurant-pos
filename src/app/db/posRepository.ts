@@ -23,6 +23,7 @@ import type {
   UserDto,
 } from "../../shared/pos";
 import { DEFAULT_GST_CONFIG, normalizeGstConfig, type GstConfig } from "../../shared/gst";
+import { clipAttendanceQueryRange, todayDateOnly } from "../../shared/validation";
 import { kotSentLinesNeedPrint } from "../../shared/kot";
 import {
   SERVICE_MODE_CONFIG_KEY,
@@ -340,12 +341,75 @@ function attendanceApi() {
 }
 
 export async function listAttendance(input: {
-  date: string;
+  date?: string;
+  fromDate?: string;
+  toDate?: string;
   shiftId?: string | null;
   status?: AttendanceStatus | null;
   search?: string;
 }): Promise<AttendanceDoc[]> {
   return attendanceApi().list(input);
+}
+
+function enumerateDateRange(fromDate: string, toDate: string) {
+  const days: string[] = [];
+  const [fromY, fromM, fromD] = fromDate.split("-").map((part) => Number(part));
+  const [toY, toM, toD] = toDate.split("-").map((part) => Number(part));
+  const cursor = new Date(fromY, fromM - 1, fromD);
+  const end = new Date(toY, toM - 1, toD);
+  while (cursor <= end) {
+    days.push(
+      `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}-${String(cursor.getDate()).padStart(2, "0")}`,
+    );
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return days;
+}
+
+export async function listAttendanceRange(input: {
+  fromDate: string;
+  toDate: string;
+  shiftId?: string | null;
+  search?: string;
+}): Promise<AttendanceDoc[]> {
+  const clipped = clipAttendanceQueryRange(input.fromDate, input.toDate);
+  if (clipped.empty) {
+    return [];
+  }
+  const query = { ...input, fromDate: clipped.fromDate, toDate: clipped.toDate };
+  const attendance = attendanceApi();
+  try {
+    const ranged = await attendance.list({
+      fromDate: query.fromDate,
+      toDate: query.toDate,
+      shiftId: query.shiftId,
+      search: query.search,
+    });
+    if (Array.isArray(ranged)) {
+      return ranged;
+    }
+  } catch {
+    // Older main process — fall through.
+  }
+  if (attendance.listRange) {
+    try {
+      return await attendance.listRange(query);
+    } catch {
+      // Fall through to per-day fallback.
+    }
+  }
+  const today = todayDateOnly();
+  const days = enumerateDateRange(query.fromDate, query.toDate).filter((date) => date <= today);
+  const rows: AttendanceDoc[] = [];
+  for (const date of days) {
+    const dayRows = await listAttendance({
+      date,
+      shiftId: query.shiftId,
+      search: query.search,
+    });
+    rows.push(...dayRows);
+  }
+  return rows;
 }
 
 export async function upsertAttendanceRows(input: {

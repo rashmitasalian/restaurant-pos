@@ -2,7 +2,6 @@ import React from "react";
 import { Modal } from "../../../components/ui/Modal";
 import { Button } from "../../../components/ui/Button";
 import { formatOvertimeInput, parseOvertimeHours } from "../../People/peopleUtils";
-import styles from "./AttendanceEditors.module.css";
 
 export function OvertimeEditor({
   open,
@@ -32,37 +31,39 @@ export function OvertimeEditor({
 
   return (
     <Modal open={open} title="Overtime" onClose={onClose}>
-      <p className={styles.subtitle}>{employee}</p>
-      <label className="pos-label" htmlFor="attendance-ot-hours">
-        Hours
-      </label>
-      <div className={styles.otRow}>
-        <input
-          id="attendance-ot-hours"
-          type="number"
-          min={0}
-          step={0.5}
-          className="pos-input"
-          value={value}
-          placeholder="0"
-          autoFocus
-          onChange={(event) => setValue(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              save();
-            }
-          }}
-        />
-        <span className={styles.otUnit}>hours</span>
-      </div>
-      <div className={styles.actions}>
-        <Button variant="ghost" onClick={onClose}>
-          Cancel
-        </Button>
-        <Button variant="primary" onClick={save}>
-          Save
-        </Button>
+      <div className="ui-form-stack">
+        <p style={{ margin: 0, fontSize: 13, color: "var(--pos-tx-sub)" }}>{employee}</p>
+        <label className="pos-label" htmlFor="attendance-ot-hours">
+          Hours
+        </label>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <input
+            id="attendance-ot-hours"
+            type="number"
+            min={0}
+            step={0.5}
+            className="pos-input"
+            value={value}
+            placeholder="0"
+            autoFocus
+            onChange={(event) => setValue(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                save();
+              }
+            }}
+          />
+          <span style={{ fontSize: 13, color: "var(--pos-tx-sub)", fontWeight: 600 }}>hours</span>
+        </div>
+        <div className="ui-form-actions">
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={save}>
+            Save
+          </Button>
+        </div>
       </div>
     </Modal>
   );
@@ -98,26 +99,28 @@ export function NoteEditor({
 
   return (
     <Modal open={open} title="Attendance Note" onClose={onClose}>
-      <p className={styles.subtitle}>{employee}</p>
-      <label className="pos-label" htmlFor="attendance-note">
-        Note{required ? " (required for leave)" : ""}
-      </label>
-      <textarea
-        id="attendance-note"
-        className="pos-input"
-        rows={3}
-        value={value}
-        placeholder={required ? "Reason for leave" : "Optional note"}
-        autoFocus
-        onChange={(event) => setValue(event.target.value)}
-      />
-      <div className={styles.actions}>
-        <Button variant="ghost" onClick={onClose}>
-          Cancel
-        </Button>
-        <Button variant="primary" onClick={save}>
-          Save
-        </Button>
+      <div className="ui-form-stack">
+        <p style={{ margin: 0, fontSize: 13, color: "var(--pos-tx-sub)" }}>{employee}</p>
+        <label className="pos-label" htmlFor="attendance-note">
+          Note{required ? " (required for leave)" : ""}
+        </label>
+        <textarea
+          id="attendance-note"
+          className="pos-input"
+          rows={3}
+          value={value}
+          placeholder={required ? "Reason for leave" : "Optional note"}
+          autoFocus
+          onChange={(event) => setValue(event.target.value)}
+        />
+        <div className="ui-form-actions">
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={save}>
+            Save
+          </Button>
+        </div>
       </div>
     </Modal>
   );

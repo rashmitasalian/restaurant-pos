@@ -133,7 +133,37 @@ export function buildManageCommands(
     go("grocery", "Grocery", "Buying lists"),
     go("expenses", "Expenses"),
     go("menu", "Menu"),
-    go("people", "People"),
+    go("people", "People", "Attendance"),
+    {
+      id: "people-attendance",
+      label: "Attendance",
+      hint: "People",
+      section: "people",
+      run: () => {
+        onNavigate("people");
+        window.location.hash = "#manage-people-attendance";
+      },
+    },
+    {
+      id: "people-roster",
+      label: "Roster",
+      hint: "People",
+      section: "people",
+      run: () => {
+        onNavigate("people");
+        window.location.hash = "#manage-people-roster";
+      },
+    },
+    {
+      id: "people-accounts",
+      label: "Accounts",
+      hint: "People",
+      section: "people",
+      run: () => {
+        onNavigate("people");
+        window.location.hash = "#manage-people-accounts";
+      },
+    },
     go("reports", "Reports"),
     go("history", "History"),
     go("audit", "Audit"),

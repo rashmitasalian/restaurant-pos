@@ -1,6 +1,7 @@
 import React from "react";
 import { ChevronDown } from "lucide-react";
-import styles from "./CellMenu.module.css";
+import { PortalMenu } from "../../../components/ui/PortalMenu";
+import menuStyles from "./CellMenu.module.css";
 
 export type CellMenuOption<T extends string> = {
   value: T;
@@ -18,13 +19,13 @@ type CellMenuProps<T extends string> = {
 };
 
 const TONE_CLASS: Record<string, string> = {
-  present: styles.tonePresent,
-  absent: styles.toneAbsent,
-  late: styles.toneLate,
-  halfDay: styles.toneHalfDay,
-  leave: styles.toneLeave,
-  holiday: styles.toneHoliday,
-  weekOff: styles.toneWeekOff,
+  present: menuStyles.tonePresent,
+  absent: menuStyles.toneAbsent,
+  late: menuStyles.toneLate,
+  halfDay: menuStyles.toneHalfDay,
+  leave: menuStyles.toneLeave,
+  holiday: menuStyles.toneHoliday,
+  weekOff: menuStyles.toneWeekOff,
 };
 
 export default function CellMenu<T extends string>({
@@ -36,63 +37,51 @@ export default function CellMenu<T extends string>({
   align = "left",
 }: CellMenuProps<T>) {
   const [open, setOpen] = React.useState(false);
-  const rootRef = React.useRef<HTMLDivElement>(null);
-
-  React.useEffect(() => {
-    if (!open) {
-      return;
-    }
-    const onPointerDown = (event: MouseEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) {
-        setOpen(false);
-      }
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [open]);
+  const triggerRef = React.useRef<HTMLButtonElement>(null);
 
   return (
-    <div className={styles.root} ref={rootRef}>
+    <div className={menuStyles.root}>
       <button
+        ref={triggerRef}
         type="button"
-        className={`${styles.trigger} ${tone ? TONE_CLASS[tone] || "" : ""}`}
+        className={`${menuStyles.trigger} ${tone ? TONE_CLASS[tone] || "" : ""}`}
         aria-label={ariaLabel}
         aria-haspopup="listbox"
         aria-expanded={open}
         onClick={() => setOpen((previous) => !previous)}
       >
-        <span className={styles.triggerLabel}>{label}</span>
-        <ChevronDown size={14} className={styles.chevron} aria-hidden />
+        <span className={menuStyles.triggerLabel}>{label}</span>
+        <ChevronDown size={14} className={menuStyles.chevron} aria-hidden />
       </button>
-      {open ? (
-        <div className={`${styles.menu} ${align === "right" ? styles.menuRight : ""}`} role="listbox">
+      <PortalMenu
+        open={open}
+        anchorRef={triggerRef}
+        align={align}
+        onClose={() => setOpen(false)}
+      >
+        <div role="listbox">
           {options.map((option) => (
             <button
               key={option.value}
               type="button"
               role="option"
               aria-selected={option.selected}
-              className={`${styles.option} ${option.selected ? styles.optionSelected : ""}`}
+              className={`ui-menu-item ${option.selected ? "ui-menu-item-selected" : ""}`}
               onClick={() => {
                 onSelect(option.value);
                 setOpen(false);
               }}
             >
-              {option.selected ? <span className={styles.check}>✓</span> : <span className={styles.checkSpacer} />}
+              {option.selected ? (
+                <span className="ui-menu-check">✓</span>
+              ) : (
+                <span className="ui-menu-checkSpacer" />
+              )}
               {option.label}
             </button>
           ))}
         </div>
-      ) : null}
+      </PortalMenu>
     </div>
   );
 }

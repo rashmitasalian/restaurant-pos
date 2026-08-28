@@ -55,6 +55,7 @@ import {
   STAFF_TEXT_LIMITS,
   isValidDateOnly,
   isFutureDateOnly,
+  todayDateOnly,
   isValidIndianMobile,
   isValidPersonName,
   normalizeCategoryName,
@@ -5196,11 +5197,24 @@ export const posService = {
   },
 
   listAttendance(input: {
-    date: string;
+    date?: string;
+    fromDate?: string;
+    toDate?: string;
     shiftId?: string | null;
     status?: AttendanceStatus | null;
     search?: string;
   }): AttendanceDto[] {
+    if (input.fromDate && input.toDate) {
+      return this.listAttendanceRange({
+        fromDate: input.fromDate,
+        toDate: input.toDate,
+        shiftId: input.shiftId,
+        search: input.search,
+      });
+    }
+    if (!input.date) {
+      throw new Error("attendance-date-required");
+    }
     const date = normalizeAttendanceDate(input.date);
     const clauses = ["ar.attendance_date = ?"];
     const params: unknown[] = [date];
@@ -5225,6 +5239,43 @@ export const posService = {
          JOIN staff s ON s.id = ar.staff_id
          WHERE ${clauses.join(" AND ")}
          ORDER BY lower(s.name) ASC, ar.created_on ASC`,
+      )
+      .all(...params)
+      .map(attendanceFromRow);
+  },
+
+  listAttendanceRange(input: {
+    fromDate: string;
+    toDate: string;
+    shiftId?: string | null;
+    search?: string;
+  }): AttendanceDto[] {
+    const fromDate = normalizeAttendanceDateFormat(input.fromDate);
+    const rawToDate = normalizeAttendanceDateFormat(input.toDate);
+    const today = todayDateOnly();
+    const toDate = rawToDate > today ? today : rawToDate;
+    if (fromDate > toDate) {
+      return [];
+    }
+    const clauses = ["ar.attendance_date >= ?", "ar.attendance_date <= ?"];
+    const params: unknown[] = [fromDate, toDate];
+    const shiftId = normalizeText(input.shiftId);
+    if (shiftId) {
+      clauses.push("COALESCE(ar.shift_id, '') = ?");
+      params.push(shiftId);
+    }
+    const search = normalizeText(input.search).toLowerCase();
+    if (search) {
+      clauses.push("(lower(s.name) LIKE ? OR lower(COALESCE(s.designation, '')) LIKE ?)");
+      params.push(`%${search}%`, `%${search}%`);
+    }
+    return getDb()
+      .prepare(
+        `SELECT ar.*, s.name AS staff_name, s.designation AS staff_role
+         FROM attendance_records ar
+         JOIN staff s ON s.id = ar.staff_id
+         WHERE ${clauses.join(" AND ")}
+         ORDER BY ar.attendance_date ASC, lower(s.name) ASC, ar.created_on ASC`,
       )
       .all(...params)
       .map(attendanceFromRow);
@@ -5721,7 +5772,7 @@ function prepareStaffInput(input: {
   };
 }
 
-function normalizeAttendanceDate(value: unknown) {
+function normalizeAttendanceDateFormat(value: unknown) {
   const date = normalizeText(value);
   if (!date) {
     throw new Error("attendance-date-required");
@@ -5729,6 +5780,11 @@ function normalizeAttendanceDate(value: unknown) {
   if (!isValidDateOnly(date)) {
     throw new Error("attendance-date-invalid");
   }
+  return date;
+}
+
+function normalizeAttendanceDate(value: unknown) {
+  const date = normalizeAttendanceDateFormat(value);
   if (isFutureDateOnly(date)) {
     throw new Error("attendance-date-future");
   }

@@ -1,4 +1,5 @@
 import {
+  clipAttendanceQueryRange,
   hasLetter,
   isFutureDateOnly,
   isValidIndianMobile,
@@ -48,5 +49,12 @@ describe("shared validation", () => {
     tomorrow.setDate(tomorrow.getDate() + 1);
     const text = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, "0")}-${String(tomorrow.getDate()).padStart(2, "0")}`;
     expect(isFutureDateOnly(text)).toBe(true);
+  });
+
+  it("clips attendance history ranges to today", () => {
+    const today = todayDateOnly();
+    const clipped = clipAttendanceQueryRange(`${today.slice(0, 8)}01`, `${today.slice(0, 8)}31`);
+    expect(clipped.toDate).toBe(today);
+    expect(clipped.empty).toBe(false);
   });
 });

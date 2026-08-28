@@ -107,6 +107,34 @@
   font-weight: 700;
 }
 
+.railSubButton {
+  width: 100%;
+  display: block;
+  border: 0;
+  border-left: 3px solid transparent;
+  background: transparent;
+  color: var(--pos-tx-sub);
+  border-radius: 0 var(--pos-r-sm) var(--pos-r-sm) 0;
+  padding: 8px 10px 8px 38px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+
+.railSubButton:hover {
+  background: var(--pos-surface-hover);
+  color: var(--pos-tx);
+}
+
+.railSubButtonActive {
+  background: var(--pos-surface-hover);
+  border-left-color: var(--pos-teal);
+  color: var(--pos-teal-strong);
+  font-weight: 700;
+}
+
 .sectionIcon {
   width: 20px;
   height: 20px;
@@ -201,5 +229,17 @@
   .railButtonActive {
     border-bottom-color: var(--pos-saffron);
     border-left-color: transparent;
+  }
+
+  .railSubButton {
+    width: auto;
+    padding: 8px 12px;
+    border-left: none;
+    border-radius: var(--pos-r-sm);
+  }
+
+  .railSubButtonActive {
+    border-left: none;
+    background: var(--pos-teal-tint);
   }
 }
