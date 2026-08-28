@@ -45,6 +45,7 @@ import type {
   ProfitabilitySummaryDto,
   Role,
   SalesSummaryDto,
+  SalaryAdvanceDto,
   SeatingAreaDto,
   StaffDto,
   TableDto,
@@ -4602,6 +4603,109 @@ export const posService = {
     });
   },
 
+  listSalaryAdvances(
+    opts: { from?: number; to?: number; staffId?: string; limit?: number; offset?: number } = {},
+  ): SalaryAdvanceDto[] {
+    const clauses = ["a.deleted_at IS NULL"];
+    const params: unknown[] = [];
+    if (opts.from != null) {
+      clauses.push("a.advance_date >= ?");
+      params.push(opts.from);
+    }
+    if (opts.to != null) {
+      clauses.push("a.advance_date <= ?");
+      params.push(opts.to);
+    }
+    if (opts.staffId) {
+      clauses.push("a.staff_id = ?");
+      params.push(opts.staffId);
+    }
+    const limit = Math.min(500, Math.max(1, Number(opts.limit || 200)));
+    const offset = Math.max(0, Number(opts.offset || 0));
+    params.push(limit, offset);
+    return getDb()
+      .prepare(
+        `SELECT a.*, s.name AS staff_name
+         FROM salary_advances a
+         JOIN staff s ON s.id = a.staff_id
+         WHERE ${clauses.join(" AND ")}
+         ORDER BY a.advance_date ASC, a.created_at ASC
+         LIMIT ? OFFSET ?`,
+      )
+      .all(...params)
+      .map(salaryAdvanceFromRow);
+  },
+
+  createSalaryAdvance(
+    input: {
+      staffId: string;
+      amount: number;
+      advanceDate?: number;
+      note?: string | null;
+    },
+    actor?: string | null,
+  ): SalaryAdvanceDto {
+    const amount = parsePositiveMoney(input.amount);
+    if (amount === null) throw new Error("salary-advance-amount-invalid");
+    const advanceDate = Number(input.advanceDate || now());
+    if (!Number.isFinite(advanceDate) || advanceDate <= 0) {
+      throw new Error("salary-advance-date-invalid");
+    }
+    const staffId = normalizeText(input.staffId);
+    if (!staffId) throw new Error("salary-advance-staff-required");
+    const id = `salary-advance:${randomUUID()}`;
+    const at = now();
+    return inTransaction((database) => {
+      const staff = database.prepare("SELECT id FROM staff WHERE id = ?").get(staffId);
+      if (!staff) throw new Error("salary-advance-staff-not-found");
+      database
+        .prepare(
+          `INSERT INTO salary_advances (
+             id, staff_id, amount_paise, advance_date, note, created_by, created_at, updated_at, deleted_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
+        )
+        .run(
+          id,
+          staffId,
+          rupeesToPaise(amount),
+          advanceDate,
+          optionalGroceryText(input.note, 500, "salary-advance-note-too-long"),
+          actor || null,
+          at,
+          at,
+        );
+      createAuditRow(database, "salary_advance.created", "salary-advance", id, actor || null, {
+        staffId,
+        amount,
+      });
+      return salaryAdvanceFromRow(
+        database
+          .prepare(
+            `SELECT a.*, s.name AS staff_name
+             FROM salary_advances a
+             JOIN staff s ON s.id = a.staff_id
+             WHERE a.id = ?`,
+          )
+          .get(id),
+      );
+    });
+  },
+
+  voidSalaryAdvance(id: string, actor?: string | null) {
+    return inTransaction((database) => {
+      const current = database.prepare("SELECT * FROM salary_advances WHERE id = ?").get(id) as any;
+      if (!current || current.deleted_at) throw new Error("salary-advance-not-found");
+      database
+        .prepare("UPDATE salary_advances SET deleted_at = ?, updated_at = ? WHERE id = ?")
+        .run(now(), now(), id);
+      createAuditRow(database, "salary_advance.voided", "salary-advance", id, actor || null, {
+        staffId: current.staff_id,
+        amount: paiseToRupees(current.amount_paise),
+      });
+      return { ok: true };
+    });
+  },
+
   listBuyingListTemplates(): BuyingListTemplateDto[] {
     const database = getDb();
     return database
@@ -6093,6 +6197,23 @@ function expenseFromRow(row: any): ExpenseDto {
     paymentMethod: row.payment_method || null,
     invoiceNumber: row.invoice_number || null,
     recurringExpenseId: row.recurring_expense_id || null,
+    createdBy: row.created_by || null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    deletedAt: row.deleted_at || null,
+  };
+}
+
+function salaryAdvanceFromRow(row: any): SalaryAdvanceDto {
+  return {
+    _id: row.id,
+    id: row.id,
+    type: "salary-advance",
+    staffId: row.staff_id,
+    staffName: row.staff_name || null,
+    amount: paiseToRupees(row.amount_paise),
+    advanceDate: row.advance_date,
+    note: row.note || null,
     createdBy: row.created_by || null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

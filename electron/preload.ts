@@ -228,6 +228,11 @@ contextBridge.exposeInMainWorld("pos", {
     update: (id: string, updates: any) => authInvoke("pos:expenses:update", id, updates),
     void: (id: string) => authInvoke("pos:expenses:void", id),
   },
+  salaryAdvances: {
+    list: (opts?: any) => authInvoke("pos:salary-advances:list", opts),
+    create: (payload: any) => authInvoke("pos:salary-advances:create", payload),
+    void: (id: string) => authInvoke("pos:salary-advances:void", id),
+  },
   audit: {
     create: (action: string, orderId?: string | null, user?: string | null, detail?: any) =>
       authInvoke("pos:audit:create", action, orderId, user, detail),

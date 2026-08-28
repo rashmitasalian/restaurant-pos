@@ -175,6 +175,11 @@ declare global {
         update: (id: string, updates: any) => Promise<any>;
         void: (id: string) => Promise<any>;
       };
+      salaryAdvances?: {
+        list: (opts?: any) => Promise<any[]>;
+        create: (payload: any) => Promise<any>;
+        void: (id: string) => Promise<any>;
+      };
       audit?: {
         create: (
           action: string,

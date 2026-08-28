@@ -10,11 +10,12 @@ export type ManagerSection =
   | "settings";
 
 /** People sub-tab when section === "people" */
-export type PeopleTab = "roster" | "attendance" | "accounts";
+export type PeopleTab = "roster" | "attendance" | "advances" | "accounts";
 
 export const PEOPLE_TABS: Array<{ id: PeopleTab; label: string }> = [
   { id: "attendance", label: "Attendance" },
   { id: "roster", label: "Roster" },
+  { id: "advances", label: "Salary Advances" },
   { id: "accounts", label: "Accounts" },
 ];
 
@@ -33,12 +34,14 @@ export const MANAGER_SECTION_HASH: Record<ManagerSection, string> = {
 export const PEOPLE_TAB_HASH: Record<PeopleTab, string> = {
   roster: "#manage-people-roster",
   attendance: "#manage-people-attendance",
+  advances: "#manage-people-advances",
   accounts: "#manage-people-accounts",
 };
 
 export function peopleTabFromHash(hash: string): PeopleTab {
   const normalized = String(hash || "").toLowerCase();
   if (normalized.includes("roster")) return "roster";
+  if (normalized.includes("advance")) return "advances";
   if (normalized.includes("attendance")) return "attendance";
   if (normalized.includes("account") || normalized.includes("user")) return "accounts";
   return "attendance";
@@ -81,6 +84,7 @@ export function managerSectionFromHash(hash: string): ManagerSection | null {
     "#manage-people": "people",
     "#manage-people-roster": "people",
     "#manage-people-attendance": "people",
+    "#manage-people-advances": "people",
     "#manage-people-accounts": "people",
     "#attendance": "people",
     "#manager-attendance": "people",

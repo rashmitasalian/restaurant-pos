@@ -155,6 +155,16 @@ export function buildManageCommands(
       },
     },
     {
+      id: "people-advances",
+      label: "Salary Advances",
+      hint: "People",
+      section: "people",
+      run: () => {
+        onNavigate("people");
+        window.location.hash = "#manage-people-advances";
+      },
+    },
+    {
       id: "people-accounts",
       label: "Accounts",
       hint: "People",

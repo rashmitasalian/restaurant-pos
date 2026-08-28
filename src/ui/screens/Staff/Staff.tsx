@@ -6,6 +6,7 @@ import {
   deleteStaff,
   getConfigShifts,
   getStaff,
+  listSalaryAdvances,
   listStaff,
   updateStaff,
   updateUser,
@@ -33,6 +34,7 @@ import { DEFAULT_ROLE } from "../../../config/roles";
 import type { Role } from "../../../config/roles";
 import { PasswordValidator } from "../../../app/utils/validators";
 import { filterStaffBySearch, staffInitials } from "../People/peopleUtils";
+import { PEOPLE_TAB_HASH } from "../Manager/managerSections";
 
 type StaffStatusFilter = "active" | "left" | "all";
 
@@ -582,6 +584,7 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
     staffName: string;
   } | null>(null);
   const [createAccountFor, setCreateAccountFor] = React.useState<StaffDoc | null>(null);
+  const [editAdvanceTotal, setEditAdvanceTotal] = React.useState<number | null>(null);
   const [shiftOptions, setShiftOptions] = React.useState<AttendanceShiftConfig[]>([
     { id: "morning", label: "Morning", hours: 8 },
     { id: "evening", label: "Evening", hours: 8 },
@@ -623,6 +626,35 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
       setShowAddModal(true);
     });
   }, [registerAddStaff]);
+
+  React.useEffect(() => {
+    if (!editingMember) {
+      setEditAdvanceTotal(null);
+      return;
+    }
+    const now = new Date();
+    const from = new Date(now.getFullYear(), now.getMonth(), 1);
+    from.setHours(0, 0, 0, 0);
+    const to = new Date(now);
+    to.setHours(23, 59, 59, 999);
+    let cancelled = false;
+    void listSalaryAdvances({
+      from: from.getTime(),
+      to: to.getTime(),
+      staffId: editingMember.id,
+      limit: 500,
+    })
+      .then((rows) => {
+        if (cancelled) return;
+        setEditAdvanceTotal(rows.reduce((sum, row) => sum + Number(row.amount || 0), 0));
+      })
+      .catch(() => {
+        if (!cancelled) setEditAdvanceTotal(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [editingMember]);
 
   const filteredStaff = React.useMemo(
     () => filterStaffBySearch(staff, staffSearch),
@@ -764,6 +796,7 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
     setEditPhoto(null);
     setEditPhotoChanged(false);
     setEditError(null);
+    setEditAdvanceTotal(null);
   };
 
   const saveEdit = async (member: StaffDoc) => {
@@ -1436,6 +1469,39 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
               min={0}
               step="0.01"
             />
+            {editingMember && editAdvanceTotal !== null && editAdvanceTotal > 0 && (
+              <div
+                style={{
+                  gridColumn: "1 / -1",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  padding: "10px 12px",
+                  borderRadius: "var(--pos-r-md)",
+                  border: "1px solid var(--pos-line)",
+                  background: "var(--pos-surface-sunken)",
+                  fontSize: 13,
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 700 }}>Salary Advances — This month</div>
+                  <div style={{ color: "var(--pos-tx-muted)", marginTop: 2 }}>
+                    ₹{editAdvanceTotal.toLocaleString("en-IN")} advanced
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="pos-btn pos-btn-secondary pos-btn-sm"
+                  onClick={() => {
+                    cancelEdit();
+                    window.location.hash = `${PEOPLE_TAB_HASH.advances}?staff=${encodeURIComponent(editingMember.id)}`;
+                  }}
+                >
+                  View Advances
+                </button>
+              </div>
+            )}
             <FieldShell id="staff-edit-default-shift" label="Default Shift">
               <select
                 id="staff-edit-default-shift"

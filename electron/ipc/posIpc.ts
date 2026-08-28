@@ -603,6 +603,21 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
     return posService.voidExpense(id, user.username);
   });
 
+  ipcMain.handle("pos:salary-advances:list", (event, token: string | null, opts) => {
+    requireSession(event, token, ADMIN_ROLES);
+    return posService.listSalaryAdvances(opts || {});
+  });
+
+  ipcMain.handle("pos:salary-advances:create", (event, token: string | null, payload) => {
+    const user = requireSession(event, token, ADMIN_ROLES);
+    return posService.createSalaryAdvance(payload, user.username);
+  });
+
+  ipcMain.handle("pos:salary-advances:void", (event, token: string | null, id: string) => {
+    const user = requireSession(event, token, ADMIN_ROLES);
+    return posService.voidSalaryAdvance(id, user.username);
+  });
+
   ipcMain.handle("pos:grocery:templates:list", (event, token: string | null) => {
     requireSession(event, token, ADMIN_ROLES);
     return posService.listBuyingListTemplates();

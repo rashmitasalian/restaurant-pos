@@ -31,6 +31,7 @@ import {
   BarChart3,
   CalendarDays,
   Users,
+  IndianRupee,
   Shield,
 } from "lucide-react";
 
@@ -64,6 +65,7 @@ const PEOPLE_RAIL: Array<{
 }> = [
   { tab: "attendance", label: "Attendance", icon: CalendarDays },
   { tab: "roster", label: "Roster", icon: Users },
+  { tab: "advances", label: "Salary Advances", icon: IndianRupee },
   { tab: "accounts", label: "Accounts", icon: Shield },
 ];
 

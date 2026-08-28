@@ -9,6 +9,7 @@ import Attendance from "../Attendance/Attendance";
 import AttendanceHistory from "../Attendance/AttendanceHistory";
 import Staff from "../Staff/Staff";
 import UsersScreen from "../Users/UsersScreen";
+import SalaryAdvances from "../SalaryAdvances/SalaryAdvances";
 import { Button } from "../../components/ui/Button";
 
 const ATTENDANCE_VIEW_TABS = [
@@ -18,6 +19,14 @@ const ATTENDANCE_VIEW_TABS = [
 
 type AttendanceView = "daily" | "history";
 
+function staffIdFromHash(): string | null {
+  const hash = window.location.hash || "";
+  const q = hash.indexOf("?");
+  if (q === -1) return null;
+  const params = new URLSearchParams(hash.slice(q + 1));
+  return params.get("staff") || params.get("staffId");
+}
+
 export default function People() {
   const [tab, setTab] = React.useState<PeopleTab>(() =>
     peopleTabFromHash(typeof window !== "undefined" ? window.location.hash : ""),
@@ -25,6 +34,7 @@ export default function People() {
   const [attendanceView, setAttendanceView] = React.useState<AttendanceView>("daily");
   const addStaffRef = React.useRef<(() => void) | null>(null);
   const addUserRef = React.useRef<(() => void) | null>(null);
+  const recordAdvanceRef = React.useRef<(() => void) | null>(null);
 
   React.useEffect(() => {
     const onHash = () => setTab(peopleTabFromHash(window.location.hash));
@@ -48,16 +58,28 @@ export default function People() {
       <Button variant="primary" onClick={() => addUserRef.current?.()}>
         Add User
       </Button>
+    ) : tab === "advances" ? (
+      <Button variant="primary" onClick={() => recordAdvanceRef.current?.()}>
+        + Record Advance
+      </Button>
     ) : undefined;
 
   const title =
-    tab === "attendance" ? "Attendance" : tab === "roster" ? "Roster" : "Accounts";
+    tab === "attendance"
+      ? "Attendance"
+      : tab === "roster"
+        ? "Roster"
+        : tab === "advances"
+          ? "Salary Advances"
+          : "Accounts";
   const description =
     tab === "attendance"
       ? "Mark daily attendance and review history"
       : tab === "roster"
         ? "Manage staff profiles and employment"
-        : "Manage login accounts and access";
+        : tab === "advances"
+          ? "Record salary advances taken by staff"
+          : "Manage login accounts and access";
 
   return (
     <ManageShell
@@ -72,6 +94,15 @@ export default function People() {
       {tab === "attendance" && attendanceView === "daily" && <Attendance embedded />}
       {tab === "attendance" && attendanceView === "history" && <AttendanceHistory embedded />}
       {tab === "roster" && <Staff embedded registerAddStaff={(fn) => { addStaffRef.current = fn; }} />}
+      {tab === "advances" && (
+        <SalaryAdvances
+          embedded
+          initialStaffId={staffIdFromHash()}
+          registerRecordAdvance={(fn) => {
+            recordAdvanceRef.current = fn;
+          }}
+        />
+      )}
       {tab === "accounts" && <UsersScreen embedded registerAddUser={(fn) => { addUserRef.current = fn; }} />}
     </ManageShell>
   );

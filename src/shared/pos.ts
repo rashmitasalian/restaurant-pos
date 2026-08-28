@@ -425,6 +425,21 @@ export type ExpenseDto = {
   deletedAt?: number | null;
 };
 
+export type SalaryAdvanceDto = {
+  _id: string;
+  id: string;
+  type: "salary-advance";
+  staffId: string;
+  staffName?: string | null;
+  amount: number;
+  advanceDate: number;
+  note?: string | null;
+  createdBy?: string | null;
+  createdAt: number;
+  updatedAt: number;
+  deletedAt?: number | null;
+};
+
 export type BuyingListTemplateLineDto = {
   id: string;
   groceryItemId?: string | null;

@@ -819,6 +819,35 @@ export async function voidExpense(id: string) {
   return expensesApi().void(id);
 }
 
+function salaryAdvancesApi() {
+  const salaryAdvances = api().salaryAdvances;
+  if (!salaryAdvances) throw new Error("pos-salary-advances-api-unavailable");
+  return salaryAdvances;
+}
+
+export async function listSalaryAdvances(opts?: {
+  from?: number;
+  to?: number;
+  staffId?: string;
+  limit?: number;
+  offset?: number;
+}) {
+  return salaryAdvancesApi().list(opts);
+}
+
+export async function createSalaryAdvance(input: {
+  staffId: string;
+  amount: number;
+  advanceDate?: number;
+  note?: string | null;
+}) {
+  return salaryAdvancesApi().create(input);
+}
+
+export async function voidSalaryAdvance(id: string) {
+  return salaryAdvancesApi().void(id);
+}
+
 export type ConfigGstDoc = GstConfigDto;
 
 export async function getConfigGst(): Promise<ConfigGstDoc> {

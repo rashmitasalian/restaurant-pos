@@ -613,6 +613,23 @@ function runSchema(database: SqliteDatabase) {
     CREATE INDEX IF NOT EXISTS idx_expenses_category_date
       ON expenses(category_id, expense_date DESC);
 
+    CREATE TABLE IF NOT EXISTS salary_advances (
+      id TEXT PRIMARY KEY,
+      staff_id TEXT NOT NULL REFERENCES staff(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+      amount_paise INTEGER NOT NULL CHECK (amount_paise > 0),
+      advance_date INTEGER NOT NULL,
+      note TEXT,
+      created_by TEXT REFERENCES users(username) ON UPDATE CASCADE ON DELETE SET NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      deleted_at INTEGER
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_salary_advances_date
+      ON salary_advances(advance_date DESC);
+    CREATE INDEX IF NOT EXISTS idx_salary_advances_staff_date
+      ON salary_advances(staff_id, advance_date DESC);
+
     CREATE TABLE IF NOT EXISTS grocery_list_templates (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL COLLATE NOCASE,
@@ -1345,6 +1362,27 @@ function runSchema(database: SqliteDatabase) {
       CREATE INDEX IF NOT EXISTS idx_attendance_staff ON attendance_records(staff_id);
       CREATE INDEX IF NOT EXISTS idx_attendance_date ON attendance_records(attendance_date);
       CREATE INDEX IF NOT EXISTS idx_attendance_status ON attendance_records(status);
+    `);
+  });
+
+  runMigration(database, 21, "Add salary advances ledger", () => {
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS salary_advances (
+        id TEXT PRIMARY KEY,
+        staff_id TEXT NOT NULL REFERENCES staff(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+        amount_paise INTEGER NOT NULL CHECK (amount_paise > 0),
+        advance_date INTEGER NOT NULL,
+        note TEXT,
+        created_by TEXT REFERENCES users(username) ON UPDATE CASCADE ON DELETE SET NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        deleted_at INTEGER
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_salary_advances_date
+        ON salary_advances(advance_date DESC);
+      CREATE INDEX IF NOT EXISTS idx_salary_advances_staff_date
+        ON salary_advances(staff_id, advance_date DESC);
     `);
   });
 
