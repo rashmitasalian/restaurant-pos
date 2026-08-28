@@ -768,6 +768,8 @@ function userFromRow(row: any, includeSensitive = false): UserDto {
     requirePasswordChange: Boolean(row.require_password_change),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    staffId: row.staff_id || null,
+    linkedStaffName: row.linked_staff_name || null,
   };
 }
 
@@ -877,7 +879,6 @@ function defaultAttendanceShifts(): AttendanceShiftConfig[] {
     { id: "morning", label: "Morning", hours: 8 },
     { id: "evening", label: "Evening", hours: 8 },
     { id: "night", label: "Night", hours: 8 },
-    { id: "half-day", label: "Half Day", hours: 4 },
   ];
 }
 
@@ -1315,17 +1316,31 @@ function insertUserRow(
     role: Role;
     displayName?: string;
     requirePasswordChange?: boolean;
+    staffId?: string | null;
   },
 ) {
   const at = now();
   const credential = createCredentialHash(input.password);
   const displayName = normalizeDisplayName(input.displayName, input.username);
+  const staffId = normalizeText(input.staffId) || null;
+  if (staffId) {
+    const staffRow = database.prepare("SELECT id FROM staff WHERE id = ?").get(staffId) as any;
+    if (!staffRow) {
+      throw new Error("staff-not-found");
+    }
+    const linked = database
+      .prepare("SELECT username FROM users WHERE staff_id = ? LIMIT 1")
+      .get(staffId) as any;
+    if (linked) {
+      throw new Error("staff-account-already-linked");
+    }
+  }
   database
     .prepare(
       `INSERT INTO users (
         username, display_name, role, password_hash, salt, hash_algo, active,
-        require_password_change, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
+        require_password_change, staff_id, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)`,
     )
     .run(
       input.username,
@@ -1335,6 +1350,7 @@ function insertUserRow(
       credential.salt,
       credential.hashAlgo,
       input.requirePasswordChange ? 1 : 0,
+      staffId,
       at,
       at,
     );
@@ -1663,6 +1679,7 @@ export const posService = {
     role?: Role;
     displayName?: string;
     requirePasswordChange?: boolean;
+    staffId?: string | null;
     actorUsername?: string | null;
     actorPassword?: string | null;
   }) {
@@ -1684,8 +1701,12 @@ export const posService = {
         role,
         displayName: input.displayName,
         requirePasswordChange: input.requirePasswordChange,
+        staffId: input.staffId,
       });
-      createAuditRow(database, "user.created", "user", username, actor, { role });
+      createAuditRow(database, "user.created", "user", username, actor, {
+        role,
+        staffId: normalizeText(input.staffId) || null,
+      });
       return userFromRow(database.prepare("SELECT * FROM users WHERE username = ?").get(username));
     });
   },
@@ -1699,7 +1720,12 @@ export const posService = {
 
   listUsers(): UserDto[] {
     return getDb()
-      .prepare("SELECT * FROM users ORDER BY created_at ASC")
+      .prepare(
+        `SELECT u.*, s.name AS linked_staff_name
+         FROM users u
+         LEFT JOIN staff s ON s.id = u.staff_id
+         ORDER BY u.created_at ASC`,
+      )
       .all()
       .map((row: any) => userFromRow(row));
   },
@@ -4987,11 +5013,43 @@ export const posService = {
     return { ok: true };
   },
 
-  listStaff(opts: { includeInactive?: boolean } = {}): StaffDto[] {
-    const sql = opts.includeInactive
-      ? "SELECT * FROM staff ORDER BY active DESC, created_at DESC"
-      : "SELECT * FROM staff WHERE active = 1 ORDER BY created_at DESC";
+  listStaff(opts: {
+    includeInactive?: boolean;
+    status?: "active" | "left" | "all";
+    includePhotos?: boolean;
+  } = {}): StaffDto[] {
+    const status = opts.status ?? (opts.includeInactive ? "all" : "active");
+    const includePhotos = opts.includePhotos === true;
+    let where = "";
+    if (status === "active") {
+      where = "WHERE s.active = 1";
+    } else if (status === "left") {
+      where = "WHERE s.active = 0";
+    }
+    const photoCols = includePhotos ? "s.photo_mime, s.photo_base64," : "";
+    const sql = `
+      SELECT s.id, s.name, s.phone, s.designation, s.joining_date, s.salary_paise,
+             s.address, s.notes, ${photoCols} s.active, s.created_at, s.updated_at,
+             u.username AS linked_username, u.active AS linked_user_active
+      FROM staff s
+      LEFT JOIN users u ON u.staff_id = s.id
+      ${where}
+      ORDER BY s.active DESC, s.created_at DESC
+    `;
     return getDb().prepare(sql).all().map(staffFromRow);
+  },
+
+  getStaff(id: string): StaffDto | null {
+    const row = getDb()
+      .prepare(
+        `SELECT s.*, u.username AS linked_username, u.active AS linked_user_active
+         FROM staff s
+         LEFT JOIN users u ON u.staff_id = s.id
+         WHERE s.id = ?
+         LIMIT 1`,
+      )
+      .get(normalizeText(id)) as any;
+    return row ? staffFromRow(row) : null;
   },
 
   createStaff(input: {
@@ -5031,7 +5089,11 @@ export const posService = {
         at,
         at,
       );
-    return this.listStaff().find((staff) => staff.id === id)!;
+    createAuditRow(database, "staff.created", "staff", id, null, {
+      name: prepared.name,
+      phone: prepared.phone,
+    });
+    return this.getStaff(id)!;
   },
 
   updateStaff(id: string, updates: Partial<StaffDto>, actor?: string | null) {
@@ -5100,6 +5162,30 @@ export const posService = {
       const current = database.prepare("SELECT id, active FROM staff WHERE id = ?").get(id) as any;
       if (!current) {
         throw new Error("staff-not-found");
+      }
+      const attendanceCount = (
+        database
+          .prepare("SELECT COUNT(*) AS count FROM attendance_records WHERE staff_id = ?")
+          .get(id) as any
+      )?.count;
+      if (Number(attendanceCount) > 0) {
+        throw new Error("staff-has-attendance");
+      }
+      const linkedUser = database
+        .prepare("SELECT username FROM users WHERE staff_id = ? LIMIT 1")
+        .get(id) as any;
+      if (linkedUser?.username) {
+        throw new Error("staff-has-account");
+      }
+      const auditCount = (
+        database
+          .prepare(
+            "SELECT COUNT(*) AS count FROM audit_logs WHERE entity_type = 'staff' AND entity_id = ?",
+          )
+          .get(id) as any
+      )?.count;
+      if (Number(auditCount) > 0) {
+        throw new Error("staff-has-history");
       }
       database.prepare("DELETE FROM staff WHERE id = ?").run(id);
       createAuditRow(database, "staff.deleted", "staff", id, actor || null, {
@@ -5173,7 +5259,8 @@ export const posService = {
         }
         assertAttendanceStaffExists(database, staffId);
         const status = normalizeAttendanceStatus(row.status);
-        const shiftId = normalizeText(row.shiftId) || null;
+        const shiftKey = normalizeText(row.shiftId) || "morning";
+        const shiftId = shiftKey;
         const checkInTime = normalizeAttendanceTime(row.checkInTime);
         const checkOutTime = normalizeAttendanceTime(row.checkOutTime);
         const breakMinutes = normalizeAttendanceBreakMinutes(row.breakMinutes);
@@ -5197,9 +5284,9 @@ export const posService = {
           : null;
         const existingByUnique = database
           .prepare(
-            "SELECT id FROM attendance_records WHERE staff_id = ? AND attendance_date = ? LIMIT 1",
+            "SELECT id FROM attendance_records WHERE staff_id = ? AND attendance_date = ? AND shift_id = ? LIMIT 1",
           )
-          .get(staffId, attendanceDate) as any;
+          .get(staffId, attendanceDate, shiftKey) as any;
         const targetId = existingById?.id || existingByUnique?.id || `attendance:${randomUUID()}`;
         const nowAt = now();
         const exists = Boolean(existingById?.id || existingByUnique?.id);
@@ -5296,7 +5383,7 @@ export const posService = {
           break_minutes, worked_minutes, overtime_minutes, remarks,
           created_by, created_on, updated_by, updated_on
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(staff_id, attendance_date) DO UPDATE SET
+        ON CONFLICT(staff_id, attendance_date, shift_id) DO UPDATE SET
           shift_id = excluded.shift_id,
           status = excluded.status,
           check_in_time = excluded.check_in_time,
@@ -5790,6 +5877,10 @@ function staffFromRow(row: any): StaffDto {
     active: Boolean(row.active),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    linkedUsername: row.linked_username || null,
+    linkedAccountActive: row.linked_user_active === undefined || row.linked_user_active === null
+      ? null
+      : Boolean(row.linked_user_active),
   };
 }
 

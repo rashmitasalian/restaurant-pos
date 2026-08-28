@@ -9,24 +9,18 @@ import {
   type AttendanceDoc,
   type StaffDoc,
 } from "../../../app/db/posRepository";
-import { isFutureDateOnly, normalizeText, validationMessage } from "../../../shared/validation";
+import { normalizeText, todayDateOnly, validationMessage } from "../../../shared/validation";
 import type { AttendanceStatus } from "../../../shared/pos";
 import { useToast } from "../../context/ToastContext";
 import StatusBadge from "./components/StatusBadge";
+import AttendanceStatusPicker from "./components/AttendanceStatusPicker";
 import { useAttendanceShortcuts } from "./hooks/useAttendanceShortcuts";
-import { PageHeader } from "../../components/ui/PageHeader";
-import { Icon } from "../../components/ui/Icon";
-import {
-  Ban,
-  Copy,
-  Download,
-  FileSpreadsheet,
-  LayoutGrid,
-  RotateCcw,
-  Table2,
-  UserCheck,
-} from "lucide-react";
 import styles from "./Attendance.module.css";
+import {
+  formatOvertimeHours,
+  formatOvertimeInput,
+  parseOvertimeHours,
+} from "../People/peopleUtils";
 
 type AttendanceRow = {
   id?: string;
@@ -52,15 +46,6 @@ type ShiftOption = {
   hours: number;
 };
 
-type IconButtonProps = {
-  label: string;
-  title: string;
-  icon: React.ReactNode;
-  onClick: () => void;
-  disabled?: boolean;
-  active?: boolean;
-};
-
 const STATUS_OPTIONS: Array<{ value: AttendanceStatus; label: string }> = [
   { value: "present", label: "Present" },
   { value: "absent", label: "Absent" },
@@ -75,12 +60,18 @@ const DEFAULT_SHIFT_OPTIONS: ShiftOption[] = [
   { value: "morning", label: "Morning", hours: 8 },
   { value: "evening", label: "Evening", hours: 8 },
   { value: "night", label: "Night", hours: 8 },
-  { value: "half-day", label: "Half Day", hours: 4 },
 ];
 
 function toDateInput(ts: number) {
   const date = new Date(ts);
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function yesterdayDateOnly(fromDate: string) {
+  const [year, month, day] = fromDate.split("-").map((part) => Number(part));
+  const date = new Date(year, month - 1, day);
+  date.setDate(date.getDate() - 1);
+  return toDateInput(date.getTime());
 }
 
 function minutesFromTime(value: string) {
@@ -97,7 +88,7 @@ function shiftMinutes(shiftId: string, shiftHoursById?: Record<string, number>) 
   if (Number.isFinite(configuredHours) && configuredHours > 0) {
     return Math.trunc(configuredHours * 60);
   }
-  if (key === "half-day") {
+  if (key === "half-day" || key === "half") {
     return 4 * 60;
   }
   return 8 * 60;
@@ -130,9 +121,6 @@ function computeDurations(row: AttendanceRow, shiftHoursById?: Record<string, nu
 
 function validateRow(date: string, row: AttendanceRow) {
   const errors: string[] = [];
-  if (isFutureDateOnly(date)) {
-    errors.push(validationMessage("attendance-date-future"));
-  }
   if (row.status === "leave" && !normalizeText(row.remarks)) {
     errors.push(validationMessage("attendance-remarks-required-for-leave"));
   }
@@ -163,7 +151,15 @@ function toShiftOptions(shifts: AttendanceShiftConfig[] | null | undefined): Shi
       label: String(entry.label || "").trim(),
       hours: Number(entry.hours),
     }))
-    .filter((entry) => entry.value && entry.label && Number.isFinite(entry.hours) && entry.hours > 0);
+    .filter(
+      (entry) =>
+        entry.value &&
+        entry.label &&
+        entry.value !== "half-day" &&
+        entry.value !== "half" &&
+        Number.isFinite(entry.hours) &&
+        entry.hours > 0,
+    );
   return mapped.length > 0 ? mapped : DEFAULT_SHIFT_OPTIONS;
 }
 
@@ -224,38 +220,21 @@ function downloadTextFile(fileName: string, content: string, mime: string) {
   URL.revokeObjectURL(url);
 }
 
-function IconButton({ label, title, icon, onClick, disabled, active }: IconButtonProps) {
-  return (
-    <button
-      type="button"
-      className={`${styles.iconButton} ${active ? styles.iconButtonActive : ""}`}
-      onClick={onClick}
-      title={title}
-      aria-label={label}
-      disabled={disabled}
-    >
-      {icon}
-      <span className={styles.iconButtonLabel}>{label}</span>
-    </button>
-  );
-}
-
-export default function Attendance() {
+export default function Attendance({ embedded = false }: { embedded?: boolean }) {
   const { showToast } = useToast();
-  const [attendanceDate, setAttendanceDate] = React.useState(toDateInput(Date.now()));
+  const [attendanceDate, setAttendanceDate] = React.useState(todayDateOnly());
   const [rows, setRows] = React.useState<AttendanceRow[]>([]);
   const [shiftOptions, setShiftOptions] = React.useState<ShiftOption[]>(DEFAULT_SHIFT_OPTIONS);
   const [search, setSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState<"all" | AttendanceStatus>("all");
   const [shiftFilter, setShiftFilter] = React.useState<"all" | string>("all");
   const [editedOnly, setEditedOnly] = React.useState(false);
-  const [viewMode, setViewMode] = React.useState<"table" | "cards">("table");
-  const [headerSize, setHeaderSize] = React.useState(11);
+  const [showTimeDetails, setShowTimeDetails] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const focusedRowRef = React.useRef(0);
-  const rowFocusRefs = React.useRef<Array<HTMLSelectElement | null>>([]);
+  const rowFocusRefs = React.useRef<Array<HTMLButtonElement | null>>([]);
 
   const shiftHoursById = React.useMemo(
     () =>
@@ -283,7 +262,23 @@ export default function Attendance() {
       setShiftOptions(resolvedShiftOptions);
       setRows(buildInitialRows(staff, records, resolvedShiftHoursById));
     } catch (loadError) {
-      setError(validationMessage(loadError, "Could not load attendance."));
+      const message = validationMessage(loadError, "Could not load attendance.");
+      try {
+        const staff = await listStaff({ includeInactive: false });
+        if (staff.length > 0) {
+          const shifts = await getConfigShifts();
+          const resolvedShiftOptions = toShiftOptions(shifts);
+          const resolvedShiftHoursById = resolvedShiftOptions.reduce<Record<string, number>>((acc, item) => {
+            acc[item.value] = item.hours;
+            return acc;
+          }, {});
+          setShiftOptions(resolvedShiftOptions);
+          setRows(buildInitialRows(staff, [], resolvedShiftHoursById));
+        }
+      } catch {
+        // keep original error
+      }
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -333,14 +328,6 @@ export default function Attendance() {
 
   const dirtyCount = rows.filter((row) => row.dirty).length;
   const hasActiveFilters = Boolean(search) || statusFilter !== "all" || shiftFilter !== "all" || editedOnly;
-  const headerStyle = React.useMemo(
-    () =>
-      ({
-        ["--attendance-table-header-font-size" as never]: `${headerSize}px`,
-        ["--attendance-table-header-padding" as never]: `${Math.max(6, headerSize - 3)}px ${Math.max(8, headerSize)}px`,
-      }) as React.CSSProperties,
-    [headerSize],
-  );
 
   const summary = React.useMemo(() => {
     const totalOvertime = rows.reduce((sum, row) => sum + Number(row.overtimeMinutes || 0), 0);
@@ -370,9 +357,7 @@ export default function Attendance() {
   );
 
   const copyYesterday = React.useCallback(async () => {
-    const now = new Date(`${attendanceDate}T00:00:00`);
-    now.setDate(now.getDate() - 1);
-    const sourceDate = toDateInput(now.getTime());
+    const sourceDate = yesterdayDateOnly(attendanceDate);
     setSaving(true);
     try {
       await copyAttendance(sourceDate, attendanceDate);
@@ -395,9 +380,14 @@ export default function Attendance() {
     }
     setSaving(true);
     try {
+      const dirtyRows = nextRows.filter((row) => row.dirty);
+      if (dirtyRows.length === 0) {
+        showToast("No changes to save.", "info");
+        return;
+      }
       await upsertAttendanceRows({
         attendanceDate,
-        rows: nextRows.map((row) => ({
+        rows: dirtyRows.map((row) => ({
           id: row.id,
           staffId: row.staffId,
           shiftId: row.shiftId,
@@ -545,230 +535,204 @@ export default function Attendance() {
   }
 
   return (
-    <div className={styles.root}>
+    <div className={embedded ? styles.rootEmbedded : styles.root}>
       <div className={styles.toolbar}>
-        <div className={styles.headerRow}>
-          <PageHeader
-            title="Attendance"
-            subtitle="Simplified daily roster with fast edits, filters, and exports."
-            actions={
-              <>
-                {dirtyCount > 0 && <div className={styles.unsaved}>{dirtyCount} unsaved change(s)</div>}
-                <button
-                  type="button"
-                  className="pos-btn pos-btn-primary"
-                  onClick={save}
-                  disabled={saving}
-                >
-                  {saving ? "Saving..." : "Save Changes"}
-                </button>
-              </>
-            }
-          />
-        </div>
+        <div className={styles.opsBar}>
+          <div className={styles.opsPrimary}>
+            <div className={styles.opsField}>
+              <label className={styles.opsLabel} htmlFor="attendance-date">
+                Date
+              </label>
+              <input
+                id="attendance-date"
+                type="date"
+                className={`pos-input ${styles.opsInput}`}
+                value={attendanceDate}
+                max={todayDateOnly()}
+                onChange={(event) => setAttendanceDate(event.target.value)}
+              />
+            </div>
+            <div className={styles.opsField}>
+              <label className={styles.opsLabel} htmlFor="attendance-shift-filter">
+                Shift
+              </label>
+              <select
+                id="attendance-shift-filter"
+                className={`pos-select ${styles.opsInput}`}
+                value={shiftFilter}
+                onChange={(event) => setShiftFilter(event.target.value)}
+              >
+                <option value="all">All Shifts</option>
+                {shiftOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className={`${styles.opsField} ${styles.opsFieldGrow}`}>
+              <label className={styles.opsLabel} htmlFor="attendance-search">
+                Search
+              </label>
+              <input
+                id="attendance-search"
+                className={`pos-input ${styles.opsInput}`}
+                placeholder="Employee or role"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+              />
+            </div>
+            <div className={styles.opsField}>
+              <label className={styles.opsLabel} htmlFor="attendance-status-filter">
+                Status
+              </label>
+              <select
+                id="attendance-status-filter"
+                className={`pos-select ${styles.opsInput}`}
+                value={statusFilter}
+                onChange={(event) =>
+                  setStatusFilter(
+                    event.target.value === "all" ? "all" : (event.target.value as AttendanceStatus),
+                  )
+                }
+              >
+                <option value="all">All</option>
+                {STATUS_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
 
-        <div className={styles.filterGrid}>
-          <div>
-            <label className="pos-label" htmlFor="attendance-date">
-              Attendance Date
-            </label>
-            <input
-              id="attendance-date"
-              type="date"
-              className={`pos-input ${styles.input}`}
-              value={attendanceDate}
-              max={toDateInput(Date.now())}
-              onChange={(event) => setAttendanceDate(event.target.value)}
-            />
-          </div>
-          <div>
-            <label className="pos-label" htmlFor="attendance-shift-filter">
-              Shift
-            </label>
-            <select
-              id="attendance-shift-filter"
-              className="pos-select"
-              value={shiftFilter}
-              onChange={(event) => setShiftFilter(event.target.value)}
-            >
-              <option value="all">All Shifts</option>
-              {shiftOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="pos-label" htmlFor="attendance-search">
-              Search Employee
-            </label>
-            <input
-              id="attendance-search"
-              className="pos-input"
-              placeholder="Search by employee or role"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-            />
-          </div>
-          <div>
-            <label className="pos-label" htmlFor="attendance-status-filter">
-              Status Filter
-            </label>
-            <select
-              id="attendance-status-filter"
-              className="pos-select"
-              value={statusFilter}
-              onChange={(event) =>
-                setStatusFilter(
-                  event.target.value === "all" ? "all" : (event.target.value as AttendanceStatus),
-                )
-              }
-            >
-              <option value="all">All Statuses</option>
-              {STATUS_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="pos-label" htmlFor="attendance-edited-only">
-              Scope
-            </label>
-            <label className={styles.checkboxRow} htmlFor="attendance-edited-only">
+          <div className={styles.opsAside}>
+            <label className={styles.toggleChip} htmlFor="attendance-edited-only">
               <input
                 id="attendance-edited-only"
                 type="checkbox"
                 checked={editedOnly}
                 onChange={(event) => setEditedOnly(event.target.checked)}
               />
-              Show only edited rows
+              Edited only
             </label>
+            <label className={styles.toggleChip} htmlFor="attendance-time-details">
+              <input
+                id="attendance-time-details"
+                type="checkbox"
+                checked={showTimeDetails}
+                onChange={(event) => setShowTimeDetails(event.target.checked)}
+              />
+              Time details
+            </label>
+            {dirtyCount > 0 ? (
+              <span className={styles.unsaved}>{dirtyCount} unsaved</span>
+            ) : null}
+            <button
+              type="button"
+              className="pos-btn pos-btn-primary"
+              onClick={save}
+              disabled={saving}
+              title="Save changes (Ctrl+S)"
+            >
+              {saving ? "Saving..." : "Save Changes"}
+            </button>
           </div>
         </div>
 
-        <div className={styles.actions}>
-          <div className={styles.actionGroup}>
-            <IconButton
-              label="Present"
-              title="Mark all present"
-              icon={<Icon icon={UserCheck} size="sm" />}
+        <div className={styles.metaBar}>
+          <div className={styles.summaryBar} aria-label="Attendance summary">
+            <span>Present {summary.present}</span>
+            <span className={styles.summarySep}>|</span>
+            <span>Absent {summary.absent}</span>
+            <span className={styles.summarySep}>|</span>
+            <span>Late {summary.late}</span>
+            <span className={styles.summarySep}>|</span>
+            <span>Leave {summary.leave}</span>
+            <span className={styles.summarySep}>|</span>
+            <span>Week Off {summary.weekOff}</span>
+            <span className={styles.summarySep}>|</span>
+            <span>OT {summary.overtimeHours}h</span>
+          </div>
+
+          <div className={styles.actions}>
+            <button
+              type="button"
+              className="pos-btn pos-btn-secondary pos-btn-sm"
               onClick={() => markAll("present")}
-            />
-            <IconButton
-              label="Absent"
-              title="Mark all absent"
-              icon={<Icon icon={Ban} size="sm" />}
+              title="Mark all visible as present (Ctrl+P)"
+            >
+              All Present
+            </button>
+            <button
+              type="button"
+              className="pos-btn pos-btn-secondary pos-btn-sm"
               onClick={() => markAll("absent")}
-            />
-            <IconButton
-              label="Copy"
-              title="Copy yesterday"
-              icon={<Icon icon={Copy} size="sm" />}
+              title="Mark all as absent (Ctrl+A)"
+            >
+              All Absent
+            </button>
+            <button
+              type="button"
+              className="pos-btn pos-btn-secondary pos-btn-sm"
               onClick={copyYesterday}
               disabled={saving}
-            />
-          </div>
-
-          <div className={styles.actionGroup}>
-            <IconButton
-              label="Excel"
-              title="Export Excel"
-              icon={<Icon icon={FileSpreadsheet} size="sm" />}
-              onClick={exportExcel}
-            />
-            <IconButton
-              label="PDF"
-              title="Export PDF"
-              icon={<Icon icon={Download} size="sm" />}
-              onClick={exportPdf}
-            />
-          </div>
-
-          <div className={styles.actionGroup}>
-            <IconButton
-              label="Table"
-              title="Table view"
-              icon={<Icon icon={Table2} size="sm" />}
-              onClick={() => setViewMode("table")}
-              active={viewMode === "table"}
-            />
-            <IconButton
-              label="Cards"
-              title="Card view"
-              icon={<Icon icon={LayoutGrid} size="sm" />}
-              onClick={() => setViewMode("cards")}
-              active={viewMode === "cards"}
-            />
+            >
+              Copy yesterday
+            </button>
+            <button type="button" className="pos-btn pos-btn-secondary pos-btn-sm" onClick={exportExcel}>
+              Export Excel
+            </button>
+            <button type="button" className="pos-btn pos-btn-secondary pos-btn-sm" onClick={exportPdf}>
+              Export PDF
+            </button>
             {hasActiveFilters && (
-              <IconButton
-                label="Reset"
-                title="Reset filters"
-                icon={<Icon icon={RotateCcw} size="sm" />}
-                onClick={clearFilters}
-              />
+              <button type="button" className="pos-btn pos-btn-secondary pos-btn-sm" onClick={clearFilters}>
+                Reset filters
+              </button>
             )}
           </div>
+        </div>
+      </div>
 
-          <div className={styles.headerSizeControl}>
-            <label className="pos-label" htmlFor="attendance-header-size">
-              Table header size
-            </label>
-            <div className={styles.headerSizeRow}>
-              <input
-                id="attendance-header-size"
-                type="range"
-                min={9}
-                max={16}
-                step={1}
-                value={headerSize}
-                onChange={(event) => setHeaderSize(Number(event.target.value))}
-                className={styles.headerSlider}
-                aria-label="Adjust table header size"
-              />
-              <span className={styles.headerSizeValue}>{headerSize}px</span>
-            </div>
+      {error && (
+        <div className={styles.errorPanel} role="alert">
+          <div>
+            <strong>Could not load attendance</strong>
+            <p>{error}</p>
           </div>
+          <button type="button" className="pos-btn pos-btn-secondary" onClick={() => void loadData()}>
+            Retry
+          </button>
         </div>
+      )}
 
-        <div className={styles.shortcutHint} aria-label="Keyboard shortcuts summary">
-          Shortcuts: Ctrl+S Save, Ctrl+P Present, Ctrl+A Absent, Alt+N/P Move Row
+      {!error && filteredRows.length === 0 && (
+        <div className={styles.empty}>
+          {rows.length === 0
+            ? "No active staff yet. Add staff in Roster before marking attendance."
+            : "No employees match the current filters."}
         </div>
-      </div>
-
-      <div className={styles.summaryGrid}>
-        <SummaryCard label="Present" value={summary.present} />
-        <SummaryCard label="Absent" value={summary.absent} />
-        <SummaryCard label="Late" value={summary.late} />
-        <SummaryCard label="Leave" value={summary.leave} />
-        <SummaryCard label="Holiday" value={summary.holiday} />
-        <SummaryCard label="Week Off" value={summary.weekOff} />
-        <SummaryCard label="Total Staff" value={summary.total} />
-        <SummaryCard label="Overtime Hours" value={summary.overtimeHours} />
-      </div>
-
-      {error && <div className="pos-field-error">{error}</div>}
-      {!error && filteredRows.length === 0 && <div className={styles.empty}>No staff records found.</div>}
+      )}
 
       {!error && filteredRows.length > 0 && (
         <>
-          {viewMode === "table" && (
-            <div className={styles.gridWrap} style={headerStyle}>
-              <table className={styles.grid}>
+          <div className={styles.gridWrap}>
+            <table className={styles.grid}>
                 <thead>
                   <tr>
                     <th className={styles.stickyCol}>Employee</th>
-                    <th>Role</th>
                     <th>Shift</th>
-                    <th>Attendance Status</th>
-                    <th>Check In</th>
-                    <th>Check Out</th>
-                    <th>Break Minutes</th>
-                    <th>Worked Hours</th>
-                    <th>Overtime</th>
-                    <th>Remarks</th>
+                    <th>Status</th>
+                    <th>OT</th>
+                    {showTimeDetails && (
+                      <>
+                        <th>Check In</th>
+                        <th>Check Out</th>
+                        <th>Break</th>
+                        <th>Remarks</th>
+                      </>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
@@ -778,11 +742,8 @@ export default function Attendance() {
                       <tr key={row.staffId} className={row.dirty ? styles.rowDirty : undefined}>
                         <td className={styles.stickyCol}>
                           <div style={{ fontWeight: 700 }}>{row.employee}</div>
-                          <div style={{ marginTop: 5 }}>
-                            <StatusBadge status={row.status} />
-                          </div>
+                          <div style={{ color: "var(--pos-tx-sub)", fontSize: 12 }}>{row.role}</div>
                         </td>
-                        <td>{row.role}</td>
                         <td>
                           <select
                             className="pos-select"
@@ -800,120 +761,98 @@ export default function Attendance() {
                           </select>
                         </td>
                         <td>
-                          <select
-                            ref={(element) => {
+                          <AttendanceStatusPicker
+                            value={row.status}
+                            employee={row.employee}
+                            focusRef={(element) => {
                               rowFocusRefs.current[viewIndex] = element;
                             }}
-                            className="pos-select"
-                            value={row.status}
-                            aria-label={`Attendance status for ${row.employee}`}
                             onFocus={() => {
                               focusedRowRef.current = viewIndex;
                             }}
-                            onKeyDown={(event) => {
-                              if (event.key === "Enter") {
-                                event.preventDefault();
-                                focusRowAt(viewIndex + 1);
-                              }
-                              if (event.key === "Escape") {
-                                event.preventDefault();
-                                (event.currentTarget as HTMLSelectElement).blur();
-                              }
-                            }}
-                            onChange={(event) =>
-                              setRowField(index, { status: event.target.value as AttendanceStatus })
-                            }
-                          >
-                            {STATUS_OPTIONS.map((option) => (
-                              <option key={option.value} value={option.value}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                        <td>
-                          <input
-                            type="time"
-                            className="pos-input"
-                            value={row.checkInTime}
-                            onChange={(event) =>
-                              setRowField(index, { checkInTime: event.target.value })
-                            }
-                            aria-label={`Check in time for ${row.employee}`}
+                            onChange={(status) => setRowField(index, { status })}
                           />
-                        </td>
-                        <td>
-                          <input
-                            type="time"
-                            className="pos-input"
-                            value={row.checkOutTime}
-                            onChange={(event) =>
-                              setRowField(index, { checkOutTime: event.target.value })
-                            }
-                            aria-label={`Check out time for ${row.employee}`}
-                          />
-                        </td>
-                        <td>
-                          <input
-                            type="number"
-                            min={0}
-                            className="pos-input"
-                            value={row.breakMinutes}
-                            onChange={(event) =>
-                              setRowField(index, {
-                                breakMinutes: Math.max(0, Number(event.target.value || 0)),
-                              })
-                            }
-                            aria-label={`Break minutes for ${row.employee}`}
-                          />
-                        </td>
-                        <td>
-                          <input
-                            type="text"
-                            className="pos-input"
-                            value={(row.workedMinutes / 60).toFixed(2)}
-                            readOnly
-                            aria-label={`Worked hours for ${row.employee}`}
-                          />
-                        </td>
-                        <td>
-                          <input
-                            type="number"
-                            min={0}
-                            className="pos-input"
-                            value={row.overtimeMinutes}
-                            onChange={(event) =>
-                              setRowField(index, {
-                                overtimeMinutes: Math.max(
-                                  0,
-                                  Math.trunc(Number(event.target.value || 0)),
-                                ),
-                              })
-                            }
-                            aria-label={`Overtime minutes for ${row.employee}`}
-                          />
-                        </td>
-                        <td>
-                          <textarea
-                            className="pos-input"
-                            rows={1}
-                            value={row.remarks}
-                            onChange={(event) => setRowField(index, { remarks: event.target.value })}
-                            aria-label={`Remarks for ${row.employee}`}
-                          />
-                          {row.errors.length > 0 && (
+                          {!showTimeDetails && row.errors.length > 0 && (
                             <div className={styles.rowError}>{row.errors[0]}</div>
                           )}
                         </td>
+                        <td>
+                          <input
+                            type="number"
+                            min={0}
+                            step={0.5}
+                            className="pos-input"
+                            style={{ width: 72 }}
+                            value={formatOvertimeInput(row.overtimeMinutes)}
+                            placeholder="—"
+                            onChange={(event) =>
+                              setRowField(index, {
+                                overtimeMinutes: parseOvertimeHours(event.target.value),
+                              })
+                            }
+                            aria-label={`Overtime hours for ${row.employee}`}
+                          />
+                          <span style={{ marginLeft: 6, fontSize: 12, color: "var(--pos-tx-sub)" }}>
+                            {formatOvertimeHours(row.overtimeMinutes)}
+                          </span>
+                        </td>
+                        {showTimeDetails && (
+                          <>
+                            <td>
+                              <input
+                                type="time"
+                                className="pos-input"
+                                value={row.checkInTime}
+                                onChange={(event) =>
+                                  setRowField(index, { checkInTime: event.target.value })
+                                }
+                              />
+                            </td>
+                            <td>
+                              <input
+                                type="time"
+                                className="pos-input"
+                                value={row.checkOutTime}
+                                onChange={(event) =>
+                                  setRowField(index, { checkOutTime: event.target.value })
+                                }
+                              />
+                            </td>
+                            <td>
+                              <input
+                                type="number"
+                                min={0}
+                                className="pos-input"
+                                style={{ width: 72 }}
+                                value={row.breakMinutes}
+                                onChange={(event) =>
+                                  setRowField(index, {
+                                    breakMinutes: Math.max(0, Math.trunc(Number(event.target.value || 0))),
+                                  })
+                                }
+                              />
+                            </td>
+                            <td>
+                              <input
+                                className="pos-input"
+                                value={row.remarks}
+                                onChange={(event) => setRowField(index, { remarks: event.target.value })}
+                                aria-label={`Remarks for ${row.employee}`}
+                              />
+                              {row.errors.length > 0 && (
+                                <div className={styles.rowError}>{row.errors[0]}</div>
+                              )}
+                            </td>
+                          </>
+                        )}
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
             </div>
-          )}
 
-          <div className={`${styles.mobileCards} ${viewMode === "cards" ? styles.mobileCardsVisible : ""}`}>
+          <div className={styles.mobileCards}>
             {filteredRows.map((row) => {
               const index = rows.findIndex((candidate) => candidate.staffId === row.staffId);
               return (
@@ -941,74 +880,45 @@ export default function Attendance() {
                   </div>
                   <div className={styles.mobileRow}>
                     <label className="pos-label">Status</label>
-                    <select
-                      className="pos-select"
+                    <AttendanceStatusPicker
                       value={row.status}
-                      onChange={(event) =>
-                        setRowField(index, { status: event.target.value as AttendanceStatus })
-                      }
-                    >
-                      {STATUS_OPTIONS.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className={styles.mobileRow}>
-                    <label className="pos-label">Check In</label>
-                    <input
-                      type="time"
-                      className="pos-input"
-                      value={row.checkInTime}
-                      onChange={(event) => setRowField(index, { checkInTime: event.target.value })}
+                      employee={row.employee}
+                      onChange={(status) => setRowField(index, { status })}
                     />
                   </div>
+                  {showTimeDetails && (
+                    <>
+                      <div className={styles.mobileRow}>
+                        <label className="pos-label">Check In</label>
+                        <input
+                          type="time"
+                          className="pos-input"
+                          value={row.checkInTime}
+                          onChange={(event) => setRowField(index, { checkInTime: event.target.value })}
+                        />
+                      </div>
+                      <div className={styles.mobileRow}>
+                        <label className="pos-label">Check Out</label>
+                        <input
+                          type="time"
+                          className="pos-input"
+                          value={row.checkOutTime}
+                          onChange={(event) => setRowField(index, { checkOutTime: event.target.value })}
+                        />
+                      </div>
+                    </>
+                  )}
                   <div className={styles.mobileRow}>
-                    <label className="pos-label">Check Out</label>
-                    <input
-                      type="time"
-                      className="pos-input"
-                      value={row.checkOutTime}
-                      onChange={(event) => setRowField(index, { checkOutTime: event.target.value })}
-                    />
-                  </div>
-                  <div className={styles.mobileRow}>
-                    <label className="pos-label">Break</label>
+                    <label className="pos-label">OT (hours)</label>
                     <input
                       type="number"
                       min={0}
+                      step={0.5}
                       className="pos-input"
-                      value={row.breakMinutes}
+                      value={formatOvertimeInput(row.overtimeMinutes)}
                       onChange={(event) =>
                         setRowField(index, {
-                          breakMinutes: Math.max(0, Number(event.target.value || 0)),
-                        })
-                      }
-                    />
-                  </div>
-                  <div className={styles.mobileRow}>
-                    <label className="pos-label">Worked Hours</label>
-                    <input
-                      type="text"
-                      readOnly
-                      className="pos-input"
-                      value={(row.workedMinutes / 60).toFixed(2)}
-                    />
-                  </div>
-                  <div className={styles.mobileRow}>
-                    <label className="pos-label">Overtime</label>
-                    <input
-                      type="number"
-                      min={0}
-                      className="pos-input"
-                      value={row.overtimeMinutes}
-                      onChange={(event) =>
-                        setRowField(index, {
-                          overtimeMinutes: Math.max(
-                            0,
-                            Math.trunc(Number(event.target.value || 0)),
-                          ),
+                          overtimeMinutes: parseOvertimeHours(event.target.value),
                         })
                       }
                     />
@@ -1027,15 +937,6 @@ export default function Attendance() {
           </div>
         </>
       )}
-    </div>
-  );
-}
-
-function SummaryCard({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className={styles.summaryCard}>
-      <div className={styles.summaryLabel}>{label}</div>
-      <div className={styles.summaryValue}>{value}</div>
     </div>
   );
 }

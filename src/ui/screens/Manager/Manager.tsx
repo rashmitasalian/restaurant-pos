@@ -5,9 +5,7 @@ import Expenses from "../Expenses/Expenses";
 import History from "../History/History";
 import ItemsEditor from "../ItemsEditor/ItemsEditor";
 import Settings from "../Settings/Settings";
-import Staff from "../Staff/Staff";
-import Attendance from "../Attendance/Attendance";
-import UsersScreen from "../Users/UsersScreen";
+import People from "../People/People";
 import Reports from "../Reports/Reports";
 import Overview from "./Overview";
 import { ManageShell } from "./ManageShell";
@@ -15,13 +13,9 @@ import { CommandPalette, buildManageCommands } from "./CommandPalette";
 import styles from "./Manager.module.css";
 import {
   type ManagerSection,
-  type PeopleTab,
   MANAGER_SECTION_HASH,
-  PEOPLE_TAB_HASH,
-  peopleTabFromHash,
 } from "./managerSections";
 import { Icon } from "../../components/ui/Icon";
-import { SegmentedControl } from "../../components/ui/SegmentedControl";
 import { Button } from "../../components/ui/Button";
 import {
   LayoutDashboard,
@@ -59,55 +53,12 @@ const SECTIONS: Array<{
   { key: "settings", label: "Settings", group: "System", icon: SettingsIcon },
 ];
 
-const PEOPLE_TABS: Array<{ id: PeopleTab; label: string }> = [
-  { id: "roster", label: "Roster" },
-  { id: "attendance", label: "Attendance" },
-  { id: "accounts", label: "Accounts" },
-];
-
 const SETTINGS_TABS = [
   { id: "identity", label: "Identity" },
   { id: "hardware", label: "Hardware" },
   { id: "operations", label: "Operations" },
   { id: "retention", label: "Retention" },
 ];
-
-function PeopleSection() {
-  const [tab, setTab] = React.useState<PeopleTab>(() =>
-    peopleTabFromHash(typeof window !== "undefined" ? window.location.hash : ""),
-  );
-
-  React.useEffect(() => {
-    const onHash = () => setTab(peopleTabFromHash(window.location.hash));
-    window.addEventListener("hashchange", onHash);
-    return () => window.removeEventListener("hashchange", onHash);
-  }, []);
-
-  const selectTab = (id: string) => {
-    const next = id as PeopleTab;
-    setTab(next);
-    window.location.hash = PEOPLE_TAB_HASH[next];
-  };
-
-  return (
-    <div className={styles.peopleRoot}>
-      <div className={styles.peopleTabs}>
-        <p className={styles.peopleContext}>Manage staff, attendance and access</p>
-        <SegmentedControl
-          ariaLabel="People sections"
-          options={PEOPLE_TABS}
-          value={tab}
-          onChange={selectTab}
-        />
-      </div>
-      <div className={styles.peopleBody}>
-        {tab === "roster" && <Staff />}
-        {tab === "attendance" && <Attendance />}
-        {tab === "accounts" && <UsersScreen />}
-      </div>
-    </div>
-  );
-}
 
 function MenuSection() {
   const addItemRef = React.useRef<(() => void) | null>(null);
@@ -181,7 +132,7 @@ function ManagerInner({ section, onSectionChange, reportsOnly }: ManagerProps) {
     if (section === "grocery") return <Grocery />;
     if (section === "expenses") return <Expenses />;
     if (section === "menu") return <MenuSection />;
-    if (section === "people") return <PeopleSection />;
+    if (section === "people") return <People />;
     if (section === "reports") {
       return (
         <ManageShell title="Reports" description="Sales and profitability" width="full">

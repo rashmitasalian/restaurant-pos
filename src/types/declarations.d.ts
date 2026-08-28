@@ -116,6 +116,7 @@ declare global {
       };
       staff?: {
         list: (opts?: any) => Promise<any[]>;
+        get: (id: string) => Promise<any | null>;
         create: (payload: any) => Promise<any>;
         update: (id: string, updates: any) => Promise<any>;
         delete: (id: string) => Promise<any>;

@@ -18,6 +18,10 @@ export const VALIDATION_MESSAGES: Record<string, string> = {
   "staff-notes-too-long": "Notes must be 500 characters or fewer.",
   "staff-photo-invalid": "Please choose a valid image file.",
   "staff-photo-too-large": "Staff photo must be 500 KB or smaller after compression.",
+  "staff-has-attendance": "This staff member has attendance records. Mark them as Left instead of deleting.",
+  "staff-has-account": "This staff member has a linked RestoNiti account. Mark them as Left instead of deleting.",
+  "staff-has-history": "This staff member has historical records. Mark them as Left instead of deleting.",
+  "staff-account-already-linked": "This staff member already has a RestoNiti account.",
   "attendance-date-required": "Attendance date is required.",
   "attendance-date-invalid": "Attendance date must be a valid date.",
   "attendance-date-future": "Attendance date cannot be in the future.",
@@ -141,10 +145,17 @@ export function isFutureDateOnly(value: unknown) {
   }
   const text = String(value);
   const [year, month, day] = text.split("-").map((part) => Number(part));
-  const input = Date.UTC(year, month - 1, day);
+  const input = new Date(year, month - 1, day);
+  input.setHours(0, 0, 0, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return input.getTime() > today.getTime();
+}
+
+/** Local calendar date as YYYY-MM-DD — matches HTML date inputs. */
+export function todayDateOnly(): string {
   const now = new Date();
-  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-  return input > today;
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 }
 
 export function parsePositiveMoney(value: unknown): number | null {

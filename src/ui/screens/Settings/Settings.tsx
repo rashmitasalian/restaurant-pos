@@ -68,12 +68,13 @@ const DEFAULT_ATTENDANCE_SHIFTS: AttendanceShiftConfig[] = [
   { id: "morning", label: "Morning", hours: 8 },
   { id: "evening", label: "Evening", hours: 8 },
   { id: "night", label: "Night", hours: 8 },
-  { id: "half-day", label: "Half Day", hours: 4 },
 ];
 
 function mergeShiftConfig(input: AttendanceShiftConfig[]) {
   const map = new Map(
-    (Array.isArray(input) ? input : []).map((entry) => [entry.id.toLowerCase(), entry]),
+    (Array.isArray(input) ? input : [])
+      .filter((entry) => entry.id && !["half-day", "half"].includes(entry.id.toLowerCase()))
+      .map((entry) => [entry.id.toLowerCase(), entry]),
   );
   return DEFAULT_ATTENDANCE_SHIFTS.map((base) => {
     const found = map.get(base.id);
@@ -1128,11 +1129,13 @@ export default function Settings({
     setSavingShifts(true);
     setShiftStatus(null);
     try {
-      const sanitized = attendanceShifts.map((shift) => ({
-        id: shift.id,
-        label: shift.label,
-        hours: Math.round(shift.hours * 100) / 100,
-      }));
+      const sanitized = attendanceShifts
+        .filter((shift) => !["half-day", "half"].includes(shift.id.toLowerCase()))
+        .map((shift) => ({
+          id: shift.id,
+          label: shift.label,
+          hours: Math.round(shift.hours * 100) / 100,
+        }));
       await setConfigShifts(sanitized);
       setAttendanceShifts(sanitized);
       setShiftStatus("Saved ");

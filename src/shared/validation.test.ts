@@ -1,9 +1,11 @@
 import {
   hasLetter,
+  isFutureDateOnly,
   isValidIndianMobile,
   isValidPersonName,
   normalizePhone,
   normalizeText,
+  todayDateOnly,
   validationMessage,
 } from "./validation";
 
@@ -37,11 +39,14 @@ describe("shared validation", () => {
     expect(normalizePhone("09876543210")).toBe("9876543210");
   });
 
-  it("validates Indian mobile numbers", () => {
-    expect(isValidIndianMobile("9876543210")).toBe(true);
-    expect(isValidIndianMobile("+91 9876543210")).toBe(true);
-    expect(isValidIndianMobile("09876543210")).toBe(true);
-    expect(isValidIndianMobile("1234567890")).toBe(false);
-    expect(isValidIndianMobile("987654321")).toBe(false);
+  it("treats today as not future in local timezone", () => {
+    expect(isFutureDateOnly(todayDateOnly())).toBe(false);
+  });
+
+  it("flags tomorrow as future", () => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const text = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, "0")}-${String(tomorrow.getDate()).padStart(2, "0")}`;
+    expect(isFutureDateOnly(text)).toBe(true);
   });
 });

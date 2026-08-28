@@ -5,6 +5,13 @@
   gap: 12px;
 }
 
+.rootEmbedded {
+  padding: 0;
+  min-height: 0;
+  display: grid;
+  gap: 12px;
+}
+
 .toolbar {
   position: sticky;
   top: 0;
@@ -13,9 +20,121 @@
   border: 1px solid var(--pos-border, var(--pos-line));
   border-radius: 12px;
   box-shadow: var(--pos-shadow-xs);
-  padding: 14px;
+  padding: 12px 14px;
   display: grid;
+  gap: 10px;
+}
+
+.opsBar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
   gap: 12px;
+  flex-wrap: wrap;
+}
+
+.opsPrimary {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex: 1 1 520px;
+  flex-wrap: wrap;
+}
+
+.opsField {
+  display: grid;
+  gap: 4px;
+  min-width: 120px;
+}
+
+.opsFieldGrow {
+  flex: 1 1 180px;
+  min-width: 160px;
+}
+
+.opsLabel {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--pos-tx-sub);
+}
+
+.opsInput {
+  min-height: 38px;
+}
+
+.opsAside {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.toggleChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--pos-line);
+  border-radius: 8px;
+  background: var(--pos-surface);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--pos-tx-sub);
+  cursor: pointer;
+  user-select: none;
+}
+
+.metaBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-top: 8px;
+  border-top: 1px solid var(--pos-line);
+}
+
+.errorPanel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--pos-danger-border, #fecaca);
+  border-radius: 10px;
+  background: var(--pos-danger-bg, #fef2f2);
+  color: var(--pos-danger-text, #991b1b);
+}
+
+.errorPanel p {
+  margin: 4px 0 0;
+  font-size: 13px;
+}
+
+.summaryBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--pos-tx-sub);
+}
+
+.summarySep {
+  color: var(--pos-tx-muted);
+  font-weight: 400;
+}
+
+.unsaved {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--pos-saffron-text, var(--pos-warning-text));
+  white-space: nowrap;
 }
 
 .headerRow {

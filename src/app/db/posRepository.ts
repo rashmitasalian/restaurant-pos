@@ -289,8 +289,21 @@ export async function deleteItem(id: string): Promise<void> {
   await api().menu!.deleteItem(id);
 }
 
-export async function listStaff(opts?: { includeInactive?: boolean }): Promise<StaffDoc[]> {
+export async function listStaff(opts?: {
+  includeInactive?: boolean;
+  status?: "active" | "left" | "all";
+  includePhotos?: boolean;
+}): Promise<StaffDoc[]> {
   return staffApi().list(opts);
+}
+
+export async function getStaff(id: string): Promise<StaffDoc | null> {
+  const staff = api().staff;
+  if (staff?.get) {
+    return staff.get(id);
+  }
+  const rows = await listStaff({ status: "all", includePhotos: true });
+  return rows.find((member) => member.id === id) || null;
 }
 
 export async function createStaff(staff: {
@@ -368,6 +381,7 @@ export async function createUser(
   requirePasswordChange = false,
   actorUsername?: string | null,
   actorPassword?: string | null,
+  staffId?: string | null,
 ): Promise<UserDoc> {
   return api().users!.create({
     username,
@@ -377,6 +391,7 @@ export async function createUser(
     requirePasswordChange,
     actorUsername,
     actorPassword,
+    staffId,
   });
 }
 
@@ -951,7 +966,14 @@ export async function getConfigShifts(): Promise<AttendanceShiftConfig[]> {
       label: String(entry?.label || "").trim(),
       hours: Number(entry?.hours || 0),
     }))
-    .filter((entry: AttendanceShiftConfig) => entry.id && entry.label && entry.hours > 0);
+    .filter(
+      (entry: AttendanceShiftConfig) =>
+        entry.id &&
+        entry.label &&
+        entry.id !== "half-day" &&
+        entry.id !== "half" &&
+        entry.hours > 0,
+    );
 }
 
 export async function setConfigShifts(shifts: AttendanceShiftConfig[]): Promise<void> {

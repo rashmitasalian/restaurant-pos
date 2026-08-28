@@ -168,6 +168,7 @@ contextBridge.exposeInMainWorld("pos", {
   },
   staff: {
     list: (opts?: any) => authInvoke("pos:staff:list", opts),
+    get: (id: string) => authInvoke("pos:staff:get", id),
     create: (payload: any) => authInvoke("pos:staff:create", payload),
     update: (id: string, updates: any) => authInvoke("pos:staff:update", id, updates),
     delete: (id: string) => authInvoke("pos:staff:delete", id),

@@ -135,6 +135,9 @@ export type UserDto = {
   updatedAt?: number;
   active?: boolean;
   requirePasswordChange?: boolean;
+  /** Optional link to a staff roster record */
+  staffId?: string | null;
+  linkedStaffName?: string | null;
 };
 
 export type CustomerDto = {
@@ -162,6 +165,9 @@ export type StaffDto = {
   createdAt: number | string;
   updatedAt?: number | string;
   active?: boolean;
+  /** Linked RestoNiti login account, if any */
+  linkedUsername?: string | null;
+  linkedAccountActive?: boolean | null;
 };
 
 export type AttendanceDto = {

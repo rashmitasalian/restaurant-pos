@@ -405,11 +405,15 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
 
   ipcMain.handle(
     "pos:staff:list",
-    (event, token?: string | null, opts?: { includeInactive?: boolean }) => {
+    (event, token?: string | null, opts?: { includeInactive?: boolean; status?: string; includePhotos?: boolean }) => {
       requireSession(event, token, ADMIN_ROLES);
-      return posService.listStaff(opts);
+      return posService.listStaff(opts as any);
     },
   );
+  ipcMain.handle("pos:staff:get", (event, token: string | null, id: string) => {
+    requireSession(event, token, ADMIN_ROLES);
+    return posService.getStaff(id);
+  });
   ipcMain.handle("pos:staff:create", (event, token: string | null, payload) => {
     requireSession(event, token, ADMIN_ROLES);
     return posService.createStaff(payload);

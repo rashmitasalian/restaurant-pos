@@ -52,7 +52,13 @@ function userListErrorMessage(message: string) {
   return "Could not load users. Please try again.";
 }
 
-export default function UsersScreen() {
+export default function UsersScreen({
+  embedded = false,
+  registerAddUser,
+}: {
+  embedded?: boolean;
+  registerAddUser?: (open: () => void) => void;
+}) {
   const auth = React.useContext(AuthContext);
   const [users, setUsers] = React.useState<UserDoc[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -114,23 +120,35 @@ export default function UsersScreen() {
     void load();
   }, [load]);
 
+  React.useEffect(() => {
+    registerAddUser?.(() => setShowCreate(true));
+  }, [registerAddUser]);
+
   const isSelf = (user: UserDoc) => user.username === auth?.session?.username;
 
   return (
     <div className={styles.container}>
-      <PageHeader
-        title="User Management"
-        subtitle="Create and manage staff accounts. Sensitive actions require your admin password."
-        actions={
-          <Button
-            variant="primary"
-            onClick={() => setShowCreate(true)}
-            disabled={auth?.session?.role !== "admin"}
-          >
-            Add User
-          </Button>
-        }
-      />
+      {!embedded && (
+        <PageHeader
+          title="Accounts"
+          subtitle="Create and manage RestoNiti login accounts and access permissions. Sensitive actions require your admin password."
+          actions={
+            <Button
+              variant="primary"
+              onClick={() => setShowCreate(true)}
+              disabled={auth?.session?.role !== "admin"}
+            >
+              Add User
+            </Button>
+          }
+        />
+      )}
+
+      {embedded && (
+        <p style={{ margin: "0 0 16px", color: "var(--pos-tx-sub)", fontSize: 13 }}>
+          Create and manage RestoNiti login accounts and access permissions.
+        </p>
+      )}
 
       {error && <div className={styles.formError}>{error}</div>}
 
@@ -153,6 +171,11 @@ export default function UsersScreen() {
                   {isSelf(user) && <span className={styles.selfNote}>(you)</span>}
                 </div>
                 <div className={styles.usernameTxt}>@{user.username}</div>
+                {user.linkedStaffName || user.staffId ? (
+                  <div style={{ marginTop: 4, fontSize: 11, color: "var(--pos-tx-muted)" }}>
+                    Linked staff: {user.linkedStaffName || user.staffId}
+                  </div>
+                ) : null}
                 <div style={{ marginTop: 4, fontSize: 11, color: "var(--pos-tx-muted)" }}>
                   Access: {accessiblePageLabels(user.role)}
                 </div>

@@ -2,9 +2,12 @@ import React from "react";
 import {
   createAudit,
   createStaff,
+  createUser,
   deleteStaff,
+  getStaff,
   listStaff,
   updateStaff,
+  updateUser,
   type StaffDoc,
 } from "../../../app/db/posRepository";
 import {
@@ -21,6 +24,19 @@ import { AuthContext } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
 import { useFocusTrap } from "../../hooks/useFocusTrap";
 import { PageHeader } from "../../components/ui/PageHeader";
+import { Modal } from "../../components/ui/Modal";
+import { DataTable } from "../../components/ui/DataTable";
+import { DEFAULT_ROLE } from "../../../config/roles";
+import type { Role } from "../../../config/roles";
+import { PasswordValidator } from "../../../app/utils/validators";
+import { filterStaffBySearch, staffInitials } from "../People/peopleUtils";
+
+type StaffStatusFilter = "active" | "left" | "all";
+
+type StaffProps = {
+  embedded?: boolean;
+  registerAddStaff?: (open: () => void) => void;
+};
 
 const MAX_PHOTO_BYTES = 500 * 1024;
 const PHOTO_SIZE = 512;
@@ -488,7 +504,7 @@ function StaffTextArea({
   );
 }
 
-export default function Staff() {
+export default function Staff({ embedded = false, registerAddStaff }: StaffProps) {
   const { showToast } = useToast();
   const auth = React.useContext(AuthContext);
   const [staff, setStaff] = React.useState<StaffDoc[]>([]);
@@ -496,7 +512,9 @@ export default function Staff() {
   const [photo, setPhoto] = React.useState<PhotoDraft | null>(null);
   const [formError, setFormError] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
-  const [showLeftStaff, setShowLeftStaff] = React.useState(false);
+  const [statusFilter, setStatusFilter] = React.useState<StaffStatusFilter>("active");
+  const [staffSearch, setStaffSearch] = React.useState("");
+  const [showAddModal, setShowAddModal] = React.useState(false);
   const [exportOpen, setExportOpen] = React.useState(false);
   const [exportingPdf, setExportingPdf] = React.useState(false);
   const [exportingCsv, setExportingCsv] = React.useState(false);
@@ -506,7 +524,7 @@ export default function Staff() {
     includeInactive: false,
   });
 
-  const [editingId, setEditingId] = React.useState<string | null>(null);
+  const [editingMember, setEditingMember] = React.useState<StaffDoc | null>(null);
   const [editForm, setEditForm] = React.useState<StaffForm>(emptyForm);
   const [editPhoto, setEditPhoto] = React.useState<PhotoDraft | null>(null);
   const [editPhotoChanged, setEditPhotoChanged] = React.useState(false);
@@ -517,24 +535,56 @@ export default function Staff() {
   const [confirmDeleteId, setConfirmDeleteId] = React.useState<string | null>(null);
   const [deletingId, setDeletingId] = React.useState<string | null>(null);
   const [photoPreview, setPhotoPreview] = React.useState<PhotoPreview | null>(null);
+  const [leftAccountPrompt, setLeftAccountPrompt] = React.useState<{
+    username: string;
+    staffName: string;
+  } | null>(null);
+  const [createAccountFor, setCreateAccountFor] = React.useState<StaffDoc | null>(null);
   const savingRef = React.useRef(false);
   const savingEditRef = React.useRef(false);
   const statusChangingRef = React.useRef<string | null>(null);
   const deletingRef = React.useRef<string | null>(null);
   const exportingRef = React.useRef(false);
 
-  const loadStaff = React.useCallback(async (includeLeftOverride?: boolean) => {
+  const loadStaff = React.useCallback(async (statusOverride?: StaffStatusFilter) => {
     try {
-      setStaff(await listStaff({ includeInactive: includeLeftOverride ?? showLeftStaff }));
+      const status = statusOverride ?? statusFilter;
+      setStaff(await listStaff({ status }));
     } catch (e) {
       showToast(validationMessage(e, "Failed to load staff"), "error");
       setStaff([]);
     }
-  }, [showLeftStaff, showToast]);
+  }, [statusFilter, showToast]);
 
   React.useEffect(() => {
     loadStaff();
   }, [loadStaff]);
+
+  React.useEffect(() => {
+    registerAddStaff?.(() => {
+      setForm(emptyForm);
+      setPhoto(null);
+      setFormError(null);
+      setShowAddModal(true);
+    });
+  }, [registerAddStaff]);
+
+  const filteredStaff = React.useMemo(
+    () => filterStaffBySearch(staff, staffSearch),
+    [staff, staffSearch],
+  );
+
+  const rosterSortValues = React.useMemo(
+    () =>
+      filteredStaff.map((member) => ({
+        name: member.name.toLowerCase(),
+        designation: (member.designation || "").toLowerCase(),
+        phone: member.phone,
+        joiningDate: member.joiningDate || "",
+        status: member.active === false ? "Left" : "Active",
+      })),
+    [filteredStaff],
+  );
 
   const closeStaffExport = React.useCallback(() => {
     if (!exportingPdf && !exportingCsv) {
@@ -610,6 +660,7 @@ export default function Staff() {
       setForm(emptyForm);
       setPhoto(null);
       setFormError(null);
+      setShowAddModal(false);
       showToast("Staff member added", "success");
     } catch (e) {
       setFormError(validationMessage(e, "Failed to add staff member"));
@@ -619,30 +670,39 @@ export default function Staff() {
     }
   };
 
-  const startEdit = (member: StaffDoc) => {
+  const openEdit = async (member: StaffDoc) => {
     setConfirmLeftId(null);
     setConfirmDeleteId(null);
-    setEditingId(member.id);
-    setEditForm({
-      name: member.name || "",
-      phone: member.phone || "",
-      designation: member.designation || "",
-      joiningDate: member.joiningDate || "",
-      salary: member.salary === null || member.salary === undefined ? "" : String(member.salary),
-      address: member.address || "",
-      notes: member.notes || "",
-    });
-    setEditPhoto(
-      member.photoMime && member.photoBase64
-        ? { photoMime: member.photoMime, photoBase64: member.photoBase64 }
-        : null,
-    );
-    setEditPhotoChanged(false);
-    setEditError(null);
+    try {
+      const full = await getStaff(member.id);
+      if (!full) {
+        showToast("Staff member was not found", "error");
+        return;
+      }
+      setEditingMember(full);
+      setEditForm({
+        name: full.name || "",
+        phone: full.phone || "",
+        designation: full.designation || "",
+        joiningDate: full.joiningDate || "",
+        salary: full.salary === null || full.salary === undefined ? "" : String(full.salary),
+        address: full.address || "",
+        notes: full.notes || "",
+      });
+      setEditPhoto(
+        full.photoMime && full.photoBase64
+          ? { photoMime: full.photoMime, photoBase64: full.photoBase64 }
+          : null,
+      );
+      setEditPhotoChanged(false);
+      setEditError(null);
+    } catch (e) {
+      showToast(validationMessage(e, "Failed to load staff member"), "error");
+    }
   };
 
   const cancelEdit = () => {
-    setEditingId(null);
+    setEditingMember(null);
     setEditForm(emptyForm);
     setEditPhoto(null);
     setEditPhotoChanged(false);
@@ -683,25 +743,36 @@ export default function Staff() {
     }
   };
 
-  const changeStaffStatus = async (id: string, active: boolean) => {
+  const changeStaffStatus = async (member: StaffDoc, active: boolean) => {
     if (statusChangingRef.current) {
       return;
     }
-    statusChangingRef.current = id;
-    setStatusChangingId(id);
+    statusChangingRef.current = member.id;
+    setStatusChangingId(member.id);
     try {
-      await updateStaff(id, { active });
-      const shouldShowLeftStaff = active ? showLeftStaff : true;
+      await updateStaff(member.id, { active });
       if (!active) {
-        setShowLeftStaff(true);
+        setStatusFilter("left");
+        await loadStaff("left");
+      } else {
+        await loadStaff();
       }
-      await loadStaff(shouldShowLeftStaff);
-      if (!active && editingId === id) {
+      if (!active && editingMember?.id === member.id) {
         cancelEdit();
       }
       setConfirmLeftId(null);
       setConfirmDeleteId(null);
       showToast(active ? "Staff member restored" : "Staff member marked Left", "success");
+      if (
+        !active &&
+        member.linkedUsername &&
+        member.linkedAccountActive !== false
+      ) {
+        setLeftAccountPrompt({
+          username: member.linkedUsername,
+          staffName: member.name,
+        });
+      }
     } catch (e) {
       showToast(validationMessage(e, active ? "Failed to restore staff member" : "Failed to mark staff member Left"), "error");
     } finally {
@@ -719,7 +790,7 @@ export default function Staff() {
     try {
       await deleteStaff(id);
       await loadStaff();
-      if (editingId === id) {
+      if (editingMember?.id === id) {
         cancelEdit();
       }
       setConfirmLeftId(null);
@@ -744,7 +815,10 @@ export default function Staff() {
     exportingRef.current = true;
     setExportingCsv(true);
     try {
-      const records = await listStaff({ includeInactive: exportOptions.includeInactive });
+      const records = await listStaff({
+        status: exportOptions.includeInactive ? "all" : "active",
+        includePhotos: exportOptions.includePhotos,
+      });
       if (records.length === 0) {
         showToast("No staff records to export", "error");
         return;
@@ -790,7 +864,10 @@ export default function Staff() {
     exportingRef.current = true;
     setExportingPdf(true);
     try {
-      const records = await listStaff({ includeInactive: exportOptions.includeInactive });
+      const records = await listStaff({
+        status: exportOptions.includeInactive ? "all" : "active",
+        includePhotos: exportOptions.includePhotos,
+      });
       if (records.length === 0) {
         showToast("No staff records to export", "error");
         return;
@@ -916,20 +993,61 @@ export default function Staff() {
   };
 
   return (
-    <div className="pos-page">
-      <PageHeader
-        title="Staff"
-        subtitle="Manage staff details, optional salary details, and profile photos"
-        actions={
-          <>
-          <button
-            type="button"
-            className={`pos-btn ${showLeftStaff ? "pos-btn-primary" : "pos-btn-secondary"}`}
-            onClick={() => setShowLeftStaff((value) => !value)}
-            aria-pressed={showLeftStaff}
+    <div className={embedded ? undefined : "pos-page"}>
+      {!embedded && (
+        <PageHeader
+          title="Roster"
+          subtitle="Who works here — employment details and optional RestoNiti accounts"
+          actions={
+            <button
+              type="button"
+              className="pos-btn pos-btn-secondary"
+              onClick={() => setExportOpen(true)}
+              disabled={exportingPdf || exportingCsv}
+            >
+              Export
+            </button>
+          }
+        />
+      )}
+
+      <div
+        style={{
+          display: "flex",
+          gap: 12,
+          alignItems: "flex-end",
+          flexWrap: "wrap",
+          marginBottom: 16,
+        }}
+      >
+        <div style={{ flex: "1 1 220px", minWidth: 180 }}>
+          <label className="pos-label" htmlFor="staff-search">
+            Search Staff
+          </label>
+          <input
+            id="staff-search"
+            className="pos-input"
+            placeholder="Search by name, phone, designation..."
+            value={staffSearch}
+            onChange={(e) => setStaffSearch(e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="pos-label" htmlFor="staff-status-filter">
+            Staff Status
+          </label>
+          <select
+            id="staff-status-filter"
+            className="pos-select"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as StaffStatusFilter)}
           >
-            {showLeftStaff ? "Hide Left Staff" : "Show Left Staff"}
-          </button>
+            <option value="active">Active</option>
+            <option value="left">Left</option>
+            <option value="all">All</option>
+          </select>
+        </div>
+        {embedded && (
           <button
             type="button"
             className="pos-btn pos-btn-secondary"
@@ -938,9 +1056,8 @@ export default function Staff() {
           >
             Export
           </button>
-          </>
-        }
-      />
+        )}
+      </div>
 
       {exportOpen && (
         <div
@@ -1151,288 +1268,638 @@ export default function Staff() {
         </div>
       )}
 
-      <div className="pos-card pos-card-p" style={{ marginBottom: 18 }}>
-        <p style={{ margin: "0 0 14px", fontWeight: 800, fontSize: 13 }}>Add Staff Member</p>
-        <div style={staffFieldGrid}>
-          <StaffInput
-            id="staff-name"
-            label="Name"
-            value={form.name}
-            onChange={(value) => setField("name", value)}
-            placeholder="Staff member name"
-            maxLength={STAFF_TEXT_LIMITS.name}
-            required
-          />
-          <StaffInput
-            id="staff-phone"
-            label="Mobile Number"
-            value={form.phone}
-            onChange={(value) => setField("phone", normalizePhone(value))}
-            placeholder="10-digit mobile"
-            type="tel"
-            inputMode="tel"
-            required
-          />
-          <StaffInput
-            id="staff-designation"
-            label="Designation"
-            value={form.designation}
-            onChange={(value) => setField("designation", value)}
-            placeholder="Optional"
-            maxLength={STAFF_TEXT_LIMITS.designation}
-          />
-          <StaffInput
-            id="staff-joining-date"
-            label="Joining Date"
-            type="date"
-            value={form.joiningDate}
-            onChange={(value) => setField("joiningDate", value)}
-          />
-          <StaffInput
-            id="staff-salary"
-            label="Monthly Salary"
-            type="number"
-            value={form.salary}
-            onChange={(value) => setField("salary", value)}
-            placeholder="Optional"
-            min={0}
-            step="0.01"
-          />
-          <StaffTextArea
-            id="staff-address"
-            label="Address"
-            value={form.address}
-            onChange={(value) => setField("address", value)}
-            placeholder="Optional"
-            maxLength={STAFF_TEXT_LIMITS.address}
-          />
-          <StaffTextArea
-            id="staff-notes"
-            label="Notes"
-            value={form.notes}
-            onChange={(value) => setField("notes", value)}
-            placeholder="Optional"
-            maxLength={STAFF_TEXT_LIMITS.notes}
-          />
-        </div>
-        <div style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 12, flexWrap: "wrap" }}>
-          {renderPhoto(null, photo)}
-          <FieldShell id="staff-photo" label="Photo">
-            <input id="staff-photo" type="file" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.jfif,.png,.webp" onChange={(e) => choosePhoto(e.target.files?.[0], "add")} />
-          </FieldShell>
-          {photo && (
-            <button type="button" onClick={() => setPhoto(null)} className="pos-btn pos-btn-secondary pos-btn-sm">
-              Remove Photo
+      {showAddModal && (
+        <Modal
+          open={showAddModal}
+          title="Add Staff Member"
+          onClose={() => {
+            if (!saving) {
+              setShowAddModal(false);
+            }
+          }}
+        >
+          <div style={staffFieldGrid}>
+            <StaffInput
+              id="staff-name"
+              label="Name"
+              value={form.name}
+              onChange={(value) => setField("name", value)}
+              placeholder="Staff member name"
+              maxLength={STAFF_TEXT_LIMITS.name}
+              required
+            />
+            <StaffInput
+              id="staff-phone"
+              label="Mobile Number"
+              value={form.phone}
+              onChange={(value) => setField("phone", normalizePhone(value))}
+              placeholder="10-digit mobile"
+              type="tel"
+              inputMode="tel"
+              required
+            />
+            <StaffInput
+              id="staff-designation"
+              label="Designation"
+              value={form.designation}
+              onChange={(value) => setField("designation", value)}
+              placeholder="Optional"
+              maxLength={STAFF_TEXT_LIMITS.designation}
+            />
+            <StaffInput
+              id="staff-joining-date"
+              label="Joining Date"
+              type="date"
+              value={form.joiningDate}
+              onChange={(value) => setField("joiningDate", value)}
+            />
+            <StaffInput
+              id="staff-salary"
+              label="Monthly Salary"
+              type="number"
+              value={form.salary}
+              onChange={(value) => setField("salary", value)}
+              placeholder="Optional"
+              min={0}
+              step="0.01"
+            />
+            <StaffTextArea
+              id="staff-address"
+              label="Address"
+              value={form.address}
+              onChange={(value) => setField("address", value)}
+              placeholder="Optional"
+              maxLength={STAFF_TEXT_LIMITS.address}
+            />
+            <StaffTextArea
+              id="staff-notes"
+              label="Notes"
+              value={form.notes}
+              onChange={(value) => setField("notes", value)}
+              placeholder="Optional"
+              maxLength={STAFF_TEXT_LIMITS.notes}
+            />
+          </div>
+          <div style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 12, flexWrap: "wrap" }}>
+            {renderPhoto(null, photo)}
+            <FieldShell id="staff-photo" label="Photo">
+              <input
+                id="staff-photo"
+                type="file"
+                accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.jfif,.png,.webp"
+                onChange={(e) => choosePhoto(e.target.files?.[0], "add")}
+              />
+            </FieldShell>
+            {photo && (
+              <button type="button" onClick={() => setPhoto(null)} className="pos-btn pos-btn-secondary pos-btn-sm">
+                Remove Photo
+              </button>
+            )}
+          </div>
+          {formError && <div className="pos-field-error" style={{ marginTop: 12 }}>{formError}</div>}
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 16 }}>
+            <button
+              type="button"
+              onClick={() => setShowAddModal(false)}
+              disabled={saving}
+              className="pos-btn pos-btn-secondary"
+            >
+              Cancel
             </button>
-          )}
-          <button onClick={addStaff} disabled={saving} className="pos-btn pos-btn-primary">
-            {saving ? "Saving..." : "Add Staff"}
-          </button>
-          {formError && <div className="pos-field-error">{formError}</div>}
-        </div>
-      </div>
-
-      {staff.length === 0 ? (
-        <div className="pos-empty">
-          {showLeftStaff ? "No staff records found." : "No active staff records yet. Add the first staff member above."}
-        </div>
-      ) : (
-        <div style={{ display: "grid", gap: 10 }}>
-          {staff.map((member) => {
-            const isEditing = editingId === member.id;
-            const isActive = member.active !== false;
-            const isConfirmingLeft = confirmLeftId === member.id;
-            const isConfirmingDelete = confirmDeleteId === member.id;
-            const isChangingStatus = statusChangingId === member.id;
-            return (
-              <div key={member.id} className="pos-card" style={{ padding: 16 }}>
-                <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
-                  {renderPhoto(member, isEditing ? editPhoto : undefined)}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    {isEditing ? (
-                      <div style={{ display: "grid", gap: 10 }}>
-                        <div style={staffFieldGrid}>
-                          <StaffInput
-                            id={`staff-edit-name-${member.id}`}
-                            label="Name"
-                            value={editForm.name}
-                            onChange={(value) => setEditField("name", value)}
-                            maxLength={STAFF_TEXT_LIMITS.name}
-                            required
-                          />
-                          <StaffInput
-                            id={`staff-edit-phone-${member.id}`}
-                            label="Mobile Number"
-                            value={editForm.phone}
-                            onChange={(value) => setEditField("phone", normalizePhone(value))}
-                            type="tel"
-                            inputMode="tel"
-                            required
-                          />
-                          <StaffInput
-                            id={`staff-edit-designation-${member.id}`}
-                            label="Designation"
-                            value={editForm.designation}
-                            onChange={(value) => setEditField("designation", value)}
-                            placeholder="Optional"
-                            maxLength={STAFF_TEXT_LIMITS.designation}
-                          />
-                          <StaffInput
-                            id={`staff-edit-joining-date-${member.id}`}
-                            label="Joining Date"
-                            type="date"
-                            value={editForm.joiningDate}
-                            onChange={(value) => setEditField("joiningDate", value)}
-                          />
-                          <StaffInput
-                            id={`staff-edit-salary-${member.id}`}
-                            label="Monthly Salary"
-                            type="number"
-                            value={editForm.salary}
-                            onChange={(value) => setEditField("salary", value)}
-                            min={0}
-                            step="0.01"
-                          />
-                          <StaffTextArea
-                            id={`staff-edit-address-${member.id}`}
-                            label="Address"
-                            value={editForm.address}
-                            onChange={(value) => setEditField("address", value)}
-                            placeholder="Optional"
-                            maxLength={STAFF_TEXT_LIMITS.address}
-                          />
-                          <StaffTextArea
-                            id={`staff-edit-notes-${member.id}`}
-                            label="Notes"
-                            value={editForm.notes}
-                            onChange={(value) => setEditField("notes", value)}
-                            placeholder="Optional"
-                            maxLength={STAFF_TEXT_LIMITS.notes}
-                          />
-                        </div>
-                        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                          <FieldShell id={`staff-edit-photo-${member.id}`} label="Photo">
-                            <input id={`staff-edit-photo-${member.id}`} type="file" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.jfif,.png,.webp" onChange={(e) => choosePhoto(e.target.files?.[0], "edit")} />
-                          </FieldShell>
-                          {editPhoto && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setEditPhoto(null);
-                                setEditPhotoChanged(true);
-                              }}
-                              className="pos-btn pos-btn-secondary pos-btn-sm"
-                            >
-                              Remove Photo
-                            </button>
-                          )}
-                          <button onClick={() => saveEdit(member)} disabled={savingEdit} className="pos-btn pos-btn-primary pos-btn-sm">
-                            {savingEdit ? "Saving..." : "Save"}
-                          </button>
-                          <button onClick={cancelEdit} disabled={savingEdit} className="pos-btn pos-btn-secondary pos-btn-sm">
-                            Cancel
-                          </button>
-                          {editError && <div className="pos-field-error">{editError}</div>}
-                        </div>
-                      </div>
-                    ) : (
-                      <div>
-                        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                          <div>
-                            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                              <div style={{ fontWeight: 900, color: "var(--pos-tx)" }}>{member.name}</div>
-                              <span className={`pos-badge ${isActive ? "pos-badge-green" : "pos-badge-red"}`}>
-                                {isActive ? "Active" : "Left"}
-                              </span>
-                            </div>
-                            {member.designation && <div style={{ color: "var(--pos-teal)", fontWeight: 800, fontSize: 13 }}>{member.designation}</div>}
-                          </div>
-                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                            <button
-                              onClick={() => startEdit(member)}
-                              disabled={isChangingStatus || deletingId === member.id}
-                              className="pos-btn pos-btn-secondary pos-btn-sm"
-                            >
-                              Edit
-                            </button>
-                            {isActive ? (
-                              isConfirmingLeft ? (
-                                <>
-                                  <button
-                                    onClick={() => changeStaffStatus(member.id, false)}
-                                    disabled={isChangingStatus}
-                                    className="pos-btn pos-btn-secondary pos-btn-sm"
-                                  >
-                                    {isChangingStatus ? "Marking..." : "Confirm Left"}
-                                  </button>
-                                  <button
-                                    onClick={() => setConfirmLeftId(null)}
-                                    disabled={isChangingStatus}
-                                    className="pos-btn pos-btn-secondary pos-btn-sm"
-                                  >
-                                    Cancel
-                                  </button>
-                                </>
-                              ) : (
-                                <button
-                                  onClick={() => {
-                                    setConfirmLeftId(member.id);
-                                    setConfirmDeleteId(null);
-                                  }}
-                                  disabled={isChangingStatus || deletingId === member.id}
-                                  className="pos-btn pos-btn-secondary pos-btn-sm"
-                                >
-                                  Mark Left
-                                </button>
-                              )
-                            ) : (
-                              <button
-                                onClick={() => changeStaffStatus(member.id, true)}
-                                disabled={isChangingStatus || deletingId === member.id}
-                                className="pos-btn pos-btn-primary pos-btn-sm"
-                              >
-                                {isChangingStatus ? "Restoring..." : "Restore"}
-                              </button>
-                            )}
-                            {isConfirmingDelete ? (
-                              <>
-                                <button onClick={() => removeStaff(member.id)} disabled={deletingId === member.id} className="pos-btn pos-btn-danger pos-btn-sm">
-                                  {deletingId === member.id ? "Deleting..." : "Confirm Delete"}
-                                </button>
-                                <button onClick={() => setConfirmDeleteId(null)} disabled={deletingId === member.id} className="pos-btn pos-btn-secondary pos-btn-sm">
-                                  Cancel
-                                </button>
-                              </>
-                            ) : (
-                              <button
-                                onClick={() => {
-                                  setConfirmDeleteId(member.id);
-                                  setConfirmLeftId(null);
-                                }}
-                                disabled={isChangingStatus || deletingId === member.id}
-                                className="pos-btn pos-btn-danger pos-btn-sm"
-                              >
-                                Delete
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                        <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginTop: 8, color: "var(--pos-tx-sub)", fontSize: 13 }}>
-                          <span>{member.phone}</span>
-                          <span>Joined: {member.joiningDate || "Not set"}</span>
-                          <span>Salary: {formatSalary(member.salary)}</span>
-                          {member.address && <span>{member.address}</span>}
-                          {member.notes && <span>{member.notes}</span>}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+            <button onClick={addStaff} disabled={saving} className="pos-btn pos-btn-primary">
+              {saving ? "Saving..." : "Save Staff"}
+            </button>
+          </div>
+        </Modal>
       )}
+
+      {leftAccountPrompt && (
+        <LeftAccountPromptModal
+          prompt={leftAccountPrompt}
+          onClose={() => setLeftAccountPrompt(null)}
+          onDone={() => {
+            setLeftAccountPrompt(null);
+            void loadStaff();
+          }}
+        />
+      )}
+
+      {createAccountFor && (
+        <CreateStaffAccountModal
+          member={createAccountFor}
+          onClose={() => setCreateAccountFor(null)}
+          onCreated={() => {
+            setCreateAccountFor(null);
+            void loadStaff();
+          }}
+        />
+      )}
+
+      {editingMember && (
+        <Modal
+          open
+          title={`Edit — ${editingMember.name}`}
+          onClose={() => {
+            if (!savingEdit) {
+              cancelEdit();
+            }
+          }}
+          large
+        >
+          <div style={staffFieldGrid}>
+            <StaffInput
+              id="staff-edit-name"
+              label="Name"
+              value={editForm.name}
+              onChange={(value) => setEditField("name", value)}
+              maxLength={STAFF_TEXT_LIMITS.name}
+              required
+            />
+            <StaffInput
+              id="staff-edit-phone"
+              label="Mobile Number"
+              value={editForm.phone}
+              onChange={(value) => setEditField("phone", normalizePhone(value))}
+              type="tel"
+              inputMode="tel"
+              required
+            />
+            <StaffInput
+              id="staff-edit-designation"
+              label="Designation"
+              value={editForm.designation}
+              onChange={(value) => setEditField("designation", value)}
+              placeholder="Optional"
+              maxLength={STAFF_TEXT_LIMITS.designation}
+            />
+            <StaffInput
+              id="staff-edit-joining-date"
+              label="Joining Date"
+              type="date"
+              value={editForm.joiningDate}
+              onChange={(value) => setEditField("joiningDate", value)}
+            />
+            <StaffInput
+              id="staff-edit-salary"
+              label="Monthly Salary"
+              type="number"
+              value={editForm.salary}
+              onChange={(value) => setEditField("salary", value)}
+              min={0}
+              step="0.01"
+            />
+            <StaffTextArea
+              id="staff-edit-address"
+              label="Address"
+              value={editForm.address}
+              onChange={(value) => setEditField("address", value)}
+              placeholder="Optional"
+              maxLength={STAFF_TEXT_LIMITS.address}
+            />
+            <StaffTextArea
+              id="staff-edit-notes"
+              label="Notes"
+              value={editForm.notes}
+              onChange={(value) => setEditField("notes", value)}
+              placeholder="Optional"
+              maxLength={STAFF_TEXT_LIMITS.notes}
+            />
+          </div>
+          <div style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 12, flexWrap: "wrap" }}>
+            {renderPhoto(editingMember, editPhoto)}
+            <FieldShell id="staff-edit-photo" label="Photo">
+              <input
+                id="staff-edit-photo"
+                type="file"
+                accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.jfif,.png,.webp"
+                onChange={(e) => choosePhoto(e.target.files?.[0], "edit")}
+              />
+            </FieldShell>
+            {editPhoto && (
+              <button
+                type="button"
+                onClick={() => {
+                  setEditPhoto(null);
+                  setEditPhotoChanged(true);
+                }}
+                className="pos-btn pos-btn-secondary pos-btn-sm"
+              >
+                Remove Photo
+              </button>
+            )}
+          </div>
+          <div
+            style={{
+              marginTop: 14,
+              paddingTop: 14,
+              borderTop: "1px solid var(--pos-line)",
+              display: "flex",
+              gap: 10,
+              alignItems: "center",
+              flexWrap: "wrap",
+              fontSize: 13,
+            }}
+          >
+            <span style={{ fontWeight: 700 }}>RestoNiti Account</span>
+            {editingMember.linkedUsername ? (
+              <>
+                <span>@{editingMember.linkedUsername}</span>
+                <span
+                  className={`pos-badge ${
+                    editingMember.linkedAccountActive !== false ? "pos-badge-green" : "pos-badge-red"
+                  }`}
+                >
+                  {editingMember.linkedAccountActive !== false ? "Active" : "Disabled"}
+                </span>
+              </>
+            ) : (
+              <>
+                <span style={{ color: "var(--pos-tx-muted)" }}>No account</span>
+                {auth?.session?.role === "admin" && (
+                  <button
+                    type="button"
+                    className="pos-btn pos-btn-secondary pos-btn-sm"
+                    onClick={() => {
+                      cancelEdit();
+                      setCreateAccountFor(editingMember);
+                    }}
+                  >
+                    Create Account
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+          {editError && <div className="pos-field-error" style={{ marginTop: 12 }}>{editError}</div>}
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 16 }}>
+            <button type="button" onClick={cancelEdit} disabled={savingEdit} className="pos-btn pos-btn-secondary">
+              Cancel
+            </button>
+            <button
+              onClick={() => saveEdit(editingMember)}
+              disabled={savingEdit}
+              className="pos-btn pos-btn-primary"
+            >
+              {savingEdit ? "Saving..." : "Save Changes"}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      <DataTable
+        dense
+        columns={[
+          { key: "name", header: "Name", sortable: true, sortKey: "name" },
+          { key: "designation", header: "Designation", sortable: true, sortKey: "designation" },
+          { key: "phone", header: "Mobile", sortable: true, sortKey: "phone" },
+          { key: "joiningDate", header: "Joining Date", sortable: true, sortKey: "joiningDate" },
+          { key: "status", header: "Status", sortable: true, sortKey: "status" },
+          { key: "account", header: "Account" },
+          { key: "actions", header: "", align: "right" },
+        ]}
+        sortValues={rosterSortValues}
+        onRowClick={(rowIndex) => void openEdit(filteredStaff[rowIndex])}
+        empty={
+          staffSearch
+            ? "No staff match your search."
+            : statusFilter === "left"
+              ? "No staff marked Left."
+              : statusFilter === "all"
+                ? "No staff records found."
+                : "No active staff yet. Add the first staff member."
+        }
+        rows={filteredStaff.map((member) => {
+          const isActive = member.active !== false;
+          const isConfirmingLeft = confirmLeftId === member.id;
+          const isConfirmingDelete = confirmDeleteId === member.id;
+          const isChangingStatus = statusChangingId === member.id;
+          return [
+            <div key="name" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div
+                aria-hidden
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: 8,
+                  background: "var(--pos-teal)",
+                  color: "var(--pos-surface)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontWeight: 800,
+                  fontSize: 12,
+                  flexShrink: 0,
+                }}
+              >
+                {staffInitials(member.name)}
+              </div>
+              <span style={{ fontWeight: 700 }}>{member.name}</span>
+            </div>,
+            member.designation || "—",
+            member.phone,
+            member.joiningDate || "—",
+            <span
+              key="status"
+              className={`pos-badge ${isActive ? "pos-badge-green" : "pos-badge-red"}`}
+            >
+              {isActive ? "Active" : "Left"}
+            </span>,
+            member.linkedUsername ? (
+              <span key="account">
+                @{member.linkedUsername}
+                {member.linkedAccountActive === false ? " (disabled)" : ""}
+              </span>
+            ) : (
+              "None"
+            ),
+            <div
+              key="actions"
+              style={{ display: "flex", gap: 6, justifyContent: "flex-end", flexWrap: "wrap" }}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <button
+                type="button"
+                onClick={() => void openEdit(member)}
+                className="pos-btn pos-btn-secondary pos-btn-sm"
+              >
+                Edit
+              </button>
+              {isActive ? (
+                isConfirmingLeft ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => changeStaffStatus(member, false)}
+                      disabled={isChangingStatus}
+                      className="pos-btn pos-btn-secondary pos-btn-sm"
+                    >
+                      {isChangingStatus ? "..." : "Confirm Left"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmLeftId(null)}
+                      className="pos-btn pos-btn-secondary pos-btn-sm"
+                    >
+                      Cancel
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setConfirmLeftId(member.id);
+                      setConfirmDeleteId(null);
+                    }}
+                    className="pos-btn pos-btn-secondary pos-btn-sm"
+                  >
+                    Mark Left
+                  </button>
+                )
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => changeStaffStatus(member, true)}
+                  disabled={isChangingStatus}
+                  className="pos-btn pos-btn-primary pos-btn-sm"
+                >
+                  Restore
+                </button>
+              )}
+              {isConfirmingDelete ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => removeStaff(member.id)}
+                    disabled={deletingId === member.id}
+                    className="pos-btn pos-btn-danger pos-btn-sm"
+                  >
+                    Confirm
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDeleteId(null)}
+                    className="pos-btn pos-btn-secondary pos-btn-sm"
+                  >
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setConfirmDeleteId(member.id);
+                    setConfirmLeftId(null);
+                  }}
+                  className="pos-btn pos-btn-danger pos-btn-sm"
+                >
+                  Delete
+                </button>
+              )}
+            </div>,
+          ];
+        })}
+      />
     </div>
+  );
+}
+
+function LeftAccountPromptModal({
+  prompt,
+  onClose,
+  onDone,
+}: {
+  prompt: { username: string; staffName: string };
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const auth = React.useContext(AuthContext);
+  const { showToast } = useToast();
+  const [adminPassword, setAdminPassword] = React.useState("");
+  const [error, setError] = React.useState<string | null>(null);
+  const [submitting, setSubmitting] = React.useState(false);
+
+  const disableAccount = async () => {
+    if (!adminPassword) {
+      setError("Enter your admin password to disable this account.");
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      await updateUser(
+        prompt.username,
+        { active: false },
+        auth?.session?.username,
+        adminPassword,
+      );
+      showToast("Account disabled", "success");
+      onDone();
+    } catch (e) {
+      setError(validationMessage(e, "Could not disable account"));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Modal open title="Disable RestoNiti account?" onClose={submitting ? () => undefined : onClose}>
+      <p style={{ margin: "0 0 12px", color: "var(--pos-tx-sub)", lineHeight: 1.5 }}>
+        {prompt.staffName} has been marked as Left. Historical records will be preserved. Their RestoNiti
+        account (@{prompt.username}) is still active. Would you like to disable the account?
+      </p>
+      <label className="pos-label" htmlFor="left-account-admin-password">
+        Your admin password
+      </label>
+      <input
+        id="left-account-admin-password"
+        type="password"
+        className="pos-input"
+        value={adminPassword}
+        onChange={(e) => setAdminPassword(e.target.value)}
+        autoComplete="current-password"
+        disabled={submitting}
+        style={{ marginTop: 6, marginBottom: 12 }}
+      />
+      {error && <div className="pos-field-error">{error}</div>}
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, flexWrap: "wrap", marginTop: 12 }}>
+        <button type="button" className="pos-btn pos-btn-secondary" onClick={onClose} disabled={submitting}>
+          Keep Account Active
+        </button>
+        <button type="button" className="pos-btn pos-btn-primary" onClick={disableAccount} disabled={submitting}>
+          {submitting ? "Disabling..." : "Disable Account"}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+function CreateStaffAccountModal({
+  member,
+  onClose,
+  onCreated,
+}: {
+  member: StaffDoc;
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const auth = React.useContext(AuthContext);
+  const { showToast } = useToast();
+  const [username, setUsername] = React.useState(
+    safeFilePart(member.name).replace(/-/g, "").slice(0, 32) || "staff",
+  );
+  const [displayName, setDisplayName] = React.useState(member.name);
+  const [role, setRole] = React.useState<Role>(DEFAULT_ROLE);
+  const [password, setPassword] = React.useState("");
+  const [confirmPassword, setConfirmPassword] = React.useState("");
+  const [adminPassword, setAdminPassword] = React.useState("");
+  const [error, setError] = React.useState<string | null>(null);
+  const [submitting, setSubmitting] = React.useState(false);
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const uname = username.trim().toLowerCase();
+    if (!/^[a-z0-9_-]{2,32}$/.test(uname)) {
+      setError("Username must be 2-32 lowercase letters, digits, hyphens or underscores.");
+      return;
+    }
+    const passwordValidation = PasswordValidator.validate(password);
+    if (!passwordValidation.ok) {
+      setError(passwordValidation.errors[0] || "Password does not meet requirements.");
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+    if (!adminPassword) {
+      setError("Enter your current admin password.");
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      await createUser(
+        uname,
+        password,
+        role,
+        displayName,
+        true,
+        auth?.session?.username,
+        adminPassword,
+        member.id,
+      );
+      showToast("Account created and linked to staff", "success");
+      onCreated();
+    } catch (e) {
+      setError(validationMessage(e, "Could not create account"));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Modal open title={`Create account for ${member.name}`} onClose={submitting ? () => undefined : onClose}>
+      <form onSubmit={handleSubmit} style={{ display: "grid", gap: 12 }}>
+        <StaffInput
+          id="staff-account-username"
+          label="Username"
+          value={username}
+          onChange={setUsername}
+          required
+        />
+        <StaffInput
+          id="staff-account-display-name"
+          label="Display name"
+          value={displayName}
+          onChange={setDisplayName}
+          required
+        />
+        <FieldShell id="staff-account-role" label="Role">
+          <select
+            id="staff-account-role"
+            className="pos-select"
+            value={role}
+            onChange={(e) => setRole(e.target.value as Role)}
+            disabled={submitting}
+          >
+            <option value="cashier">Cashier</option>
+            <option value="admin">Admin</option>
+          </select>
+        </FieldShell>
+        <StaffInput
+          id="staff-account-password"
+          label="Password"
+          type="password"
+          value={password}
+          onChange={setPassword}
+          required
+        />
+        <StaffInput
+          id="staff-account-confirm-password"
+          label="Confirm password"
+          type="password"
+          value={confirmPassword}
+          onChange={setConfirmPassword}
+          required
+        />
+        <StaffInput
+          id="staff-account-admin-password"
+          label="Your admin password"
+          type="password"
+          value={adminPassword}
+          onChange={setAdminPassword}
+          required
+        />
+        {error && <div className="pos-field-error">{error}</div>}
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+          <button type="button" className="pos-btn pos-btn-secondary" onClick={onClose} disabled={submitting}>
+            Cancel
+          </button>
+          <button type="submit" className="pos-btn pos-btn-primary" disabled={submitting}>
+            {submitting ? "Creating..." : "Create Account"}
+          </button>
+        </div>
+      </form>
+    </Modal>
   );
 }

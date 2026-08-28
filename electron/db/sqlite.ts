@@ -175,6 +175,7 @@ function runSchema(database: SqliteDatabase) {
       hash_algo TEXT NOT NULL,
       active INTEGER NOT NULL DEFAULT 1,
       require_password_change INTEGER NOT NULL DEFAULT 0,
+      staff_id TEXT REFERENCES staff(id) ON UPDATE CASCADE ON DELETE SET NULL,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     );
@@ -302,7 +303,7 @@ function runSchema(database: SqliteDatabase) {
       created_on INTEGER NOT NULL,
       updated_by TEXT REFERENCES users(username) ON UPDATE CASCADE ON DELETE SET NULL,
       updated_on INTEGER NOT NULL,
-      UNIQUE(staff_id, attendance_date)
+      UNIQUE(staff_id, attendance_date, shift_id)
     );
 
     CREATE INDEX IF NOT EXISTS idx_attendance_staff
@@ -1228,6 +1229,52 @@ function runSchema(database: SqliteDatabase) {
 
       CREATE INDEX IF NOT EXISTS idx_grocery_list_template_lines_template
         ON grocery_list_template_lines(template_id, sort_order);
+    `);
+  });
+
+  runMigration(database, 19, "People module: staff-account link and attendance shift uniqueness", () => {
+    addColumnIfMissing(database, "users", "staff_id", "TEXT REFERENCES staff(id) ON UPDATE CASCADE ON DELETE SET NULL");
+    database.exec(`
+      CREATE INDEX IF NOT EXISTS idx_users_staff_id ON users(staff_id) WHERE staff_id IS NOT NULL;
+    `);
+
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS attendance_records_v19 (
+        id TEXT PRIMARY KEY,
+        staff_id TEXT NOT NULL REFERENCES staff(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+        attendance_date TEXT NOT NULL,
+        shift_id TEXT NOT NULL DEFAULT 'morning',
+        status TEXT NOT NULL CHECK (status IN ('present', 'absent', 'half-day', 'leave', 'holiday', 'week-off', 'late')),
+        check_in_time TEXT,
+        check_out_time TEXT,
+        break_minutes INTEGER NOT NULL DEFAULT 0,
+        worked_minutes INTEGER NOT NULL DEFAULT 0,
+        overtime_minutes INTEGER NOT NULL DEFAULT 0,
+        remarks TEXT,
+        created_by TEXT REFERENCES users(username) ON UPDATE CASCADE ON DELETE SET NULL,
+        created_on INTEGER NOT NULL,
+        updated_by TEXT REFERENCES users(username) ON UPDATE CASCADE ON DELETE SET NULL,
+        updated_on INTEGER NOT NULL,
+        UNIQUE(staff_id, attendance_date, shift_id)
+      );
+
+      INSERT INTO attendance_records_v19 (
+        id, staff_id, attendance_date, shift_id, status, check_in_time, check_out_time,
+        break_minutes, worked_minutes, overtime_minutes, remarks,
+        created_by, created_on, updated_by, updated_on
+      )
+      SELECT
+        id, staff_id, attendance_date, COALESCE(NULLIF(trim(shift_id), ''), 'morning'), status,
+        check_in_time, check_out_time, break_minutes, worked_minutes, overtime_minutes, remarks,
+        created_by, created_on, updated_by, updated_on
+      FROM attendance_records;
+
+      DROP TABLE attendance_records;
+      ALTER TABLE attendance_records_v19 RENAME TO attendance_records;
+
+      CREATE INDEX IF NOT EXISTS idx_attendance_staff ON attendance_records(staff_id);
+      CREATE INDEX IF NOT EXISTS idx_attendance_date ON attendance_records(attendance_date);
+      CREATE INDEX IF NOT EXISTS idx_attendance_status ON attendance_records(status);
     `);
   });
 
