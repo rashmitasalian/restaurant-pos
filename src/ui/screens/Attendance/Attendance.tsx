@@ -76,7 +76,7 @@ function StatusDisplay({ status, isLate = false }: { status: AttendanceStatus | 
     return (
       <>
         <span className={`${menuStyles.statusDot} ${STATUS_DOT_CLASS.empty}`} aria-hidden />
-        Not set
+        <span title="Not recorded">—</span>
       </>
     );
   }
@@ -411,6 +411,11 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
     }
   }, [attendanceDate, loadData, rows, showToast]);
 
+  const discardChanges = React.useCallback(async () => {
+    await loadData();
+    showToast("Unsaved changes discarded.", "info");
+  }, [loadData, showToast]);
+
   const getShiftLabel = React.useCallback(
     (shiftId: string) => shiftOptions.find((option) => option.value === shiftId)?.label || shiftId,
     [shiftOptions],
@@ -618,7 +623,7 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
           <div className={styles.stripActions}>
             <button
               type="button"
-              className={`${styles.stripBtn} ${styles.stripBtnPrimary}`}
+              className={styles.stripBtn}
               onClick={() => markAll("present")}
             >
               Mark all present
@@ -862,14 +867,21 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
         ) : (
           <span className={styles.savedHint}>No changes</span>
         )}
-        <Button
-          variant={hasUnsaved ? "primary" : "secondary"}
-          onClick={save}
-          disabled={saving || !hasUnsaved}
-          title="Save changes (Ctrl+S)"
-        >
-          {saving ? "Saving..." : "Save Changes"}
-        </Button>
+        <div className={styles.saveBarActions}>
+          {hasUnsaved ? (
+            <Button variant="ghost" onClick={() => void discardChanges()} disabled={saving}>
+              Discard
+            </Button>
+          ) : null}
+          <Button
+            variant={hasUnsaved ? "primary" : "secondary"}
+            onClick={save}
+            disabled={saving || !hasUnsaved}
+            title="Save changes (Ctrl+S)"
+          >
+            {saving ? "Saving..." : "Save Changes"}
+          </Button>
+        </div>
       </div>
 
       <OvertimeEditor

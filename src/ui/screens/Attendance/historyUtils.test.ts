@@ -1,6 +1,7 @@
 import {
   buildAttendanceMatrix,
   enumerateDays,
+  exportStatusCode,
   formatWeekLabel,
   monthRange,
   statusCode,
@@ -36,6 +37,12 @@ describe("historyUtils", () => {
     expect(statusCode({ status: "present" })).toBe("P");
     expect(statusCode({ status: "present", isLate: true })).toBe("P*");
     expect(statusCode(null)).toBe("—");
+  });
+
+  it("maps export status codes without em dash", () => {
+    expect(exportStatusCode(null)).toBe("-");
+    expect(exportStatusCode({ status: "present" })).toBe("P");
+    expect(exportStatusCode({ status: "present", isLate: true })).toBe("P*");
   });
 
   it("labels empty cells as not recorded", () => {
@@ -84,5 +91,25 @@ describe("historyUtils", () => {
     expect(matrix.rows[0].totals.overtimeMinutes).toBe(90);
     expect(matrix.summary.present).toBe(1);
     expect(matrix.summary.leave).toBe(1);
+  });
+
+  it("includes left staff when they have attendance in the range", () => {
+    const staff = [
+      { id: "s1", name: "Active", phone: "1", designation: "Chef", active: true },
+      { id: "s2", name: "Former", phone: "2", designation: "Waiter", active: false },
+      { id: "s3", name: "Old Hire", phone: "3", designation: "Helper", active: false },
+    ] as any[];
+    const records = [
+      {
+        id: "a1",
+        staffId: "s2",
+        staffName: "Former",
+        attendanceDate: "2026-08-05",
+        status: "present",
+        overtimeMinutes: 0,
+      },
+    ] as any[];
+    const matrix = buildAttendanceMatrix(staff, records, ["2026-08-01", "2026-08-05"], "");
+    expect(matrix.rows.map((row) => row.staffId)).toEqual(["s1", "s2"]);
   });
 });

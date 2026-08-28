@@ -5038,7 +5038,8 @@ export const posService = {
     const photoCols = includePhotos ? "s.photo_mime, s.photo_base64," : "";
     const sql = `
       SELECT s.id, s.name, s.phone, s.designation, s.joining_date, s.salary_paise,
-             s.address, s.notes, ${photoCols} s.active, s.created_at, s.updated_at,
+             s.address, s.notes, s.weekly_off_days, s.default_shift_id,
+             ${photoCols} s.active, s.created_at, s.updated_at,
              u.username AS linked_username, u.active AS linked_user_active
       FROM staff s
       LEFT JOIN users u ON u.staff_id = s.id
@@ -5176,7 +5177,7 @@ export const posService = {
           : "staff.marked_left"
         : "staff.updated";
     createAuditRow(database, action, "staff", id, actor || null, { fields: changedFields });
-    return this.listStaff({ includeInactive: true }).find((staff) => staff.id === id) || null;
+    return this.getStaff(id);
   },
 
   deleteStaff(id: string, actor?: string | null) {

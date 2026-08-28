@@ -134,6 +134,12 @@ export function statusCode(cell: HistoryDayCell | null | undefined) {
   return "—";
 }
 
+/** ASCII-safe status code for CSV/Excel export (avoids em-dash mojibake in Excel). */
+export function exportStatusCode(cell: HistoryDayCell | null | undefined) {
+  const code = statusCode(cell);
+  return code === "—" ? "-" : code;
+}
+
 export function statusCellTitle(cell: HistoryDayCell | null | undefined) {
   if (!cell?.status) {
     return "Not recorded";
@@ -215,7 +221,10 @@ export function buildAttendanceMatrix(
   days: string[],
   search: string,
 ): HistoryMatrix {
-  const visibleStaff = filterStaffBySearch(staff, search);
+  const staffWithRecords = new Set(records.map((record) => record.staffId));
+  const visibleStaff = filterStaffBySearch(staff, search).filter(
+    (member) => member.active !== false || staffWithRecords.has(member.id),
+  );
   const byStaffDate = new Map<string, AttendanceDoc[]>();
   records.forEach((record) => {
     const key = `${record.staffId}|${record.attendanceDate}`;

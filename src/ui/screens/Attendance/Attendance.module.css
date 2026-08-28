@@ -7,11 +7,21 @@
 }
 
 .rootEmbedded {
-  padding: 0 0 72px;
+  padding: 0;
+  flex: 1;
   min-height: 0;
+  height: calc(100dvh - 248px);
+  max-height: calc(100dvh - 248px);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.rootEmbedded .gridWrap {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
 }
 
 .stickyChrome {
@@ -23,6 +33,7 @@
   padding-bottom: 4px;
   background: var(--pos-bg, var(--pos-surface));
   box-shadow: 0 1px 0 var(--pos-line);
+  flex-shrink: 0;
 }
 
 .toolbar {
@@ -186,16 +197,6 @@
   background: var(--pos-surface-hover);
 }
 
-.stripBtnPrimary {
-  border-color: var(--pos-primary, var(--pos-teal));
-  background: color-mix(in srgb, var(--pos-primary, var(--pos-teal)) 10%, var(--pos-surface));
-  color: var(--pos-primary, var(--pos-teal));
-}
-
-.stripBtnPrimary:hover {
-  background: color-mix(in srgb, var(--pos-primary, var(--pos-teal)) 16%, var(--pos-surface));
-}
-
 .menuWrap {
   position: relative;
 }
@@ -269,10 +270,17 @@
 
 .colStatus {
   width: 18%;
+  min-width: 108px;
+}
+
+.colLate {
+  width: 72px;
+  min-width: 72px;
 }
 
 .colOt {
   width: 10%;
+  min-width: 56px;
 }
 
 .colNote {
@@ -408,12 +416,18 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-top: 4px;
+  margin-top: auto;
   padding: 12px 14px;
   border: 1px solid var(--pos-line);
   border-radius: 12px;
   background: var(--pos-surface);
   box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.06);
+}
+
+.saveBarActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .saveBarActive {
@@ -468,10 +482,6 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-}
-
-.colLate {
-  width: 72px;
 }
 
 .lateToggle {

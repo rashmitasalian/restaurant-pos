@@ -1238,93 +1238,6 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
         </div>
       )}
 
-      {photoPreview && (
-        <div
-          onClick={closePhotoPreview}
-          style={{
-            position: "fixed",
-            inset: 0,
-            zIndex: 1100,
-            background: "var(--pos-overlay)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: 18,
-          }}
-        >
-          <div
-            ref={photoPreviewDialogRef}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="staffPhotoPreviewTitle"
-            tabIndex={-1}
-            onClick={(event) => event.stopPropagation()}
-            style={{
-              width: "min(560px, 96vw)",
-              maxHeight: "92vh",
-              background: "var(--pos-surface)",
-              borderRadius: 12,
-              boxShadow: "var(--pos-shadow-overlay)",
-              overflow: "hidden",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 12,
-                padding: "14px 16px",
-                borderBottom: "1px solid var(--pos-line)",
-              }}
-            >
-              <div>
-                <h3 id="staffPhotoPreviewTitle" style={{ margin: 0, fontSize: 16 }}>
-                  {photoPreview.name}
-                </h3>
-                <div style={{ marginTop: 2, color: "var(--pos-tx-sub)", fontSize: 12 }}>Staff photo</div>
-              </div>
-              <button
-                type="button"
-                onClick={downloadPhotoPreview}
-                className="pos-btn pos-btn-primary pos-btn-sm"
-              >
-                Download
-              </button>
-              <button
-                type="button"
-                onClick={closePhotoPreview}
-                className="pos-btn pos-btn-secondary pos-btn-sm"
-              >
-                Close
-              </button>
-            </div>
-            <div
-              style={{
-                padding: 16,
-                background: "var(--pos-surface-sunken)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <img
-                src={photoPreview.src}
-                alt=""
-                style={{
-                  display: "block",
-                  maxWidth: "100%",
-                  maxHeight: "calc(92vh - 96px)",
-                  borderRadius: 10,
-                  objectFit: "contain",
-                  background: "var(--pos-surface)",
-                }}
-              />
-            </div>
-          </div>
-        </div>
-      )}
-
       {showAddModal && (
         <Modal
           open={showAddModal}
@@ -1637,6 +1550,81 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
             </button>
           </div>
         </Modal>
+      )}
+
+      {photoPreview && (
+        <div className="ui-overlay ui-overlay-front" onClick={closePhotoPreview}>
+          <div
+            ref={photoPreviewDialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="staffPhotoPreviewTitle"
+            tabIndex={-1}
+            onClick={(event) => event.stopPropagation()}
+            style={{
+              width: "min(560px, 96vw)",
+              maxHeight: "92vh",
+              background: "var(--pos-surface)",
+              borderRadius: 12,
+              boxShadow: "var(--pos-shadow-overlay)",
+              overflow: "hidden",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+                padding: "14px 16px",
+                borderBottom: "1px solid var(--pos-line)",
+              }}
+            >
+              <div>
+                <h3 id="staffPhotoPreviewTitle" style={{ margin: 0, fontSize: 16 }}>
+                  {photoPreview.name}
+                </h3>
+                <div style={{ marginTop: 2, color: "var(--pos-tx-sub)", fontSize: 12 }}>Staff photo</div>
+              </div>
+              <button
+                type="button"
+                onClick={downloadPhotoPreview}
+                className="pos-btn pos-btn-primary pos-btn-sm"
+              >
+                Download
+              </button>
+              <button
+                type="button"
+                onClick={closePhotoPreview}
+                className="pos-btn pos-btn-secondary pos-btn-sm"
+              >
+                Close
+              </button>
+            </div>
+            <div
+              style={{
+                padding: 16,
+                background: "var(--pos-surface-sunken)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <img
+                src={photoPreview.src}
+                alt=""
+                style={{
+                  display: "block",
+                  maxWidth: "100%",
+                  maxHeight: "calc(92vh - 96px)",
+                  borderRadius: 10,
+                  objectFit: "contain",
+                  background: "var(--pos-surface)",
+                }}
+              />
+            </div>
+          </div>
+        </div>
       )}
 
       <DataTable

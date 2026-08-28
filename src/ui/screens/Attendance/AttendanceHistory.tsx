@@ -82,7 +82,7 @@ export default function AttendanceHistory({ embedded = false }: { embedded?: boo
     setError(null);
     try {
       const [staffRows, shifts] = await Promise.all([
-        listStaff({ includeInactive: false }),
+        listStaff({ status: "all" }),
         getConfigShifts(),
       ]);
       setStaff(staffRows);
@@ -132,19 +132,14 @@ export default function AttendanceHistory({ embedded = false }: { embedded?: boo
 
   const exportExcel = React.useCallback(() => {
     exportAttendanceHistoryExcel({
-      fileName: `attendance-history-${resolvedRange.fromDate}-to-${resolvedRange.toDate}.csv`,
+      fileName: `attendance-history-${resolvedRange.fromDate}-to-${resolvedRange.toDate}.xlsx`,
       scopeLabel,
       shiftLabel,
+      period,
       matrix,
-      records: records.filter((record) => {
-        const visibleStaffIds = new Set(
-          filterStaffBySearch(staff, search).map((member) => member.id),
-        );
-        return visibleStaffIds.has(record.staffId);
-      }),
     });
     showToast(`Exported ${scopeLabel} · ${shiftLabel}`, "success");
-  }, [matrix, records, resolvedRange.fromDate, resolvedRange.toDate, scopeLabel, search, shiftLabel, showToast, staff]);
+  }, [matrix, period, resolvedRange.fromDate, resolvedRange.toDate, scopeLabel, shiftLabel, showToast]);
 
   const periodNav = () => {
     if (period === "month") {
