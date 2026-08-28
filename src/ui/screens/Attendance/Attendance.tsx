@@ -1,4 +1,5 @@
 import React from "react";
+import { ChevronLeft, ChevronRight, MoreHorizontal, StickyNote } from "lucide-react";
 import {
   copyAttendance,
   getConfigShifts,
@@ -12,16 +13,19 @@ import {
 import { normalizeText, todayDateOnly, validationMessage } from "../../../shared/validation";
 import type { AttendanceStatus } from "../../../shared/pos";
 import { useToast } from "../../context/ToastContext";
-import StatusBadge from "./components/StatusBadge";
-import AttendanceStatusPicker from "./components/AttendanceStatusPicker";
+import { Button } from "../../components/ui/Button";
 import { useAttendanceShortcuts } from "./hooks/useAttendanceShortcuts";
 import styles from "./Attendance.module.css";
+import menuStyles from "./components/CellMenu.module.css";
+import { formatOvertimeHours } from "../People/peopleUtils";
 import {
-  formatOvertimeHours,
-  formatOvertimeInput,
-  parseOvertimeHours,
-} from "../People/peopleUtils";
-
+  formatAttendanceDate,
+  shiftAttendanceDate,
+  statusLabel,
+  statusTone,
+} from "./attendanceDisplay";
+import CellMenu from "./components/CellMenu";
+import { NoteEditor, OvertimeEditor } from "./components/AttendanceEditors";
 type AttendanceRow = {
   id?: string;
   staffId: string;
@@ -45,6 +49,26 @@ type ShiftOption = {
   label: string;
   hours: number;
 };
+
+const STATUS_DOT_CLASS: Record<string, string> = {
+  present: menuStyles.statusDotPresent,
+  absent: menuStyles.statusDotAbsent,
+  late: menuStyles.statusDotLate,
+  halfDay: menuStyles.statusDotHalfDay,
+  leave: menuStyles.statusDotLeave,
+  holiday: menuStyles.statusDotHoliday,
+  weekOff: menuStyles.statusDotWeekOff,
+};
+
+function StatusDisplay({ status }: { status: AttendanceStatus }) {
+  const tone = statusTone(status);
+  return (
+    <>
+      <span className={`${menuStyles.statusDot} ${STATUS_DOT_CLASS[tone] || ""}`} aria-hidden />
+      {statusLabel(status)}
+    </>
+  );
+}
 
 const STATUS_OPTIONS: Array<{ value: AttendanceStatus; label: string }> = [
   { value: "present", label: "Present" },
@@ -74,69 +98,13 @@ function yesterdayDateOnly(fromDate: string) {
   return toDateInput(date.getTime());
 }
 
-function minutesFromTime(value: string) {
-  if (!value || !/^([01]\d|2[0-3]):([0-5]\d)$/.test(value)) {
-    return null;
-  }
-  const [hours, minutes] = value.split(":").map((part) => Number(part));
-  return hours * 60 + minutes;
-}
-
-function shiftMinutes(shiftId: string, shiftHoursById?: Record<string, number>) {
-  const key = String(shiftId || "").toLowerCase();
-  const configuredHours = Number(shiftHoursById?.[key]);
-  if (Number.isFinite(configuredHours) && configuredHours > 0) {
-    return Math.trunc(configuredHours * 60);
-  }
-  if (key === "half-day" || key === "half") {
-    return 4 * 60;
-  }
-  return 8 * 60;
-}
-
-function computeDurations(row: AttendanceRow, shiftHoursById?: Record<string, number>) {
-  const inMinutes = minutesFromTime(row.checkInTime);
-  const outMinutes = minutesFromTime(row.checkOutTime);
-  if ((inMinutes === null) !== (outMinutes === null)) {
-    return { workedMinutes: row.workedMinutes, overtimeMinutes: row.overtimeMinutes, invalid: true };
-  }
-  if (inMinutes === null || outMinutes === null) {
-    return { workedMinutes: 0, overtimeMinutes: 0, invalid: false };
-  }
-  if (outMinutes < inMinutes) {
-    return { workedMinutes: 0, overtimeMinutes: 0, invalid: true };
-  }
-  const rawWorked = outMinutes - inMinutes;
-  if (row.breakMinutes > rawWorked) {
-    return { workedMinutes: 0, overtimeMinutes: 0, invalid: true };
-  }
-  const workedMinutes = Math.max(0, rawWorked - row.breakMinutes);
-  const autoOvertime = Math.max(0, workedMinutes - shiftMinutes(row.shiftId, shiftHoursById));
-  return {
-    workedMinutes,
-    overtimeMinutes: row.manualOvertime ? Math.max(0, row.overtimeMinutes) : autoOvertime,
-    invalid: false,
-  };
-}
-
-function validateRow(date: string, row: AttendanceRow) {
+function validateRow(row: AttendanceRow) {
   const errors: string[] = [];
   if (row.status === "leave" && !normalizeText(row.remarks)) {
     errors.push(validationMessage("attendance-remarks-required-for-leave"));
   }
-  const inMinutes = minutesFromTime(row.checkInTime);
-  const outMinutes = minutesFromTime(row.checkOutTime);
-  if ((inMinutes === null) !== (outMinutes === null)) {
-    errors.push(validationMessage("attendance-time-invalid"));
-  }
-  if (inMinutes !== null && outMinutes !== null && outMinutes < inMinutes) {
-    errors.push(validationMessage("attendance-checkout-before-checkin"));
-  }
-  if (row.breakMinutes < 0) {
-    errors.push(validationMessage("attendance-break-invalid"));
-  }
-  if (inMinutes !== null && outMinutes !== null && row.breakMinutes > outMinutes - inMinutes) {
-    errors.push(validationMessage("attendance-break-exceeds-worked"));
+  if (row.overtimeMinutes < 0) {
+    errors.push("Overtime cannot be negative.");
   }
   return errors;
 }
@@ -163,11 +131,7 @@ function toShiftOptions(shifts: AttendanceShiftConfig[] | null | undefined): Shi
   return mapped.length > 0 ? mapped : DEFAULT_SHIFT_OPTIONS;
 }
 
-function buildInitialRows(
-  staff: StaffDoc[],
-  records: AttendanceDoc[],
-  shiftHoursById?: Record<string, number>,
-) {
+function buildInitialRows(staff: StaffDoc[], records: AttendanceDoc[]) {
   const byStaff = new Map(records.map((record) => [record.staffId, record]));
   return staff.map((member) => {
     const record = byStaff.get(member.id);
@@ -188,14 +152,11 @@ function buildInitialRows(
       dirty: false,
       errors: [],
     };
-    const auto = computeDurations({ ...row, manualOvertime: false }, shiftHoursById);
-    const manualOvertime = row.overtimeMinutes !== auto.overtimeMinutes;
-    const recomputed = computeDurations({ ...row, manualOvertime }, shiftHoursById);
+    const manualOvertime = Number(record?.overtimeMinutes || 0) > 0;
     return {
       ...row,
       manualOvertime,
-      workedMinutes: recomputed.workedMinutes,
-      overtimeMinutes: manualOvertime ? row.overtimeMinutes : recomputed.overtimeMinutes,
+      overtimeMinutes: Number(record?.overtimeMinutes || 0),
     };
   });
 }
@@ -226,24 +187,19 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
   const [rows, setRows] = React.useState<AttendanceRow[]>([]);
   const [shiftOptions, setShiftOptions] = React.useState<ShiftOption[]>(DEFAULT_SHIFT_OPTIONS);
   const [search, setSearch] = React.useState("");
-  const [statusFilter, setStatusFilter] = React.useState<"all" | AttendanceStatus>("all");
   const [shiftFilter, setShiftFilter] = React.useState<"all" | string>("all");
   const [editedOnly, setEditedOnly] = React.useState(false);
-  const [showTimeDetails, setShowTimeDetails] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [moreOpen, setMoreOpen] = React.useState(false);
+  const [bulkOpen, setBulkOpen] = React.useState(false);
+  const [otEditor, setOtEditor] = React.useState<{ index: number; employee: string } | null>(null);
+  const [noteEditor, setNoteEditor] = React.useState<{ index: number; employee: string } | null>(null);
+  const dateInputRef = React.useRef<HTMLInputElement>(null);
+  const moreRef = React.useRef<HTMLDivElement>(null);
+  const bulkRef = React.useRef<HTMLDivElement>(null);
   const focusedRowRef = React.useRef(0);
-  const rowFocusRefs = React.useRef<Array<HTMLButtonElement | null>>([]);
-
-  const shiftHoursById = React.useMemo(
-    () =>
-      shiftOptions.reduce<Record<string, number>>((acc, option) => {
-        acc[option.value] = Number(option.hours || 0);
-        return acc;
-      }, {}),
-    [shiftOptions],
-  );
 
   const loadData = React.useCallback(async () => {
     setLoading(true);
@@ -255,12 +211,8 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
         getConfigShifts(),
       ]);
       const resolvedShiftOptions = toShiftOptions(shifts);
-      const resolvedShiftHoursById = resolvedShiftOptions.reduce<Record<string, number>>((acc, item) => {
-        acc[item.value] = item.hours;
-        return acc;
-      }, {});
       setShiftOptions(resolvedShiftOptions);
-      setRows(buildInitialRows(staff, records, resolvedShiftHoursById));
+      setRows(buildInitialRows(staff, records));
     } catch (loadError) {
       const message = validationMessage(loadError, "Could not load attendance.");
       try {
@@ -268,12 +220,8 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
         if (staff.length > 0) {
           const shifts = await getConfigShifts();
           const resolvedShiftOptions = toShiftOptions(shifts);
-          const resolvedShiftHoursById = resolvedShiftOptions.reduce<Record<string, number>>((acc, item) => {
-            acc[item.value] = item.hours;
-            return acc;
-          }, {});
           setShiftOptions(resolvedShiftOptions);
-          setRows(buildInitialRows(staff, [], resolvedShiftHoursById));
+          setRows(buildInitialRows(staff, []));
         }
       } catch {
         // keep original error
@@ -288,6 +236,22 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
     loadData();
   }, [loadData]);
 
+  React.useEffect(() => {
+    if (!moreOpen && !bulkOpen) {
+      return;
+    }
+    const onPointerDown = (event: MouseEvent) => {
+      if (moreOpen && !moreRef.current?.contains(event.target as Node)) {
+        setMoreOpen(false);
+      }
+      if (bulkOpen && !bulkRef.current?.contains(event.target as Node)) {
+        setBulkOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, [bulkOpen, moreOpen]);
+
   const setRowField = React.useCallback(
     (index: number, patch: Partial<AttendanceRow>) => {
       setRows((previous) =>
@@ -299,35 +263,51 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
           if (patch.overtimeMinutes !== undefined) {
             next.manualOvertime = true;
           }
-          const calc = computeDurations(next, shiftHoursById);
-          if (!next.manualOvertime) {
-            next.overtimeMinutes = calc.overtimeMinutes;
-          }
-          next.workedMinutes = calc.workedMinutes;
-          next.errors = validateRow(attendanceDate, next);
+          next.errors = validateRow(next);
           return next;
         }),
       );
     },
-    [attendanceDate, shiftHoursById],
+    [],
   );
 
   const filteredRows = React.useMemo(() => {
     const lowered = normalizeText(search).toLowerCase();
     return rows.filter((row) => {
-      const statusOk = statusFilter === "all" || row.status === statusFilter;
       const shiftOk = shiftFilter === "all" || row.shiftId === shiftFilter;
       const dirtyOk = !editedOnly || row.dirty;
       const searchOk =
         !lowered ||
         row.employee.toLowerCase().includes(lowered) ||
         row.role.toLowerCase().includes(lowered);
-      return statusOk && shiftOk && dirtyOk && searchOk;
+      return shiftOk && dirtyOk && searchOk;
     });
-  }, [editedOnly, rows, search, shiftFilter, statusFilter]);
+  }, [editedOnly, rows, search, shiftFilter]);
 
+  const changeDate = React.useCallback(
+    (nextDate: string) => {
+      if (nextDate > todayDateOnly()) {
+        return;
+      }
+      setAttendanceDate(nextDate);
+    },
+    [],
+  );
+
+  const stepDate = React.useCallback(
+    (delta: number) => {
+      changeDate(shiftAttendanceDate(attendanceDate, delta));
+    },
+    [attendanceDate, changeDate],
+  );
   const dirtyCount = rows.filter((row) => row.dirty).length;
-  const hasActiveFilters = Boolean(search) || statusFilter !== "all" || shiftFilter !== "all" || editedOnly;
+  const hasUnsaved = dirtyCount > 0;
+  const hasActiveFilters = Boolean(search) || shiftFilter !== "all" || editedOnly;
+
+  const closeMenus = React.useCallback(() => {
+    setMoreOpen(false);
+    setBulkOpen(false);
+  }, []);
 
   const summary = React.useMemo(() => {
     const totalOvertime = rows.reduce((sum, row) => sum + Number(row.overtimeMinutes || 0), 0);
@@ -348,12 +328,12 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
       setRows((previous) =>
         previous.map((row) => {
           const next = { ...row, status, dirty: true };
-          next.errors = validateRow(attendanceDate, next);
+          next.errors = validateRow(next);
           return next;
         }),
       );
     },
-    [attendanceDate],
+    [],
   );
 
   const copyYesterday = React.useCallback(async () => {
@@ -371,7 +351,7 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
   }, [attendanceDate, loadData, showToast]);
 
   const save = React.useCallback(async () => {
-    const nextRows = rows.map((row) => ({ ...row, errors: validateRow(attendanceDate, row) }));
+    const nextRows = rows.map((row) => ({ ...row, errors: validateRow(row) }));
     setRows(nextRows);
     const firstError = nextRows.find((row) => row.errors.length > 0);
     if (firstError) {
@@ -415,24 +395,12 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
 
   const clearFilters = React.useCallback(() => {
     setSearch("");
-    setStatusFilter("all");
     setShiftFilter("all");
     setEditedOnly(false);
   }, []);
 
   const exportExcel = React.useCallback(() => {
-    const header = [
-      "Employee",
-      "Role",
-      "Shift",
-      "Status",
-      "Check In",
-      "Check Out",
-      "Break Minutes",
-      "Worked Hours",
-      "Overtime Hours",
-      "Remarks",
-    ];
+    const header = ["Employee", "Role", "Shift", "Status", "Overtime Hours", "Note"];
     const lines = [header.join(",")];
     rows.forEach((row) => {
       lines.push(
@@ -441,10 +409,6 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
           row.role,
           getShiftLabel(row.shiftId),
           row.status,
-          row.checkInTime,
-          row.checkOutTime,
-          row.breakMinutes,
-          (row.workedMinutes / 60).toFixed(2),
           (row.overtimeMinutes / 60).toFixed(2),
           row.remarks,
         ]
@@ -469,10 +433,6 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
             <td>${row.role}</td>
             <td>${getShiftLabel(row.shiftId)}</td>
             <td>${row.status}</td>
-            <td>${row.checkInTime || "-"}</td>
-            <td>${row.checkOutTime || "-"}</td>
-            <td>${row.breakMinutes}</td>
-            <td>${(row.workedMinutes / 60).toFixed(2)}</td>
             <td>${(row.overtimeMinutes / 60).toFixed(2)}</td>
             <td>${row.remarks || "-"}</td>
           </tr>`,
@@ -490,8 +450,7 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
       <p>Date: ${attendanceDate}</p>
       <table>
       <thead><tr>
-        <th>Employee</th><th>Role</th><th>Shift</th><th>Status</th><th>Check In</th><th>Check Out</th>
-        <th>Break</th><th>Worked Hours</th><th>Overtime Hours</th><th>Remarks</th>
+        <th>Employee</th><th>Role</th><th>Shift</th><th>Status</th><th>OT Hours</th><th>Note</th>
       </tr></thead>
       <tbody>${bodyRows}</tbody></table>
     </body></html>`;
@@ -506,15 +465,9 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
     }
   }, [attendanceDate, getShiftLabel, rows, showToast]);
 
-  const focusRowAt = React.useCallback(
-    (index: number) => {
-      const safeIndex = Math.max(0, Math.min(index, filteredRows.length - 1));
-      focusedRowRef.current = safeIndex;
-      const element = rowFocusRefs.current[safeIndex];
-      element?.focus();
-    },
-    [filteredRows.length],
-  );
+  const focusRowAt = React.useCallback((index: number) => {
+    focusedRowRef.current = Math.max(0, Math.min(index, filteredRows.length - 1));
+  }, [filteredRows.length]);
 
   useAttendanceShortcuts({
     onSave: save,
@@ -537,30 +490,52 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
   return (
     <div className={embedded ? styles.rootEmbedded : styles.root}>
       <div className={styles.toolbar}>
-        <div className={styles.opsBar}>
-          <div className={styles.opsPrimary}>
-            <div className={styles.opsField}>
-              <label className={styles.opsLabel} htmlFor="attendance-date">
-                Date
-              </label>
+        <div className={styles.contextBar}>
+          <div className={styles.contextPrimary}>
+            <h2 className={styles.sectionTitle}>Attendance</h2>
+            <div className={styles.dateNav}>
+              <button
+                type="button"
+                className={styles.dateNavBtn}
+                onClick={() => stepDate(-1)}
+                aria-label="Previous day"
+              >
+                <ChevronLeft size={18} />
+              </button>
+              <button
+                type="button"
+                className={styles.dateDisplay}
+                onClick={() => dateInputRef.current?.showPicker?.() ?? dateInputRef.current?.click()}
+              >
+                {formatAttendanceDate(attendanceDate)}
+              </button>
+              <button
+                type="button"
+                className={styles.dateNavBtn}
+                onClick={() => stepDate(1)}
+                disabled={attendanceDate >= todayDateOnly()}
+                aria-label="Next day"
+              >
+                <ChevronRight size={18} />
+              </button>
               <input
-                id="attendance-date"
+                ref={dateInputRef}
                 type="date"
-                className={`pos-input ${styles.opsInput}`}
+                className={styles.hiddenDateInput}
                 value={attendanceDate}
                 max={todayDateOnly()}
-                onChange={(event) => setAttendanceDate(event.target.value)}
+                onChange={(event) => changeDate(event.target.value)}
+                tabIndex={-1}
+                aria-hidden
               />
             </div>
-            <div className={styles.opsField}>
-              <label className={styles.opsLabel} htmlFor="attendance-shift-filter">
-                Shift
-              </label>
+            <div className={styles.filterGroup}>
               <select
                 id="attendance-shift-filter"
-                className={`pos-select ${styles.opsInput}`}
+                className={`pos-select ${styles.shiftFilter}`}
                 value={shiftFilter}
                 onChange={(event) => setShiftFilter(event.target.value)}
+                aria-label="Filter by shift"
               >
                 <option value="all">All Shifts</option>
                 {shiftOptions.map((option) => (
@@ -569,128 +544,158 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
                   </option>
                 ))}
               </select>
-            </div>
-            <div className={`${styles.opsField} ${styles.opsFieldGrow}`}>
-              <label className={styles.opsLabel} htmlFor="attendance-search">
-                Search
-              </label>
               <input
                 id="attendance-search"
-                className={`pos-input ${styles.opsInput}`}
-                placeholder="Employee or role"
+                className={`pos-input ${styles.searchInput}`}
+                placeholder="Search employee..."
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
               />
             </div>
-            <div className={styles.opsField}>
-              <label className={styles.opsLabel} htmlFor="attendance-status-filter">
-                Status
-              </label>
-              <select
-                id="attendance-status-filter"
-                className={`pos-select ${styles.opsInput}`}
-                value={statusFilter}
-                onChange={(event) =>
-                  setStatusFilter(
-                    event.target.value === "all" ? "all" : (event.target.value as AttendanceStatus),
-                  )
-                }
-              >
-                <option value="all">All</option>
-                {STATUS_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className={styles.opsAside}>
-            <label className={styles.toggleChip} htmlFor="attendance-edited-only">
-              <input
-                id="attendance-edited-only"
-                type="checkbox"
-                checked={editedOnly}
-                onChange={(event) => setEditedOnly(event.target.checked)}
-              />
-              Edited only
-            </label>
-            <label className={styles.toggleChip} htmlFor="attendance-time-details">
-              <input
-                id="attendance-time-details"
-                type="checkbox"
-                checked={showTimeDetails}
-                onChange={(event) => setShowTimeDetails(event.target.checked)}
-              />
-              Time details
-            </label>
-            {dirtyCount > 0 ? (
-              <span className={styles.unsaved}>{dirtyCount} unsaved</span>
-            ) : null}
-            <button
-              type="button"
-              className="pos-btn pos-btn-primary"
-              onClick={save}
-              disabled={saving}
-              title="Save changes (Ctrl+S)"
-            >
-              {saving ? "Saving..." : "Save Changes"}
-            </button>
           </div>
         </div>
 
-        <div className={styles.metaBar}>
-          <div className={styles.summaryBar} aria-label="Attendance summary">
-            <span>Present {summary.present}</span>
-            <span className={styles.summarySep}>|</span>
-            <span>Absent {summary.absent}</span>
-            <span className={styles.summarySep}>|</span>
-            <span>Late {summary.late}</span>
-            <span className={styles.summarySep}>|</span>
-            <span>Leave {summary.leave}</span>
-            <span className={styles.summarySep}>|</span>
-            <span>Week Off {summary.weekOff}</span>
-            <span className={styles.summarySep}>|</span>
-            <span>OT {summary.overtimeHours}h</span>
+        <div className={styles.statusStrip}>
+          <div className={styles.summaryStats} aria-label="Attendance summary">
+            <span className={styles.stat}>
+              <strong>{summary.present}</strong> Present
+            </span>
+            <span className={styles.stat}>
+              <strong>{summary.absent}</strong> Absent
+            </span>
+            <span className={styles.stat}>
+              <strong>{summary.late}</strong> Late
+            </span>
+            <span className={styles.stat}>
+              <strong>{summary.leave}</strong> Leave
+            </span>
+            <span className={styles.stat}>
+              <strong>{summary.weekOff}</strong> Week Off
+            </span>
+            <span className={styles.stat}>
+              <strong>{summary.overtimeHours}h</strong> OT
+            </span>
           </div>
 
-          <div className={styles.actions}>
-            <button
-              type="button"
-              className="pos-btn pos-btn-secondary pos-btn-sm"
-              onClick={() => markAll("present")}
-              title="Mark all visible as present (Ctrl+P)"
-            >
-              All Present
-            </button>
-            <button
-              type="button"
-              className="pos-btn pos-btn-secondary pos-btn-sm"
-              onClick={() => markAll("absent")}
-              title="Mark all as absent (Ctrl+A)"
-            >
-              All Absent
-            </button>
-            <button
-              type="button"
-              className="pos-btn pos-btn-secondary pos-btn-sm"
-              onClick={copyYesterday}
-              disabled={saving}
-            >
-              Copy yesterday
-            </button>
-            <button type="button" className="pos-btn pos-btn-secondary pos-btn-sm" onClick={exportExcel}>
-              Export Excel
-            </button>
-            <button type="button" className="pos-btn pos-btn-secondary pos-btn-sm" onClick={exportPdf}>
-              Export PDF
-            </button>
-            {hasActiveFilters && (
-              <button type="button" className="pos-btn pos-btn-secondary pos-btn-sm" onClick={clearFilters}>
-                Reset filters
+          <div className={styles.stripActions}>
+            <div className={styles.menuWrap} ref={bulkRef}>
+              <button
+                type="button"
+                className={styles.stripBtn}
+                aria-haspopup="menu"
+                aria-expanded={bulkOpen}
+                onClick={() => {
+                  setBulkOpen((open) => !open);
+                  setMoreOpen(false);
+                }}
+              >
+                Mark all present
               </button>
-            )}
+              {bulkOpen ? (
+                <div className={styles.menu} role="menu">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className={styles.menuItem}
+                    onClick={() => {
+                      markAll("present");
+                      closeMenus();
+                    }}
+                  >
+                    Mark all present
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className={styles.menuItem}
+                    onClick={() => {
+                      markAll("absent");
+                      closeMenus();
+                    }}
+                  >
+                    Mark all absent
+                  </button>
+                </div>
+              ) : null}
+            </div>
+
+            <div className={styles.menuWrap} ref={moreRef}>
+              <button
+                type="button"
+                className={styles.iconMenuBtn}
+                aria-label="More actions"
+                aria-haspopup="menu"
+                aria-expanded={moreOpen}
+                onClick={() => {
+                  setMoreOpen((open) => !open);
+                  setBulkOpen(false);
+                }}
+              >
+                <MoreHorizontal size={18} />
+              </button>
+              {moreOpen ? (
+                <div className={`${styles.menu} ${styles.menuRight}`} role="menu">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className={styles.menuItem}
+                    onClick={() => {
+                      void copyYesterday();
+                      closeMenus();
+                    }}
+                    disabled={saving}
+                  >
+                    Copy yesterday
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className={styles.menuItem}
+                    onClick={() => {
+                      exportExcel();
+                      closeMenus();
+                    }}
+                  >
+                    Export CSV
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className={styles.menuItem}
+                    onClick={() => {
+                      void exportPdf();
+                      closeMenus();
+                    }}
+                  >
+                    Export PDF
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className={styles.menuItem}
+                    onClick={() => {
+                      setEditedOnly((value) => !value);
+                      closeMenus();
+                    }}
+                  >
+                    {editedOnly ? "Show all rows" : "Show edited only"}
+                  </button>
+                  {hasActiveFilters ? (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className={styles.menuItem}
+                      onClick={() => {
+                        clearFilters();
+                        closeMenus();
+                      }}
+                    >
+                      Reset filters
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
       </div>
@@ -716,227 +721,140 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
       )}
 
       {!error && filteredRows.length > 0 && (
-        <>
-          <div className={styles.gridWrap}>
-            <table className={styles.grid}>
-                <thead>
-                  <tr>
-                    <th className={styles.stickyCol}>Employee</th>
-                    <th>Shift</th>
-                    <th>Status</th>
-                    <th>OT</th>
-                    {showTimeDetails && (
-                      <>
-                        <th>Check In</th>
-                        <th>Check Out</th>
-                        <th>Break</th>
-                        <th>Remarks</th>
-                      </>
-                    )}
+        <div className={styles.gridWrap}>
+          <table className={styles.grid}>
+            <thead>
+              <tr>
+                <th className={styles.colEmployee}>Employee</th>
+                <th className={styles.colShift}>Shift</th>
+                <th className={styles.colStatus}>Status</th>
+                <th className={styles.colOt}>OT</th>
+                <th className={styles.colNote}>Note</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredRows.map((row, viewIndex) => {
+                const index = rows.findIndex((candidate) => candidate.staffId === row.staffId);
+                const tone = statusTone(row.status);
+                return (
+                  <tr key={row.staffId} className={row.dirty ? styles.rowDirty : undefined}>
+                    <td className={styles.colEmployee}>
+                      <div className={styles.employeeName}>{row.employee}</div>
+                      <div className={styles.employeeRole}>{row.role}</div>
+                      {row.errors.length > 0 ? (
+                        <div className={styles.rowError}>{row.errors[0]}</div>
+                      ) : null}
+                    </td>
+                    <td className={styles.colShift}>
+                      <CellMenu
+                        label={getShiftLabel(row.shiftId)}
+                        ariaLabel={`Shift for ${row.employee}`}
+                        options={shiftOptions.map((option) => ({
+                          value: option.value,
+                          label: option.label,
+                          selected: option.value === row.shiftId,
+                        }))}
+                        onSelect={(shiftId) => {
+                          focusedRowRef.current = viewIndex;
+                          setRowField(index, { shiftId });
+                        }}
+                      />
+                    </td>
+                    <td className={styles.colStatus}>
+                      <CellMenu
+                        label={<StatusDisplay status={row.status} />}
+                        ariaLabel={`Status for ${row.employee}`}
+                        tone={tone}
+                        options={STATUS_OPTIONS.map((option) => ({
+                          value: option.value,
+                          label: option.label,
+                          selected: option.value === row.status,
+                        }))}
+                        onSelect={(status) => {
+                          focusedRowRef.current = viewIndex;
+                          setRowField(index, { status });
+                        }}
+                      />
+                    </td>
+                    <td className={styles.colOt}>
+                      <button
+                        type="button"
+                        className={styles.quietCellBtn}
+                        onClick={() => {
+                          focusedRowRef.current = viewIndex;
+                          setOtEditor({ index, employee: row.employee });
+                        }}
+                        aria-label={`Overtime for ${row.employee}`}
+                      >
+                        {formatOvertimeHours(row.overtimeMinutes)}
+                      </button>
+                    </td>
+                    <td className={styles.colNote}>
+                      <button
+                        type="button"
+                        className={`${styles.noteBtn} ${row.remarks ? styles.noteBtnFilled : ""}`}
+                        onClick={() => {
+                          focusedRowRef.current = viewIndex;
+                          setNoteEditor({ index, employee: row.employee });
+                        }}
+                        aria-label={`Note for ${row.employee}`}
+                        title={row.remarks || "Add note"}
+                      >
+                        <StickyNote size={16} />
+                        {row.remarks ? <span className={styles.notePreview}>{row.remarks}</span> : null}
+                      </button>
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {filteredRows.map((row, viewIndex) => {
-                    const index = rows.findIndex((candidate) => candidate.staffId === row.staffId);
-                    return (
-                      <tr key={row.staffId} className={row.dirty ? styles.rowDirty : undefined}>
-                        <td className={styles.stickyCol}>
-                          <div style={{ fontWeight: 700 }}>{row.employee}</div>
-                          <div style={{ color: "var(--pos-tx-sub)", fontSize: 12 }}>{row.role}</div>
-                        </td>
-                        <td>
-                          <select
-                            className="pos-select"
-                            value={row.shiftId}
-                            onFocus={() => {
-                              focusedRowRef.current = viewIndex;
-                            }}
-                            onChange={(event) => setRowField(index, { shiftId: event.target.value })}
-                          >
-                            {shiftOptions.map((option) => (
-                              <option key={option.value} value={option.value}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                        <td>
-                          <AttendanceStatusPicker
-                            value={row.status}
-                            employee={row.employee}
-                            focusRef={(element) => {
-                              rowFocusRefs.current[viewIndex] = element;
-                            }}
-                            onFocus={() => {
-                              focusedRowRef.current = viewIndex;
-                            }}
-                            onChange={(status) => setRowField(index, { status })}
-                          />
-                          {!showTimeDetails && row.errors.length > 0 && (
-                            <div className={styles.rowError}>{row.errors[0]}</div>
-                          )}
-                        </td>
-                        <td>
-                          <input
-                            type="number"
-                            min={0}
-                            step={0.5}
-                            className="pos-input"
-                            style={{ width: 72 }}
-                            value={formatOvertimeInput(row.overtimeMinutes)}
-                            placeholder="—"
-                            onChange={(event) =>
-                              setRowField(index, {
-                                overtimeMinutes: parseOvertimeHours(event.target.value),
-                              })
-                            }
-                            aria-label={`Overtime hours for ${row.employee}`}
-                          />
-                          <span style={{ marginLeft: 6, fontSize: 12, color: "var(--pos-tx-sub)" }}>
-                            {formatOvertimeHours(row.overtimeMinutes)}
-                          </span>
-                        </td>
-                        {showTimeDetails && (
-                          <>
-                            <td>
-                              <input
-                                type="time"
-                                className="pos-input"
-                                value={row.checkInTime}
-                                onChange={(event) =>
-                                  setRowField(index, { checkInTime: event.target.value })
-                                }
-                              />
-                            </td>
-                            <td>
-                              <input
-                                type="time"
-                                className="pos-input"
-                                value={row.checkOutTime}
-                                onChange={(event) =>
-                                  setRowField(index, { checkOutTime: event.target.value })
-                                }
-                              />
-                            </td>
-                            <td>
-                              <input
-                                type="number"
-                                min={0}
-                                className="pos-input"
-                                style={{ width: 72 }}
-                                value={row.breakMinutes}
-                                onChange={(event) =>
-                                  setRowField(index, {
-                                    breakMinutes: Math.max(0, Math.trunc(Number(event.target.value || 0))),
-                                  })
-                                }
-                              />
-                            </td>
-                            <td>
-                              <input
-                                className="pos-input"
-                                value={row.remarks}
-                                onChange={(event) => setRowField(index, { remarks: event.target.value })}
-                                aria-label={`Remarks for ${row.employee}`}
-                              />
-                              {row.errors.length > 0 && (
-                                <div className={styles.rowError}>{row.errors[0]}</div>
-                              )}
-                            </td>
-                          </>
-                        )}
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-          <div className={styles.mobileCards}>
-            {filteredRows.map((row) => {
-              const index = rows.findIndex((candidate) => candidate.staffId === row.staffId);
-              return (
-                <article className={styles.mobileCard} key={`mobile-${row.staffId}`}>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-                    <div>
-                      <div style={{ fontWeight: 800 }}>{row.employee}</div>
-                      <div style={{ color: "var(--pos-tx-sub)", fontSize: 12 }}>{row.role}</div>
-                    </div>
-                    <StatusBadge status={row.status} />
-                  </div>
-                  <div className={styles.mobileRow}>
-                    <label className="pos-label">Shift</label>
-                    <select
-                      className="pos-select"
-                      value={row.shiftId}
-                      onChange={(event) => setRowField(index, { shiftId: event.target.value })}
-                    >
-                      {shiftOptions.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className={styles.mobileRow}>
-                    <label className="pos-label">Status</label>
-                    <AttendanceStatusPicker
-                      value={row.status}
-                      employee={row.employee}
-                      onChange={(status) => setRowField(index, { status })}
-                    />
-                  </div>
-                  {showTimeDetails && (
-                    <>
-                      <div className={styles.mobileRow}>
-                        <label className="pos-label">Check In</label>
-                        <input
-                          type="time"
-                          className="pos-input"
-                          value={row.checkInTime}
-                          onChange={(event) => setRowField(index, { checkInTime: event.target.value })}
-                        />
-                      </div>
-                      <div className={styles.mobileRow}>
-                        <label className="pos-label">Check Out</label>
-                        <input
-                          type="time"
-                          className="pos-input"
-                          value={row.checkOutTime}
-                          onChange={(event) => setRowField(index, { checkOutTime: event.target.value })}
-                        />
-                      </div>
-                    </>
-                  )}
-                  <div className={styles.mobileRow}>
-                    <label className="pos-label">OT (hours)</label>
-                    <input
-                      type="number"
-                      min={0}
-                      step={0.5}
-                      className="pos-input"
-                      value={formatOvertimeInput(row.overtimeMinutes)}
-                      onChange={(event) =>
-                        setRowField(index, {
-                          overtimeMinutes: parseOvertimeHours(event.target.value),
-                        })
-                      }
-                    />
-                  </div>
-                  <textarea
-                    className="pos-input"
-                    rows={2}
-                    value={row.remarks}
-                    placeholder="Remarks"
-                    onChange={(event) => setRowField(index, { remarks: event.target.value })}
-                  />
-                  {row.errors.length > 0 && <div className={styles.rowError}>{row.errors[0]}</div>}
-                </article>
-              );
-            })}
-          </div>
-        </>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
+
+      <div className={`${styles.saveBar} ${hasUnsaved ? styles.saveBarActive : ""}`}>
+        {hasUnsaved ? (
+          <span className={styles.unsavedIndicator}>
+            <span className={styles.unsavedDot} aria-hidden />
+            {dirtyCount} unsaved {dirtyCount === 1 ? "change" : "changes"}
+          </span>
+        ) : (
+          <span className={styles.savedHint}>No changes</span>
+        )}
+        <Button
+          variant={hasUnsaved ? "primary" : "secondary"}
+          onClick={save}
+          disabled={saving || !hasUnsaved}
+          title="Save changes (Ctrl+S)"
+        >
+          {saving ? "Saving..." : "Save Changes"}
+        </Button>
+      </div>
+
+      <OvertimeEditor
+        open={otEditor !== null}
+        employee={otEditor?.employee || ""}
+        minutes={otEditor ? rows[otEditor.index]?.overtimeMinutes || 0 : 0}
+        onClose={() => setOtEditor(null)}
+        onSave={(minutes) => {
+          if (otEditor) {
+            setRowField(otEditor.index, { overtimeMinutes: minutes });
+          }
+        }}
+      />
+
+      <NoteEditor
+        open={noteEditor !== null}
+        employee={noteEditor?.employee || ""}
+        note={noteEditor ? rows[noteEditor.index]?.remarks || "" : ""}
+        required={noteEditor ? rows[noteEditor.index]?.status === "leave" : false}
+        onClose={() => setNoteEditor(null)}
+        onSave={(remarks) => {
+          if (noteEditor) {
+            setRowField(noteEditor.index, { remarks });
+          }
+        }}
+      />
     </div>
   );
 }
