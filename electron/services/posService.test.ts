@@ -331,7 +331,7 @@ describe("posService strict SQLite APIs", () => {
     const paymentQuery = mockDb.calls.find((call: any) => /SELECT\s+p\.\*/.test(call.sql));
     expect(paymentQuery!.sql).toContain("p.status = 'completed'");
     expect(paymentQuery!.sql).toContain("p.received_at >= ?");
-    expect(paymentQuery!.sql).toContain("p.received_at <= ?");
+    expect(paymentQuery!.sql).toContain("p.received_at < ?");
     expect(paymentQuery!.params).toEqual([1000, 2000]);
     const lineQuery = mockDb.calls.find((call: any) => call.sql.includes("JOIN order_lines"));
     expect(lineQuery!.params).toEqual(["order:1"]);

@@ -13,6 +13,7 @@ import type {
   OrderLineDto,
   OrderStatus,
   PaidOrderQueryDto,
+  PaidOrdersSummaryDto,
   PaymentDto,
   ProductSalesReportDto,
   Role,
@@ -243,6 +244,10 @@ export async function listPaidOrders(opts?: PaidOrderQueryDto): Promise<OrderDoc
 
 export async function countPaidOrders(opts?: PaidOrderQueryDto): Promise<number> {
   return api().orders!.countPaid(opts);
+}
+
+export async function summarizePaidOrders(opts?: PaidOrderQueryDto): Promise<PaidOrdersSummaryDto> {
+  return api().orders!.summarizePaid(opts);
 }
 
 export async function listPaidOrderIds(opts?: PaidOrderQueryDto): Promise<string[]> {

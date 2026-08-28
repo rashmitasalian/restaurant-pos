@@ -306,6 +306,10 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
     requireSession(event, token, ADMIN_ROLES);
     return posService.countPaidOrders(opts);
   });
+  ipcMain.handle("pos:orders:summarize-paid", (event, token: string | null, opts) => {
+    requireSession(event, token, ADMIN_ROLES);
+    return posService.summarizePaidOrders(opts);
+  });
   ipcMain.handle("pos:orders:list-paid-ids", (event, token: string | null, opts) => {
     requireSession(event, token, ADMIN_ROLES);
     return posService.listPaidOrderIds(opts);

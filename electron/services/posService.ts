@@ -39,6 +39,7 @@ import type {
   OrderLineDto,
   OrderStatus,
   PaidOrderQueryDto,
+  PaidOrdersSummaryDto,
   PaymentDto,
   PrintJobDto,
   ProductSalesReportDto,
@@ -1093,7 +1094,7 @@ function orderFromRow(database: Database.Database, row: any): OrderDto {
 }
 
 function paidOrderTimeExpression() {
-  return "COALESCE(o.paid_at, o.updated_at, o.created_at)";
+  return "o.created_at";
 }
 
 function normalizePaidOrderQuery(opts: PaidOrderQueryDto = {}) {
@@ -1123,7 +1124,7 @@ function buildPaidOrderWhere(opts: PaidOrderQueryDto = {}) {
     params.push(query.from);
   }
   if (query.to !== undefined) {
-    clauses.push(`${paidAt} <= ?`);
+    clauses.push(`${paidAt} < ?`);
     params.push(query.to);
   }
   if (query.search) {
@@ -3168,6 +3169,21 @@ export const posService = {
     return Number(row?.count || 0);
   },
 
+  summarizePaidOrders(opts: PaidOrderQueryDto = {}): PaidOrdersSummaryDto {
+    const query = buildPaidOrderWhere(opts);
+    const row = getDb()
+      .prepare(
+        `SELECT COUNT(*) AS count, COALESCE(SUM(o.total_paise), 0) AS total_paise
+         FROM orders o
+         WHERE ${query.whereSql}`,
+      )
+      .get(...query.params) as { count?: number; total_paise?: number } | undefined;
+    return {
+      count: Number(row?.count || 0),
+      total: paiseToRupees(Number(row?.total_paise || 0)),
+    };
+  },
+
   listPaidOrderIds(opts: PaidOrderQueryDto = {}) {
     const query = buildPaidOrderWhere(opts);
     const params = [...query.params];
@@ -3380,7 +3396,7 @@ export const posService = {
       params.push(opts.from);
     }
     if (opts.to !== null && opts.to !== undefined) {
-      clauses.push("p.received_at <= ?");
+      clauses.push("p.received_at < ?");
       params.push(opts.to);
     }
     return getDb()

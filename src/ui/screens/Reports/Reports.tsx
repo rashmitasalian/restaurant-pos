@@ -23,9 +23,13 @@ import { Stat } from "../../components/ui/Stat";
 import { SegmentedControl } from "../../components/ui/SegmentedControl";
 import { Icon } from "../../components/ui/Icon";
 import { FileDown } from "lucide-react";
+import { BUSINESS_RANGE_SEMANTICS } from "../../../shared/businessDateRange";
+import {
+  BusinessRangePanel,
+} from "../../components/BusinessRangeControls";
+import { useBusinessDateRange } from "../../hooks/useBusinessDateRange";
 import "./Reports.module.css";
 
-type RangePreset = "today" | "yesterday" | "thisWeek" | "thisMonth" | "custom";
 type ReportTab = "sales" | "profitability";
 type CategoryMetric = "sales" | "units";
 type ItemSort = "units" | "sales" | "name";
@@ -44,66 +48,6 @@ const EMPTY_PRODUCT_SALES_REPORT: ProductSalesReportDto = {
 };
 
 const CATEGORY_COLORS = CHART_RAMP;
-
-function getPresetRange(preset: RangePreset): { from: number; to: number } {
-  const now = new Date();
-  const sod = (d: Date) => {
-    const c = new Date(d);
-    c.setHours(0, 0, 0, 0);
-    return c;
-  };
-  const eod = (d: Date) => {
-    const c = new Date(d);
-    c.setHours(23, 59, 59, 999);
-    return c;
-  };
-
-  switch (preset) {
-    case "yesterday": {
-      const y = new Date(now);
-      y.setDate(y.getDate() - 1);
-      return { from: sod(y).getTime(), to: eod(y).getTime() };
-    }
-    case "thisWeek": {
-      const d = new Date(now);
-      const day = d.getDay(); // 0=Sun
-      d.setDate(d.getDate() - day); // back to Sunday (start of week)
-      return { from: sod(d).getTime(), to: eod(now).getTime() };
-    }
-    case "thisMonth": {
-      const d = new Date(now.getFullYear(), now.getMonth(), 1);
-      return { from: sod(d).getTime(), to: eod(now).getTime() };
-    }
-    case "today":
-    default:
-      return { from: sod(now).getTime(), to: eod(now).getTime() };
-  }
-}
-
-function toInputDate(ts: number): string {
-  const d = new Date(ts);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-function rangeLabel(preset: RangePreset, from: number, to: number): string {
-  const fmt = (ts: number) =>
-    new Date(ts).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
-  if (preset === "today") {
-return "Today";
-}
-  if (preset === "yesterday") {
-return "Yesterday";
-}
-  if (preset === "thisWeek") {
-return "This Week";
-}
-  if (preset === "thisMonth") {
-return "This Month";
-}
-  const f = fmt(from);
-  const t = fmt(to);
-  return f === t ? f : `${f} – ${t}`;
-}
 
 function topCategoryRows(
   rows: ProductSalesReportDto["categorySales"],
@@ -178,10 +122,8 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
     logoDataUrl?: string | null;
   } | null>(null);
 
-  const [preset, setPreset] = React.useState<RangePreset>("today");
-  const initRange = getPresetRange("today");
-  const [fromTs, setFromTs] = React.useState(initRange.from);
-  const [toTs, setToTs] = React.useState(initRange.to);
+  const rangeState = useBusinessDateRange();
+  const { fromTs, toTs, label: rangeLabel } = rangeState;
   const [reportTab, setReportTab] = React.useState<ReportTab>("sales");
   const [profitability, setProfitability] = React.useState<ProfitabilitySummaryDto | null>(null);
   const [profitLoading, setProfitLoading] = React.useState(false);
@@ -402,7 +344,7 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
     }
     exportingRef.current = true;
     setExporting(true);
-    const dateStr = rangeLabel(preset, fromTs, toTs);
+    const dateStr = rangeLabel;
     const businessName = branding?.hotelName || ENV.HOTEL_NAME || "Restaurant";
     const businessLogoHtml = branding?.logoDataUrl
       ? `<img class="brand-logo" src="${escapeHtml(branding.logoDataUrl)}" alt=""/>`
@@ -525,7 +467,7 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
         // Electron: native save dialog → PDF via printToPDF
         await window.pos.exportReportPdf(
           html,
-          `sales-report-${rangeLabel(preset, fromTs, toTs)
+          `sales-report-${rangeLabel
             .replace(/[^a-z0-9]/gi, "-")
             .toLowerCase()}`,
         );
@@ -540,103 +482,40 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
     }
   };
 
-  const PRESETS: { key: RangePreset; label: string }[] = [
-    { key: "today", label: "Today" },
-    { key: "yesterday", label: "Yesterday" },
-    { key: "thisWeek", label: "This Week" },
-    { key: "thisMonth", label: "This Month" },
-    { key: "custom", label: "Custom" },
-  ];
-
   const rangeControls = (
-    <div className="rpt-controls">
-      {PRESETS.map(({ key, label }) => (
-        <button
-          key={key}
-          className={`rpt-preset-btn${preset === key ? " active" : ""}`}
-          aria-pressed={preset === key}
-          onClick={() => {
-            setPreset(key);
-            if (key !== "custom") {
-              const r = getPresetRange(key);
-              setFromTs(r.from);
-              setToTs(r.to);
-            }
-          }}
-        >
-          {label}
-        </button>
-      ))}
-
-      {preset === "custom" && (
-        <>
-          <input
-            type="date"
-            className="rpt-date-input"
-            value={toInputDate(fromTs)}
-            max={toInputDate(toTs)}
-            onChange={(e) => {
-              const d = new Date(e.target.value);
-              d.setHours(0, 0, 0, 0);
-              if (!isNaN(d.getTime())) {
-                setFromTs(d.getTime());
-              }
-            }}
-          />
-          <span style={{ fontSize: 11, color: "var(--pos-tx-sec)" }}>–</span>
-          <input
-            type="date"
-            className="rpt-date-input"
-            value={toInputDate(toTs)}
-            min={toInputDate(fromTs)}
-            max={toInputDate(Date.now())}
-            onChange={(e) => {
-              const d = new Date(e.target.value);
-              d.setHours(23, 59, 59, 999);
-              if (!isNaN(d.getTime())) {
-                setToTs(d.getTime());
-              }
-            }}
-          />
-        </>
-      )}
-
-      {reportTab === "sales" && (
-        <Button variant="primary" onClick={handleExport} disabled={loading || exporting}>
-          {exporting ? (
-            "Saving…"
-          ) : (
-            <>
-              <Icon icon={FileDown} size="sm" /> Export PDF
-            </>
-          )}
-        </Button>
-      )}
-    </div>
+    <BusinessRangePanel
+      rangeState={rangeState}
+      semanticsLabel={BUSINESS_RANGE_SEMANTICS.reports.shortLabel}
+      description={BUSINESS_RANGE_SEMANTICS.reports.description}
+      detail={loading ? undefined : `${orders} paid · ${formatCurrency(sales)}`}
+      actions={
+        reportTab === "sales" ? (
+          <Button variant="primary" onClick={handleExport} disabled={loading || exporting}>
+            {exporting ? (
+              "Saving…"
+            ) : (
+              <>
+                <Icon icon={FileDown} size="sm" /> Export PDF
+              </>
+            )}
+          </Button>
+        ) : undefined
+      }
+    />
   );
 
   return (
     <div style={{ background: embedded ? "transparent" : "var(--pos-bg, var(--pos-surface))", minHeight: embedded ? undefined : "100%", padding: 0 }}>
 
       <div className="rpt-wrap" style={embedded ? { padding: 0 } : undefined}>
-        {embedded ? (
-          <div style={{ marginBottom: 14 }}>{rangeControls}</div>
-        ) : (
+        {!embedded && (
           <PageHeader
             title="Reports"
-            subtitle={
-              <>
-                {rangeLabel(preset, fromTs, toTs)} ·{" "}
-                {new Date().toLocaleDateString("en-IN", {
-                  weekday: "long",
-                  day: "numeric",
-                  month: "long",
-                })}
-              </>
-            }
-            actions={rangeControls}
+            subtitle="Sales and profitability"
           />
         )}
+
+        {rangeControls}
 
         <div className="rpt-tabs">
           <SegmentedControl
@@ -654,12 +533,12 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
             primary
             label="Total Sales"
             value={loading ? "———" : formatCurrency(sales)}
-            sub={loading ? "Loading…" : `${orders} orders`}
+            sub={loading ? "Loading…" : `${orders} paid bills`}
           />
           <Stat
-            label="Orders"
+            label="Paid Bills"
             value={loading ? "——" : orders}
-            sub={loading ? "Loading…" : rangeLabel(preset, fromTs, toTs)}
+            sub={loading ? "Loading…" : BUSINESS_RANGE_SEMANTICS.reports.shortLabel}
           />
           <Stat
             label="Avg. Order Value"
@@ -903,7 +782,7 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
                     primary
                     label="Revenue"
                     value={formatCurrency(profitability.revenue)}
-                    sub={rangeLabel(preset, fromTs, toTs)}
+                    sub={rangeLabel}
                   />
                   <Stat
                     label="Food Cost"

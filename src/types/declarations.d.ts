@@ -87,6 +87,7 @@ declare global {
         listActive: () => Promise<any[]>;
         listPaid: (opts?: any) => Promise<any[]>;
         countPaid: (opts?: any) => Promise<number>;
+        summarizePaid: (opts?: any) => Promise<{ count: number; total: number }>;
         listPaidIds: (opts?: any) => Promise<string[]>;
         addLine: (orderId: string, item: any) => Promise<any>;
         updateLines: (orderId: string, lines: any[]) => Promise<any>;

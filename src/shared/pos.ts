@@ -557,6 +557,11 @@ export type ProfitabilitySummaryDto = {
   disclaimer: string;
 };
 
+export type PaidOrdersSummaryDto = {
+  count: number;
+  total: number;
+};
+
 export type PaidOrderQueryDto = {
   from?: number;
   to?: number;

@@ -12,6 +12,12 @@
 :global(.rpt-header .pos-ph-title) {
   margin-bottom: 5px;
 }
+:global(.rpt-range-note) {
+  margin: -4px 0 16px;
+  font-size: 12px;
+  color: var(--pos-tx-muted);
+  line-height: 1.45;
+}
 :global(.rpt-controls) {
   display: flex;
   gap: 6px;

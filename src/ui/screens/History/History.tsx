@@ -4,6 +4,7 @@ import {
   getOrderById,
   listPaidOrderIds,
   listPaidOrders,
+  summarizePaidOrders,
   deleteOrderHistory,
   getConfigGst,
   getConfigBranding,
@@ -11,6 +12,12 @@ import {
 import { printReceipt } from "../../../app/services/printer";
 import { useToast } from "../../context/ToastContext";
 import { useFocusTrap } from "../../hooks/useFocusTrap";
+import { useBusinessDateRange } from "../../hooks/useBusinessDateRange";
+import {
+  BusinessRangePanel,
+} from "../../components/BusinessRangeControls";
+import { BUSINESS_RANGE_SEMANTICS } from "../../../shared/businessDateRange";
+import { ENV } from "../../../config/env";
 import { buildReceiptLines } from "../Billing/utils/receiptBuilder";
 import type { ReceiptBranding } from "../Billing/utils/receiptBuilder";
 import {
@@ -22,66 +29,6 @@ import {
 } from "../../../shared/gst";
 import { PRINT } from "../../theme/print-html";
 import { PageHeader } from "../../components/ui/PageHeader";
-
-type RangePreset = "today" | "yesterday" | "thisWeek" | "thisMonth" | "custom";
-
-function getPresetRange(preset: RangePreset): { from: number; to: number } {
-  const now = new Date();
-  const sod = (d: Date) => {
-    const c = new Date(d);
-    c.setHours(0, 0, 0, 0);
-    return c;
-  };
-  const eod = (d: Date) => {
-    const c = new Date(d);
-    c.setHours(23, 59, 59, 999);
-    return c;
-  };
-  switch (preset) {
-    case "yesterday": {
-      const y = new Date(now);
-      y.setDate(y.getDate() - 1);
-      return { from: sod(y).getTime(), to: eod(y).getTime() };
-    }
-    case "thisWeek": {
-      const d = new Date(now);
-      d.setDate(d.getDate() - d.getDay());
-      return { from: sod(d).getTime(), to: eod(now).getTime() };
-    }
-    case "thisMonth": {
-      const d = new Date(now.getFullYear(), now.getMonth(), 1);
-      return { from: sod(d).getTime(), to: eod(now).getTime() };
-    }
-    case "today":
-    default:
-      return { from: sod(now).getTime(), to: eod(now).getTime() };
-  }
-}
-
-function toInputDate(ts: number): string {
-  const d = new Date(ts);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-function rangeLabel(preset: RangePreset, from: number, to: number): string {
-  const fmt = (ts: number) =>
-    new Date(ts).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
-  if (preset === "today") {
-return "Today";
-}
-  if (preset === "yesterday") {
-return "Yesterday";
-}
-  if (preset === "thisWeek") {
-return "This Week";
-}
-  if (preset === "thisMonth") {
-return "This Month";
-}
-  const f = fmt(from),
-    t = fmt(to);
-  return f === t ? f : `${f} – ${t}`;
-}
 
 function normalizeModeId(value: unknown): string {
   return String(value || "")
@@ -119,42 +66,27 @@ const samples: UIOrder[] = [];
 
 export default function History({ embedded = false }: { embedded?: boolean }) {
   const { showToast } = useToast();
+  const rangeState = useBusinessDateRange();
+  const { fromTs, toTs, label: rangeLabel } = rangeState;
   const [search, setSearch] = React.useState("");
+  const [rangeSummary, setRangeSummary] = React.useState<{ count: number; total: number } | null>(
+    null,
+  );
+  const [summaryLoading, setSummaryLoading] = React.useState(false);
   const [gstConfig, setGstConfig] = React.useState(() => normalizeGstConfig(DEFAULT_GST_CONFIG));
   const [branding, setBranding] = React.useState<ReceiptBranding | null>(null);
 
-  // Date range filter
-  const PRESETS: { key: RangePreset; label: string }[] = [
-    { key: "today", label: "Today" },
-    { key: "yesterday", label: "Yesterday" },
-    { key: "thisWeek", label: "This Week" },
-    { key: "thisMonth", label: "This Month" },
-    { key: "custom", label: "Custom" },
-  ];
-  const [preset, setPreset] = React.useState<RangePreset>("today");
-  const initRange = getPresetRange("today");
-  const [fromTs, setFromTs] = React.useState(initRange.from);
-  const [toTs, setToTs] = React.useState(initRange.to);
-  const [customFrom, setCustomFrom] = React.useState(toInputDate(initRange.from));
-  const [customTo, setCustomTo] = React.useState(toInputDate(initRange.to));
-
-  const applyPreset = (p: RangePreset) => {
-    setPreset(p);
-    if (p !== "custom") {
-      const r = getPresetRange(p);
-      setFromTs(r.from);
-      setToTs(r.to);
-      setCustomFrom(toInputDate(r.from));
-      setCustomTo(toInputDate(r.to));
+  const formatCurrency = React.useCallback((value: number) => {
+    try {
+      return new Intl.NumberFormat(ENV.CURRENCY_LOCALE, {
+        style: "currency",
+        currency: ENV.CURRENCY_CODE,
+        maximumFractionDigits: 2,
+      }).format(value);
+    } catch {
+      return `₹${Math.round(value * 100) / 100}`;
     }
-  };
-
-  const applyCustomRange = () => {
-    const from = customFrom ? new Date(customFrom).setHours(0, 0, 0, 0) : fromTs;
-    const to = customTo ? new Date(customTo).setHours(23, 59, 59, 999) : toTs;
-    setFromTs(from);
-    setToTs(to);
-  };
+  }, []);
 
   const [selected, setSelected] = React.useState<string[]>([]);
   const [confirmSelectedOpen, setConfirmSelectedOpen] = React.useState(false);
@@ -286,7 +218,7 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
         discountTotal: Number(d.discountTotal || 0),
         items: (d.items || []).length,
         method,
-        time: d.paidAt || d.updatedAt || d.createdAt || Date.now(),
+        time: d.createdAt || d.updatedAt || d.paidAt || Date.now(),
       } as UIOrder;
     });
 
@@ -414,6 +346,34 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
   // Reload when date range changes
   React.useEffect(() => {
     loadFirstPage(pageSize, search, fromTs, toTs);
+  }, [fromTs, toTs]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setSummaryLoading(true);
+      try {
+        const summary = await summarizePaidOrders({
+          from: fromTs,
+          to: toTs,
+        });
+        if (!cancelled) {
+          setRangeSummary(summary);
+        }
+      } catch (e) {
+        console.warn("History: failed to load range summary", e);
+        if (!cancelled) {
+          setRangeSummary(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setSummaryLoading(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [fromTs, toTs]);
 
   // load first page on mount
@@ -679,8 +639,8 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
   // Export helpers: selected rows export by ID; no selection exports the active filter.
   const sortOrdersNewestFirst = (docs: any[]) =>
     docs.slice().sort((a: any, b: any) => {
-      const ta = a.paidAt || a.updatedAt || a.createdAt || 0;
-      const tb = b.paidAt || b.updatedAt || b.createdAt || 0;
+      const ta = a.createdAt || a.updatedAt || a.paidAt || 0;
+      const tb = b.createdAt || b.updatedAt || b.paidAt || 0;
       if (ta !== tb) {
         return tb - ta;
       }
@@ -719,7 +679,7 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
     }
     let allItems: UIOrder[] = [];
     const exportingSelected = selected.length > 0;
-    const label = exportingSelected ? "Selected orders" : rangeLabel(preset, fromTs, toTs);
+    const label = exportingSelected ? "Selected orders" : rangeLabel;
     const fileName = exportingSelected
       ? "order-history-selected"
       : `order-history-${label.replace(/[^a-z0-9]/gi, "-").toLowerCase()}`;
@@ -813,13 +773,7 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
       {!embedded && (
       <PageHeader
         title="Order History"
-        subtitle={
-          <>
-            {rangeLabel(preset, fromTs, toTs)}
-            {pageItems.length > 0 &&
-              ` · ${pageItems.length} order${pageItems.length !== 1 ? "s" : ""}`}
-          </>
-        }
+        subtitle="Paid orders"
         actions={
           <>
           <input
@@ -906,57 +860,18 @@ loadFirstPage(pageSize, search, fromTs, toTs);
         </div>
       )}
 
-      {/* Row 2: date-range filter bar */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 6,
-          marginBottom: 14,
-          flexWrap: "wrap",
-          padding: "10px 14px",
-          borderRadius: 10,
-          background: "var(--pos-surface-hover)",
-          border: "1px solid var(--pos-surface-sunken)",
-        }}
-      >
-        {/* Preset pills */}
-        <div style={{ display: "flex", gap: 4 }}>
-          {PRESETS.map((p) => (
-            <button
-              key={p.key}
-              onClick={() => applyPreset(p.key)}
-              className={`pos-btn pos-btn-sm ${preset === p.key ? "pos-btn-primary" : "pos-btn-secondary"}`}
-            >
-              {p.label}
-            </button>
-          ))}
-        </div>
-        {/* Custom date pickers — inline, only when Custom active */}
-        {preset === "custom" && (
-          <>
-            <span style={{ width: 1, height: 20, background: "var(--pos-line)", margin: "0 4px" }} />
-            <input
-              type="date"
-              value={customFrom}
-              onChange={(e) => setCustomFrom(e.target.value)}
-              className="pos-input"
-              style={{ width: 136 }}
-            />
-            <span style={{ fontSize: 12, color: "var(--pos-tx-muted)" }}>to</span>
-            <input
-              type="date"
-              value={customTo}
-              onChange={(e) => setCustomTo(e.target.value)}
-              className="pos-input"
-              style={{ width: 136 }}
-            />
-            <button onClick={applyCustomRange} className="pos-btn pos-btn-primary pos-btn-sm">
-              Apply
-            </button>
-          </>
-        )}
-      </div>
+      <BusinessRangePanel
+        rangeState={rangeState}
+        semanticsLabel={BUSINESS_RANGE_SEMANTICS.history.shortLabel}
+        description={BUSINESS_RANGE_SEMANTICS.history.description}
+        detail={
+          summaryLoading
+            ? "Loading…"
+            : rangeSummary
+              ? `${rangeSummary.count} bill${rangeSummary.count === 1 ? "" : "s"} · ${formatCurrency(rangeSummary.total)}`
+              : undefined
+        }
+      />
 
       {/* Column header */}
       <div
@@ -988,7 +903,7 @@ loadFirstPage(pageSize, search, fromTs, toTs);
         </div>
         <span>#</span>
         <span>Order</span>
-        <span>Time</span>
+        <span>Bill Created</span>
         <span style={{ textAlign: "center" }}>Items</span>
         <span style={{ textAlign: "center" }}>Method</span>
         <span style={{ textAlign: "center" }}>Actions</span>

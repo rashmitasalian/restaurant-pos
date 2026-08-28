@@ -138,6 +138,7 @@ contextBridge.exposeInMainWorld("pos", {
     listActive: () => authInvoke("pos:orders:list-active"),
     listPaid: (opts?: any) => authInvoke("pos:orders:list-paid", opts),
     countPaid: (opts?: any) => authInvoke("pos:orders:count-paid", opts),
+    summarizePaid: (opts?: any) => authInvoke("pos:orders:summarize-paid", opts),
     listPaidIds: (opts?: any) => authInvoke("pos:orders:list-paid-ids", opts),
     addLine: (orderId: string, item: any) => authInvoke("pos:orders:add-line", orderId, item),
     updateLines: (orderId: string, lines: any[]) =>
