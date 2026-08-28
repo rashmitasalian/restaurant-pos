@@ -43,21 +43,41 @@ export function formatTimeInput(date: Date): string {
 }
 
 /**
- * Suggested window when the user first adds a time filter:
- * from 4 hours ago (same day) through the current local time.
+ * Suggested window when the user first adds a time filter.
+ * - Selected day is today: last 4 hours through now.
+ * - Any other single day: full day (00:00–23:59).
  */
-export function suggestInitialTimeWindow(now = new Date()): { fromTime: string; toTime: string } {
-  const end = new Date(now);
-  const start = new Date(now);
-  start.setHours(start.getHours() - 4, start.getMinutes(), 0, 0);
-  const dayStart = startOfDay(now);
-  if (start.getTime() < dayStart.getTime()) {
-    start.setTime(dayStart.getTime());
+export function suggestInitialTimeWindow(referenceDay: Date, now = new Date()): { fromTime: string; toTime: string } {
+  const dayStart = startOfDay(referenceDay);
+  const todayStart = startOfDay(now);
+  if (dayStart.getTime() === todayStart.getTime()) {
+    const end = new Date(now);
+    const start = new Date(now);
+    start.setHours(start.getHours() - 4, start.getMinutes(), 0, 0);
+    if (start.getTime() < dayStart.getTime()) {
+      start.setTime(dayStart.getTime());
+    }
+    return {
+      fromTime: formatTimeInput(start),
+      toTime: formatTimeInput(end),
+    };
   }
-  return {
-    fromTime: formatTimeInput(start),
-    toTime: formatTimeInput(end),
-  };
+  return { fromTime: "00:00", toTime: "23:59" };
+}
+
+export function referenceDayForRange(input: {
+  preset: BusinessRangePreset;
+  customFromDate?: string;
+  now?: Date;
+}): Date {
+  const now = input.now ?? new Date();
+  if (input.preset === "yesterday") {
+    return addDays(startOfDay(now), -1);
+  }
+  if (input.preset === "custom" && input.customFromDate) {
+    return dateFromInput(input.customFromDate) ?? startOfDay(now);
+  }
+  return startOfDay(now);
 }
 
 /** Central hook for future business timezone from settings. */
@@ -140,10 +160,13 @@ export function timeFilterHint(input: {
   if (supportsTimeFilter(input)) {
     return null;
   }
-  if (input.preset === "custom") {
-    return "Time filter is available for a single day. Set the same From and To date, or choose Today.";
+  if (input.preset === "thisWeek" || input.preset === "thisMonth") {
+    return "Time-of-day filter is available only for individual dates — choose Today, Yesterday, or a single custom day.";
   }
-  return "Time filter is available for Today, Yesterday, or a single custom day.";
+  if (input.preset === "custom") {
+    return "Time-of-day filter is available only for individual dates — set the same From and To date.";
+  }
+  return null;
 }
 
 export function buildPresetDateSpan(
@@ -213,8 +236,14 @@ export function buildBusinessDateRange(input: {
 }): BusinessDateRange {
   const now = input.now ?? new Date();
   const timezone = input.timezone ?? resolveBusinessTimezone();
-  const fromTime = input.fromTime ?? suggestInitialTimeWindow(now).fromTime;
-  const toTime = input.toTime ?? suggestInitialTimeWindow(now).toTime;
+  const refDay = referenceDayForRange({
+    preset: input.preset,
+    customFromDate: input.customFromDate,
+    now,
+  });
+  const suggested = suggestInitialTimeWindow(refDay, now);
+  const fromTime = input.fromTime ?? suggested.fromTime;
+  const toTime = input.toTime ?? suggested.toTime;
 
   let fromDate: Date;
   let toDateInclusive: Date;

@@ -11,66 +11,25 @@
 }
 
 .panel {
-  flex: 1 1 420px;
+  flex: 1 1 360px;
   display: grid;
-  gap: 10px;
-  padding: 12px 14px;
-  border-radius: 12px;
-  background: var(--pos-surface-hover);
-  border: 1px solid var(--pos-surface-sunken);
+  gap: 12px;
+  min-width: 0;
+  margin-bottom: 20px;
+  padding-bottom: 4px;
 }
 
-.row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-}
-
-.rowLabel {
-  min-width: 52px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--pos-tx-muted);
-}
-
-.presets {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.presetBtn {
-  border: 1px solid var(--pos-line);
-  background: var(--pos-surface);
-  color: var(--pos-tx-sec);
-  border-radius: 999px;
-  padding: 6px 12px;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.presetBtn:hover {
-  background: var(--pos-surface);
-  border-color: var(--pos-saffron-line);
-}
-
-.presetBtnActive {
-  background: var(--pos-saffron-tint);
-  border-color: var(--pos-saffron-line);
-  color: var(--pos-tx);
-}
-
-.customDates,
-.timeControls,
-.actions {
+.secondaryRow {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.inlineLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--pos-tx-muted);
 }
 
 .dateInput,
@@ -78,21 +37,22 @@
   border: 1px solid var(--pos-line);
   background: var(--pos-surface);
   color: var(--pos-tx);
-  border-radius: 8px;
-  padding: 7px 10px;
+  border-radius: var(--pos-r-md, 8px);
+  padding: 8px 10px;
   font-size: 13px;
+  font-family: inherit;
 }
 
 .dateInput {
-  width: 148px;
+  width: 152px;
 }
 
 .timeInput {
-  width: 118px;
+  width: 112px;
 }
 
 .timeInput::-webkit-calendar-picker-indicator {
-  opacity: 0.55;
+  opacity: 0.45;
 }
 
 .separator {
@@ -100,26 +60,14 @@
   color: var(--pos-tx-muted);
 }
 
-.applyBtn,
 .linkBtn {
   border: none;
   background: transparent;
   cursor: pointer;
   font-size: 12px;
   font-weight: 600;
-}
-
-.applyBtn {
-  padding: 7px 10px;
-  border-radius: 8px;
-  border: 1px solid var(--pos-saffron-line);
-  background: var(--pos-saffron-tint);
-  color: var(--pos-tx);
-}
-
-.linkBtn {
   padding: 0;
-  color: var(--pos-link, var(--pos-saffron));
+  color: var(--pos-teal, var(--pos-link));
 }
 
 .linkBtn:hover {
@@ -128,22 +76,26 @@
 
 .hint {
   margin: 0;
-  padding-left: 62px;
   font-size: 12px;
   line-height: 1.45;
   color: var(--pos-tx-muted);
 }
 
-.footer {
-  margin-top: 10px;
-  padding: 0 2px;
+.actions {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
-.footerMain {
+.footer {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: baseline;
   gap: 6px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--pos-line);
   font-size: 13px;
 }
 
@@ -152,33 +104,24 @@
   color: var(--pos-tx);
 }
 
-.footerSemantics {
+.footerMetric {
   font-weight: 600;
-  color: var(--pos-tx-sec);
-}
-
-.footerDetail {
   font-variant-numeric: tabular-nums;
   color: var(--pos-tx);
+}
+
+.footerContext {
+  flex-basis: 100%;
+  font-size: 12px;
+  color: var(--pos-tx-muted);
 }
 
 .footerDot {
   color: var(--pos-tx-muted);
 }
 
-.footerNote {
-  margin: 4px 0 0;
-  font-size: 12px;
-  line-height: 1.45;
-  color: var(--pos-tx-muted);
-}
-
 @media (max-width: 720px) {
-  .hint {
-    padding-left: 0;
-  }
-
-  .rowLabel {
+  .actions {
     width: 100%;
   }
 }

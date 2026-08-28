@@ -4,7 +4,6 @@ import {
   getOrderById,
   listPaidOrderIds,
   listPaidOrders,
-  summarizePaidOrders,
   deleteOrderHistory,
   getConfigGst,
   getConfigBranding,
@@ -14,10 +13,8 @@ import { useToast } from "../../context/ToastContext";
 import { useFocusTrap } from "../../hooks/useFocusTrap";
 import { useBusinessDateRange } from "../../hooks/useBusinessDateRange";
 import {
-  BusinessRangePanel,
+  BusinessRangeControls,
 } from "../../components/BusinessRangeControls";
-import { BUSINESS_RANGE_SEMANTICS } from "../../../shared/businessDateRange";
-import { ENV } from "../../../config/env";
 import { buildReceiptLines } from "../Billing/utils/receiptBuilder";
 import type { ReceiptBranding } from "../Billing/utils/receiptBuilder";
 import {
@@ -69,24 +66,8 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
   const rangeState = useBusinessDateRange();
   const { fromTs, toTs, label: rangeLabel } = rangeState;
   const [search, setSearch] = React.useState("");
-  const [rangeSummary, setRangeSummary] = React.useState<{ count: number; total: number } | null>(
-    null,
-  );
-  const [summaryLoading, setSummaryLoading] = React.useState(false);
   const [gstConfig, setGstConfig] = React.useState(() => normalizeGstConfig(DEFAULT_GST_CONFIG));
   const [branding, setBranding] = React.useState<ReceiptBranding | null>(null);
-
-  const formatCurrency = React.useCallback((value: number) => {
-    try {
-      return new Intl.NumberFormat(ENV.CURRENCY_LOCALE, {
-        style: "currency",
-        currency: ENV.CURRENCY_CODE,
-        maximumFractionDigits: 2,
-      }).format(value);
-    } catch {
-      return `₹${Math.round(value * 100) / 100}`;
-    }
-  }, []);
 
   const [selected, setSelected] = React.useState<string[]>([]);
   const [confirmSelectedOpen, setConfirmSelectedOpen] = React.useState(false);
@@ -346,34 +327,6 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
   // Reload when date range changes
   React.useEffect(() => {
     loadFirstPage(pageSize, search, fromTs, toTs);
-  }, [fromTs, toTs]);
-
-  React.useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setSummaryLoading(true);
-      try {
-        const summary = await summarizePaidOrders({
-          from: fromTs,
-          to: toTs,
-        });
-        if (!cancelled) {
-          setRangeSummary(summary);
-        }
-      } catch (e) {
-        console.warn("History: failed to load range summary", e);
-        if (!cancelled) {
-          setRangeSummary(null);
-        }
-      } finally {
-        if (!cancelled) {
-          setSummaryLoading(false);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
   }, [fromTs, toTs]);
 
   // load first page on mount
@@ -860,18 +813,7 @@ loadFirstPage(pageSize, search, fromTs, toTs);
         </div>
       )}
 
-      <BusinessRangePanel
-        rangeState={rangeState}
-        semanticsLabel={BUSINESS_RANGE_SEMANTICS.history.shortLabel}
-        description={BUSINESS_RANGE_SEMANTICS.history.description}
-        detail={
-          summaryLoading
-            ? "Loading…"
-            : rangeSummary
-              ? `${rangeSummary.count} bill${rangeSummary.count === 1 ? "" : "s"} · ${formatCurrency(rangeSummary.total)}`
-              : undefined
-        }
-      />
+      <BusinessRangeControls rangeState={rangeState} />
 
       {/* Column header */}
       <div

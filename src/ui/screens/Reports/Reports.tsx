@@ -14,7 +14,7 @@ import {
   formatGstRate,
   normalizeGstConfig,
 } from "../../../shared/gst";
-import { CHART_RAMP } from "../../theme/external-brands";
+import { CATEGORY_CHART_COLORS } from "../../theme/external-brands";
 import { PRINT } from "../../theme/print-html";
 import { DataTable } from "../../components/ui/DataTable";
 import { Button } from "../../components/ui/Button";
@@ -24,9 +24,7 @@ import { SegmentedControl } from "../../components/ui/SegmentedControl";
 import { Icon } from "../../components/ui/Icon";
 import { FileDown } from "lucide-react";
 import { BUSINESS_RANGE_SEMANTICS } from "../../../shared/businessDateRange";
-import {
-  BusinessRangePanel,
-} from "../../components/BusinessRangeControls";
+import { BusinessRangeControls } from "../../components/BusinessRangeControls";
 import { useBusinessDateRange } from "../../hooks/useBusinessDateRange";
 import "./Reports.module.css";
 
@@ -47,7 +45,7 @@ const EMPTY_PRODUCT_SALES_REPORT: ProductSalesReportDto = {
   totals: { totalSales: 0, totalUnits: 0 },
 };
 
-const CATEGORY_COLORS = CHART_RAMP;
+const CATEGORY_COLORS = CATEGORY_CHART_COLORS;
 
 function topCategoryRows(
   rows: ProductSalesReportDto["categorySales"],
@@ -482,27 +480,7 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
     }
   };
 
-  const rangeControls = (
-    <BusinessRangePanel
-      rangeState={rangeState}
-      semanticsLabel={BUSINESS_RANGE_SEMANTICS.reports.shortLabel}
-      description={BUSINESS_RANGE_SEMANTICS.reports.description}
-      detail={loading ? undefined : `${orders} paid · ${formatCurrency(sales)}`}
-      actions={
-        reportTab === "sales" ? (
-          <Button variant="primary" onClick={handleExport} disabled={loading || exporting}>
-            {exporting ? (
-              "Saving…"
-            ) : (
-              <>
-                <Icon icon={FileDown} size="sm" /> Export PDF
-              </>
-            )}
-          </Button>
-        ) : undefined
-      }
-    />
-  );
+  const rangeControls = <BusinessRangeControls rangeState={rangeState} />;
 
   return (
     <div style={{ background: embedded ? "transparent" : "var(--pos-bg, var(--pos-surface))", minHeight: embedded ? undefined : "100%", padding: 0 }}>
@@ -517,13 +495,24 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
 
         {rangeControls}
 
-        <div className="rpt-tabs">
+        <div className="rpt-tabs" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
           <SegmentedControl
             ariaLabel="Report sections"
             options={REPORT_TABS}
             value={reportTab}
             onChange={(id) => setReportTab(id as ReportTab)}
           />
+          {reportTab === "sales" && (
+            <Button variant="primary" onClick={handleExport} disabled={loading || exporting}>
+              {exporting ? (
+                "Saving…"
+              ) : (
+                <>
+                  <Icon icon={FileDown} size="sm" /> Export PDF
+                </>
+              )}
+            </Button>
+          )}
         </div>
 
         {reportTab === "sales" && (

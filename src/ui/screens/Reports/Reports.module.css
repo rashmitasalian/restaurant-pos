@@ -25,7 +25,10 @@
   flex-wrap: wrap;
 }
 :global(.rpt-tabs) {
+  margin-top: 8px;
   margin-bottom: 18px;
+  padding-top: 8px;
+  border-top: 1px solid var(--pos-line);
 }
 :global(.rpt-kpi-grid) {
   display: grid;

@@ -3,9 +3,11 @@ import {
   buildBusinessDateRange,
   createDefaultBusinessDateRange,
   formatBusinessRangeLabel,
+  referenceDayForRange,
   suggestInitialTimeWindow,
   supportsTimeFilter,
   timeFilterHint,
+  toInputDate,
   type BusinessDateRange,
   type BusinessRangePreset,
 } from "../../shared/businessDateRange";
@@ -57,11 +59,21 @@ export function useBusinessDateRange(initial?: Partial<BusinessDateRange>) {
   const setTimeEnabled = React.useCallback(
     (timeEnabled: boolean) => {
       if (timeEnabled) {
-        const suggested = suggestInitialTimeWindow();
-        recompute({
-          timeEnabled: true,
-          fromTime: suggested.fromTime,
-          toTime: suggested.toTime,
+        setRange((current) => {
+          const refDay = referenceDayForRange({
+            preset: current.preset,
+            customFromDate: current.customFromDate,
+          });
+          const suggested = suggestInitialTimeWindow(refDay);
+          return buildBusinessDateRange({
+            preset: current.preset,
+            timeEnabled: true,
+            fromTime: suggested.fromTime,
+            toTime: suggested.toTime,
+            customFromDate: current.customFromDate,
+            customToDate: current.customToDate,
+            timezone: current.timezone,
+          });
         });
         return;
       }
@@ -98,10 +110,6 @@ export function useBusinessDateRange(initial?: Partial<BusinessDateRange>) {
     [recompute],
   );
 
-  const applyCustomRange = React.useCallback(() => {
-    recompute({ preset: "custom" });
-  }, [recompute]);
-
   const label = React.useMemo(() => formatBusinessRangeLabel(range), [range]);
   const canUseTimeFilter = supportsTimeFilter(range);
   const timeHint = timeFilterHint(range);
@@ -119,7 +127,6 @@ export function useBusinessDateRange(initial?: Partial<BusinessDateRange>) {
     setToTime,
     setCustomFromDate,
     setCustomToDate,
-    applyCustomRange,
   };
 }
 

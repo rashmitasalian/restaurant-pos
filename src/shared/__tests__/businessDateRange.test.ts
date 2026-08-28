@@ -3,8 +3,10 @@ import {
   buildBusinessDateRange,
   buildPresetDateSpan,
   formatBusinessRangeLabel,
+  referenceDayForRange,
   suggestInitialTimeWindow,
   supportsTimeFilter,
+  timeFilterHint,
   toInputDate,
 } from "../businessDateRange";
 
@@ -33,16 +35,18 @@ describe("businessDateRange", () => {
     expect(formatBusinessRangeLabel(range)).toMatch(/6:00 pm/i);
   });
 
-  it("suggests a recent window ending at the current time", () => {
-    const suggested = suggestInitialTimeWindow(new Date(2026, 7, 28, 18, 15, 0, 0));
+  it("suggests a recent window on today", () => {
+    const day = new Date(2026, 7, 28, 18, 15, 0, 0);
+    const suggested = suggestInitialTimeWindow(day, day);
     expect(suggested.toTime).toBe("18:15");
     expect(suggested.fromTime).toBe("14:15");
   });
 
-  it("does not suggest a from time before the start of the day", () => {
-    const suggested = suggestInitialTimeWindow(new Date(2026, 7, 28, 2, 30, 0, 0));
-    expect(suggested.toTime).toBe("02:30");
-    expect(suggested.fromTime).toBe("00:00");
+  it("suggests a full day on past dates", () => {
+    const past = new Date(2026, 7, 24, 0, 0, 0, 0);
+    const now = new Date(2026, 7, 28, 23, 30, 0, 0);
+    const suggested = suggestInitialTimeWindow(past, now);
+    expect(suggested).toEqual({ fromTime: "00:00", toTime: "23:59" });
   });
 
   it("ignores time on month presets", () => {
@@ -79,6 +83,11 @@ describe("businessDateRange", () => {
     expect(range.to).toBe(new Date(2026, 7, 28, 18, 0, 0, 0).getTime());
   });
 
+  it("shows a hint for week and month presets", () => {
+    expect(timeFilterHint({ preset: "thisWeek" })).toMatch(/individual dates/i);
+    expect(timeFilterHint({ preset: "thisMonth" })).toMatch(/individual dates/i);
+  });
+
   it("disables time for multi-day custom ranges", () => {
     expect(
       supportsTimeFilter({
@@ -98,6 +107,18 @@ describe("businessDateRange", () => {
       toTime: "18:00",
     });
     expect(range.timeEnabled).toBe(false);
+  });
+
+  it("resolves reference day for presets", () => {
+    expect(referenceDayForRange({ preset: "today", now: noon }).getDate()).toBe(28);
+    expect(referenceDayForRange({ preset: "yesterday", now: noon }).getDate()).toBe(27);
+    expect(
+      referenceDayForRange({
+        preset: "custom",
+        customFromDate: "2026-08-24",
+        now: noon,
+      }).getDate(),
+    ).toBe(24);
   });
 
   it("uses exclusive end for preset week and month spans", () => {

@@ -22,14 +22,16 @@ export function platformBrand(platform: string) {
   return null;
 }
 
-export const CHART_RAMP = [
-  "#0b4a52",
-  "#0f5e68",
-  "#2d7380",
-  "#4a8f99",
-  "#6ba8b0",
+/** Distinct hues for category pie charts — interleaved warm/cool for readability. */
+export const CATEGORY_CHART_COLORS = [
+  "#0f766e",
   "#d97706",
-  "#f59e0b",
-  "#f3d89a",
-  "#8b9089",
+  "#7c3aed",
+  "#dc2626",
+  "#2563eb",
+  "#059669",
+  "#db2777",
+  "#64748b",
+  "#0891b2",
+  "#ca8a04",
 ];

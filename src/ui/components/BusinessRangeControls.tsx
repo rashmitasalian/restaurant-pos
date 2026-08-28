@@ -3,8 +3,14 @@ import {
   BUSINESS_RANGE_PRESETS,
   toInputDate,
 } from "../../shared/businessDateRange";
+import { SegmentedControl } from "./ui/SegmentedControl";
 import type { BusinessDateRangeState } from "../hooks/useBusinessDateRange";
 import styles from "./BusinessRangeControls.module.css";
+
+const PRESET_OPTIONS = BUSINESS_RANGE_PRESETS.map(({ key, label }) => ({
+  id: key,
+  label,
+}));
 
 type BusinessRangeControlsProps = {
   rangeState: BusinessDateRangeState;
@@ -22,60 +28,47 @@ export function BusinessRangeControls({ rangeState, className = "" }: BusinessRa
     setToTime,
     setCustomFromDate,
     setCustomToDate,
-    applyCustomRange,
   } = rangeState;
+
+  const showCustomDates = range.preset === "custom";
 
   return (
     <div className={`${styles.panel} ${className}`.trim()}>
-      <div className={styles.row}>
-        <span className={styles.rowLabel}>Period</span>
-        <div className={styles.presets}>
-          {BUSINESS_RANGE_PRESETS.map(({ key, label }) => (
-            <button
-              key={key}
-              type="button"
-              className={`${styles.presetBtn}${range.preset === key ? ` ${styles.presetBtnActive}` : ""}`}
-              aria-pressed={range.preset === key}
-              onClick={() => setPreset(key)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
+      <SegmentedControl
+        ariaLabel="Report period"
+        options={PRESET_OPTIONS}
+        value={range.preset}
+        onChange={(id) => setPreset(id as typeof range.preset)}
+      />
 
-      {range.preset === "custom" && (
-        <div className={styles.row}>
-          <span className={styles.rowLabel}>Dates</span>
-          <div className={styles.customDates}>
-            <input
-              type="date"
-              className={styles.dateInput}
-              value={range.customFromDate}
-              max={range.customToDate}
-              onChange={(e) => setCustomFromDate(e.target.value)}
-            />
-            <span className={styles.separator}>to</span>
-            <input
-              type="date"
-              className={styles.dateInput}
-              value={range.customToDate}
-              min={range.customFromDate}
-              max={toInputDate(Date.now())}
-              onChange={(e) => setCustomToDate(e.target.value)}
-            />
-            <button type="button" className={styles.applyBtn} onClick={applyCustomRange}>
-              Apply
-            </button>
-          </div>
+      {showCustomDates && (
+        <div className={styles.secondaryRow}>
+          <input
+            type="date"
+            className={styles.dateInput}
+            value={range.customFromDate}
+            max={range.customToDate}
+            aria-label="From date"
+            onChange={(e) => setCustomFromDate(e.target.value)}
+          />
+          <span className={styles.separator}>to</span>
+          <input
+            type="date"
+            className={styles.dateInput}
+            value={range.customToDate}
+            min={range.customFromDate}
+            max={toInputDate(Date.now())}
+            aria-label="To date"
+            onChange={(e) => setCustomToDate(e.target.value)}
+          />
         </div>
       )}
 
-      {canUseTimeFilter ? (
-        <div className={styles.row}>
-          <span className={styles.rowLabel}>Time</span>
+      {canUseTimeFilter && (
+        <div className={styles.secondaryRow}>
           {range.timeEnabled ? (
-            <div className={styles.timeControls}>
+            <>
+              <span className={styles.inlineLabel}>Time</span>
               <input
                 type="time"
                 className={styles.timeInput}
@@ -91,41 +84,37 @@ export function BusinessRangeControls({ rangeState, className = "" }: BusinessRa
                 aria-label="To time"
                 onChange={(e) => setToTime(e.target.value)}
               />
-              <button
-                type="button"
-                className={styles.linkBtn}
-                onClick={() => setTimeEnabled(false)}
-              >
-                Clear
+              <button type="button" className={styles.linkBtn} onClick={() => setTimeEnabled(false)}>
+                Full day
               </button>
-            </div>
+            </>
           ) : (
             <button type="button" className={styles.linkBtn} onClick={() => setTimeEnabled(true)}>
-              Add time window
+              Filter by time of day
             </button>
           )}
         </div>
-      ) : timeHint ? (
-        <p className={styles.hint}>{timeHint}</p>
-      ) : null}
+      )}
+
+      {timeHint ? <p className={styles.hint}>{timeHint}</p> : null}
     </div>
   );
 }
 
 type BusinessRangePanelProps = {
   rangeState: BusinessDateRangeState;
-  semanticsLabel: string;
-  description: string;
-  detail?: string;
+  /** Short metric line, e.g. "5 bills · ₹3,880" */
+  metric?: string;
+  /** One-line context, e.g. "By bill created time" */
+  context?: string;
   actions?: React.ReactNode;
   className?: string;
 };
 
 export function BusinessRangePanel({
   rangeState,
-  semanticsLabel,
-  description,
-  detail,
+  metric,
+  context,
   actions,
   className = "",
 }: BusinessRangePanelProps) {
@@ -138,18 +127,14 @@ export function BusinessRangePanel({
         {actions ? <div className={styles.actions}>{actions}</div> : null}
       </div>
       <div className={styles.footer}>
-        <div className={styles.footerMain}>
-          <span className={styles.footerRange}>{label}</span>
-          <span className={styles.footerDot}>·</span>
-          <span className={styles.footerSemantics}>{semanticsLabel}</span>
-          {detail ? (
-            <>
-              <span className={styles.footerDot}>·</span>
-              <span className={styles.footerDetail}>{detail}</span>
-            </>
-          ) : null}
-        </div>
-        <p className={styles.footerNote}>{description}</p>
+        <span className={styles.footerRange}>{label}</span>
+        {metric ? (
+          <>
+            <span className={styles.footerDot}>·</span>
+            <span className={styles.footerMetric}>{metric}</span>
+          </>
+        ) : null}
+        {context ? <span className={styles.footerContext}>{context}</span> : null}
       </div>
     </div>
   );
