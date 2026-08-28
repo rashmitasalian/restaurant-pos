@@ -4625,7 +4625,7 @@ export const posService = {
     params.push(limit, offset);
     return getDb()
       .prepare(
-        `SELECT a.*, s.name AS staff_name
+        `SELECT a.*, s.name AS staff_name, s.designation AS staff_designation
          FROM salary_advances a
          JOIN staff s ON s.id = a.staff_id
          WHERE ${clauses.join(" AND ")}
@@ -4681,7 +4681,7 @@ export const posService = {
       return salaryAdvanceFromRow(
         database
           .prepare(
-            `SELECT a.*, s.name AS staff_name
+            `SELECT a.*, s.name AS staff_name, s.designation AS staff_designation
              FROM salary_advances a
              JOIN staff s ON s.id = a.staff_id
              WHERE a.id = ?`,
@@ -6211,6 +6211,7 @@ function salaryAdvanceFromRow(row: any): SalaryAdvanceDto {
     type: "salary-advance",
     staffId: row.staff_id,
     staffName: row.staff_name || null,
+    staffDesignation: row.staff_designation || null,
     amount: paiseToRupees(row.amount_paise),
     advanceDate: row.advance_date,
     note: row.note || null,

@@ -35,6 +35,7 @@ import type { Role } from "../../../config/roles";
 import { PasswordValidator } from "../../../app/utils/validators";
 import { filterStaffBySearch, staffInitials } from "../People/peopleUtils";
 import { PEOPLE_TAB_HASH } from "../Manager/managerSections";
+import { formatMoney } from "../SalaryAdvances/salaryAdvanceUtils";
 
 type StaffStatusFilter = "active" | "left" | "all";
 
@@ -585,6 +586,7 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
   } | null>(null);
   const [createAccountFor, setCreateAccountFor] = React.useState<StaffDoc | null>(null);
   const [editAdvanceTotal, setEditAdvanceTotal] = React.useState<number | null>(null);
+  const [editAdvanceCount, setEditAdvanceCount] = React.useState<number | null>(null);
   const [shiftOptions, setShiftOptions] = React.useState<AttendanceShiftConfig[]>([
     { id: "morning", label: "Morning", hours: 8 },
     { id: "evening", label: "Evening", hours: 8 },
@@ -630,6 +632,7 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
   React.useEffect(() => {
     if (!editingMember) {
       setEditAdvanceTotal(null);
+      setEditAdvanceCount(null);
       return;
     }
     const now = new Date();
@@ -647,9 +650,13 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
       .then((rows) => {
         if (cancelled) return;
         setEditAdvanceTotal(rows.reduce((sum, row) => sum + Number(row.amount || 0), 0));
+        setEditAdvanceCount(rows.length);
       })
       .catch(() => {
-        if (!cancelled) setEditAdvanceTotal(null);
+        if (!cancelled) {
+          setEditAdvanceTotal(null);
+          setEditAdvanceCount(null);
+        }
       });
     return () => {
       cancelled = true;
@@ -797,6 +804,7 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
     setEditPhotoChanged(false);
     setEditError(null);
     setEditAdvanceTotal(null);
+    setEditAdvanceCount(null);
   };
 
   const saveEdit = async (member: StaffDoc) => {
@@ -1487,7 +1495,8 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
                 <div>
                   <div style={{ fontWeight: 700 }}>Salary Advances — This month</div>
                   <div style={{ color: "var(--pos-tx-muted)", marginTop: 2 }}>
-                    ₹{editAdvanceTotal.toLocaleString("en-IN")} advanced
+                    {formatMoney(editAdvanceTotal)} · {editAdvanceCount} advance
+                    {editAdvanceCount === 1 ? "" : "s"}
                   </div>
                 </div>
                 <button

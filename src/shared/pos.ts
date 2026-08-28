@@ -431,6 +431,7 @@ export type SalaryAdvanceDto = {
   type: "salary-advance";
   staffId: string;
   staffName?: string | null;
+  staffDesignation?: string | null;
   amount: number;
   advanceDate: number;
   note?: string | null;

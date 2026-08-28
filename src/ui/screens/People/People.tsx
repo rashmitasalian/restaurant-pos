@@ -17,7 +17,13 @@ const ATTENDANCE_VIEW_TABS = [
   { id: "history", label: "History" },
 ];
 
+const ADVANCES_VIEW_TABS = [
+  { id: "summary", label: "Summary" },
+  { id: "transactions", label: "Transactions" },
+];
+
 type AttendanceView = "daily" | "history";
+type AdvancesView = "summary" | "transactions";
 
 function staffIdFromHash(): string | null {
   const hash = window.location.hash || "";
@@ -32,6 +38,7 @@ export default function People() {
     peopleTabFromHash(typeof window !== "undefined" ? window.location.hash : ""),
   );
   const [attendanceView, setAttendanceView] = React.useState<AttendanceView>("daily");
+  const [advancesView, setAdvancesView] = React.useState<AdvancesView>("summary");
   const addStaffRef = React.useRef<(() => void) | null>(null);
   const addUserRef = React.useRef<(() => void) | null>(null);
   const recordAdvanceRef = React.useRef<(() => void) | null>(null);
@@ -86,9 +93,27 @@ export default function People() {
       title={title}
       description={description}
       primaryAction={primaryAction}
-      tabs={tab === "attendance" ? ATTENDANCE_VIEW_TABS : undefined}
-      tab={tab === "attendance" ? attendanceView : undefined}
-      onTabChange={tab === "attendance" ? (next) => setAttendanceView(next as AttendanceView) : undefined}
+      tabs={
+        tab === "attendance"
+          ? ATTENDANCE_VIEW_TABS
+          : tab === "advances"
+            ? ADVANCES_VIEW_TABS
+            : undefined
+      }
+      tab={
+        tab === "attendance"
+          ? attendanceView
+          : tab === "advances"
+            ? advancesView
+            : undefined
+      }
+      onTabChange={
+        tab === "attendance"
+          ? (next) => setAttendanceView(next as AttendanceView)
+          : tab === "advances"
+            ? (next) => setAdvancesView(next as AdvancesView)
+            : undefined
+      }
       width="operational"
     >
       {tab === "attendance" && attendanceView === "daily" && <Attendance embedded />}
@@ -97,6 +122,7 @@ export default function People() {
       {tab === "advances" && (
         <SalaryAdvances
           embedded
+          view={advancesView}
           initialStaffId={staffIdFromHash()}
           registerRecordAdvance={(fn) => {
             recordAdvanceRef.current = fn;

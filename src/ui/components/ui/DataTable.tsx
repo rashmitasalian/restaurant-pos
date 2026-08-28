@@ -5,6 +5,8 @@ export type DataTableColumn = {
   header: React.ReactNode;
   sortable?: boolean;
   align?: "left" | "right" | "center";
+  /** Keep column width tight to content (useful for dates, amounts, actions) */
+  nowrap?: boolean;
   /** When sorting, read this value from the row's sortValues map */
   sortKey?: string;
 };
@@ -27,6 +29,15 @@ export type DataTableProps = {
   onSelectionChange?: (indexes: number[]) => void;
   className?: string;
 };
+
+function columnClass(col: DataTableColumn) {
+  return [
+    col.align === "right" ? "ui-table-num" : col.align === "center" ? "ui-table-center" : undefined,
+    col.nowrap ? "ui-table-nowrap" : undefined,
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
 
 export function DataTable({
   headers,
@@ -137,7 +148,7 @@ export function DataTable({
               <th
                 key={col.key || index}
                 scope="col"
-                className={col.align === "right" ? "ui-table-num" : undefined}
+                className={columnClass(col) || undefined}
                 aria-sort={
                   col.sortable && sortCol === index
                     ? sortDir === "asc"
@@ -149,7 +160,13 @@ export function DataTable({
                 {col.sortable ? (
                   <button
                     type="button"
-                    className="ui-table-sort"
+                    className={`ui-table-sort${
+                      col.align === "right"
+                        ? " ui-table-sort-right"
+                        : col.align === "center"
+                          ? " ui-table-sort-center"
+                          : ""
+                    }`}
                     onClick={() => toggleSort(index)}
                   >
                     {col.header}
@@ -210,7 +227,12 @@ export function DataTable({
                   {cols.map((col, colIndex) => (
                     <td
                       key={col.key || colIndex}
-                      className={col.align === "right" ? "ui-table-num pos-tabular" : undefined}
+                      className={[
+                        columnClass(col),
+                        col.align === "right" ? "pos-tabular" : undefined,
+                      ]
+                        .filter(Boolean)
+                        .join(" ") || undefined}
                     >
                       {row[colIndex]}
                     </td>

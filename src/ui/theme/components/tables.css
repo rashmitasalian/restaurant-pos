@@ -64,6 +64,15 @@
   font-variant-numeric: tabular-nums;
 }
 
+.ui-table-center {
+  text-align: center;
+}
+
+.ui-table-nowrap {
+  width: 1%;
+  white-space: nowrap;
+}
+
 .ui-table-check {
   width: 36px;
   text-align: center;
@@ -79,6 +88,19 @@
   text-transform: inherit;
   padding: 0;
   cursor: pointer;
+  text-align: inherit;
+}
+
+.ui-table-sort-right {
+  display: block;
+  width: 100%;
+  text-align: right;
+}
+
+.ui-table-sort-center {
+  display: block;
+  width: 100%;
+  text-align: center;
 }
 
 .ui-table-sort:hover {
