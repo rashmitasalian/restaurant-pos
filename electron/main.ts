@@ -1,5 +1,5 @@
 import "./env";
-import { app, BrowserWindow, ipcMain, dialog, session, Menu, type IpcMainInvokeEvent } from "electron";
+import { app, BrowserWindow, ipcMain, dialog, session, Menu, type IpcMainInvokeEvent, type WebContents } from "electron";
 import path from "path";
 import http from "http";
 import https from "https";
@@ -28,6 +28,41 @@ function logStartupStage(stage: string, context?: Record<string, unknown>) {
 // Treat the app as dev only when NODE_ENV != 'production' AND the app is not packaged.
 // This prevents packaged releases from attempting to load the dev server.
 const isDev = process.env.NODE_ENV !== "production" && !app.isPackaged;
+
+function isAllowedRendererUrl(targetUrl: string) {
+  try {
+    const parsed = new URL(targetUrl);
+    const isDevRenderer =
+      isDev &&
+      (parsed.origin.startsWith("http://localhost:") ||
+        parsed.origin.startsWith("http://127.0.0.1:"));
+    const isProdRenderer = !isDev && parsed.protocol === "file:";
+    return isDevRenderer || isProdRenderer;
+  } catch {
+    return false;
+  }
+}
+
+function denyPopupWindows(contents: WebContents) {
+  contents.setWindowOpenHandler(() => ({ action: "deny" }));
+}
+
+function bindRendererNavigationGuard(contents: WebContents) {
+  contents.on("will-navigate", (event, targetUrl) => {
+    if (!isAllowedRendererUrl(targetUrl)) {
+      event.preventDefault();
+    }
+  });
+  contents.on("will-redirect", (event, targetUrl) => {
+    if (!isAllowedRendererUrl(targetUrl)) {
+      event.preventDefault();
+    }
+  });
+}
+
+const LOG_LEVELS = new Set(["debug", "info", "warn", "error", "fatal"]);
+const MAX_LOG_MESSAGE_CHARS = 8_192;
+const MAX_LOG_CONTEXT_CHARS = 16_384;
 
 // ── Configurable constants (set in .env / OS environment) ──────────────────────
 const HOTEL_NAME = process.env.HOTEL_NAME ?? "";
@@ -178,12 +213,15 @@ async function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      webSecurity: true,
+      allowRunningInsecureContent: false,
     },
   });
 
   session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => {
     callback(false);
   });
+  session.defaultSession.setPermissionCheckHandler(() => false);
 
   mainWindow.webContents.once("did-start-loading", () => {
     logStartupStage("renderer:did-start-loading");
@@ -198,23 +236,8 @@ async function createWindow() {
     logStartupStage("window:ready-to-show");
   });
 
-  mainWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
-  mainWindow.webContents.on("will-navigate", (event, targetUrl) => {
-    try {
-      const parsed = new URL(targetUrl);
-      const isDevRenderer =
-        isDev &&
-        (parsed.origin.startsWith("http://localhost:") ||
-          parsed.origin.startsWith("http://127.0.0.1:"));
-      const isProdRenderer = !isDev && parsed.protocol === "file:";
-      if (isDevRenderer || isProdRenderer) {
-        return;
-      }
-    } catch {
-      // Block malformed navigation targets.
-    }
-    event.preventDefault();
-  });
+  denyPopupWindows(mainWindow.webContents);
+  bindRendererNavigationGuard(mainWindow.webContents);
 
   // ── Content Security Policy ──────────────────────────────────────────────
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
@@ -274,6 +297,15 @@ async function createWindow() {
     mainWindow = null;
   });
 }
+
+app.on("web-contents-created", (_event, contents) => {
+  denyPopupWindows(contents);
+});
+
+app.on("certificate-error", (event, _webContents, _url, _error, _certificate, callback) => {
+  event.preventDefault();
+  callback(false);
+});
 
 app.whenReady().then(async () => {
   logStartupStage("app:whenReady");
@@ -359,7 +391,21 @@ ipcMain.handle("printer:print", async (event, token: string | null, payload) => 
 // Log IPC: persist renderer logs to file
 ipcMain.handle("log:write", async (event, token: string | null, level: string, message: string, context?: any) => {
   requireMainSession(event, token);
-  writeLogToFile(level, message, context);
+  const safeLevel = LOG_LEVELS.has(String(level || "").toLowerCase())
+    ? String(level).toLowerCase()
+    : "info";
+  const safeMessage = String(message || "").slice(0, MAX_LOG_MESSAGE_CHARS);
+  let safeContext: unknown;
+  try {
+    const serialized = JSON.stringify(context);
+    safeContext =
+      serialized && serialized.length > MAX_LOG_CONTEXT_CHARS
+        ? { truncated: true, preview: serialized.slice(0, MAX_LOG_CONTEXT_CHARS) }
+        : context;
+  } catch {
+    safeContext = { unserializable: true };
+  }
+  writeLogToFile(safeLevel, safeMessage, safeContext);
   return { ok: true };
 });
 
@@ -375,7 +421,18 @@ ipcMain.handle("report:exportPdf", async (event, token: string | null, html: str
 
     pdfWin = new BrowserWindow({
       show: false,
-      webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
+      webPreferences: {
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true,
+        webSecurity: true,
+        javascript: false,
+        allowRunningInsecureContent: false,
+      },
+    });
+    pdfWin.webContents.once("did-finish-load", () => {
+      pdfWin!.webContents.on("will-navigate", (navEvent) => navEvent.preventDefault());
+      pdfWin!.webContents.on("will-redirect", (redirectEvent) => redirectEvent.preventDefault());
     });
 
     await new Promise<void>((resolve, reject) => {

@@ -19,8 +19,14 @@ function pushMonoImage(cmds: number[], directive: string) {
     return;
   }
   const widthBytes = Math.ceil(width / 8);
+  const MAX_WIDTH = 576;
+  const MAX_HEIGHT = 512;
+  const MAX_BYTES = 64 * 1024;
+  if (width > MAX_WIDTH || height > MAX_HEIGHT || !dataBase64 || dataBase64.length > MAX_BYTES * 2) {
+    return;
+  }
   const data = Buffer.from(dataBase64, "base64");
-  if (data.length < widthBytes * height) {
+  if (data.length < widthBytes * height || data.length > MAX_BYTES) {
     return;
   }
 

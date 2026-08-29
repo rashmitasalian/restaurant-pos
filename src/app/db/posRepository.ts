@@ -47,7 +47,7 @@ export type GroceryListDoc = GroceryListDto;
 export type GroceryPurchaseLineDoc = GroceryPurchaseLineDto;
 
 export const MAX_ATTEMPTS = 5;
-export const LOCKOUT_DURATION = 30_000;
+export const LOCKOUT_DURATION = 900_000;
 
 function api() {
   if (!window.pos) {

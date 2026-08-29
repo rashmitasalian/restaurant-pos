@@ -138,13 +138,23 @@ function writeJson(filePath: string, value: unknown) {
   fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
 }
 
-function downloadBuffer(url: string): Promise<Buffer> {
+const MAX_DOWNLOAD_BYTES = 512 * 1024 * 1024;
+const MAX_DOWNLOAD_REDIRECTS = 5;
+
+function downloadBuffer(url: string, redirectsLeft = MAX_DOWNLOAD_REDIRECTS): Promise<Buffer> {
   const parsed = assertHttpsUrl(url, "download-url");
   return new Promise((resolve, reject) => {
     const req = https.get(parsed, (res) => {
       if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
         res.resume();
-        downloadBuffer(new URL(res.headers.location, parsed).toString()).then(resolve, reject);
+        if (redirectsLeft <= 0) {
+          reject(new Error("download-too-many-redirects"));
+          return;
+        }
+        downloadBuffer(new URL(res.headers.location, parsed).toString(), redirectsLeft - 1).then(
+          resolve,
+          reject,
+        );
         return;
       }
       if (res.statusCode !== 200) {
@@ -152,8 +162,24 @@ function downloadBuffer(url: string): Promise<Buffer> {
         reject(new Error(`download-failed:${res.statusCode || "unknown"}`));
         return;
       }
+      const declared = Number(res.headers["content-length"] || 0);
+      if (declared > MAX_DOWNLOAD_BYTES) {
+        res.resume();
+        reject(new Error("download-too-large"));
+        return;
+      }
       const chunks: Buffer[] = [];
-      res.on("data", (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+      let received = 0;
+      res.on("data", (chunk) => {
+        const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+        received += buf.length;
+        if (received > MAX_DOWNLOAD_BYTES) {
+          req.destroy();
+          reject(new Error("download-too-large"));
+          return;
+        }
+        chunks.push(buf);
+      });
       res.on("end", () => resolve(Buffer.concat(chunks)));
     });
     req.on("error", reject);

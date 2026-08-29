@@ -41,6 +41,6 @@ export const ENV = {
   SESSION_INACTIVITY_MS: Number(import.meta.env.VITE_SESSION_INACTIVITY_MS ?? 1_800_000),
   /** Max consecutive failed login attempts before account is temporarily locked. */
   AUTH_MAX_ATTEMPTS: Number(import.meta.env.VITE_AUTH_MAX_ATTEMPTS ?? 5),
-  /** Lockout duration in ms after reaching max failed attempts (default: 30 s). */
-  AUTH_LOCKOUT_MS: Number(import.meta.env.VITE_AUTH_LOCKOUT_MS ?? 30_000),
+  /** Lockout duration in ms after reaching max failed attempts (default: 15 min). */
+  AUTH_LOCKOUT_MS: Number(import.meta.env.VITE_AUTH_LOCKOUT_MS ?? 900_000),
 } as const;

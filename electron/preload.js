@@ -252,17 +252,3 @@ contextBridge.exposeInMainWorld("pos", {
   },
 });
 
-// Developer convenience: attempt to load React DevTools if present
-try {
-  const installExtension = require("electron-devtools-installer");
-  window.__installReactDevTools = async () => {
-    try {
-      const result = await installExtension.default(installExtension.REACT_DEVELOPER_TOOLS);
-      console.log("React DevTools installed:", result);
-    } catch (error) {
-      console.warn("React DevTools install failed", error && error.message);
-    }
-  };
-} catch (e) {
-  window.__installReactDevTools = async () => {};
-}

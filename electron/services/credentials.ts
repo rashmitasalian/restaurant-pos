@@ -58,6 +58,28 @@ export function verifyCredential(secret: string, stored: StoredCredential) {
   };
 }
 
+let dummyStored: StoredCredential | null = null;
+
+function getDummyStored(): StoredCredential {
+  if (!dummyStored) {
+    const created = createCredentialHash(randomBytes(32).toString("hex"));
+    dummyStored = {
+      hash_algo: created.hashAlgo,
+      salt: created.salt,
+      password_hash: created.hash,
+    };
+  }
+  return dummyStored;
+}
+
+export function verifyCredentialAgainstStored(secret: string, stored: StoredCredential | null) {
+  if (stored) {
+    return verifyCredential(secret, stored);
+  }
+  verifyCredential(secret, getDummyStored());
+  return { ok: false, needsUpgrade: false };
+}
+
 export function normalizeRecoveryCode(code: string) {
   return code.replace(/[^a-z0-9]/gi, "").toUpperCase();
 }

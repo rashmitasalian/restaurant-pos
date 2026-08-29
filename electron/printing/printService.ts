@@ -30,9 +30,6 @@ export function resolvePrinterTarget(
   if (key === "counter") {
     return cfg.counterPrinterName;
   }
-  if (requested && key !== "default") {
-    return requested;
-  }
   return type === "kot" ? cfg.kitchenPrinterName : cfg.counterPrinterName;
 }
 

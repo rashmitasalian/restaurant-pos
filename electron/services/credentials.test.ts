@@ -4,6 +4,7 @@ import {
   normalizeRecoveryCode,
   SCRYPT_ALGO,
   verifyCredential,
+  verifyCredentialAgainstStored,
 } from "./credentials";
 
 jest.setTimeout(20000);
@@ -37,5 +38,10 @@ describe("credential helpers", () => {
         password_hash: "00",
       }),
     ).toEqual({ ok: false, needsUpgrade: false });
+  });
+
+  it("fails closed for unknown users after a dummy scrypt compare", () => {
+    const missing = verifyCredentialAgainstStored("StrongPass123", null);
+    expect(missing).toEqual({ ok: false, needsUpgrade: false });
   });
 });

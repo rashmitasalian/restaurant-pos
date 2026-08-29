@@ -10,6 +10,7 @@ import {
   generateRecoveryCode,
   normalizeRecoveryCode,
   verifyCredential,
+  verifyCredentialAgainstStored,
 } from "./credentials";
 import type {
   AuditArchiveDto,
@@ -90,7 +91,7 @@ import { RECOVERY_CODE_COUNT } from "../../src/shared/auth";
 
 const TAX_RATE_BPS = 1800;
 const MAX_ATTEMPTS = Number(process.env.VITE_AUTH_MAX_ATTEMPTS || 5);
-const LOCKOUT_MS = Number(process.env.VITE_AUTH_LOCKOUT_MS || 30_000);
+const LOCKOUT_MS = Number(process.env.VITE_AUTH_LOCKOUT_MS || 900_000);
 const INVOICE_CONFIG_KEY = "config:invoice";
 const ORDER_SEQ_KEY = "config:order-seq";
 const KOT_SEQ_KEY = "config:kot-seq";
@@ -1764,6 +1765,14 @@ export const posService = {
     }
 
     const row = getDb().prepare("SELECT * FROM users WHERE username = ?").get(key) as any;
+    const stored = row
+      ? {
+          hash_algo: row.hash_algo,
+          salt: row.salt,
+          password_hash: row.password_hash,
+        }
+      : null;
+    const verified = verifyCredentialAgainstStored(password, stored);
     if (!row) {
       recordFailedLogin(key);
       return { ok: false, reason: "not-found" };
@@ -1772,7 +1781,6 @@ export const posService = {
       createAuditRow(getDb(), "auth.login.blocked", "user", key, null, { reason: "inactive" });
       return { ok: false, reason: "inactive" };
     }
-    const verified = verifyCredential(password, row);
     if (!verified.ok) {
       recordFailedLogin(key);
       createAuditRow(getDb(), "auth.login.failed", "user", key, null, {

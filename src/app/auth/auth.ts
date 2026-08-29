@@ -98,7 +98,7 @@ export function getSession(): Session | null {
  * - Checks account active flag before password comparison.
  * - Both "user not found" and "wrong password" return "invalid-credentials"
  *   to prevent username enumeration.
- * - In-memory brute-force counter: 5 failures means a 30-second lockout per username.
+ * - In-memory brute-force counter: 5 failures means a 15-minute lockout per username.
  * - Audit event written for every attempt.
  */
 export async function login(username: string, password: string): Promise<LoginResult> {

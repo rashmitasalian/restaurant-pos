@@ -64,8 +64,26 @@ function publicUser(user: UserDto) {
     role: user.role,
     displayName: user.displayName,
     requirePasswordChange: user.requirePasswordChange ?? false,
+    active: user.active !== false,
   };
 }
+
+function sanitizeLogoDataUrl(value: unknown): string | null {
+  const raw = String(value || "").replace(/\s/g, "");
+  if (!raw || raw.length > 2_000_000) {
+    return null;
+  }
+  if (!/^data:image\/(png|jpe?g|webp);base64,[A-Za-z0-9+/]+=*$/i.test(raw)) {
+    return null;
+  }
+  return raw;
+}
+
+const RENDERER_AUDIT_ACTIONS = new Set([
+  "staff.export.csv",
+  "staff.export.pdf",
+  "staff.photo.downloaded",
+]);
 
 function requireSession(
   event: IpcMainInvokeEvent,
@@ -140,7 +158,7 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
   });
   ipcMain.handle("pos:auth:refresh-user", (event, token?: string | null) => {
     const user = requireSession(event, token, undefined, { allowPasswordChange: true });
-    return user;
+    return publicUser(user);
   });
   ipcMain.handle(
     "pos:auth:change-password",
@@ -159,7 +177,7 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
       hotelName: String(cfg.hotelName || ""),
       hotelInitials: String(cfg.hotelInitials || ""),
       tagline: String(cfg.tagline || "POINT OF SALE"),
-      logoDataUrl: cfg.logoDataUrl || null,
+      logoDataUrl: sanitizeLogoDataUrl(cfg.logoDataUrl),
     };
   });
   ipcMain.handle("pos:auth:regenerate-recovery-codes", (event, token: string | null, payload) => {
@@ -403,7 +421,7 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
     const user = requireSession(event, token);
     return posService.setOrderPaid(orderId, {
       ...payment,
-      receivedBy: payment?.receivedBy || user.username,
+      receivedBy: user.username,
     });
   });
   ipcMain.handle("pos:orders:cancel", (event, token: string | null, orderId: string) => {
@@ -485,17 +503,33 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
 
   ipcMain.handle("pos:settings:get", (event, token: string | null, key: string) => {
     const user = requireSession(event, token);
-    if (!canReadSetting(user.role, String(key || ""))) {
+    const settingKey = String(key || "");
+    if (!canReadSetting(user.role, settingKey)) {
       throw new Error("forbidden");
     }
-    return posService.getConfigDoc(key);
+    const value = posService.getConfigDoc(settingKey);
+    if (settingKey === "config:branding" && value && typeof value === "object") {
+      return {
+        ...value,
+        logoDataUrl: sanitizeLogoDataUrl((value as { logoDataUrl?: unknown }).logoDataUrl),
+      };
+    }
+    return value;
   });
   ipcMain.handle("pos:settings:set", (event, token: string | null, key: string, value) => {
     const user = requirePermission(event, token, "system:settings");
-    if (!WRITABLE_SETTINGS.has(String(key || ""))) {
+    const settingKey = String(key || "");
+    if (!WRITABLE_SETTINGS.has(settingKey)) {
       throw new Error("invalid-setting-key");
     }
-    return posService.setSetting(key, value, user.username);
+    let nextValue = value;
+    if (settingKey === "config:branding" && value && typeof value === "object") {
+      nextValue = {
+        ...value,
+        logoDataUrl: sanitizeLogoDataUrl((value as { logoDataUrl?: unknown }).logoDataUrl),
+      };
+    }
+    return posService.setSetting(settingKey, nextValue, user.username);
   });
   ipcMain.handle("pos:settings:prune-audit", (event, token?: string | null) => {
     requirePermission(event, token, "system:settings");
@@ -684,7 +718,11 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
       detail?: unknown,
     ) => {
       const user = requireSession(event, token, undefined, { allowPasswordChange: true });
-      return posService.createAudit(action, orderId, user.username, detail);
+      const actionName = String(action || "").trim();
+      if (!RENDERER_AUDIT_ACTIONS.has(actionName)) {
+        throw new Error("invalid-audit-action");
+      }
+      return posService.createAudit(actionName, orderId, user.username, detail);
     },
   );
   ipcMain.handle("pos:audit:list", (event, token: string | null, opts) => {
@@ -786,8 +824,12 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
   });
 
   ipcMain.handle("pos:app:info", (event, token?: string | null) => {
-    requireSession(event, token);
-    return updateService.appInfo();
+    const user = requireSession(event, token);
+    const info = updateService.appInfo();
+    if (!roleHasPermission(user.role, "system:settings")) {
+      return { version: info.version };
+    }
+    return info;
   });
   ipcMain.handle("pos:updates:check", async (event, token?: string | null) => {
     requirePermission(event, token, "system:settings");

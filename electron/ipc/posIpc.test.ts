@@ -141,7 +141,11 @@ describe("print queue IPC access", () => {
       active: true,
       requirePasswordChange: false,
     });
-    appInfoMock.mockReturnValue({ version: "1.0.0" });
+    appInfoMock.mockReturnValue({
+      version: "1.0.0",
+      databasePath: "C:\\secret\\restaurant-pos.sqlite",
+      logPath: "C:\\secret\\logs",
+    });
 
     expect(invoke("pos:app:info")).toEqual({ version: "1.0.0" });
   });
