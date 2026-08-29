@@ -4,5 +4,6 @@ export const PRINT = {
   sub: "#666666",
   muted: "#888888",
   faint: "#aaaaaa",
+  line: "#e5e5e5",
   dangerRow: "#fff5f5",
 } as const;

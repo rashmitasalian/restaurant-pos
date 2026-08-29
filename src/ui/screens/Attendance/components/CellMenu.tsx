@@ -1,5 +1,5 @@
 import React from "react";
-import { ChevronDown } from "lucide-react";
+import { Check, ChevronDown } from "lucide-react";
 import { PortalMenu } from "../../../components/ui/PortalMenu";
 import menuStyles from "./CellMenu.module.css";
 
@@ -86,7 +86,7 @@ export default function CellMenu<T extends string>({
               }}
             >
               {option.selected ? (
-                <span className="ui-menu-check">✓</span>
+                <Check size={14} className="ui-menu-check" aria-hidden />
               ) : (
                 <span className="ui-menu-checkSpacer" />
               )}

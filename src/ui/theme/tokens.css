@@ -81,6 +81,12 @@
   --pos-state-danger-line: #dc2626;
   --pos-state-danger-text: #991b1b;
 
+  /* Attendance status dots (Manage back-office) */
+  --pos-attendance-late-dot: var(--pos-saffron-deep);
+  --pos-attendance-half-day-dot: var(--pos-info);
+  --pos-attendance-leave-dot: var(--pos-teal-strong);
+  --pos-attendance-holiday-dot: var(--pos-tx-sub);
+
   --pos-brand: var(--pos-teal);
   --pos-brand-deep: var(--pos-teal-strong);
   --pos-brand-dark: var(--pos-teal-strong);

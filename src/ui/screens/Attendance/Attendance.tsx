@@ -17,6 +17,7 @@ import type { AttendanceStatus } from "../../../shared/pos";
 import { useToast } from "../../context/ToastContext";
 import { Button } from "../../components/ui/Button";
 import { PortalMenu, PortalMenuItem } from "../../components/ui/PortalMenu";
+import { Skeleton } from "../../components/ui/Skeleton";
 import { useAttendanceShortcuts } from "./hooks/useAttendanceShortcuts";
 import styles from "./Attendance.module.css";
 import menuStyles from "./components/CellMenu.module.css";
@@ -514,9 +515,7 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
   if (loading) {
     return (
       <div className={styles.root}>
-        <div className={styles.skeleton} />
-        <div className={styles.skeleton} />
-        <div className={styles.skeleton} />
+        <Skeleton rows={3} label="Loading attendance..." />
       </div>
     );
   }

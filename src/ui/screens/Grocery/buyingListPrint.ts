@@ -1,4 +1,5 @@
 import type { GroceryListDoc } from "../../../app/db/posRepository";
+import { PRINT } from "../../theme/print-html";
 import { formatListDate } from "./groceryUtils";
 
 export function buyingListPrintLines(list: GroceryListDoc, withPurchaseDetails = false) {
@@ -30,7 +31,7 @@ export function buyingListHtml(list: GroceryListDoc) {
   const rows = list.lines
     .map(
       (line) =>
-        `<tr><td>☐ ${escapeHtml(line.itemName)}</td><td>${line.quantity} ${escapeHtml(
+        `<tr><td><span class="box"></span>${escapeHtml(line.itemName)}</td><td>${line.quantity} ${escapeHtml(
           line.unit,
         )}</td></tr>`,
     )
@@ -39,11 +40,12 @@ export function buyingListHtml(list: GroceryListDoc) {
     list.title,
   )}</title>
   <style>
-    body{font-family:Segoe UI,Arial,sans-serif;padding:24px;color:#111}
+    body{font-family:Segoe UI,Arial,sans-serif;padding:24px;color:${PRINT.ink}}
     h1{font-size:20px;margin:0 0 4px}
-    .meta{color:#666;font-size:13px;margin-bottom:16px}
+    .meta{color:${PRINT.sub};font-size:13px;margin-bottom:16px}
     table{width:100%;border-collapse:collapse}
-    td{padding:8px 4px;border-bottom:1px solid #e5e5e5;font-size:14px}
+    td{padding:8px 4px;border-bottom:1px solid ${PRINT.line};font-size:14px}
+    .box{display:inline-block;width:12px;height:12px;border:1px solid ${PRINT.muted};margin-right:8px;vertical-align:middle}
     td:last-child{text-align:right;white-space:nowrap}
   </style></head><body>
   <h1>${escapeHtml(list.title)}</h1>

@@ -1,4 +1,5 @@
 import React from "react";
+import { Check } from "lucide-react";
 import {
   getGroceryList,
   listGroceryPurchaseHeaders,
@@ -221,7 +222,7 @@ export function BuyingListDetail({
                           {line.purchasedQuantity != null
                             ? `${line.purchasedQuantity} ${line.unit}`
                             : line.lineStatus === "purchased"
-                              ? "✓"
+                              ? <Check size={14} aria-label="Purchased" />
                               : "—"}
                         </td>
                         <td>

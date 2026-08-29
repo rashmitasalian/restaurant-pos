@@ -21,10 +21,15 @@ npm run start
 
 ```powershell
 npm test
+npm run lint
 npm run build:renderer
 npm run build:electron
 npm run rebuild:electron
 ```
+
+## UI and design system
+
+Product UI follows **RestoNiti 2026**. New work should use components and tokens from `src/ui/components/ui/` and `src/ui/theme/`. See `docs/design-system.md` for rules and `docs/ONBOARDING.md` if you are starting on the codebase today.
 
 `npm run build:electron` rebuilds native modules for Electron. Run `npm run rebuild:electron` if
 `better-sqlite3` binaries are compiled against a different Node/Electron version during development.

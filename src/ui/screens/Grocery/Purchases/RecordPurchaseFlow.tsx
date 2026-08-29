@@ -1,4 +1,5 @@
 import React from "react";
+import { Check, Circle } from "lucide-react";
 import { createPortal } from "react-dom";
 import {
   createGroceryPurchase,
@@ -438,7 +439,7 @@ export function RecordPurchaseFlow({ listId, initialMode = null, onClose, onChan
                           onClick={() => setActiveLineId(line.id)}
                         >
                           <span className={styles.purchaseItemCheck} aria-hidden>
-                            {ready ? "✓" : "○"}
+                            {ready ? <Check size={14} /> : <Circle size={14} />}
                           </span>
                           <span>
                             <strong>{line.itemName}</strong>

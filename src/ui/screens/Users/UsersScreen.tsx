@@ -195,22 +195,19 @@ export default function UsersScreen({
               </span>
 
               <div className={styles.cardActions}>
-                <button
-                  className={styles.btnSecondary}
-                  onClick={() => setResetTarget(user)}
-                  title="Reset password"
-                >
+                <Button size="sm" variant="secondary" onClick={() => setResetTarget(user)} title="Reset password">
                   Reset password
-                </button>
+                </Button>
 
                 {!isSelf(user) && (
-                  <button
-                    className={user.active !== false ? styles.btnDanger : styles.btnSecondary}
+                  <Button
+                    size="sm"
+                    variant={user.active !== false ? "danger" : "secondary"}
                     onClick={() => setToggleTarget(user)}
                     title={user.active !== false ? "Disable account" : "Enable account"}
                   >
                     {user.active !== false ? "Disable" : "Enable"}
-                  </button>
+                  </Button>
                 )}
               </div>
             </div>
@@ -623,12 +620,17 @@ function ModalActions({
 }) {
   return (
     <div className={styles.modalActions}>
-      <button type="button" className={styles.btnSecondary} onClick={onClose} disabled={disabled}>
+      <Button type="button" size="sm" variant="secondary" onClick={onClose} disabled={disabled}>
         Cancel
-      </button>
-      <button type="submit" className={danger ? styles.btnDanger : styles.btnPrimary} disabled={disabled}>
+      </Button>
+      <Button
+        type="submit"
+        size="sm"
+        variant={danger ? "danger" : "primary"}
+        disabled={disabled}
+      >
         {primaryLabel}
-      </button>
+      </Button>
     </div>
   );
 }

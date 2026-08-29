@@ -51,7 +51,7 @@
   border: 1px solid var(--pos-line);
   border-radius: 10px;
   background: var(--pos-surface);
-  box-shadow: var(--pos-shadow-md, 0 8px 24px rgba(0, 0, 0, 0.12));
+  box-shadow: var(--pos-shadow-md);
 }
 
 .menuRight {
@@ -80,12 +80,12 @@
 }
 
 .optionSelected {
-  color: var(--pos-primary, var(--pos-teal));
+  color: var(--pos-teal);
 }
 
 .check {
   width: 14px;
-  color: var(--pos-primary, var(--pos-teal));
+  color: var(--pos-teal);
   font-weight: 800;
 }
 
@@ -102,12 +102,12 @@
 
 .tonePresent .statusDot,
 .statusDotPresent {
-  background: var(--pos-success, #16a34a);
+  background: var(--pos-success);
 }
 
 .toneAbsent .statusDot,
 .statusDotAbsent {
-  background: var(--pos-danger, #dc2626);
+  background: var(--pos-danger);
 }
 
 .toneEmpty .statusDot {
@@ -117,22 +117,22 @@
 
 .toneLate .statusDot,
 .statusDotLate {
-  background: var(--pos-warning, #d97706);
+  background: var(--pos-attendance-late-dot);
 }
 
 .toneHalfDay .statusDot,
 .statusDotHalfDay {
-  background: #2563eb;
+  background: var(--pos-attendance-half-day-dot);
 }
 
 .toneLeave .statusDot,
 .statusDotLeave {
-  background: #0891b2;
+  background: var(--pos-attendance-leave-dot);
 }
 
 .toneHoliday .statusDot,
 .statusDotHoliday {
-  background: #7c3aed;
+  background: var(--pos-attendance-holiday-dot);
 }
 
 .statusDotEmpty {

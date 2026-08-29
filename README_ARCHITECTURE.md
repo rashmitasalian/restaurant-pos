@@ -60,6 +60,8 @@ Electron main owns:
 - `src/shared/gst.ts`: GST normalization and totals.
 - `src/ui/App.tsx`: auth gate and role-filtered navigation.
 
+UI work uses the RestoNiti 2026 design system (`docs/design-system.md`, `src/ui/theme/`, `src/ui/components/ui/`). See `docs/ONBOARDING.md` for a repo map and migration notes.
+
 ## 4. Database
 
 The source of truth is one SQLite database:
