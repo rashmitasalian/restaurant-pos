@@ -1,5 +1,5 @@
 import "./env";
-import { app, BrowserWindow, ipcMain, dialog, session, type IpcMainInvokeEvent } from "electron";
+import { app, BrowserWindow, ipcMain, dialog, session, Menu, type IpcMainInvokeEvent } from "electron";
 import path from "path";
 import http from "http";
 import https from "https";
@@ -170,6 +170,7 @@ async function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
+    autoHideMenuBar: true,
     ...(icon ? { icon } : {}),
     webPreferences: {
       // Always use the JS shim for preload. The shim will register ts-node and require preload.ts during dev.
@@ -276,6 +277,10 @@ async function createWindow() {
 
 app.whenReady().then(async () => {
   logStartupStage("app:whenReady");
+  // POS shell: no File/Edit/View menu in production; dev keeps Alt-accessible bar via autoHideMenuBar.
+  if (!isDev) {
+    Menu.setApplicationMenu(null);
+  }
   configureStableUserDataPath();
   try {
     logStartupStage("db:init:start");

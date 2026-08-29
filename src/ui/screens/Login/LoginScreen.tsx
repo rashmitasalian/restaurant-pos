@@ -111,7 +111,13 @@ export default function LoginScreen() {
               </ul>
             </div>
           </div>
-          <div className={authStyles.brandPaneFoot}>Secure staff access</div>
+          <div className={authStyles.brandPaneFoot} aria-hidden="true">
+            <span>Offline-ready</span>
+            <span className={authStyles.brandPaneFootDot} aria-hidden="true" />
+            <span>Secure</span>
+            <span className={authStyles.brandPaneFootDot} aria-hidden="true" />
+            <span>Built for restaurants</span>
+          </div>
         </aside>
 
         <form onSubmit={handleSubmit} className={authStyles.formPane}>
@@ -127,12 +133,12 @@ export default function LoginScreen() {
               ) : null}
               <div style={{ minWidth: 0 }}>
                 {restaurantName ? <div className={authStyles.hotelName}>{restaurantName}</div> : null}
-                <div className={authStyles.hotelMeta}>Staff sign-in</div>
+                <div className={authStyles.hotelMeta}>Restaurant staff access</div>
               </div>
             </div>
           ) : (
             <div className={authStyles.hotelMeta} style={{ marginBottom: 16 }}>
-              Staff sign-in
+              Restaurant staff access
             </div>
           )}
 
@@ -191,7 +197,7 @@ export default function LoginScreen() {
             disabled={isSubmitting}
             className={authStyles.linkBtn}
           >
-            Forgot admin password?
+            Need help signing in?
           </button>
         </form>
       </div>
