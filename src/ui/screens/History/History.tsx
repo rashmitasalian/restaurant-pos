@@ -25,6 +25,7 @@ import {
   normalizeGstConfig,
 } from "../../../shared/gst";
 import { PRINT } from "../../theme/print-html";
+import { Button } from "../../components/ui/Button";
 import { PageHeader } from "../../components/ui/PageHeader";
 
 function normalizeModeId(value: unknown): string {
@@ -741,16 +742,13 @@ loadFirstPage(pageSize, search, fromTs, toTs);
             className="pos-input"
             style={{ width: 200 }}
           />
-          <button
-            onClick={() => loadFirstPage(pageSize, search, fromTs, toTs)}
-            className="pos-btn pos-btn-secondary"
-          >
+          <Button onClick={() => loadFirstPage(pageSize, search, fromTs, toTs)} variant="secondary">
             Search
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={handleExport}
             disabled={exporting}
-            className="pos-btn pos-btn-secondary"
+            variant="secondary"
             title={
               selected.length > 0 ? "Save selected orders as PDF" : "Save filtered orders as PDF"
             }
@@ -760,14 +758,14 @@ loadFirstPage(pageSize, search, fromTs, toTs);
               : selected.length > 0
                 ? `Export Selected PDF (${selected.length})`
                 : "Export PDF"}
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={openDeleteAllConfirm}
-            className="pos-btn pos-btn-danger"
+            variant="danger"
             disabled={deleteAllCountLoading || deletingAll}
           >
             {deletingAll ? "Deleting..." : "Delete All"}
-          </button>
+          </Button>
           </>
         }
       />
@@ -786,30 +784,23 @@ loadFirstPage(pageSize, search, fromTs, toTs);
             className="pos-input"
             style={{ width: 200 }}
           />
-          <button
-            onClick={() => loadFirstPage(pageSize, search, fromTs, toTs)}
-            className="pos-btn pos-btn-secondary"
-          >
+          <Button onClick={() => loadFirstPage(pageSize, search, fromTs, toTs)} variant="secondary">
             Search
-          </button>
-          <button
-            onClick={handleExport}
-            disabled={exporting}
-            className="pos-btn pos-btn-secondary"
-          >
+          </Button>
+          <Button onClick={handleExport} disabled={exporting} variant="secondary">
             {exporting
               ? "Exporting..."
               : selected.length > 0
                 ? `Export Selected PDF (${selected.length})`
                 : "Export PDF"}
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={openDeleteAllConfirm}
-            className="pos-btn pos-btn-danger"
+            variant="danger"
             disabled={deleteAllCountLoading || deletingAll}
           >
             {deletingAll ? "Deleting..." : "Delete All"}
-          </button>
+          </Button>
         </div>
       )}
 
@@ -959,21 +950,18 @@ loadFirstPage(pageSize, search, fromTs, toTs);
             </div>
             {/* Actions */}
             <div style={{ display: "flex", gap: 5, justifyContent: "center" }}>
-              <button
-                onClick={() => openOrder(s)}
-                className="pos-btn pos-btn-secondary pos-btn-sm"
-                title="Preview order"
-              >
+              <Button size="sm" variant="secondary" onClick={() => openOrder(s)} title="Preview order">
                 Preview
-              </button>
-              <button
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
                 onClick={() => reprintOrder(s)}
                 disabled={reprinting}
-                className="pos-btn pos-btn-secondary pos-btn-sm"
                 title="Reprint receipt"
               >
                 {reprinting ? "Printing..." : "Reprint"}
-              </button>
+              </Button>
             </div>
             {/* Total */}
             <span style={{ textAlign: "right", fontWeight: 800, fontSize: 15, color: "var(--pos-tx)" }}>
@@ -1003,13 +991,14 @@ loadFirstPage(pageSize, search, fromTs, toTs);
               {pageItems.length} order{pageItems.length !== 1 ? "s" : ""}
             </span>
             {selected.length > 0 && (
-              <button
+              <Button
+                size="sm"
+                variant="danger"
                 onClick={() => setConfirmSelectedOpen(true)}
                 disabled={deletingSelected || deletingAll}
-                className="pos-btn pos-btn-danger pos-btn-sm"
               >
                 {deletingSelected ? "Deleting..." : `Delete selected (${selected.length})`}
-              </button>
+              </Button>
             )}
           </div>
           <span style={{ fontWeight: 900, fontSize: 18, color: "var(--pos-saffron-text)" }}>
@@ -1031,20 +1020,17 @@ loadFirstPage(pageSize, search, fromTs, toTs);
           }}
         >
           <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-            <button
-              onClick={() => loadPrevPage()}
-              disabled={currentPageIndex === 0}
-              className="pos-btn pos-btn-secondary pos-btn-sm"
-            >
+            <Button size="sm" variant="secondary" onClick={() => loadPrevPage()} disabled={currentPageIndex === 0}>
               ← Prev
-            </button>
-            <button
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
               onClick={() => loadNextPage(undefined, search)}
               disabled={loadingPage || (!hasMore && currentPageIndex >= pages.length - 1)}
-              className="pos-btn pos-btn-secondary pos-btn-sm"
             >
               Next →
-            </button>
+            </Button>
             <div ref={sentinelRef as any} style={{ width: 1, height: 1 }} />
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -1055,13 +1041,14 @@ loadFirstPage(pageSize, search, fromTs, toTs);
                   ? "All orders loaded"
                   : `${pages.flat().length} orders`}
             </span>
-            <button
+            <Button
+              size="sm"
+              variant="secondary"
               onClick={() => loadMore(pageSize, search)}
               disabled={loadingPage || !hasMore}
-              className="pos-btn pos-btn-secondary pos-btn-sm"
             >
               Load more
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -1102,20 +1089,12 @@ loadFirstPage(pageSize, search, fromTs, toTs);
               {selected.length !== 1 ? "s" : ""}.
             </p>
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-              <button
-                onClick={closeSelectedConfirm}
-                className="pos-btn pos-btn-secondary"
-                disabled={deletingSelected}
-              >
+              <Button variant="secondary" onClick={closeSelectedConfirm} disabled={deletingSelected}>
                 Cancel
-              </button>
-              <button
-                onClick={deleteSelected}
-                className="pos-btn pos-btn-danger"
-                disabled={deletingSelected}
-              >
+              </Button>
+              <Button variant="danger" onClick={deleteSelected} disabled={deletingSelected}>
                 {deletingSelected ? "Deleting..." : "Delete"}
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -1163,20 +1142,16 @@ loadFirstPage(pageSize, search, fromTs, toTs);
               )}
             </p>
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-              <button
-                onClick={closeDeleteAllConfirm}
-                className="pos-btn pos-btn-secondary"
-                disabled={deletingAll}
-              >
+              <Button variant="secondary" onClick={closeDeleteAllConfirm} disabled={deletingAll}>
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="danger"
                 onClick={deleteAll}
                 disabled={deleteAllCountLoading || deletingAll || (deleteAllCount ?? 0) === 0}
-                className="pos-btn pos-btn-danger"
               >
                 {deletingAll ? "Deleting..." : "Delete All"}
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -1253,16 +1228,17 @@ loadFirstPage(pageSize, search, fromTs, toTs);
                 )}
               </div>
               <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
-                <button
+                <Button
+                  size="sm"
+                  variant="primary"
                   onClick={() => previewFull && reprintOrder(previewFull)}
                   disabled={reprinting || previewLoading}
-                  className="pos-btn pos-btn-primary pos-btn-sm"
                 >
                   {reprinting ? "Printing…" : "Reprint"}
-                </button>
-                <button onClick={closePreview} className="pos-btn pos-btn-secondary pos-btn-sm">
+                </Button>
+                <Button size="sm" variant="secondary" onClick={closePreview}>
                   Close
-                </button>
+                </Button>
               </div>
             </div>
 

@@ -7,6 +7,8 @@ import {
   validationMessage,
 } from "../../../shared/validation";
 import { useToast } from "../../context/ToastContext";
+import { Button } from "../../components/ui/Button";
+import { Input } from "../../components/ui/Input";
 import { PageHeader } from "../../components/ui/PageHeader";
 
 interface Customer {
@@ -53,7 +55,6 @@ export default function Customers() {
     if (savingAddRef.current) {
       return;
     }
-    // clear previous errors
     setNameError(null);
     setPhoneError(null);
 
@@ -69,7 +70,6 @@ export default function Customers() {
       return;
     }
 
-    // check duplicate phone
     if (customers.some((c) => c.phone === cleaned)) {
       setPhoneError(validationMessage("customer-phone-duplicate"));
       return;
@@ -170,35 +170,37 @@ export default function Customers() {
     <div className="pos-page pos-page-sm">
       <PageHeader title="Customers" subtitle="Collect customer name & phone for promotions" />
 
-      {/* Add customer form */}
       <div className="pos-card pos-card-p" style={{ marginBottom: 24 }}>
         <p
           style={{
             margin: "0 0 14px",
             fontWeight: 700,
             fontSize: 13,
-            color: "var(--pos-tx-sec,var(--pos-tx-sec))",
+            color: "var(--pos-tx-sec)",
           }}
         >
           Add New Customer
         </p>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-start" }}>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
           <div style={{ flex: "1 1 180px" }}>
-            <input
+            <Input
+              label="Customer name"
+              labelHidden
               value={name}
               onChange={(e) => {
                 setName(e.target.value);
                 if (nameError) {
-setNameError(null);
-}
+                  setNameError(null);
+                }
               }}
               placeholder="Customer name"
-              className={`pos-input${nameError ? " pos-input-error" : ""}`}
+              error={nameError}
             />
-            {nameError && <div className="pos-field-error">{nameError}</div>}
           </div>
           <div style={{ flex: "1 1 180px" }}>
-            <input
+            <Input
+              label="Phone"
+              labelHidden
               type="tel"
               inputMode="tel"
               autoComplete="tel"
@@ -206,16 +208,16 @@ setNameError(null);
               onChange={(e) => {
                 setPhone(normalizePhone(e.target.value));
                 if (phoneError) {
-setPhoneError(null);
-}
+                  setPhoneError(null);
+                }
               }}
               placeholder="Phone (10 digits)"
-              className={`pos-input${phoneError ? " pos-input-error" : ""}`}
+              error={phoneError}
             />
-            {phoneError && <div className="pos-field-error">{phoneError}</div>}
           </div>
-          <button
+          <Button
             onClick={addCustomer}
+            variant="primary"
             disabled={
               !normalizeText(name) ||
               !isValidPersonName(name) ||
@@ -224,14 +226,12 @@ setPhoneError(null);
               Boolean(phoneError) ||
               savingAdd
             }
-            className="pos-btn pos-btn-primary"
           >
             {savingAdd ? "Adding..." : "Add Customer"}
-          </button>
+          </Button>
         </div>
       </div>
 
-      {/* Customer list */}
       {customers.length === 0 ? (
         <div className="pos-empty">No customers yet. Add your first customer above.</div>
       ) : (
@@ -282,7 +282,9 @@ setPhoneError(null);
                   {isEditing ? (
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", flex: 1 }}>
                       <div style={{ flex: "1 1 160px" }}>
-                        <input
+                        <Input
+                          label="Customer name"
+                          labelHidden
                           value={editName}
                           onChange={(e) => {
                             setEditName(e.target.value);
@@ -291,12 +293,13 @@ setPhoneError(null);
                             }
                           }}
                           placeholder="Customer name"
-                          className={`pos-input${editNameError ? " pos-input-error" : ""}`}
+                          error={editNameError}
                         />
-                        {editNameError && <div className="pos-field-error">{editNameError}</div>}
                       </div>
                       <div style={{ flex: "1 1 160px" }}>
-                        <input
+                        <Input
+                          label="Phone"
+                          labelHidden
                           type="tel"
                           inputMode="tel"
                           autoComplete="tel"
@@ -308,21 +311,16 @@ setPhoneError(null);
                             }
                           }}
                           placeholder="Phone (10 digits)"
-                          className={`pos-input${editPhoneError ? " pos-input-error" : ""}`}
+                          error={editPhoneError}
                         />
-                        {editPhoneError && <div className="pos-field-error">{editPhoneError}</div>}
                       </div>
                     </div>
                   ) : (
                     <div>
-                      <div
-                        style={{ fontWeight: 700, fontSize: 14, color: "var(--pos-tx,var(--pos-tx))" }}
-                      >
-                        {c.name}
-                      </div>
+                      <div style={{ fontWeight: 700, fontSize: 14, color: "var(--pos-tx)" }}>{c.name}</div>
                       <div
                         style={{
-                          color: "var(--pos-tx-sub,var(--pos-tx-sub))",
+                          color: "var(--pos-tx-sub)",
                           fontSize: 13,
                           fontVariantNumeric: "tabular-nums",
                         }}
@@ -335,24 +333,18 @@ setPhoneError(null);
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   {isEditing ? (
                     <>
-                      <button
-                        onClick={() => saveCustomer(c)}
-                        disabled={savingEdit}
-                        className="pos-btn pos-btn-sm pos-btn-primary"
-                      >
+                      <Button size="sm" variant="primary" onClick={() => saveCustomer(c)} disabled={savingEdit}>
                         {savingEdit ? "Saving..." : "Save"}
-                      </button>
-                      <button
-                        onClick={cancelEdit}
-                        disabled={savingEdit}
-                        className="pos-btn pos-btn-sm pos-btn-secondary"
-                      >
+                      </Button>
+                      <Button size="sm" variant="secondary" onClick={cancelEdit} disabled={savingEdit}>
                         Cancel
-                      </button>
+                      </Button>
                     </>
                   ) : (
                     <>
-                      <button
+                      <Button
+                        size="sm"
+                        variant="secondary"
                         onClick={() => {
                           try {
                             navigator.clipboard?.writeText(c.phone);
@@ -361,40 +353,35 @@ setPhoneError(null);
                             showToast("Copied");
                           }
                         }}
-                        className="pos-btn pos-btn-sm pos-btn-secondary"
                       >
                         Copy
-                      </button>
-                      <button
-                        onClick={() => startEdit(c)}
-                        className="pos-btn pos-btn-sm pos-btn-secondary"
-                      >
+                      </Button>
+                      <Button size="sm" variant="secondary" onClick={() => startEdit(c)}>
                         Edit
-                      </button>
+                      </Button>
                       {isConfirmingDelete ? (
                         <>
-                          <button
+                          <Button
+                            size="sm"
+                            variant="danger"
                             onClick={() => removeCustomer(c.id)}
                             disabled={deletingId === c.id}
-                            className="pos-btn pos-btn-sm pos-btn-danger"
                           >
                             {deletingId === c.id ? "Deleting..." : "Confirm Delete"}
-                          </button>
-                          <button
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="secondary"
                             onClick={() => setConfirmDeleteId(null)}
                             disabled={deletingId === c.id}
-                            className="pos-btn pos-btn-sm pos-btn-secondary"
                           >
                             Cancel
-                          </button>
+                          </Button>
                         </>
                       ) : (
-                        <button
-                          onClick={() => setConfirmDeleteId(c.id)}
-                          className="pos-btn pos-btn-sm pos-btn-danger"
-                        >
+                        <Button size="sm" variant="danger" onClick={() => setConfirmDeleteId(c.id)}>
                           Delete
-                        </button>
+                        </Button>
                       )}
                     </>
                   )}

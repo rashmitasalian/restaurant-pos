@@ -7,6 +7,8 @@ import React, { useEffect, useState } from "react";
 import { logger } from "../../../app/utils/logger";
 import { AuditArchiver } from "../../../app/utils/auditArchiver";
 import { CrashRecovery } from "../../../app/utils/crashRecovery";
+import { Badge } from "../../components/ui/Badge";
+import { Button } from "../../components/ui/Button";
 import styles from "./LogSettings.module.css";
 
 interface LogEntry {
@@ -230,6 +232,19 @@ return "0 B";
     return date.toLocaleString();
   };
 
+  const logLevelTone = (level: LogEntry["level"]) => {
+    if (level === "warn") {
+      return "attention" as const;
+    }
+    if (level === "error") {
+      return "danger" as const;
+    }
+    if (level === "info") {
+      return "occupied" as const;
+    }
+    return "neutral" as const;
+  };
+
   return (
     <div className={styles.container}>
       <h2>System Logs & Archives</h2>
@@ -279,23 +294,23 @@ return "0 B";
           </div>
 
           <div className={styles.actions}>
-            <button
-              className={styles.button}
+            <Button
+              variant="secondary"
               onClick={() => handleExportLogs("json")}
               disabled={exportingLogs}
             >
-               Export JSON
-            </button>
-            <button
-              className={styles.button}
+              Export JSON
+            </Button>
+            <Button
+              variant="secondary"
               onClick={() => handleExportLogs("csv")}
               disabled={exportingLogs}
             >
-               Export CSV
-            </button>
-            <button className={`${styles.button} ${styles.danger}`} onClick={handleClearLogs}>
-               Clear All Logs
-            </button>
+              Export CSV
+            </Button>
+            <Button variant="danger" onClick={handleClearLogs}>
+              Clear All Logs
+            </Button>
           </div>
 
           <div className={styles.logsList}>
@@ -306,9 +321,7 @@ return "0 B";
                 <div key={index} className={`${styles.logEntry} ${styles[log.level]}`}>
                   <div className={styles.logHeader}>
                     <span className={styles.timestamp}>{log.timestamp}</span>
-                    <span className={`${styles.level} ${styles[log.level]}`}>
-                      {log.level.toUpperCase()}
-                    </span>
+                    <Badge tone={logLevelTone(log.level)}>{log.level.toUpperCase()}</Badge>
                   </div>
                   <div className={styles.message}>{log.message}</div>
                   {log.context && Object.keys(log.context).length > 0 && (
@@ -341,19 +354,16 @@ return "0 B";
           </div>
 
           <div className={styles.actions}>
-            <button
-              className={`${styles.button} ${styles.danger}`}
+            <Button
+              variant="danger"
               onClick={handleBulkDeleteArchives}
               disabled={selectedArchives.size === 0}
             >
-               Delete Selected ({selectedArchives.size})
-            </button>
-            <button
-              className={`${styles.button} ${styles.warning}`}
-              onClick={() => handleCleanupOldArchives(12)}
-            >
-               Cleanup Archives &gt;1 year
-            </button>
+              Delete Selected ({selectedArchives.size})
+            </Button>
+            <Button variant="accent" onClick={() => handleCleanupOldArchives(12)}>
+              Cleanup Archives &gt;1 year
+            </Button>
           </div>
 
           <div className={styles.archivesList}>
@@ -376,18 +386,12 @@ return "0 B";
                     </span>
                   </div>
                   <div className={styles.archiveActions}>
-                    <button
-                      className={styles.buttonSmall}
-                      onClick={() => handleExportArchive(archive._id)}
-                    >
-                       Export
-                    </button>
-                    <button
-                      className={`${styles.buttonSmall} ${styles.danger}`}
-                      onClick={() => handleDeleteArchive(archive._id)}
-                    >
-                       Delete
-                    </button>
+                    <Button size="sm" variant="secondary" onClick={() => handleExportArchive(archive._id)}>
+                      Export
+                    </Button>
+                    <Button size="sm" variant="danger" onClick={() => handleDeleteArchive(archive._id)}>
+                      Delete
+                    </Button>
                   </div>
                 </div>
               ))
@@ -436,15 +440,12 @@ return "0 B";
               </div>
 
               <div className={styles.actions}>
-                <button className={styles.button} onClick={handleViewRecoveryState}>
+                <Button variant="secondary" onClick={handleViewRecoveryState}>
                   View Recovery State
-                </button>
-                <button
-                  className={`${styles.button} ${styles.danger}`}
-                  onClick={handleClearRecovery}
-                >
-                   Clear Recovery State
-                </button>
+                </Button>
+                <Button variant="danger" onClick={handleClearRecovery}>
+                  Clear Recovery State
+                </Button>
               </div>
             </div>
           ) : (

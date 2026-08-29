@@ -48,22 +48,11 @@
   object-fit: contain;
 }
 
-.brand .brandMark {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--pos-r-sm);
-}
-
 .brandName {
   font-weight: 900;
   font-size: 32px;
   letter-spacing: -0.8px;
   line-height: 1;
-}
-
-.brand .brandName {
-  font-size: 22px;
-  letter-spacing: -0.4px;
 }
 
 .brandResto {
@@ -406,24 +395,6 @@
   padding: 36px 28px;
 }
 
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 24px;
-}
-
-.warning {
-  padding: 10px 12px;
-  border-radius: var(--pos-r-md);
-  background: var(--pos-saffron-tint);
-  border: 1px solid var(--pos-saffron-line);
-  color: var(--pos-saffron-text);
-  font-size: 13px;
-  line-height: 1.5;
-  margin-bottom: 16px;
-}
-
 .overlay {
   position: fixed;
   inset: 0;
@@ -450,50 +421,6 @@
   gap: 8px;
   justify-content: flex-end;
   margin-top: 18px;
-}
-
-.btnPrimary {
-  padding: 9px 14px;
-  min-height: 36px;
-  background: var(--pos-teal);
-  color: var(--pos-tx-inverse);
-  border: none;
-  border-radius: var(--pos-r-btn);
-  font-weight: 700;
-  font-size: 13px;
-  font-family: inherit;
-  cursor: pointer;
-}
-
-.btnPrimary:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.btnPrimary:hover:not(:disabled) {
-  background: var(--pos-teal-strong);
-}
-
-.btnSecondary {
-  padding: 9px 14px;
-  min-height: 36px;
-  background: var(--pos-surface);
-  color: var(--pos-tx-sec);
-  border: 1px solid var(--pos-line-strong);
-  border-radius: var(--pos-r-btn);
-  font-weight: 700;
-  font-size: 13px;
-  font-family: inherit;
-  cursor: pointer;
-}
-
-.btnSecondary:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.btnSecondary:hover:not(:disabled) {
-  background: var(--pos-surface-hover);
 }
 
 .errorList {
@@ -554,8 +481,7 @@
     flex-direction: column;
   }
 
-  .overlayActions .btnPrimary,
-  .overlayActions .btnSecondary {
+  .overlayActions button {
     width: 100%;
   }
 }

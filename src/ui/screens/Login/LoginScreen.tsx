@@ -5,6 +5,7 @@ import { ENV } from "../../../config/env";
 import { AuthContext } from "../../context/AuthContext";
 import { useFocusTrap } from "../../hooks/useFocusTrap";
 import restoNitiMark from "../../assets/restoniti-icon.png";
+import { Button } from "../../components/ui/Button";
 import { Eye, EyeOff } from "lucide-react";
 import authStyles from "./Auth.module.css";
 
@@ -315,9 +316,9 @@ function RecoveryModal({
           <>
             <Message tone="success">Password changed. You can sign in with the new password.</Message>
             <div className={authStyles.overlayActions}>
-              <button type="button" onClick={onClose} className={authStyles.btnSecondary}>
+              <Button type="button" size="sm" variant="secondary" onClick={onClose}>
                 Back to sign in
-              </button>
+              </Button>
             </div>
           </>
         ) : (
@@ -387,16 +388,13 @@ function RecoveryModal({
             ) : null}
 
             <div className={authStyles.overlayActions}>
-              <button
-                type="button"
-                onClick={onClose}
-                disabled={isSubmitting}
-                className={authStyles.btnSecondary}
-              >
+              <Button type="button" size="sm" variant="secondary" onClick={onClose} disabled={isSubmitting}>
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
                 type="submit"
+                size="sm"
+                variant="primary"
                 disabled={
                   isSubmitting ||
                   lockedSeconds > 0 ||
@@ -406,10 +404,9 @@ function RecoveryModal({
                   !confirmPassword ||
                   passwordErrors.length > 0
                 }
-                className={authStyles.btnPrimary}
               >
                 {isSubmitting ? "Recovering..." : "Recover access"}
-              </button>
+              </Button>
             </div>
           </form>
         )}
