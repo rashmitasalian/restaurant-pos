@@ -5,6 +5,7 @@ import {
   peopleTabFromHash,
   type PeopleTab,
 } from "../Manager/managerSections";
+import { getDefaultPeopleTab } from "../../../shared/permissions";
 import Attendance from "../Attendance/Attendance";
 import AttendanceHistory from "../Attendance/AttendanceHistory";
 import Staff from "../Staff/Staff";
@@ -25,6 +26,10 @@ const ADVANCES_VIEW_TABS = [
 type AttendanceView = "daily" | "history";
 type AdvancesView = "summary" | "transactions";
 
+type PeopleProps = {
+  allowedPeopleTabs: PeopleTab[];
+};
+
 function staffIdFromHash(): string | null {
   const hash = window.location.hash || "";
   const q = hash.indexOf("?");
@@ -33,58 +38,76 @@ function staffIdFromHash(): string | null {
   return params.get("staff") || params.get("staffId");
 }
 
-export default function People() {
-  const [tab, setTab] = React.useState<PeopleTab>(() =>
-    peopleTabFromHash(typeof window !== "undefined" ? window.location.hash : ""),
-  );
+export default function People({ allowedPeopleTabs }: PeopleProps) {
+  const [tab, setTab] = React.useState<PeopleTab>(() => {
+    const fromHash = peopleTabFromHash(typeof window !== "undefined" ? window.location.hash : "");
+    if (allowedPeopleTabs.includes(fromHash)) {
+      return fromHash;
+    }
+    return allowedPeopleTabs[0] ?? getDefaultPeopleTab("admin");
+  });
   const [attendanceView, setAttendanceView] = React.useState<AttendanceView>("daily");
   const [advancesView, setAdvancesView] = React.useState<AdvancesView>("summary");
   const addStaffRef = React.useRef<(() => void) | null>(null);
   const addUserRef = React.useRef<(() => void) | null>(null);
   const recordAdvanceRef = React.useRef<(() => void) | null>(null);
 
+  const effectiveTab = allowedPeopleTabs.includes(tab)
+    ? tab
+    : allowedPeopleTabs[0] ?? getDefaultPeopleTab("admin");
+
   React.useEffect(() => {
-    const onHash = () => setTab(peopleTabFromHash(window.location.hash));
+    const onHash = () => {
+      const next = peopleTabFromHash(window.location.hash);
+      setTab(allowedPeopleTabs.includes(next) ? next : allowedPeopleTabs[0] ?? getDefaultPeopleTab("admin"));
+    };
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
-  }, []);
+  }, [allowedPeopleTabs]);
 
   React.useEffect(() => {
     const hash = String(window.location.hash || "").toLowerCase();
     if (hash === "#manage-people" || hash === "#staff" || hash === "#attendance" || hash === "#users") {
-      window.location.hash = PEOPLE_TAB_HASH.attendance;
+      window.location.hash = PEOPLE_TAB_HASH[effectiveTab];
     }
-  }, []);
+  }, [effectiveTab]);
+
+  React.useEffect(() => {
+    if (!allowedPeopleTabs.includes(tab) && allowedPeopleTabs.length > 0) {
+      window.location.hash = PEOPLE_TAB_HASH[allowedPeopleTabs[0]];
+      setTab(allowedPeopleTabs[0]);
+    }
+  }, [allowedPeopleTabs, tab]);
 
   const primaryAction =
-    tab === "roster" ? (
+    effectiveTab === "roster" ? (
       <Button variant="primary" onClick={() => addStaffRef.current?.()}>
         + Add Staff
       </Button>
-    ) : tab === "accounts" ? (
+    ) : effectiveTab === "accounts" ? (
       <Button variant="primary" onClick={() => addUserRef.current?.()}>
         Add User
       </Button>
-    ) : tab === "advances" ? (
+    ) : effectiveTab === "advances" ? (
       <Button variant="primary" onClick={() => recordAdvanceRef.current?.()}>
         + Record Advance
       </Button>
     ) : undefined;
 
   const title =
-    tab === "attendance"
+    effectiveTab === "attendance"
       ? "Attendance"
-      : tab === "roster"
+      : effectiveTab === "roster"
         ? "Roster"
-        : tab === "advances"
+        : effectiveTab === "advances"
           ? "Salary Advances"
           : "Accounts";
   const description =
-    tab === "attendance"
+    effectiveTab === "attendance"
       ? "Mark daily attendance and review history"
-      : tab === "roster"
+      : effectiveTab === "roster"
         ? "Manage staff profiles and employment"
-        : tab === "advances"
+        : effectiveTab === "advances"
           ? "Record salary advances taken by staff"
           : "Manage login accounts and access";
 
@@ -94,32 +117,39 @@ export default function People() {
       description={description}
       primaryAction={primaryAction}
       tabs={
-        tab === "attendance"
+        effectiveTab === "attendance"
           ? ATTENDANCE_VIEW_TABS
-          : tab === "advances"
+          : effectiveTab === "advances"
             ? ADVANCES_VIEW_TABS
             : undefined
       }
       tab={
-        tab === "attendance"
+        effectiveTab === "attendance"
           ? attendanceView
-          : tab === "advances"
+          : effectiveTab === "advances"
             ? advancesView
             : undefined
       }
       onTabChange={
-        tab === "attendance"
+        effectiveTab === "attendance"
           ? (next) => setAttendanceView(next as AttendanceView)
-          : tab === "advances"
+          : effectiveTab === "advances"
             ? (next) => setAdvancesView(next as AdvancesView)
             : undefined
       }
       width="operational"
     >
-      {tab === "attendance" && attendanceView === "daily" && <Attendance embedded />}
-      {tab === "attendance" && attendanceView === "history" && <AttendanceHistory embedded />}
-      {tab === "roster" && <Staff embedded registerAddStaff={(fn) => { addStaffRef.current = fn; }} />}
-      {tab === "advances" && (
+      {effectiveTab === "attendance" && attendanceView === "daily" && <Attendance embedded />}
+      {effectiveTab === "attendance" && attendanceView === "history" && <AttendanceHistory embedded />}
+      {effectiveTab === "roster" && (
+        <Staff
+          embedded
+          registerAddStaff={(fn) => {
+            addStaffRef.current = fn;
+          }}
+        />
+      )}
+      {effectiveTab === "advances" && (
         <SalaryAdvances
           embedded
           view={advancesView}
@@ -129,7 +159,14 @@ export default function People() {
           }}
         />
       )}
-      {tab === "accounts" && <UsersScreen embedded registerAddUser={(fn) => { addUserRef.current = fn; }} />}
+      {effectiveTab === "accounts" && (
+        <UsersScreen
+          embedded
+          registerAddUser={(fn) => {
+            addUserRef.current = fn;
+          }}
+        />
+      )}
     </ManageShell>
   );
 }

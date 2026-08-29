@@ -53,6 +53,7 @@ import type {
   UserDto,
   VendorDto,
 } from "../../src/shared/pos";
+import { ROLE_KEYS } from "../../src/shared/permissions";
 import {
   STAFF_TEXT_LIMITS,
   isValidDateOnly,
@@ -757,6 +758,12 @@ function assertPassword(password: string) {
 function assertUsername(username: string) {
   if (!/^[a-z0-9_-]{2,32}$/.test(username)) {
     throw new Error("invalid-username");
+  }
+}
+
+function assertValidRole(role: Role) {
+  if (!ROLE_KEYS.includes(role)) {
+    throw new Error("invalid-role");
   }
 }
 
@@ -1698,6 +1705,7 @@ export const posService = {
     assertUsername(username);
     assertPassword(input.password);
     const role = input.role || "cashier";
+    assertValidRole(role);
     return inTransaction((database) => {
       const actor = assertActiveAdminPassword(database, input.actorUsername, input.actorPassword);
       const existing = database
@@ -1812,6 +1820,9 @@ export const posService = {
       const current = database.prepare("SELECT * FROM users WHERE username = ?").get(key) as any;
       if (!current) {
         throw new Error("user-not-found");
+      }
+      if (updates.role) {
+        assertValidRole(updates.role);
       }
       if ((updates.role && updates.role !== "admin") || updates.active === false) {
         ensureNotLastActiveAdmin(database, key);

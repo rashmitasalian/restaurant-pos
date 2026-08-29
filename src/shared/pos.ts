@@ -1,4 +1,4 @@
-export type Role = "admin" | "cashier";
+export type { Role } from "./permissions";
 
 export type OrderType = string;
 export type OrderStatus = "open" | "held" | "ready" | "assigned" | "paid" | "cancelled";

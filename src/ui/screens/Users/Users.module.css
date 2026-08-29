@@ -187,6 +187,12 @@
   border: 1px solid var(--pos-saffron-line);
 }
 
+.roleBadge.manager {
+  background: #eef2ff;
+  color: #3730a3;
+  border: 1px solid #c7d2fe;
+}
+
 .roleBadge.cashier {
   background: var(--pos-teal-tint);
   color: var(--pos-teal-strong);

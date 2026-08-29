@@ -24,6 +24,7 @@ jest.mock("../services/posService", () => ({
     getFoodCostSummary: jest.fn(),
     listAttendance: jest.fn(),
     upsertAttendanceRows: jest.fn(),
+    getConfigDoc: jest.fn(),
   },
 }));
 
@@ -56,6 +57,7 @@ const createGroceryItemMock = posService.createGroceryItem as jest.Mock;
 const getFoodCostSummaryMock = posService.getFoodCostSummary as jest.Mock;
 const listAttendanceMock = posService.listAttendance as jest.Mock;
 const upsertAttendanceRowsMock = posService.upsertAttendanceRows as jest.Mock;
+const getConfigDocMock = posService.getConfigDoc as jest.Mock;
 const appInfoMock = updateService.appInfo as jest.Mock;
 const checkForUpdatesMock = updateService.checkForUpdates as jest.Mock;
 const prepareUpdateMock = updateService.prepareUpdate as jest.Mock;
@@ -261,5 +263,28 @@ describe("print queue IPC access", () => {
 
     await expect(Promise.resolve(invoke(channel, ...(args as any[])))).resolves.toEqual(result);
     expect(serviceMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("allows managers to use grocery and attendance APIs but not reports or accounts", async () => {
+    getSessionMock.mockReturnValue({ token: "token", username: "manager" });
+    getUserMock.mockReturnValue({
+      username: "manager",
+      role: "manager",
+      active: true,
+      requirePasswordChange: false,
+    });
+    listGroceryItemsMock.mockReturnValue([{ id: "grocery-item:1" }]);
+    listAttendanceMock.mockReturnValue([{ id: "attendance:1" }]);
+    getConfigDocMock.mockReturnValue({ shifts: [], holidays: [] });
+
+    expect(invoke("pos:grocery:items:list")).toEqual([{ id: "grocery-item:1" }]);
+    expect(invoke("pos:attendance:list", { date: "2026-08-01" })).toEqual([
+      { id: "attendance:1" },
+    ]);
+    expect(invoke("pos:settings:get", "config:attendance")).toEqual({ shifts: [], holidays: [] });
+    await expectForbidden("pos:reports:sales-summary", { from: 1, to: 2 });
+    await expectForbidden("pos:users:list");
+    await expectForbidden("pos:settings:set", "config:gst", { enabled: true });
+    await expectForbidden("pos:settings:get", "config:audit");
   });
 });

@@ -1,14 +1,24 @@
 /**
  * Centralised role registry.
  *
- * To add a new role (e.g. "waiter", "captain"):
- *   1. Add it to the `Role` union type below.
- *   2. Add an entry in `ROLE_CONFIG`.
- * That's it — nav gating, user management UI, badge styles, and
- * DB types will all pick it up automatically.
+ * Roles are bundles of permissions defined in `src/shared/permissions.ts`.
+ * To add a new desktop login role:
+ *   1. Add it to the `Role` union and `ROLE_PERMISSIONS` in permissions.ts.
+ *   2. Add label + badgeClass here.
+ * Nav gating, IPC checks, user management UI, and DB types derive from permissions.
+ *
+ * Waiter / Captain is intentionally not a desktop role — Phase 2+ tablet app.
  */
 
-export type Role = "admin" | "cashier";
+import {
+  type Role,
+  ROLE_KEYS,
+  ROLE_PERMISSIONS,
+  permissionsToPages,
+} from "../shared/permissions";
+
+export type { Role };
+export { ROLE_KEYS } from "../shared/permissions";
 
 export type RoleConfig = {
   label: string;
@@ -21,25 +31,20 @@ export type RoleConfig = {
 export const ROLES: Record<Role, RoleConfig> = {
   admin: {
     label: "Admin",
-    pages: [
-      "tables",
-      "billing",
-      "kot",
-      "reports",
-      "customers",
-      "manager",
-    ],
+    pages: permissionsToPages(ROLE_PERMISSIONS.admin),
     badgeClass: "admin",
+  },
+  manager: {
+    label: "Manager",
+    pages: permissionsToPages(ROLE_PERMISSIONS.manager),
+    badgeClass: "manager",
   },
   cashier: {
     label: "Cashier",
-    pages: ["tables", "billing", "kot", "customers"],
+    pages: permissionsToPages(ROLE_PERMISSIONS.cashier),
     badgeClass: "cashier",
   },
 };
-
-/** All valid role keys, for use in dropdowns / validation. */
-export const ROLE_KEYS = Object.keys(ROLES) as Role[];
 
 /** Default role assigned to new users. */
 export const DEFAULT_ROLE: Role = "cashier";
@@ -51,5 +56,5 @@ export const PAGE_LABELS: Record<string, string> = {
   kot: "KOT Queue",
   reports: "Reports",
   customers: "Customers",
-  manager: "Manager",
+  manager: "Manage",
 };

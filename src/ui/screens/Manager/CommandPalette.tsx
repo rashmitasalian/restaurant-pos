@@ -2,7 +2,7 @@ import React from "react";
 import { createPortal } from "react-dom";
 import { Input } from "../../components/ui/Input";
 import { useFocusTrap } from "../../hooks/useFocusTrap";
-import type { ManagerSection } from "./managerSections";
+import type { ManagerSection, PeopleTab } from "../../../shared/manageSections";
 import { MANAGER_SECTION_HASH } from "./managerSections";
 import styles from "./CommandPalette.module.css";
 
@@ -116,7 +116,17 @@ export function CommandPalette({ open, onClose, items }: CommandPaletteProps) {
 
 export function buildManageCommands(
   onNavigate: (section: ManagerSection) => void,
+  opts?: {
+    allowedManageSections?: ManagerSection[];
+    allowedPeopleTabs?: PeopleTab[];
+  },
 ): CommandItem[] {
+  const allowedSections = new Set(opts?.allowedManageSections ?? []);
+  const allowedPeople = new Set(opts?.allowedPeopleTabs ?? []);
+  const canSection = (section: ManagerSection) =>
+    !opts?.allowedManageSections || allowedSections.has(section);
+  const canPeopleTab = (tab: PeopleTab) => !opts?.allowedPeopleTabs || allowedPeople.has(tab);
+
   const go = (section: ManagerSection, label: string, hint?: string): CommandItem => ({
     id: section,
     label,
@@ -133,50 +143,78 @@ export function buildManageCommands(
     go("grocery", "Grocery", "Buying lists"),
     go("expenses", "Expenses"),
     go("menu", "Menu"),
-    go("people", "People", "Attendance"),
-    {
-      id: "people-attendance",
-      label: "Attendance",
-      hint: "People",
-      section: "people",
-      run: () => {
-        onNavigate("people");
-        window.location.hash = "#manage-people-attendance";
-      },
-    },
-    {
-      id: "people-roster",
-      label: "Roster",
-      hint: "People",
-      section: "people",
-      run: () => {
-        onNavigate("people");
-        window.location.hash = "#manage-people-roster";
-      },
-    },
-    {
-      id: "people-advances",
-      label: "Salary Advances",
-      hint: "People",
-      section: "people",
-      run: () => {
-        onNavigate("people");
-        window.location.hash = "#manage-people-advances";
-      },
-    },
-    {
-      id: "people-accounts",
-      label: "Accounts",
-      hint: "People",
-      section: "people",
-      run: () => {
-        onNavigate("people");
-        window.location.hash = "#manage-people-accounts";
-      },
-    },
+    ...(canSection("people")
+      ? [
+          go("people", "People", "Attendance"),
+          ...(canPeopleTab("attendance")
+            ? [
+                {
+                  id: "people-attendance",
+                  label: "Attendance",
+                  hint: "People",
+                  section: "people" as ManagerSection,
+                  run: () => {
+                    onNavigate("people");
+                    window.location.hash = "#manage-people-attendance";
+                  },
+                },
+              ]
+            : []),
+          ...(canPeopleTab("roster")
+            ? [
+                {
+                  id: "people-roster",
+                  label: "Roster",
+                  hint: "People",
+                  section: "people" as ManagerSection,
+                  run: () => {
+                    onNavigate("people");
+                    window.location.hash = "#manage-people-roster";
+                  },
+                },
+              ]
+            : []),
+          ...(canPeopleTab("advances")
+            ? [
+                {
+                  id: "people-advances",
+                  label: "Salary Advances",
+                  hint: "People",
+                  section: "people" as ManagerSection,
+                  run: () => {
+                    onNavigate("people");
+                    window.location.hash = "#manage-people-advances";
+                  },
+                },
+              ]
+            : []),
+          ...(canPeopleTab("accounts")
+            ? [
+                {
+                  id: "people-accounts",
+                  label: "Accounts",
+                  hint: "People",
+                  section: "people" as ManagerSection,
+                  run: () => {
+                    onNavigate("people");
+                    window.location.hash = "#manage-people-accounts";
+                  },
+                },
+              ]
+            : []),
+        ]
+      : []),
     go("reports", "Reports"),
     go("history", "History"),
     go("audit", "Audit"),
     go("settings", "Settings"),
-  ];
+  ].filter((item) => {
+    if (item.section && item.section !== "people") {
+      return canSection(item.section);
+    }
+    if (item.id.startsWith("people-")) {
+      return true;
+    }
+    return true;
+  });
 }

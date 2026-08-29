@@ -1,16 +1,6 @@
-export type ManagerSection =
-  | "overview"
-  | "grocery"
-  | "expenses"
-  | "menu"
-  | "people"
-  | "reports"
-  | "history"
-  | "audit"
-  | "settings";
+import type { ManagerSection, PeopleTab } from "../../../shared/manageSections";
 
-/** People sub-tab when section === "people" */
-export type PeopleTab = "roster" | "attendance" | "advances" | "accounts";
+export type { ManagerSection, PeopleTab } from "../../../shared/manageSections";
 
 export const PEOPLE_TABS: Array<{ id: PeopleTab; label: string }> = [
   { id: "attendance", label: "Attendance" },

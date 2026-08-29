@@ -30,8 +30,9 @@ import { useFocusTrap } from "../../hooks/useFocusTrap";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { Modal } from "../../components/ui/Modal";
 import { DataTable } from "../../components/ui/DataTable";
-import { DEFAULT_ROLE } from "../../../config/roles";
+import { DEFAULT_ROLE, ROLE_KEYS, ROLES } from "../../../config/roles";
 import type { Role } from "../../../config/roles";
+import { roleHasPermission } from "../../../shared/permissions";
 import { PasswordValidator } from "../../../app/utils/validators";
 import { filterStaffBySearch, staffInitials } from "../People/peopleUtils";
 import { PEOPLE_TAB_HASH } from "../Manager/managerSections";
@@ -1596,7 +1597,7 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
             ) : (
               <>
                 <span style={{ color: "var(--pos-tx-muted)" }}>No account</span>
-                {auth?.session?.role === "admin" && (
+                {auth?.session?.role && roleHasPermission(auth.session.role, "people:accounts") && (
                   <button
                     type="button"
                     className="pos-btn pos-btn-secondary pos-btn-sm"
@@ -2018,8 +2019,11 @@ function CreateStaffAccountModal({
             onChange={(e) => setRole(e.target.value as Role)}
             disabled={submitting}
           >
-            <option value="cashier">Cashier</option>
-            <option value="admin">Admin</option>
+            {ROLE_KEYS.map((roleKey) => (
+              <option key={roleKey} value={roleKey}>
+                {ROLES[roleKey].label}
+              </option>
+            ))}
           </select>
         </FieldShell>
         <StaffInput

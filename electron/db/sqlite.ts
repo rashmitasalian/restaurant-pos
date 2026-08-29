@@ -169,7 +169,7 @@ function runSchema(database: SqliteDatabase) {
     CREATE TABLE IF NOT EXISTS users (
       username TEXT PRIMARY KEY,
       display_name TEXT NOT NULL,
-      role TEXT NOT NULL CHECK (role IN ('admin', 'cashier')),
+      role TEXT NOT NULL CHECK (role IN ('admin', 'cashier', 'manager')),
       password_hash TEXT NOT NULL,
       salt TEXT NOT NULL,
       hash_algo TEXT NOT NULL,
@@ -1383,6 +1383,36 @@ function runSchema(database: SqliteDatabase) {
         ON salary_advances(advance_date DESC);
       CREATE INDEX IF NOT EXISTS idx_salary_advances_staff_date
         ON salary_advances(staff_id, advance_date DESC);
+    `);
+  });
+
+  runMigration(database, 22, "Allow manager login role", () => {
+    database.exec(`
+      CREATE TABLE users_v22 (
+        username TEXT PRIMARY KEY,
+        display_name TEXT NOT NULL,
+        role TEXT NOT NULL CHECK (role IN ('admin', 'cashier', 'manager')),
+        password_hash TEXT NOT NULL,
+        salt TEXT NOT NULL,
+        hash_algo TEXT NOT NULL,
+        active INTEGER NOT NULL DEFAULT 1,
+        require_password_change INTEGER NOT NULL DEFAULT 0,
+        staff_id TEXT REFERENCES staff(id) ON UPDATE CASCADE ON DELETE SET NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+
+      INSERT INTO users_v22 (
+        username, display_name, role, password_hash, salt, hash_algo,
+        active, require_password_change, staff_id, created_at, updated_at
+      )
+      SELECT
+        username, display_name, role, password_hash, salt, hash_algo,
+        active, require_password_change, staff_id, created_at, updated_at
+      FROM users;
+
+      DROP TABLE users;
+      ALTER TABLE users_v22 RENAME TO users;
     `);
   });
 

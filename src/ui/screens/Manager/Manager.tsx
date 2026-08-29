@@ -38,6 +38,8 @@ import {
 type ManagerProps = {
   section: ManagerSection;
   onSectionChange: (section: ManagerSection) => void;
+  allowedManageSections: ManagerSection[];
+  allowedPeopleTabs: PeopleTab[];
   /** When true, only Reports is allowed — hide rail */
   reportsOnly?: boolean;
 };
@@ -115,7 +117,13 @@ function SettingsSection() {
   );
 }
 
-function ManagerInner({ section, onSectionChange, reportsOnly }: ManagerProps) {
+function ManagerInner({
+  section,
+  onSectionChange,
+  allowedManageSections,
+  allowedPeopleTabs,
+  reportsOnly,
+}: ManagerProps) {
   const [paletteOpen, setPaletteOpen] = React.useState(false);
   const [peopleTab, setPeopleTab] = React.useState<PeopleTab>(() =>
     peopleTabFromHash(typeof window !== "undefined" ? window.location.hash : ""),
@@ -149,31 +157,75 @@ function ManagerInner({ section, onSectionChange, reportsOnly }: ManagerProps) {
   };
 
   const navigatePeopleTab = (tab: PeopleTab) => {
+    if (!allowedPeopleTabs.includes(tab)) {
+      return;
+    }
     onSectionChange("people");
     setPeopleTab(tab);
     window.location.hash = PEOPLE_TAB_HASH[tab];
   };
 
+  const allowedSectionSet = React.useMemo(
+    () => new Set<ManagerSection>(allowedManageSections),
+    [allowedManageSections],
+  );
+
   const commands = React.useMemo(() => {
-    const all = buildManageCommands(navigate);
-    if (!reportsOnly) return all;
+    const all = buildManageCommands(navigate, {
+      allowedManageSections,
+      allowedPeopleTabs,
+    });
+    if (!reportsOnly) {
+      return all;
+    }
     return all.filter((item) => item.id === "reports");
-  }, [onSectionChange, reportsOnly]);
+  }, [allowedManageSections, allowedPeopleTabs, onSectionChange, reportsOnly]);
+
+  const visibleMainSections = SECTIONS.slice(0, 4).filter((item) => allowedSectionSet.has(item.key));
+  const visibleBusinessSections = SECTIONS.slice(4).filter((item) => allowedSectionSet.has(item.key));
+  const visiblePeopleTabs = PEOPLE_RAIL.filter((item) => allowedPeopleTabs.includes(item.tab));
+
+  const effectiveSection = React.useMemo(() => {
+    if (reportsOnly) {
+      return "reports" as ManagerSection;
+    }
+    if (section === "people") {
+      const tab = peopleTabFromHash(typeof window !== "undefined" ? window.location.hash : "");
+      if (allowedPeopleTabs.includes(tab)) {
+        return section;
+      }
+      return allowedManageSections[0] ?? "overview";
+    }
+    if (allowedSectionSet.has(section)) {
+      return section;
+    }
+    return allowedManageSections[0] ?? "overview";
+  }, [allowedManageSections, allowedPeopleTabs, allowedSectionSet, reportsOnly, section]);
 
   const renderSection = () => {
-    if (section === "overview") return <Overview onNavigate={onSectionChange} />;
-    if (section === "grocery") return <Grocery />;
-    if (section === "expenses") return <Expenses />;
-    if (section === "menu") return <MenuSection />;
-    if (section === "people") return <People />;
-    if (section === "reports") {
+    if (effectiveSection === "overview") {
+      return <Overview onNavigate={onSectionChange} />;
+    }
+    if (effectiveSection === "grocery") {
+      return <Grocery />;
+    }
+    if (effectiveSection === "expenses") {
+      return <Expenses />;
+    }
+    if (effectiveSection === "menu") {
+      return <MenuSection />;
+    }
+    if (effectiveSection === "people") {
+      return <People allowedPeopleTabs={allowedPeopleTabs} />;
+    }
+    if (effectiveSection === "reports") {
       return (
         <ManageShell title="Reports" description="Sales and profitability" width="full">
           <Reports embedded />
         </ManageShell>
       );
     }
-    if (section === "history") {
+    if (effectiveSection === "history") {
       return (
         <ManageShell title="Order History" description="Paid orders" width="full">
           <div className={styles.embedBody}>
@@ -182,8 +234,12 @@ function ManagerInner({ section, onSectionChange, reportsOnly }: ManagerProps) {
         </ManageShell>
       );
     }
-    if (section === "audit") return <AuditViewer />;
-    if (section === "settings") return <SettingsSection />;
+    if (effectiveSection === "audit") {
+      return <AuditViewer />;
+    }
+    if (effectiveSection === "settings") {
+      return <SettingsSection />;
+    }
     return <SettingsSection />;
   };
 
@@ -215,13 +271,13 @@ function ManagerInner({ section, onSectionChange, reportsOnly }: ManagerProps) {
             Jump (Ctrl+K)
           </Button>
         </div>
-        {SECTIONS.slice(0, 4).map((item) => (
+        {visibleMainSections.map((item) => (
           <React.Fragment key={item.key}>
             {renderGroupLabel(item.group)}
             <button
               type="button"
-              className={`${styles.railButton} ${section === item.key ? styles.railButtonActive : ""}`}
-              aria-current={section === item.key ? "page" : undefined}
+              className={`${styles.railButton} ${effectiveSection === item.key ? styles.railButtonActive : ""}`}
+              aria-current={effectiveSection === item.key ? "page" : undefined}
               onClick={() => navigate(item.key)}
             >
               <span className={styles.buttonMain}>
@@ -233,15 +289,15 @@ function ManagerInner({ section, onSectionChange, reportsOnly }: ManagerProps) {
             </button>
           </React.Fragment>
         ))}
-        {renderGroupLabel("People")}
-        {PEOPLE_RAIL.map((item) => (
+        {visiblePeopleTabs.length > 0 && renderGroupLabel("People")}
+        {visiblePeopleTabs.map((item) => (
           <button
             key={item.tab}
             type="button"
             className={`${styles.railButton} ${
-              section === "people" && peopleTab === item.tab ? styles.railButtonActive : ""
+              effectiveSection === "people" && peopleTab === item.tab ? styles.railButtonActive : ""
             }`}
-            aria-current={section === "people" && peopleTab === item.tab ? "page" : undefined}
+            aria-current={effectiveSection === "people" && peopleTab === item.tab ? "page" : undefined}
             onClick={() => navigatePeopleTab(item.tab)}
           >
             <span className={styles.buttonMain}>
@@ -252,13 +308,13 @@ function ManagerInner({ section, onSectionChange, reportsOnly }: ManagerProps) {
             </span>
           </button>
         ))}
-        {SECTIONS.slice(4).map((item) => (
+        {visibleBusinessSections.map((item) => (
           <React.Fragment key={item.key}>
             {renderGroupLabel(item.group)}
             <button
               type="button"
-              className={`${styles.railButton} ${section === item.key ? styles.railButtonActive : ""}`}
-              aria-current={section === item.key ? "page" : undefined}
+              className={`${styles.railButton} ${effectiveSection === item.key ? styles.railButtonActive : ""}`}
+              aria-current={effectiveSection === item.key ? "page" : undefined}
               onClick={() => navigate(item.key)}
             >
               <span className={styles.buttonMain}>

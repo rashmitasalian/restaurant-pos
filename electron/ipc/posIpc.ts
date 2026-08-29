@@ -8,6 +8,8 @@ import {
 } from "electron";
 import path from "path";
 import type { Role, UserDto } from "../../src/shared/pos";
+import type { Permission } from "../../src/shared/permissions";
+import { roleHasPermission } from "../../src/shared/permissions";
 import { posService } from "../services/posService";
 import { updateService } from "../services/updateService";
 import {
@@ -19,8 +21,6 @@ import {
 
 type WindowGetter = () => BrowserWindow | null;
 
-const ADMIN_ROLES: Role[] = ["admin"];
-const CUSTOMER_ROLES: Role[] = ["admin", "cashier"];
 const CASHIER_READABLE_SETTINGS = new Set([
   "config:gst",
   "config:printers",
@@ -42,6 +42,21 @@ const WRITABLE_SETTINGS = new Set([
   "config:service-modes",
   "config:tables",
 ]);
+
+function canReadSetting(role: Role, key: string): boolean {
+  if (roleHasPermission(role, "system:settings")) {
+    return true;
+  }
+  if (CASHIER_READABLE_SETTINGS.has(key)) {
+    return true;
+  }
+  if (key === "config:attendance") {
+    return (
+      roleHasPermission(role, "people:attendance") || roleHasPermission(role, "people:roster")
+    );
+  }
+  return false;
+}
 
 function publicUser(user: UserDto) {
   return {
@@ -76,6 +91,19 @@ function requireSession(
   }
 
   refreshMainSession(session.token, user);
+  return user;
+}
+
+function requirePermission(
+  event: IpcMainInvokeEvent,
+  token: string | null | undefined,
+  permission: Permission,
+  options: { allowPasswordChange?: boolean } = {},
+) {
+  const user = requireSession(event, token, undefined, options);
+  if (!roleHasPermission(user.role, permission)) {
+    throw new Error("forbidden");
+  }
   return user;
 }
 
@@ -135,7 +163,7 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
     };
   });
   ipcMain.handle("pos:auth:regenerate-recovery-codes", (event, token: string | null, payload) => {
-    const user = requireSession(event, token, ADMIN_ROLES);
+    const user = requirePermission(event, token, "system:settings");
     return posService.regenerateRecoveryCodes({
       actorUsername: user.username,
       actorPassword: payload?.actorPassword,
@@ -143,11 +171,11 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
   });
 
   ipcMain.handle("pos:users:list", (event, token?: string | null) => {
-    requireSession(event, token, ADMIN_ROLES);
+    requirePermission(event, token, "people:accounts");
     return posService.listUsers();
   });
   ipcMain.handle("pos:users:create", (event, token: string | null, payload) => {
-    const actor = requireSession(event, token, ADMIN_ROLES);
+    const actor = requirePermission(event, token, "people:accounts");
     return posService.createUser({ ...payload, actorUsername: actor.username });
   });
   ipcMain.handle(
@@ -160,7 +188,7 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
       _actorUsername?: string | null,
       actorPassword?: string | null,
     ) => {
-      const actor = requireSession(event, token, ADMIN_ROLES);
+      const actor = requirePermission(event, token, "people:accounts");
       return posService.updateUser(username, updates, actor.username, actorPassword);
     },
   );
@@ -174,7 +202,7 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
       _actorUsername?: string | null,
       actorPassword?: string | null,
     ) => {
-      const actor = requireSession(event, token, ADMIN_ROLES);
+      const actor = requirePermission(event, token, "people:accounts");
       return posService.resetUserPassword(username, password, actor.username, actorPassword);
     },
   );
@@ -196,11 +224,11 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
     return posService.getTablesSnapshot();
   });
   ipcMain.handle("pos:tables:set-area", (event, token: string | null, tableId: number, areaId: string) => {
-    const user = requireSession(event, token, ADMIN_ROLES);
+    const user = requirePermission(event, token, "system:settings");
     return posService.setTableArea(tableId, areaId, user.username);
   });
   ipcMain.handle("pos:tables:set-seats", (event, token: string | null, tableId: number, seats: number) => {
-    const user = requireSession(event, token, ADMIN_ROLES);
+    const user = requirePermission(event, token, "system:settings");
     return posService.setTableSeats(tableId, seats, user.username);
   });
   ipcMain.handle("pos:seating-areas:list", (event, token?: string | null, includeDisabled?: boolean) => {
@@ -208,13 +236,13 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
     return posService.getSeatingAreas(Boolean(includeDisabled));
   });
   ipcMain.handle("pos:seating-areas:save", (event, token: string | null, payload) => {
-    const user = requireSession(event, token, ADMIN_ROLES);
+    const user = requirePermission(event, token, "system:settings");
     return posService.setSeatingAreas(payload, user.username);
   });
   ipcMain.handle(
     "pos:seating-areas:delete",
     (event, token: string | null, areaId: string, reassignToAreaId: string) => {
-      const user = requireSession(event, token, ADMIN_ROLES);
+      const user = requirePermission(event, token, "system:settings");
       return posService.deleteSeatingArea(areaId, reassignToAreaId, user.username);
     },
   );
@@ -232,15 +260,15 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
     return posService.getItemById(id);
   });
   ipcMain.handle("pos:menu:create-item", (event, token: string | null, payload) => {
-    const user = requireSession(event, token, ADMIN_ROLES);
+    const user = requirePermission(event, token, "manage:menu");
     return posService.createItem(payload, user.username);
   });
   ipcMain.handle("pos:menu:update-item", (event, token: string | null, payload) => {
-    const user = requireSession(event, token, ADMIN_ROLES);
+    const user = requirePermission(event, token, "manage:menu");
     return posService.updateItem(payload, user.username);
   });
   ipcMain.handle("pos:menu:delete-item", (event, token: string | null, id: string) => {
-    const user = requireSession(event, token, ADMIN_ROLES);
+    const user = requirePermission(event, token, "manage:menu");
     return posService.deleteItem(id, user.username);
   });
   ipcMain.handle("pos:menu:list-categories", (event, token?: string | null) => {
@@ -248,7 +276,7 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
     return posService.getCategories();
   });
   ipcMain.handle("pos:menu:set-categories", (event, token: string | null, categories: string[]) => {
-    const user = requireSession(event, token, ADMIN_ROLES);
+    const user = requirePermission(event, token, "system:settings");
     return posService.setCategories(categories, user.username);
   });
   ipcMain.handle("pos:menu:list-variant-options", (event, token?: string | null) => {
@@ -258,7 +286,7 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
   ipcMain.handle(
     "pos:menu:set-variant-options",
     (event, token: string | null, options: string[]) => {
-      const user = requireSession(event, token, ADMIN_ROLES);
+      const user = requirePermission(event, token, "system:settings");
       return posService.setVariantOptions(options, user.username);
     },
   );
@@ -274,7 +302,10 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
   ipcMain.handle("pos:orders:get", (event, token: string | null, id: string) => {
     const user = requireSession(event, token);
     const order = posService.getOrderById(id);
-    if (user.role !== "admin" && (order?.status === "paid" || order?.status === "cancelled")) {
+    if (
+      !roleHasPermission(user.role, "business:history") &&
+      (order?.status === "paid" || order?.status === "cancelled")
+    ) {
       throw new Error("forbidden");
     }
     return order;
@@ -299,19 +330,19 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
     return posService.getActiveOrders();
   });
   ipcMain.handle("pos:orders:list-paid", (event, token: string | null, opts) => {
-    requireSession(event, token, ADMIN_ROLES);
+    requirePermission(event, token, "business:history");
     return posService.listPaidOrders(opts);
   });
   ipcMain.handle("pos:orders:count-paid", (event, token: string | null, opts) => {
-    requireSession(event, token, ADMIN_ROLES);
+    requirePermission(event, token, "business:history");
     return posService.countPaidOrders(opts);
   });
   ipcMain.handle("pos:orders:summarize-paid", (event, token: string | null, opts) => {
-    requireSession(event, token, ADMIN_ROLES);
+    requirePermission(event, token, "business:history");
     return posService.summarizePaidOrders(opts);
   });
   ipcMain.handle("pos:orders:list-paid-ids", (event, token: string | null, opts) => {
-    requireSession(event, token, ADMIN_ROLES);
+    requirePermission(event, token, "business:history");
     return posService.listPaidOrderIds(opts);
   });
   ipcMain.handle("pos:orders:add-line", (event, token: string | null, orderId: string, item) => {
@@ -380,265 +411,265 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
     return posService.cancelOrder(orderId, user.username);
   });
   ipcMain.handle("pos:orders:delete-history", (event, token: string | null, orderIds: string[]) => {
-    const user = requireSession(event, token, ADMIN_ROLES);
+    const user = requirePermission(event, token, "business:history");
     return posService.deleteClosedOrders(orderIds, user.username);
   });
   ipcMain.handle("pos:orders:restore-history", (event, token: string | null, orders) => {
-    const user = requireSession(event, token, ADMIN_ROLES);
+    const user = requirePermission(event, token, "business:history");
     return (orders || []).map((order: any) =>
       posService.restoreOrderSnapshot(order, user.username),
     );
   });
 
   ipcMain.handle("pos:customers:list", (event, token?: string | null) => {
-    requireSession(event, token, CUSTOMER_ROLES);
+    requirePermission(event, token, "page:customers");
     return posService.listCustomers();
   });
   ipcMain.handle("pos:customers:create", (event, token: string | null, payload) => {
-    requireSession(event, token, CUSTOMER_ROLES);
+    requirePermission(event, token, "page:customers");
     return posService.createCustomer(payload);
   });
   ipcMain.handle("pos:customers:update", (event, token: string | null, id: string, updates) => {
-    requireSession(event, token, CUSTOMER_ROLES);
+    requirePermission(event, token, "page:customers");
     return posService.updateCustomer(id, updates);
   });
   ipcMain.handle("pos:customers:delete", (event, token: string | null, id: string) => {
-    requireSession(event, token, CUSTOMER_ROLES);
+    requirePermission(event, token, "page:customers");
     return posService.deleteCustomer(id);
   });
 
   ipcMain.handle(
     "pos:staff:list",
     (event, token?: string | null, opts?: { includeInactive?: boolean; status?: string; includePhotos?: boolean }) => {
-      requireSession(event, token, ADMIN_ROLES);
+      requirePermission(event, token, "people:roster");
       return posService.listStaff(opts as any);
     },
   );
   ipcMain.handle("pos:staff:get", (event, token: string | null, id: string) => {
-    requireSession(event, token, ADMIN_ROLES);
+    requirePermission(event, token, "people:roster");
     return posService.getStaff(id);
   });
   ipcMain.handle("pos:staff:create", (event, token: string | null, payload) => {
-    requireSession(event, token, ADMIN_ROLES);
+    requirePermission(event, token, "people:roster");
     return posService.createStaff(payload);
   });
   ipcMain.handle("pos:staff:update", (event, token: string | null, id: string, updates) => {
-    const user = requireSession(event, token, ADMIN_ROLES);
+    const user = requirePermission(event, token, "people:roster");
     return posService.updateStaff(id, updates, user.username);
   });
   ipcMain.handle("pos:staff:delete", (event, token: string | null, id: string) => {
-    const user = requireSession(event, token, ADMIN_ROLES);
+    const user = requirePermission(event, token, "people:roster");
     return posService.deleteStaff(id, user.username);
   });
 
   ipcMain.handle("pos:attendance:list", (event, token: string | null, input) => {
-    requireSession(event, token, ADMIN_ROLES);
+    requirePermission(event, token, "people:attendance");
     return posService.listAttendance(input || {});
   });
   ipcMain.handle("pos:attendance:listRange", (event, token: string | null, input) => {
-    requireSession(event, token, ADMIN_ROLES);
+    requirePermission(event, token, "people:attendance");
     return posService.listAttendanceRange(input || {});
   });
   ipcMain.handle("pos:attendance:upsert", (event, token: string | null, input) => {
-    const user = requireSession(event, token, ADMIN_ROLES);
+    const user = requirePermission(event, token, "people:attendance");
     return posService.upsertAttendanceRows(input || {}, user.username);
   });
   ipcMain.handle("pos:attendance:copy", (event, token: string | null, fromDate: string, toDate: string) => {
-    const user = requireSession(event, token, ADMIN_ROLES);
+    const user = requirePermission(event, token, "people:attendance");
     return posService.copyAttendance(fromDate, toDate, user.username);
   });
   ipcMain.handle("pos:attendance:delete", (event, token: string | null, id: string) => {
-    const user = requireSession(event, token, ADMIN_ROLES);
+    const user = requirePermission(event, token, "people:attendance");
     return posService.deleteAttendance(id, user.username);
   });
 
   ipcMain.handle("pos:settings:get", (event, token: string | null, key: string) => {
     const user = requireSession(event, token);
-    if (user.role !== "admin" && !CASHIER_READABLE_SETTINGS.has(String(key || ""))) {
+    if (!canReadSetting(user.role, String(key || ""))) {
       throw new Error("forbidden");
     }
     return posService.getConfigDoc(key);
   });
   ipcMain.handle("pos:settings:set", (event, token: string | null, key: string, value) => {
-    const user = requireSession(event, token, ADMIN_ROLES);
+    const user = requirePermission(event, token, "system:settings");
     if (!WRITABLE_SETTINGS.has(String(key || ""))) {
       throw new Error("invalid-setting-key");
     }
     return posService.setSetting(key, value, user.username);
   });
   ipcMain.handle("pos:settings:prune-audit", (event, token?: string | null) => {
-    requireSession(event, token, ADMIN_ROLES);
+    requirePermission(event, token, "system:settings");
     return posService.pruneAuditLogs();
   });
   ipcMain.handle("pos:settings:prune-history", (event, token?: string | null) => {
-    requireSession(event, token, ADMIN_ROLES);
+    requirePermission(event, token, "system:settings");
     return posService.pruneOrderHistory();
   });
 
   ipcMain.handle("pos:reports:sales-summary", (event, token: string | null, opts) => {
-    requireSession(event, token, ADMIN_ROLES);
+    requirePermission(event, token, "business:reports");
     return posService.getSalesSummary(opts);
   });
   ipcMain.handle("pos:reports:payment-breakdown", (event, token: string | null, opts) => {
-    requireSession(event, token, ADMIN_ROLES);
+    requirePermission(event, token, "business:reports");
     return posService.getPaymentBreakdown(opts);
   });
   ipcMain.handle("pos:reports:product-sales", (event, token: string | null, opts) => {
-    requireSession(event, token, ADMIN_ROLES);
+    requirePermission(event, token, "business:reports");
     return posService.getProductSalesReport(opts);
   });
   ipcMain.handle("pos:reports:order-history", (event, token: string | null, opts) => {
-    requireSession(event, token, ADMIN_ROLES);
+    requirePermission(event, token, "business:reports");
     return posService.listPaidOrders(opts);
   });
   ipcMain.handle("pos:reports:food-cost-summary", (event, token: string | null, opts) => {
-    requireSession(event, token, ADMIN_ROLES);
+    requirePermission(event, token, "business:reports");
     return posService.getFoodCostSummary(opts);
   });
 
   ipcMain.handle("pos:grocery:items:list", (event, token: string | null, opts) => {
-    requireSession(event, token, ADMIN_ROLES);
+    requirePermission(event, token, "manage:grocery");
     return posService.listGroceryItems(opts || {});
   });
   ipcMain.handle("pos:grocery:items:create", (event, token: string | null, payload) => {
-    const user = requireSession(event, token, ADMIN_ROLES);
+    const user = requirePermission(event, token, "manage:grocery");
     return posService.createGroceryItem(payload, user.username);
   });
   ipcMain.handle("pos:grocery:items:update", (event, token: string | null, id: string, updates) => {
-    const user = requireSession(event, token, ADMIN_ROLES);
+    const user = requirePermission(event, token, "manage:grocery");
     return posService.updateGroceryItem(id, updates, user.username);
   });
   ipcMain.handle("pos:grocery:items:delete", (event, token: string | null, id: string) => {
-    const user = requireSession(event, token, ADMIN_ROLES);
+    const user = requirePermission(event, token, "manage:grocery");
     return posService.deleteGroceryItem(id, user.username);
   });
   ipcMain.handle("pos:grocery:lists:list", (event, token: string | null, opts) => {
-    requireSession(event, token, ADMIN_ROLES);
+    requirePermission(event, token, "manage:grocery");
     return posService.listGroceryLists(opts || {});
   });
   ipcMain.handle("pos:grocery:lists:get", (event, token: string | null, id: string) => {
-    requireSession(event, token, ADMIN_ROLES);
+    requirePermission(event, token, "manage:grocery");
     return posService.getGroceryList(id);
   });
   ipcMain.handle("pos:grocery:lists:create", (event, token: string | null, payload) => {
-    const user = requireSession(event, token, ADMIN_ROLES);
+    const user = requirePermission(event, token, "manage:grocery");
     return posService.createGroceryList(payload, user.username);
   });
   ipcMain.handle("pos:grocery:lists:update", (event, token: string | null, id: string, updates) => {
-    const user = requireSession(event, token, ADMIN_ROLES);
+    const user = requirePermission(event, token, "manage:grocery");
     return posService.updateGroceryList(id, updates, user.username);
   });
   ipcMain.handle("pos:grocery:lists:delete", (event, token: string | null, id: string) => {
-    const user = requireSession(event, token, ADMIN_ROLES);
+    const user = requirePermission(event, token, "manage:grocery");
     return posService.deleteGroceryList(id, user.username);
   });
   ipcMain.handle("pos:grocery:purchases:list", (event, token: string | null, opts) => {
-    requireSession(event, token, ADMIN_ROLES);
+    requirePermission(event, token, "manage:grocery");
     return posService.listGroceryPurchases(opts || {});
   });
   ipcMain.handle("pos:grocery:purchases:create", (event, token: string | null, payload) => {
-    const user = requireSession(event, token, ADMIN_ROLES);
+    const user = requirePermission(event, token, "manage:grocery");
     return posService.createGroceryPurchase(payload, user.username);
   });
   ipcMain.handle(
     "pos:grocery:purchases:update",
     (event, token: string | null, id: string, updates) => {
-      const user = requireSession(event, token, ADMIN_ROLES);
+      const user = requirePermission(event, token, "manage:grocery");
       return posService.updateGroceryPurchase(id, updates, user.username);
     },
   );
   ipcMain.handle("pos:grocery:purchases:delete", (event, token: string | null, id: string) => {
-    const user = requireSession(event, token, ADMIN_ROLES);
+    const user = requirePermission(event, token, "manage:grocery");
     return posService.deleteGroceryPurchase(id, user.username);
   });
 
   ipcMain.handle("pos:grocery:purchase-headers:list", (event, token: string | null, opts) => {
-    requireSession(event, token, ADMIN_ROLES);
+    requirePermission(event, token, "manage:grocery");
     return posService.listGroceryPurchaseHeaders(opts || {});
   });
 
   ipcMain.handle("pos:grocery:purchase-headers:void", (event, token: string | null, id: string) => {
-    const user = requireSession(event, token, ADMIN_ROLES);
+    const user = requirePermission(event, token, "manage:grocery");
     return posService.voidGroceryPurchaseHeader(id, user.username);
   });
 
   ipcMain.handle("pos:vendors:list", (event, token: string | null, opts) => {
-    requireSession(event, token, ADMIN_ROLES);
+    requirePermission(event, token, "manage:grocery");
     return posService.listVendors(opts || {});
   });
 
   ipcMain.handle("pos:vendors:create", (event, token: string | null, payload) => {
-    const user = requireSession(event, token, ADMIN_ROLES);
+    const user = requirePermission(event, token, "manage:grocery");
     return posService.createVendor(payload, user.username);
   });
 
   ipcMain.handle("pos:vendors:update", (event, token: string | null, id: string, updates) => {
-    const user = requireSession(event, token, ADMIN_ROLES);
+    const user = requirePermission(event, token, "manage:grocery");
     return posService.updateVendor(id, updates, user.username);
   });
 
   ipcMain.handle("pos:vendors:delete", (event, token: string | null, id: string) => {
-    const user = requireSession(event, token, ADMIN_ROLES);
+    const user = requirePermission(event, token, "manage:grocery");
     return posService.deleteVendor(id, user.username);
   });
 
   ipcMain.handle("pos:expenses:categories:list", (event, token: string | null, opts) => {
-    requireSession(event, token, ADMIN_ROLES);
+    requirePermission(event, token, "manage:expenses");
     return posService.listExpenseCategories(opts || {});
   });
 
   ipcMain.handle("pos:expenses:list", (event, token: string | null, opts) => {
-    requireSession(event, token, ADMIN_ROLES);
+    requirePermission(event, token, "manage:expenses");
     return posService.listExpenses(opts || {});
   });
 
   ipcMain.handle("pos:expenses:create", (event, token: string | null, payload) => {
-    const user = requireSession(event, token, ADMIN_ROLES);
+    const user = requirePermission(event, token, "manage:expenses");
     return posService.createExpense(payload, user.username);
   });
 
   ipcMain.handle("pos:expenses:update", (event, token: string | null, id: string, updates) => {
-    const user = requireSession(event, token, ADMIN_ROLES);
+    const user = requirePermission(event, token, "manage:expenses");
     return posService.updateExpense(id, updates, user.username);
   });
 
   ipcMain.handle("pos:expenses:void", (event, token: string | null, id: string) => {
-    const user = requireSession(event, token, ADMIN_ROLES);
+    const user = requirePermission(event, token, "manage:expenses");
     return posService.voidExpense(id, user.username);
   });
 
   ipcMain.handle("pos:salary-advances:list", (event, token: string | null, opts) => {
-    requireSession(event, token, ADMIN_ROLES);
+    requirePermission(event, token, "people:advances");
     return posService.listSalaryAdvances(opts || {});
   });
 
   ipcMain.handle("pos:salary-advances:create", (event, token: string | null, payload) => {
-    const user = requireSession(event, token, ADMIN_ROLES);
+    const user = requirePermission(event, token, "people:advances");
     return posService.createSalaryAdvance(payload, user.username);
   });
 
   ipcMain.handle("pos:salary-advances:void", (event, token: string | null, id: string) => {
-    const user = requireSession(event, token, ADMIN_ROLES);
+    const user = requirePermission(event, token, "people:advances");
     return posService.voidSalaryAdvance(id, user.username);
   });
 
   ipcMain.handle("pos:grocery:templates:list", (event, token: string | null) => {
-    requireSession(event, token, ADMIN_ROLES);
+    requirePermission(event, token, "manage:grocery");
     return posService.listBuyingListTemplates();
   });
 
   ipcMain.handle("pos:grocery:templates:create", (event, token: string | null, payload) => {
-    const user = requireSession(event, token, ADMIN_ROLES);
+    const user = requirePermission(event, token, "manage:grocery");
     return posService.createBuyingListTemplate(payload, user.username);
   });
 
   ipcMain.handle("pos:grocery:templates:delete", (event, token: string | null, id: string) => {
-    const user = requireSession(event, token, ADMIN_ROLES);
+    const user = requirePermission(event, token, "manage:grocery");
     return posService.deleteBuyingListTemplate(id, user.username);
   });
 
   ipcMain.handle("pos:reports:profitability", (event, token: string | null, opts) => {
-    requireSession(event, token, ADMIN_ROLES);
+    requirePermission(event, token, "business:reports");
     return posService.getProfitabilitySummary(opts || {});
   });
 
@@ -657,36 +688,36 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
     },
   );
   ipcMain.handle("pos:audit:list", (event, token: string | null, opts) => {
-    requireSession(event, token, ADMIN_ROLES);
+    requirePermission(event, token, "system:audit");
     return posService.getAudits(opts);
   });
   ipcMain.handle("pos:audit:count", (event, token: string | null, opts) => {
-    requireSession(event, token, ADMIN_ROLES);
+    requirePermission(event, token, "system:audit");
     return posService.countAudits(opts);
   });
   ipcMain.handle(
     "pos:audit-archives:create",
     (event, token: string | null, retentionDays: number) => {
-      requireSession(event, token, ADMIN_ROLES);
+      requirePermission(event, token, "system:audit");
       return posService.createAuditArchive(retentionDays);
     },
   );
   ipcMain.handle("pos:audit-archives:list", (event, token?: string | null) => {
-    requireSession(event, token, ADMIN_ROLES);
+    requirePermission(event, token, "system:audit");
     return posService.listAuditArchives();
   });
   ipcMain.handle("pos:audit-archives:export", (event, token: string | null, id: string) => {
-    requireSession(event, token, ADMIN_ROLES);
+    requirePermission(event, token, "system:audit");
     return posService.exportAuditArchive(id);
   });
   ipcMain.handle("pos:audit-archives:delete", (event, token: string | null, id: string) => {
-    requireSession(event, token, ADMIN_ROLES);
+    requirePermission(event, token, "system:audit");
     return posService.deleteAuditArchive(id);
   });
   ipcMain.handle(
     "pos:audit-archives:cleanup-old",
     (event, token: string | null, ageMonths: number) => {
-      requireSession(event, token, ADMIN_ROLES);
+      requirePermission(event, token, "system:audit");
       return posService.cleanupOldAuditArchives(ageMonths);
     },
   );
@@ -696,24 +727,24 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
     return posService.addPrintJob(payload);
   });
   ipcMain.handle("pos:print-queue:list", (event, token: string | null, status) => {
-    requireSession(event, token, ADMIN_ROLES);
+    requirePermission(event, token, "system:settings");
     return posService.listPrintJobs(status);
   });
   ipcMain.handle("pos:print-queue:mark-completed", (event, token: string | null, id: string) => {
-    requireSession(event, token, ADMIN_ROLES);
+    requirePermission(event, token, "system:settings");
     return posService.markPrintJobCompleted(id);
   });
   ipcMain.handle("pos:print-queue:retry", (event, token: string | null, id: string) => {
-    requireSession(event, token, ADMIN_ROLES);
+    requirePermission(event, token, "system:settings");
     return posService.retryPrintJob(id);
   });
   ipcMain.handle("pos:print-queue:clear-old", (event, token: string | null, ageHours: number) => {
-    requireSession(event, token, ADMIN_ROLES);
+    requirePermission(event, token, "system:settings");
     return posService.clearOldPrintJobs(ageHours);
   });
 
   ipcMain.handle("pos:backup:create-local", async (event, token?: string | null) => {
-    const user = requireSession(event, token, ADMIN_ROLES);
+    const user = requirePermission(event, token, "system:settings");
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
     const defaultPath = path.join(
       app.getPath("documents"),
@@ -734,11 +765,11 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
     return posService.createLocalBackup(result.filePath, user.username);
   });
   ipcMain.handle("pos:backup:list", (event, token?: string | null) => {
-    requireSession(event, token, ADMIN_ROLES);
+    requirePermission(event, token, "system:settings");
     return posService.listBackups();
   });
   ipcMain.handle("pos:backup:restore-local", async (event, token?: string | null) => {
-    const user = requireSession(event, token, ADMIN_ROLES);
+    const user = requirePermission(event, token, "system:settings");
     const options: OpenDialogOptions = {
       title: "Restore SQLite Backup",
       filters: [{ name: "SQLite Database", extensions: ["sqlite", "db"] }],
@@ -759,37 +790,37 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
     return updateService.appInfo();
   });
   ipcMain.handle("pos:updates:check", async (event, token?: string | null) => {
-    requireSession(event, token, ADMIN_ROLES);
+    requirePermission(event, token, "system:settings");
     return updateService.checkForUpdates();
   });
   ipcMain.handle(
     "pos:updates:prepare",
     async (event, token?: string | null, options?: { allowBusinessActivity?: boolean }) => {
-      requireSession(event, token, ADMIN_ROLES);
+      requirePermission(event, token, "system:settings");
       return updateService.prepareUpdate(options || {});
     },
   );
   ipcMain.handle("pos:updates:launch", async (event, token?: string | null) => {
-    requireSession(event, token, ADMIN_ROLES);
+    requirePermission(event, token, "system:settings");
     return updateService.launchPreparedUpdate();
   });
   ipcMain.handle("pos:updates:status", (event, token?: string | null) => {
-    requireSession(event, token, ADMIN_ROLES);
+    requirePermission(event, token, "system:settings");
     return updateService.getStatus();
   });
   ipcMain.handle("pos:updates:startup-health", (event, token?: string | null) => {
-    requireSession(event, token, ADMIN_ROLES);
+    requirePermission(event, token, "system:settings");
     return updateService.processStartupState();
   });
   ipcMain.handle(
     "pos:updates:rollback",
     async (event, token?: string | null, options?: { confirmed?: boolean }) => {
-      requireSession(event, token, ADMIN_ROLES);
+      requirePermission(event, token, "system:settings");
       return updateService.rollbackLast(options || {});
     },
   );
   ipcMain.handle("pos:support:export-diagnostics", (event, token?: string | null) => {
-    requireSession(event, token, ADMIN_ROLES);
+    requirePermission(event, token, "system:settings");
     return updateService.exportDiagnostics();
   });
 }

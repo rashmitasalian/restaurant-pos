@@ -8,17 +8,35 @@ Authentication is owned by the Electron main process. The renderer never stores 
 - New passwords are hashed with scrypt in `electron/services/credentials.ts`.
 - Main-process sessions are random tokens kept in memory and bound to the renderer `webContents` id.
 - Preload reads the session token from renderer localStorage and attaches it to protected IPC calls.
-- Every protected IPC handler revalidates the session, active user, required role, and password-change state before calling `posService`.
+- Every protected IPC handler revalidates the session, active user, required permission, and password-change state before calling `posService`.
 
 ## Roles
 
-| Area | admin | cashier |
-| --- | ---: | ---: |
-| Tables, Billing, KOT Queue | yes | yes |
-| Customers | yes | yes |
-| Reports, History, Settings, Audit, Staff, Users | yes | no |
+Roles are bundles of permissions defined in [`src/shared/permissions.ts`](src/shared/permissions.ts). Navigation, Manage sections, Jump (Ctrl+K), and IPC all derive from the same permission map.
 
-Print queue creation is available to authenticated users so cashier/KOT flows can queue failed prints. Print queue listing, retry, mark-completed, and cleanup are admin-only.
+| Area | admin | manager | cashier |
+| --- | ---: | ---: | ---: |
+| Tables, Billing, KOT Queue | yes | yes | yes |
+| Customers | yes | yes | yes |
+| Manage: Overview, Grocery, Expenses, Menu | yes | yes | no |
+| People: Attendance, Roster, Salary Advances | yes | yes | no |
+| People: Accounts | yes | no | no |
+| Reports, History | yes | no | no |
+| Audit, Settings | yes | no | no |
+
+### Manager
+
+Runs the restaurant when the owner is away: floor POS plus grocery, expenses, menu, attendance, roster, and salary advances. Cannot access accounts, reports, history, audit, or settings.
+
+### Cashier
+
+Counter POS only: tables, billing, customers, KOT queue.
+
+### Waiter / Captain (future)
+
+Not a desktop login role. Planned for Phase 2+ tablet app with narrower order/KOT permissions than Cashier.
+
+Print queue creation is available to authenticated users so cashier/KOT flows can queue failed prints. Print queue listing, retry, mark-completed, and cleanup require `system:settings` (admin only).
 
 ## Credential Rules
 

@@ -2,9 +2,18 @@
 import { ENV } from "../config/env";
 import { ROLES } from "../config/roles";
 import type { Role } from "../config/roles";
+import { useRolePermissions } from "../app/auth/useRolePermissions";
+import {
+  getDefaultManageSection,
+  getDefaultPeopleTab,
+  canAccessManageSection,
+  canAccessPeopleTab,
+} from "../shared/permissions";
 import {
   MANAGER_SECTION_HASH,
+  PEOPLE_TAB_HASH,
   managerSectionFromHash,
+  peopleTabFromHash,
   type ManagerSection,
 } from "./screens/Manager/managerSections";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -62,6 +71,7 @@ function MainContent({
   onSetupComplete: () => void;
 }) {
     const auth = React.useContext(AuthContext);
+    const perms = useRolePermissions();
     const maintenanceRanRef = React.useRef(false);
     const [branding, setBranding] = React.useState({
       hotelName: ENV.HOTEL_NAME || "",
@@ -98,7 +108,7 @@ function MainContent({
         maintenanceRanRef.current ||
         auth?.loading ||
         !auth?.session ||
-        auth.session.role !== "admin" ||
+        !perms.has("system:settings") ||
         auth.session.requirePasswordChange
       ) {
         return;
@@ -125,7 +135,7 @@ function MainContent({
       { k: "kot", t: "KOT Queue", icon: ChefHat },
       { k: "reports", t: "Reports", icon: BarChart3 },
       { k: "customers", t: "Customers", icon: Users },
-      { k: "manager", t: "Manager", icon: Settings2 },
+      { k: "manager", t: "Manage", icon: Settings2 },
     ];
 
     const [enabledServiceModes, setEnabledServiceModes] = React.useState(() =>
@@ -149,12 +159,31 @@ function MainContent({
       : allowedPages.filter((p) => p !== "tables");
 
     const fallbackPage: Page = effectiveAllowedPages.includes("billing") ? "billing" : "kot";
-    const canManager = effectiveAllowedPages.includes("manager");
-    const canReports = effectiveAllowedPages.includes("reports");
-    const reportsOnly = canReports && !canManager;
+    const reportsOnly = perms.reportsOnly;
 
-    const canOpenManager = (section: ManagerSection | null) =>
-      canManager || (reportsOnly && (!section || section === "reports"));
+    const resolveManagerSection = (
+      section: ManagerSection,
+      hash: string,
+      role: Role,
+    ): ManagerSection => {
+      if (reportsOnly) return "reports";
+      if (section === "people") {
+        const tab = peopleTabFromHash(hash);
+        if (!canAccessPeopleTab(role, tab)) {
+          const fallbackTab = getDefaultPeopleTab(role);
+          window.location.hash = PEOPLE_TAB_HASH[fallbackTab];
+          return "people";
+        }
+        return section;
+      }
+      if (canAccessManageSection(role, section)) {
+        return section;
+      }
+      return getDefaultManageSection(role);
+    };
+
+    const canOpenManager = (section: ManagerSection | null, hash?: string) =>
+      perms.canOpenManageSection(section, hash);
 
     const getInitial = (): Page => {
       const hash = (typeof window !== "undefined" && window.location.hash) || "";
@@ -167,7 +196,9 @@ function MainContent({
       };
       const section = managerSectionFromHash(hash);
       if (section) {
-        if (canOpenManager(section)) return "manager";
+        if (canOpenManager(section, hash) && auth?.session?.role) {
+          return "manager";
+        }
         return fallbackPage;
       }
       if (hash === "#reports" && canOpenManager("reports")) {
@@ -193,7 +224,10 @@ function MainContent({
     const [page, setPage] = React.useState<Page>(getInitial);
     const [managerSection, setManagerSection] = React.useState<ManagerSection>(() => {
       const hash = (typeof window !== "undefined" && window.location.hash) || "";
-      return managerSectionFromHash(hash) || "overview";
+      const role = auth?.session?.role as Role | undefined;
+      const section = managerSectionFromHash(hash) || (role ? getDefaultManageSection(role) : "overview");
+      if (!role) return section;
+      return resolveManagerSection(section, hash, role);
     });
     const firstScreenLoggedRef = React.useRef(false);
     const [now, setNow] = React.useState(new Date());
@@ -270,8 +304,17 @@ function MainContent({
         };
         const sectionTarget = managerSectionFromHash(window.location.hash);
         if (sectionTarget) {
-          if (canOpenManager(sectionTarget)) {
-            setManagerSection(reportsOnly ? "reports" : sectionTarget);
+          if (canOpenManager(sectionTarget, window.location.hash)) {
+            const role = auth?.session?.role as Role;
+            setManagerSection(
+              role
+                ? resolveManagerSection(
+                    reportsOnly ? "reports" : sectionTarget,
+                    window.location.hash,
+                    role,
+                  )
+                : sectionTarget,
+            );
             setPage("manager");
             return;
           }
@@ -318,7 +361,7 @@ function MainContent({
         window.removeEventListener("select-table", onSelectTable as EventListener);
         window.removeEventListener("hashchange", onHash);
       };
-    }, [effectiveAllowedPages, fallbackPage, canManager, reportsOnly]);
+    }, [effectiveAllowedPages, fallbackPage, reportsOnly, auth?.session?.role, perms]);
 
     React.useEffect(() => {
       try {
@@ -543,13 +586,18 @@ function MainContent({
                   {page === "billing" && effectiveAllowedPages.includes("billing") && <Billing />}
                   {page === "kot" && effectiveAllowedPages.includes("kot") && <KOTQueue />}
                   {page === "customers" && effectiveAllowedPages.includes("customers") && <Customers />}
-                  {page === "manager" && canOpenManager(managerSection) && (
+                  {page === "manager" && canOpenManager(managerSection, window.location.hash) && (
                     <Manager
                       section={reportsOnly ? "reports" : managerSection}
                       reportsOnly={reportsOnly}
+                      allowedManageSections={perms.allowedManageSections}
+                      allowedPeopleTabs={perms.allowedPeopleTabs}
                       onSectionChange={(section) => {
                         if (reportsOnly && section !== "reports") return;
-                        setManagerSection(section);
+                        const role = auth?.session?.role as Role;
+                        if (!role) return;
+                        const next = resolveManagerSection(section, window.location.hash, role);
+                        setManagerSection(next);
                         setPage("manager");
                       }}
                     />

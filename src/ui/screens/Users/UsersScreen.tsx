@@ -9,6 +9,7 @@ import {
 import { PasswordValidator } from "../../../app/utils/validators";
 import { DEFAULT_ROLE, PAGE_LABELS, ROLE_KEYS, ROLES } from "../../../config/roles";
 import type { Role } from "../../../config/roles";
+import { roleHasPermission } from "../../../shared/permissions";
 import { isValidPersonName, normalizeText } from "../../../shared/validation";
 import { AuthContext } from "../../context/AuthContext";
 import { PageHeader } from "../../components/ui/PageHeader";
@@ -80,7 +81,7 @@ export default function UsersScreen({
       return;
     }
 
-    if (auth.session.role !== "admin") {
+    if (!auth.session || !roleHasPermission(auth.session.role, "people:accounts")) {
       setUsers([]);
       setError("Only admins can manage users.");
       setLoading(false);
@@ -136,7 +137,7 @@ export default function UsersScreen({
             <Button
               variant="primary"
               onClick={() => setShowCreate(true)}
-              disabled={auth?.session?.role !== "admin"}
+              disabled={!auth?.session?.role || !roleHasPermission(auth.session.role, "people:accounts")}
             >
               Add User
             </Button>
