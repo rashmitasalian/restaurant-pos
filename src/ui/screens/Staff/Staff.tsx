@@ -27,6 +27,7 @@ import {
 import { AuthContext } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
 import { useFocusTrap } from "../../hooks/useFocusTrap";
+import { Button } from "../../components/ui/Button";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { Modal } from "../../components/ui/Modal";
 import { DataTable } from "../../components/ui/DataTable";
@@ -254,15 +255,14 @@ function WeeklyOffField({
         {WEEKDAY_OPTIONS.map((option) => {
           const active = value.includes(option.value);
           return (
-            <button
+            <Button
               key={option.value}
               type="button"
-              className={`pos-btn pos-btn-sm ${active ? "pos-btn-primary" : "pos-btn-secondary"}`}
               onClick={() => onChange(toggleWeeklyOffDay(value, option.value))}
               aria-pressed={active}
-            >
+             variant={active ? "primary" : "secondary"} size="sm">
               {option.label.slice(0, 3)}
-            </button>
+            </Button>
           );
         })}
       </div>
@@ -1098,14 +1098,13 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
           title="Roster"
           subtitle="Who works here — employment details and optional RestoNiti accounts"
           actions={
-            <button
+            <Button
               type="button"
-              className="pos-btn pos-btn-secondary"
               onClick={() => setExportOpen(true)}
               disabled={exportingPdf || exportingCsv}
-            >
+             variant="secondary">
               Export
-            </button>
+            </Button>
           }
         />
       )}
@@ -1147,14 +1146,13 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
           </select>
         </div>
         {embedded && (
-          <button
+          <Button
             type="button"
-            className="pos-btn pos-btn-secondary"
             onClick={() => setExportOpen(true)}
             disabled={exportingPdf || exportingCsv}
-          >
+           variant="secondary">
             Export
-          </button>
+          </Button>
         )}
       </div>
 
@@ -1189,14 +1187,13 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
                   Confidential roster export
                 </p>
               </div>
-              <button
+              <Button
                 type="button"
-                className="pos-btn pos-btn-secondary pos-btn-sm"
                 onClick={closeStaffExport}
                 disabled={exportingPdf || exportingCsv}
-              >
+               variant="secondary" size="sm">
                 Close
-              </button>
+              </Button>
             </div>
 
             <div style={{ display: "grid", gap: 10 }}>
@@ -1251,30 +1248,27 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
                 borderTop: "1px solid var(--pos-line)",
               }}
             >
-              <button
+              <Button
                 type="button"
-                className="pos-btn pos-btn-secondary"
                 onClick={closeStaffExport}
                 disabled={exportingPdf || exportingCsv}
-              >
+               variant="secondary">
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
-                className="pos-btn pos-btn-secondary"
                 onClick={exportStaffCsv}
                 disabled={exportingPdf || exportingCsv}
-              >
+               variant="secondary">
                 {exportingCsv ? "Exporting..." : "Export CSV"}
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
-                className="pos-btn pos-btn-primary"
                 onClick={exportStaffPdf}
                 disabled={exportingPdf || exportingCsv}
-              >
+               variant="primary">
                 {exportingPdf ? "Exporting..." : "Export PDF"}
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -1381,24 +1375,23 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
               />
             </FieldShell>
             {photo && (
-              <button type="button" onClick={() => setPhoto(null)} className="pos-btn pos-btn-secondary pos-btn-sm">
+              <Button type="button" onClick={() => setPhoto(null)}  variant="secondary" size="sm">
                 Remove Photo
-              </button>
+              </Button>
             )}
           </div>
           {formError && <div className="pos-field-error" style={{ marginTop: 12 }}>{formError}</div>}
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 16 }}>
-            <button
+            <Button
               type="button"
               onClick={() => setShowAddModal(false)}
               disabled={saving}
-              className="pos-btn pos-btn-secondary"
-            >
+             variant="secondary">
               Cancel
-            </button>
-            <button onClick={addStaff} disabled={saving} className="pos-btn pos-btn-primary">
+            </Button>
+            <Button onClick={addStaff} disabled={saving}  variant="primary">
               {saving ? "Saving..." : "Save Staff"}
-            </button>
+            </Button>
           </div>
         </Modal>
       )}
@@ -1500,16 +1493,15 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
                     {editAdvanceCount === 1 ? "" : "s"}
                   </div>
                 </div>
-                <button
+                <Button
                   type="button"
-                  className="pos-btn pos-btn-secondary pos-btn-sm"
                   onClick={() => {
                     cancelEdit();
                     window.location.hash = `${PEOPLE_TAB_HASH.advances}?staff=${encodeURIComponent(editingMember.id)}`;
                   }}
-                >
+                 variant="secondary" size="sm">
                   View Advances
-                </button>
+                </Button>
               </div>
             )}
             <FieldShell id="staff-edit-default-shift" label="Default Shift">
@@ -1558,16 +1550,15 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
               />
             </FieldShell>
             {editPhoto && (
-              <button
+              <Button
                 type="button"
                 onClick={() => {
                   setEditPhoto(null);
                   setEditPhotoChanged(true);
                 }}
-                className="pos-btn pos-btn-secondary pos-btn-sm"
-              >
+               variant="secondary" size="sm">
                 Remove Photo
-              </button>
+              </Button>
             )}
           </div>
           <div
@@ -1598,32 +1589,30 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
               <>
                 <span style={{ color: "var(--pos-tx-muted)" }}>No account</span>
                 {auth?.session?.role && roleHasPermission(auth.session.role, "people:accounts") && (
-                  <button
+                  <Button
                     type="button"
-                    className="pos-btn pos-btn-secondary pos-btn-sm"
                     onClick={() => {
                       cancelEdit();
                       setCreateAccountFor(editingMember);
                     }}
-                  >
+                   variant="secondary" size="sm">
                     Create Account
-                  </button>
+                  </Button>
                 )}
               </>
             )}
           </div>
           {editError && <div className="pos-field-error" style={{ marginTop: 12 }}>{editError}</div>}
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 16 }}>
-            <button type="button" onClick={cancelEdit} disabled={savingEdit} className="pos-btn pos-btn-secondary">
+            <Button type="button" onClick={cancelEdit} disabled={savingEdit}  variant="secondary">
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={() => saveEdit(editingMember)}
               disabled={savingEdit}
-              className="pos-btn pos-btn-primary"
-            >
+             variant="primary">
               {savingEdit ? "Saving..." : "Save Changes"}
-            </button>
+            </Button>
           </div>
         </Modal>
       )}
@@ -1662,20 +1651,18 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
                 </h3>
                 <div style={{ marginTop: 2, color: "var(--pos-tx-sub)", fontSize: 12 }}>Staff photo</div>
               </div>
-              <button
+              <Button
                 type="button"
                 onClick={downloadPhotoPreview}
-                className="pos-btn pos-btn-primary pos-btn-sm"
-              >
+               variant="primary" size="sm">
                 Download
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
                 onClick={closePhotoPreview}
-                className="pos-btn pos-btn-secondary pos-btn-sm"
-              >
+               variant="secondary" size="sm">
                 Close
-              </button>
+              </Button>
             </div>
             <div
               style={{
@@ -1774,83 +1761,75 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
               style={{ display: "flex", gap: 6, justifyContent: "flex-end", flexWrap: "wrap" }}
               onClick={(event) => event.stopPropagation()}
             >
-              <button
+              <Button
                 type="button"
                 onClick={() => void openEdit(member)}
-                className="pos-btn pos-btn-secondary pos-btn-sm"
-              >
+               variant="secondary" size="sm">
                 Edit
-              </button>
+              </Button>
               {isActive ? (
                 isConfirmingLeft ? (
                   <>
-                    <button
+                    <Button
                       type="button"
                       onClick={() => changeStaffStatus(member, false)}
                       disabled={isChangingStatus}
-                      className="pos-btn pos-btn-secondary pos-btn-sm"
-                    >
+                     variant="secondary" size="sm">
                       {isChangingStatus ? "..." : "Confirm Left"}
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                       type="button"
                       onClick={() => setConfirmLeftId(null)}
-                      className="pos-btn pos-btn-secondary pos-btn-sm"
-                    >
+                     variant="secondary" size="sm">
                       Cancel
-                    </button>
+                    </Button>
                   </>
                 ) : (
-                  <button
+                  <Button
                     type="button"
                     onClick={() => {
                       setConfirmLeftId(member.id);
                       setConfirmDeleteId(null);
                     }}
-                    className="pos-btn pos-btn-secondary pos-btn-sm"
-                  >
+                   variant="secondary" size="sm">
                     Mark Left
-                  </button>
+                  </Button>
                 )
               ) : (
-                <button
+                <Button
                   type="button"
                   onClick={() => changeStaffStatus(member, true)}
                   disabled={isChangingStatus}
-                  className="pos-btn pos-btn-primary pos-btn-sm"
-                >
+                 variant="primary" size="sm">
                   Restore
-                </button>
+                </Button>
               )}
               {isConfirmingDelete ? (
                 <>
-                  <button
+                  <Button
                     type="button"
                     onClick={() => removeStaff(member.id)}
                     disabled={deletingId === member.id}
-                    className="pos-btn pos-btn-danger pos-btn-sm"
-                  >
+                   variant="danger" size="sm">
                     Confirm
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
                     onClick={() => setConfirmDeleteId(null)}
-                    className="pos-btn pos-btn-secondary pos-btn-sm"
-                  >
+                   variant="secondary" size="sm">
                     Cancel
-                  </button>
+                  </Button>
                 </>
               ) : (
-                <button
+                <Button
                   type="button"
                   onClick={() => {
                     setConfirmDeleteId(member.id);
                     setConfirmLeftId(null);
                   }}
-                  className="pos-btn pos-btn-danger pos-btn-sm"
-                >
+                 variant="danger" size="sm">
                   Delete
-                </button>
+                </Button>
               )}
             </div>,
           ];
@@ -1919,12 +1898,12 @@ function LeftAccountPromptModal({
       />
       {error && <div className="pos-field-error">{error}</div>}
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, flexWrap: "wrap", marginTop: 12 }}>
-        <button type="button" className="pos-btn pos-btn-secondary" onClick={onClose} disabled={submitting}>
+        <Button type="button"  onClick={onClose} disabled={submitting} variant="secondary">
           Keep Account Active
-        </button>
-        <button type="button" className="pos-btn pos-btn-primary" onClick={disableAccount} disabled={submitting}>
+        </Button>
+        <Button type="button"  onClick={disableAccount} disabled={submitting} variant="primary">
           {submitting ? "Disabling..." : "Disable Account"}
-        </button>
+        </Button>
       </div>
     </Modal>
   );
@@ -2052,12 +2031,12 @@ function CreateStaffAccountModal({
         />
         {error && <div className="pos-field-error">{error}</div>}
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
-          <button type="button" className="pos-btn pos-btn-secondary" onClick={onClose} disabled={submitting}>
+          <Button type="button"  onClick={onClose} disabled={submitting} variant="secondary">
             Cancel
-          </button>
-          <button type="submit" className="pos-btn pos-btn-primary" disabled={submitting}>
+          </Button>
+          <Button type="submit"  disabled={submitting} variant="primary">
             {submitting ? "Creating..." : "Create Account"}
-          </button>
+          </Button>
         </div>
       </form>
     </Modal>

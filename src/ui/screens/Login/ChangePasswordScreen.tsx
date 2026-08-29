@@ -72,22 +72,9 @@ export default function ChangePasswordScreen() {
     confirmPassword.length > 0 &&
     passwordErrors.length === 0;
 
-  const inputStyle: React.CSSProperties = {
-    width: "100%",
-    padding: "9px 12px",
-    border: "1px solid var(--pos-line-strong)",
-    borderRadius: 6,
-    fontSize: 14,
-    boxSizing: "border-box",
-    outline: "none",
-  };
-
   return (
     <div className={authStyles.screen}>
-      <form
-        onSubmit={handleSubmit}
-        className={authStyles.card}
-      >
+      <form onSubmit={handleSubmit} className={authStyles.card}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
           <div
             style={{
@@ -115,63 +102,46 @@ export default function ChangePasswordScreen() {
           </div>
         </div>
 
-        <div
-          style={{
-            background: "var(--pos-saffron-tint)",
-            border: "1px solid var(--pos-saffron-line)",
-            borderRadius: 8,
-            padding: "10px 14px",
-            fontSize: 13,
-            color: "var(--pos-saffron-text)",
-            marginBottom: 20,
-            lineHeight: 1.5,
-          }}
-        >
+        <div className={`${authStyles.message} ${authStyles.messageWarning}`}>
           For security, enter your current or temporary password, then set a new password.
         </div>
 
-        <label style={{ display: "block", marginBottom: 14 }}>
-          <span style={{ display: "block", fontSize: 13, fontWeight: 600, color: "var(--pos-tx-sec)", marginBottom: 6 }}>
-            Current password
-          </span>
+        <label className={authStyles.field}>
+          <span className={authStyles.fieldLabel}>Current password</span>
           <input
             type="password"
+            className={authStyles.input}
             value={currentPassword}
             autoComplete="current-password"
             autoFocus
             onChange={(e) => setCurrentPassword(e.target.value)}
             disabled={isSubmitting}
-            style={inputStyle}
           />
         </label>
 
-        <label style={{ display: "block", marginBottom: 14 }}>
-          <span style={{ display: "block", fontSize: 13, fontWeight: 600, color: "var(--pos-tx-sec)", marginBottom: 6 }}>
-            New password
-          </span>
+        <label className={authStyles.field}>
+          <span className={authStyles.fieldLabel}>New password</span>
           <input
             type="password"
+            className={authStyles.input}
             value={newPassword}
             autoComplete="new-password"
             onChange={(e) => setNewPassword(e.target.value)}
             disabled={isSubmitting}
             placeholder="Minimum 8 characters"
-            style={inputStyle}
           />
         </label>
 
-        <label style={{ display: "block", marginBottom: 18 }}>
-          <span style={{ display: "block", fontSize: 13, fontWeight: 600, color: "var(--pos-tx-sec)", marginBottom: 6 }}>
-            Confirm password
-          </span>
+        <label className={authStyles.field}>
+          <span className={authStyles.fieldLabel}>Confirm password</span>
           <input
             type="password"
+            className={authStyles.input}
             value={confirmPassword}
             autoComplete="new-password"
             onChange={(e) => setConfirmPassword(e.target.value)}
             disabled={isSubmitting}
             placeholder="Repeat your new password"
-            style={inputStyle}
           />
         </label>
 
@@ -198,59 +168,20 @@ export default function ChangePasswordScreen() {
           </div>
         )}
 
-        {error && (
-          <div
-            style={{
-              background: "var(--pos-danger-tint)",
-              border: "1px solid var(--pos-danger-line)",
-              color: "var(--pos-danger-strong)",
-              borderRadius: 6,
-              padding: "9px 12px",
-              fontSize: 13,
-              marginBottom: 16,
-            }}
-          >
-            {error}
-          </div>
-        )}
+        {error && <div className={`${authStyles.message} ${authStyles.messageError}`}>{error}</div>}
 
-        <button
-          type="submit"
-          disabled={!canSubmit}
-          style={{
-            width: "100%",
-            padding: "11px 0",
-            background: canSubmit ? "var(--pos-saffron-deep)" : "var(--pos-line)",
-            color: canSubmit ? "var(--pos-surface)" : "var(--pos-tx-muted)",
-            border: "none",
-            borderRadius: 8,
-            fontWeight: 700,
-            fontSize: 15,
-            cursor: canSubmit ? "pointer" : "not-allowed",
-            transition: "background 120ms",
-          }}
-        >
+        <button type="submit" className={authStyles.submitBtn} disabled={!canSubmit}>
           {isSubmitting ? "Saving..." : "Set password & continue"}
         </button>
 
-        <div style={{ textAlign: "center", marginTop: 14 }}>
-          <button
-            type="button"
-            onClick={() => auth?.logout()}
-            disabled={isSubmitting}
-            style={{
-              background: "none",
-              border: "none",
-              color: "var(--pos-tx-sub)",
-              fontSize: 12,
-              cursor: isSubmitting ? "not-allowed" : "pointer",
-              opacity: isSubmitting ? 0.6 : 1,
-              textDecoration: "underline",
-            }}
-          >
-            Sign out and use a different account
-          </button>
-        </div>
+        <button
+          type="button"
+          className={authStyles.linkBtn}
+          onClick={() => auth?.logout()}
+          disabled={isSubmitting}
+        >
+          Sign out and use a different account
+        </button>
       </form>
     </div>
   );

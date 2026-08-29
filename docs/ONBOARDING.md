@@ -55,9 +55,9 @@ Billing/Manage selectors, labels, and shortcuts are guarded by `scripts/perf-ui.
 
 | Tier | Examples | Pattern |
 | --- | --- | --- |
-| Modern | Grocery, Expenses, Audit, Manager, Customers, History | `Button`, `Input`, `DataTable`, `Drawer` |
-| Mixed | Attendance, Users, Staff, Reports, LogSettings | Primitives + some legacy `pos-btn` |
-| Legacy | Settings, ItemsEditor, Login (main form) | Raw `pos-btn` / auth-specific CSS; migrate when touching those files |
+| Modern | Grocery, Expenses, Audit, Manager, Customers, History, ItemsEditor, Staff, Attendance, Users, LogSettings | `Button`, `Input`, `DataTable`, `Drawer`, `Modal` |
+| Mixed | Settings, Reports, Login | Shared auth CSS + `Button` on actions; some dense forms still use `pos-input` |
+| Legacy | — | Prefer migrating touched controls when editing a screen |
 
 When you edit a legacy screen, prefer converting touched controls to design-system primitives in the same change.
 

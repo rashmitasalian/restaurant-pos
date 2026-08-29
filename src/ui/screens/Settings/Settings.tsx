@@ -1,6 +1,8 @@
 ﻿import React from "react";
 import { ENV } from "../../../config/env";
 import { AuthContext } from "../../context/AuthContext";
+import { Button } from "../../components/ui/Button";
+import { Input } from "../../components/ui/Input";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { Icon } from "../../components/ui/Icon";
 import { Clock3, LayoutGrid, Timer, X } from "lucide-react";
@@ -1309,23 +1311,24 @@ export default function Settings({
           </p>
 
           <div style={{ display: "flex", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
-            <input
+            <Input
               type="password"
+              label="Current admin password"
+              labelHidden
               value={recoveryPassword}
               onChange={(event) => setRecoveryPassword(event.target.value)}
-              className="pos-input"
               placeholder="Current admin password"
               autoComplete="current-password"
               style={{ maxWidth: 260 }}
             />
-            <button
+            <Button
               type="button"
+              variant="primary"
               onClick={regenerateAdminRecoveryCodes}
               disabled={regeneratingRecovery}
-              className="pos-btn pos-btn-primary"
             >
               {regeneratingRecovery ? "Regenerating..." : `Regenerate ${RECOVERY_CODE_COUNT} Codes`}
-            </button>
+            </Button>
           </div>
 
           {recoveryStatus && (
@@ -1408,51 +1411,38 @@ export default function Settings({
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-          <div>
-            <label className="pos-label">Hotel Name</label>
-            <input
-              className="pos-input"
-              value={hotelName}
-              onChange={(event) => setHotelName(event.target.value)}
-              placeholder="Restaurant name"
-            />
-          </div>
-          <div>
-            <label className="pos-label">Initials</label>
-            <input
-              className="pos-input"
-              value={hotelInitials}
-              onChange={(event) => setHotelInitials(event.target.value.toUpperCase())}
-              placeholder="POS"
-              maxLength={4}
-              style={{ maxWidth: 120 }}
-            />
-          </div>
-          <div>
-            <label className="pos-label">Phone</label>
-            <input
-              className="pos-input"
-              type="tel"
-              inputMode="tel"
-              autoComplete="tel"
-              value={hotelPhone}
-              onChange={(event) => setHotelPhone(event.target.value)}
-              placeholder="Receipt phone"
-            />
-          </div>
-          <div>
-            <label className="pos-label">Email</label>
-            <input
-              className="pos-input"
-              value={hotelEmail}
-              onChange={(event) => setHotelEmail(event.target.value)}
-              placeholder="Receipt email"
-            />
-          </div>
+          <Input
+            label="Hotel Name"
+            value={hotelName}
+            onChange={(event) => setHotelName(event.target.value)}
+            placeholder="Restaurant name"
+          />
+          <Input
+            label="Initials"
+            value={hotelInitials}
+            onChange={(event) => setHotelInitials(event.target.value.toUpperCase())}
+            placeholder="POS"
+            maxLength={4}
+            style={{ maxWidth: 120 }}
+          />
+          <Input
+            label="Phone"
+            type="tel"
+            inputMode="tel"
+            autoComplete="tel"
+            value={hotelPhone}
+            onChange={(event) => setHotelPhone(event.target.value)}
+            placeholder="Receipt phone"
+          />
+          <Input
+            label="Email"
+            value={hotelEmail}
+            onChange={(event) => setHotelEmail(event.target.value)}
+            placeholder="Receipt email"
+          />
           <div style={{ gridColumn: "1 / -1" }}>
-            <label className="pos-label">Tagline</label>
-            <input
-              className="pos-input"
+            <Input
+              label="Tagline"
               value={hotelTagline}
               onChange={(event) => setHotelTagline(event.target.value)}
               placeholder="POINT OF SALE"
@@ -1512,15 +1502,15 @@ export default function Settings({
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                   <label
                     htmlFor="restaurant-logo-upload"
-                    className="pos-btn"
+                    className="ui-btn ui-btn-secondary ui-btn-sm"
                     style={{ cursor: processingLogo ? "not-allowed" : "pointer", opacity: processingLogo ? 0.65 : 1 }}
                   >
                     {processingLogo ? "Processing..." : hotelLogoDataUrl ? "Replace Logo" : "Upload Logo"}
                   </label>
                   {hotelLogoDataUrl && (
-                    <button type="button" className="pos-btn" onClick={removeLogo}>
+                    <Button type="button" variant="secondary" size="sm" onClick={removeLogo}>
                       Remove Logo
-                    </button>
+                    </Button>
                   )}
                 </div>
                 <div style={{ fontSize: 12, color: "var(--pos-tx-sub)", marginTop: 8, lineHeight: 1.5 }}>
@@ -1542,14 +1532,14 @@ export default function Settings({
             flexWrap: "wrap",
           }}
         >
-          <button
+          <Button
             type="button"
+            variant="primary"
             onClick={saveBranding}
             disabled={savingBranding || processingLogo}
-            className="pos-btn pos-btn-primary"
           >
             {savingBranding ? "Saving..." : "Save Business Identity"}
-          </button>
+          </Button>
           {brandingStatus && (
             <div
               style={{
@@ -1631,34 +1621,27 @@ export default function Settings({
         </label>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-          <div>
-            <label className="pos-label">GSTIN</label>
-            <input
-              className="pos-input"
-              value={gstin}
-              onChange={(event) => setGstin(event.target.value.toUpperCase())}
-              placeholder="22AAAAA0000A1Z5"
-              maxLength={15}
-              style={{ fontFamily: "monospace", textTransform: "uppercase" }}
-            />
-          </div>
-          <div>
-            <label className="pos-label">GST Rate (%)</label>
-            <input
-              className="pos-input"
-              type="number"
-              min={0}
-              max={28}
-              step={0.01}
-              value={gstRate}
-              onChange={(event) => setGstRate(Number(event.target.value))}
-              style={{ width: 140 }}
-            />
-          </div>
+          <Input
+            label="GSTIN"
+            value={gstin}
+            onChange={(event) => setGstin(event.target.value.toUpperCase())}
+            placeholder="22AAAAA0000A1Z5"
+            maxLength={15}
+            style={{ fontFamily: "monospace", textTransform: "uppercase" }}
+          />
+          <Input
+            label="GST Rate (%)"
+            type="number"
+            min={0}
+            max={28}
+            step={0.01}
+            value={gstRate}
+            onChange={(event) => setGstRate(Number(event.target.value))}
+            style={{ width: 140 }}
+          />
           <div style={{ gridColumn: "1 / -1" }}>
-            <label className="pos-label">Legal Business Name</label>
-            <input
-              className="pos-input"
+            <Input
+              label="Legal Business Name"
               value={gstLegalName}
               onChange={(event) => setGstLegalName(event.target.value)}
               placeholder="Registered business name"
@@ -1675,26 +1658,20 @@ export default function Settings({
               style={{ resize: "vertical", minHeight: 74 }}
             />
           </div>
-          <div>
-            <label className="pos-label">State Code</label>
-            <input
-              className="pos-input"
-              value={gstStateCode}
-              onChange={(event) => setGstStateCode(event.target.value)}
-              placeholder="e.g. 27"
-              maxLength={2}
-              style={{ width: 120 }}
-            />
-          </div>
-          <div>
-            <label className="pos-label">State Name</label>
-            <input
-              className="pos-input"
-              value={gstStateName}
-              onChange={(event) => setGstStateName(event.target.value)}
-              placeholder="e.g. Maharashtra"
-            />
-          </div>
+          <Input
+            label="State Code"
+            value={gstStateCode}
+            onChange={(event) => setGstStateCode(event.target.value)}
+            placeholder="e.g. 27"
+            maxLength={2}
+            style={{ width: 120 }}
+          />
+          <Input
+            label="State Name"
+            value={gstStateName}
+            onChange={(event) => setGstStateName(event.target.value)}
+            placeholder="e.g. Maharashtra"
+          />
         </div>
 
         <label
@@ -1734,16 +1711,17 @@ export default function Settings({
             flexWrap: "wrap",
           }}
         >
-          <button
+          <Button
             type="button"
             onClick={saveGstConfig}
             disabled={savingGst}
-            className="pos-btn pos-btn-primary"
+            variant="primary"
           >
             {savingGst ? "Saving..." : "Save GST Details"}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant="secondary"
             onClick={() => {
               setGstEnabled(DEFAULT_GST_CONFIG.enabled);
               setGstin(DEFAULT_GST_CONFIG.gstin);
@@ -1755,10 +1733,9 @@ export default function Settings({
               setGstPriceIncludesTax(DEFAULT_GST_CONFIG.priceIncludesTax);
               setGstStatus(null);
             }}
-            className="pos-btn pos-btn-secondary"
           >
             Reset Form
-          </button>
+          </Button>
           {gstStatus && (
             <div
               style={{
@@ -1813,14 +1790,14 @@ export default function Settings({
               className="pos-input"
               style={{ fontFamily: "monospace" }}
             />
-            <button
+            <Button
+              variant="accent"
               onClick={() => doTestPrint("kitchen")}
               title="Test configured printer or default printer"
               disabled={testingPrinter !== null}
-              className="pos-btn pos-btn-amber-outline"
             >
               {testingPrinter === "kitchen" ? "Testing..." : "Test"}
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -1836,14 +1813,14 @@ export default function Settings({
               className="pos-input"
               style={{ fontFamily: "monospace" }}
             />
-            <button
+            <Button
+              variant="accent"
               onClick={() => doTestPrint("counter")}
               title="Test configured printer or default printer"
               disabled={testingPrinter !== null}
-              className="pos-btn pos-btn-amber-outline"
             >
               {testingPrinter === "counter" ? "Testing..." : "Test"}
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -1857,9 +1834,31 @@ export default function Settings({
             className="pos-input"
             style={{ width: 120, fontFamily: "monospace" }}
           />
-          <p style={{ fontSize: 12, color: "var(--pos-muted,var(--pos-tx-muted))", marginTop: 6 }}>
+          <p style={{ fontSize: 12, color: "var(--pos-muted)", marginTop: 6 }}>
             Default: 9100 (for network printers)
           </p>
+        </div>
+
+        <div
+          style={{
+            marginBottom: 20,
+            padding: "14px 16px",
+            borderRadius: 10,
+            border: "1px solid var(--pos-saffron-line)",
+            background: "var(--pos-saffron-tint)",
+            fontSize: 13,
+            color: "var(--pos-saffron-text)",
+            lineHeight: 1.6,
+          }}
+        >
+          <div style={{ fontWeight: 700, marginBottom: 6 }}>Printer Setup</div>
+          <div>
+            Network printers typically use port 9100. Check your printer&apos;s network settings or
+            administration panel to find its IP address.
+          </div>
+          <div style={{ marginTop: 6 }}>
+            After entering the IP address, use the Test button to verify connectivity.
+          </div>
         </div>
 
         {/* Action Buttons */}
@@ -1873,29 +1872,20 @@ export default function Settings({
             flexWrap: "wrap",
           }}
         >
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="pos-btn pos-btn-primary"
-            style={{
-              background: "var(--pos-success)",
-              borderColor: "var(--pos-success)",
-              boxShadow: "0 2px 8px rgba(22,163,74,0.25)",
-            }}
-          >
+          <Button variant="primary" onClick={handleSave} disabled={saving}>
             {saving ? "Saving..." : "Save Changes"}
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="secondary"
             onClick={() => {
               setKitchenIp("");
               setCounterIp("");
               setPort(9100);
               setStatus(null);
             }}
-            className="pos-btn pos-btn-secondary"
           >
             Reset
-          </button>
+          </Button>
 
           {status && (
             <div
@@ -1944,15 +1934,15 @@ export default function Settings({
           }}
         >
           <span>Print Queue</span>
-          <button
+          <Button
             type="button"
             onClick={loadPrintQueue}
             disabled={loadingPrintQueue}
-            className="pos-btn pos-btn-secondary"
+            
             style={{ padding: "6px 10px", fontSize: 12 }}
-          >
+           variant="secondary">
             {loadingPrintQueue ? "Refreshing..." : "Refresh"}
-          </button>
+          </Button>
         </div>
 
         {visiblePrintJobs.length === 0 ? (
@@ -1995,15 +1985,15 @@ export default function Settings({
                     </div>
                   )}
                 </div>
-                <button
+                <Button
                   type="button"
+                  size="sm"
+                  variant="primary"
                   onClick={() => retryQueuedPrint(job._id)}
                   disabled={retryingPrintJob === job._id}
-                  className="pos-btn pos-btn-primary"
-                  style={{ padding: "7px 12px", fontSize: 12 }}
                 >
                   {retryingPrintJob === job._id ? "Retrying..." : "Retry"}
-                </button>
+                </Button>
               </div>
             ))}
           </div>
@@ -2020,14 +2010,14 @@ export default function Settings({
             flexWrap: "wrap",
           }}
         >
-          <button
+          <Button
             type="button"
             onClick={clearCompletedPrintJobs}
             disabled={clearingPrintJobs || loadingPrintQueue}
-            className="pos-btn pos-btn-secondary"
+            variant="secondary"
           >
             {clearingPrintJobs ? "Clearing..." : "Clear Old Jobs"}
-          </button>
+          </Button>
           {printQueueStatus && (
             <div
               style={{
@@ -2069,30 +2059,30 @@ export default function Settings({
         </div>
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-          <button
+          <Button
             type="button"
             onClick={createBackup}
             disabled={backupBusy !== null}
-            className="pos-btn pos-btn-primary"
+            variant="primary"
           >
             {backupBusy === "create" ? "Creating..." : "Create Backup"}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             onClick={restoreBackup}
             disabled={backupBusy !== null}
-            className="pos-btn pos-btn-secondary"
+            variant="secondary"
           >
             {backupBusy === "restore" ? "Restoring..." : "Restore Backup"}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             onClick={loadBackups}
             disabled={backupBusy !== null}
-            className="pos-btn pos-btn-secondary"
+            variant="secondary"
           >
             Refresh List
-          </button>
+          </Button>
         </div>
 
         <div
@@ -2232,46 +2222,46 @@ export default function Settings({
         )}
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-          <button
+          <Button
             type="button"
             onClick={checkUpdate}
             disabled={updateBusy !== null}
-            className="pos-btn pos-btn-secondary"
+            variant="secondary"
           >
             {updateBusy === "check" ? "Checking..." : "Check for Updates"}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant="primary"
             onClick={() => preparePosUpdate(false)}
             disabled={updateBusy !== null || !updateCheck?.updateAvailable}
-            className="pos-btn pos-btn-primary"
           >
             {updateBusy === "prepare" ? "Preparing..." : "Prepare Update"}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             onClick={launchUpdate}
             disabled={updateBusy !== null || updateStatus?.state?.status !== "prepared"}
-            className="pos-btn pos-btn-primary"
+            variant="primary"
           >
             Launch Installer
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             onClick={rollbackUpdate}
             disabled={updateBusy !== null || !updateStatus?.rollbackAvailable}
-            className="pos-btn pos-btn-secondary"
+            variant="secondary"
           >
             {updateBusy === "rollback" ? "Rolling back..." : "Roll Back Last Update"}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             onClick={exportSupportDiagnostics}
             disabled={updateBusy !== null}
-            className="pos-btn pos-btn-secondary"
+            variant="secondary"
           >
             {updateBusy === "diagnostics" ? "Exporting..." : "Export Diagnostics"}
-          </button>
+          </Button>
         </div>
 
         {updateStatus?.rollbackRisk && updateStatus.rollbackAvailable && (
@@ -2296,29 +2286,6 @@ export default function Settings({
             {updateMessage}
           </div>
         )}
-      </div>
-
-      {/* Info Box */}
-      <div
-        style={{
-          background: "var(--pos-brand-xlight,var(--pos-saffron-tint))",
-          border: "1px solid var(--pos-brand-border,var(--pos-saffron-line))",
-          borderRadius: 12,
-          padding: "16px 18px",
-          fontSize: 13,
-          color: "var(--pos-brand-dark,var(--pos-saffron-text))",
-          lineHeight: 1.6,
-          marginBottom: 24,
-        }}
-      >
-        <div style={{ fontWeight: 700, marginBottom: 6 }}>Printer Setup</div>
-        <div>
-          Network printers typically use port 9100. Check your printer's network settings or
-          administration panel to find its IP address.
-        </div>
-        <div style={{ marginTop: 6 }}>
-          After entering the IP address, use the Test button to verify connectivity.
-        </div>
       </div>
 
       {/* ── Tables Section ─────────────────────────────────────────────── */}
@@ -2391,13 +2358,13 @@ export default function Settings({
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <button
+          <Button
             onClick={saveTables}
             disabled={savingTables}
-            className="pos-btn pos-btn-primary"
+            variant="primary"
           >
             {savingTables ? "Saving..." : "Save Tables"}
-          </button>
+          </Button>
           {tableStatus && (
             <div
               style={{
@@ -2424,9 +2391,9 @@ export default function Settings({
               placeholder="Ground Floor, Rooftop, AC Hall..."
               style={{ maxWidth: 320 }}
             />
-            <button type="button" onClick={addSeatingArea} className="pos-btn pos-btn-secondary">
+            <Button type="button" onClick={addSeatingArea}  variant="secondary">
               Add Area
-            </button>
+            </Button>
           </div>
           <div style={{ display: "grid", gap: 8 }}>
             {seatingAreas.map((area, index) => (
@@ -2475,31 +2442,34 @@ export default function Settings({
                   Active
                 </label>
                 <div style={{ display: "flex", gap: 6 }}>
-                  <button
+                  <Button
                     type="button"
-                    className="pos-btn"
+                    variant="secondary"
+                    size="sm"
                     onClick={() => moveSeatingArea(area.id, -1)}
                     disabled={index === 0}
                   >
                     Up
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
-                    className="pos-btn"
+                    variant="secondary"
+                    size="sm"
                     onClick={() => moveSeatingArea(area.id, 1)}
                     disabled={index === seatingAreas.length - 1}
                   >
                     Down
-                  </button>
+                  </Button>
                 </div>
-                <button
+                <Button
                   type="button"
-                  className="pos-btn"
+                  variant="secondary"
+                  size="sm"
                   onClick={() => removeSeatingArea(area.id)}
                   disabled={area.id === "area:main"}
                 >
                   Delete
-                </button>
+                </Button>
               </div>
             ))}
           </div>
@@ -2583,13 +2553,13 @@ export default function Settings({
         </div>
 
         <div style={{ marginTop: 16 }}>
-          <button
+          <Button
             onClick={saveSeatingAreasAndTables}
             disabled={savingSeatingAreas}
-            className="pos-btn pos-btn-primary"
+            variant="primary"
           >
             {savingSeatingAreas ? "Saving..." : "Save Seating Areas"}
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -2747,13 +2717,13 @@ export default function Settings({
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 16 }}>
-          <button
+          <Button
             onClick={saveServiceModes}
             disabled={savingServiceModes}
-            className="pos-btn pos-btn-primary"
+            variant="primary"
           >
             {savingServiceModes ? "Saving..." : "Save Service Modes"}
-          </button>
+          </Button>
           {serviceModeStatus && (
             <div
               style={{
@@ -2815,13 +2785,13 @@ export default function Settings({
             onKeyDown={(e) => e.key === "Enter" && addCategory()}
             style={{ flex: 1 }}
           />
-          <button
+          <Button
             onClick={addCategory}
             disabled={!normalizeCategoryName(newCategory)}
-            className="pos-btn pos-btn-primary"
+            variant="primary"
           >
             + Add
-          </button>
+          </Button>
         </div>
 
         {/* Category list */}
@@ -2880,13 +2850,13 @@ export default function Settings({
             borderTop: "1px solid var(--pos-border,var(--pos-line))",
           }}
         >
-          <button
+          <Button
             onClick={saveCategories}
             disabled={savingCategories}
-            className="pos-btn pos-btn-primary"
+            variant="primary"
           >
             {savingCategories ? "Saving…" : "Save Categories"}
-          </button>
+          </Button>
           {categoryStatus && (
             <div
               style={{
@@ -2947,13 +2917,13 @@ export default function Settings({
             onKeyDown={(e) => e.key === "Enter" && addMenuVariantOption()}
             style={{ flex: 1 }}
           />
-          <button
+          <Button
             onClick={addMenuVariantOption}
             disabled={!normalizeCategoryName(newMenuVariantOption)}
-            className="pos-btn pos-btn-primary"
+            variant="primary"
           >
             + Add
-          </button>
+          </Button>
         </div>
 
         {menuVariantOptions.length === 0 ? (
@@ -3010,13 +2980,13 @@ export default function Settings({
             borderTop: "1px solid var(--pos-border,var(--pos-line))",
           }}
         >
-          <button
+          <Button
             onClick={saveMenuVariantOptions}
             disabled={savingMenuVariantOptions}
-            className="pos-btn pos-btn-primary"
+            variant="primary"
           >
             {savingMenuVariantOptions ? "Saving…" : "Save Variant Options"}
-          </button>
+          </Button>
           {menuVariantStatus && (
             <div
               style={{
@@ -3100,13 +3070,13 @@ export default function Settings({
             borderTop: "1px solid var(--pos-border,var(--pos-line))",
           }}
         >
-          <button
+          <Button
             onClick={saveShiftConfig}
             disabled={savingShifts}
-            className="pos-btn pos-btn-primary"
+            variant="primary"
           >
             {savingShifts ? "Saving..." : "Save Shift Master"}
-          </button>
+          </Button>
           {shiftStatus && (
             <div
               style={{
@@ -3124,7 +3094,7 @@ export default function Settings({
         </div>
       </div>
 
-      <div className="pos-card pos-card-p" style={{ marginBottom: 24 }} data-settings-sec="attendance-holidays">
+      <div className="pos-card pos-card-p" style={{ marginBottom: 24 }} data-settings-sec="operations">
         <div
           style={{
             fontSize: 11,
@@ -3154,9 +3124,9 @@ export default function Settings({
             onChange={(event) => setHolidayDraft(event.target.value)}
             aria-label="Holiday date"
           />
-          <button type="button" className="pos-btn pos-btn-secondary" onClick={addHolidayDraft}>
+          <Button type="button"  onClick={addHolidayDraft} variant="secondary">
             Add date
-          </button>
+          </Button>
         </div>
 
         <div style={{ display: "grid", gap: 8, marginBottom: 20 }}>
@@ -3177,15 +3147,16 @@ export default function Settings({
                 }}
               >
                 <span style={{ fontSize: 13, fontWeight: 600 }}>{date}</span>
-                <button
+                <Button
                   type="button"
-                  className="pos-btn pos-btn-secondary pos-btn-sm"
+                  variant="secondary"
+                  size="sm"
                   onClick={() =>
                     setAttendanceHolidays((previous) => previous.filter((entry) => entry !== date))
                   }
                 >
                   Remove
-                </button>
+                </Button>
               </div>
             ))
           )}
@@ -3200,13 +3171,13 @@ export default function Settings({
             borderTop: "1px solid var(--pos-border,var(--pos-line))",
           }}
         >
-          <button
+          <Button
             onClick={saveHolidayConfig}
             disabled={savingHolidays}
-            className="pos-btn pos-btn-primary"
+            variant="primary"
           >
             {savingHolidays ? "Saving..." : "Save Holidays"}
-          </button>
+          </Button>
           {holidayStatus ? (
             <div
               style={{
@@ -3281,13 +3252,13 @@ export default function Settings({
             borderTop: "1px solid var(--pos-border,var(--pos-line))",
           }}
         >
-          <button
+          <Button
             onClick={saveAuditConfig}
             disabled={savingAudit}
-            className="pos-btn pos-btn-primary"
+            variant="primary"
           >
             {savingAudit ? "Saving…" : "Save Retention Policy"}
-          </button>
+          </Button>
           {auditStatus && (
             <div
               style={{
@@ -3360,13 +3331,13 @@ export default function Settings({
             borderTop: "1px solid var(--pos-border,var(--pos-line))",
           }}
         >
-          <button
+          <Button
             onClick={saveHistoryConfig}
             disabled={savingHistory}
-            className="pos-btn pos-btn-primary"
+            variant="primary"
           >
             {savingHistory ? "Saving\u2026" : "Save Retention Policy"}
-          </button>
+          </Button>
           {historyStatus && (
             <div
               style={{

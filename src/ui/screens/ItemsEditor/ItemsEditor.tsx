@@ -16,8 +16,9 @@ import {
   validationMessage,
 } from "../../../shared/validation";
 import { useToast } from "../../context/ToastContext";
-import { useFocusTrap } from "../../hooks/useFocusTrap";
 import { PageHeader } from "../../components/ui/PageHeader";
+import { Button } from "../../components/ui/Button";
+import { Modal } from "../../components/ui/Modal";
 import { Icon } from "../../components/ui/Icon";
 import { Star, X } from "lucide-react";
 
@@ -237,7 +238,6 @@ export default function ItemsEditor({
     setModalAvailable(true);
     setModalVariants([]);
   }, []);
-  const addItemDialogRef = useFocusTrap<HTMLDivElement>(modalOpen, closeModal);
 
   const resetModalForm = React.useCallback(() => {
     setModalName("");
@@ -577,9 +577,9 @@ export default function ItemsEditor({
         title="Menu"
         subtitle={`${items.length} item${items.length !== 1 ? "s" : ""} · edit prices inline, then Save All`}
         actions={
-          <button onClick={() => setModalOpen(true)} className="pos-btn pos-btn-primary">
+          <Button variant="primary" onClick={() => setModalOpen(true)}>
             + Add Item
-          </button>
+          </Button>
         }
       />
       )}
@@ -594,9 +594,9 @@ export default function ItemsEditor({
           style={{ flex: 1 }}
         />
         {query && (
-          <button onClick={() => setQuery("")} className="pos-btn pos-btn-secondary">
+          <Button variant="secondary" onClick={() => setQuery("")}>
             Clear
-          </button>
+          </Button>
         )}
       </div>
 
@@ -617,25 +617,25 @@ export default function ItemsEditor({
           {filtered.length !== 1 ? "s" : ""}
         </span>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <button
+          <Button
             type="button"
-            className="pos-btn pos-btn-secondary"
+            variant="secondary"
             disabled={pageIndex === 0}
             onClick={() => setPageIndex((current) => Math.max(0, current - 1))}
           >
             Previous
-          </button>
+          </Button>
           <span style={{ minWidth: 86, textAlign: "center" }}>
             Page {pageIndex + 1} of {pageCount}
           </span>
-          <button
+          <Button
             type="button"
-            className="pos-btn pos-btn-secondary"
+            variant="secondary"
             disabled={pageIndex >= pageCount - 1}
             onClick={() => setPageIndex((current) => Math.min(pageCount - 1, current + 1))}
           >
             Next
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -1010,19 +1010,20 @@ export default function ItemsEditor({
 
                       {/* Editable price */}
                       <div>
-                        <button
+                        <Button
                           type="button"
+                          variant="secondary"
+                          size="sm"
+                          style={{ width: "100%", padding: "6px 8px", fontSize: 12 }}
                           onClick={() => {
                             setVariantEditorItemId(it._id);
                             setVariantEditorDraft(currentVariants);
                           }}
-                          className="pos-btn pos-btn-secondary"
-                          style={{ width: "100%", padding: "6px 8px", fontSize: 12 }}
                         >
                           {currentVariants.length > 0
                             ? `${currentVariants.length} option${currentVariants.length !== 1 ? "s" : ""}`
                             : "No variants"}
-                        </button>
+                        </Button>
                       </div>
 
                       {/* Editable price */}
@@ -1234,90 +1235,17 @@ export default function ItemsEditor({
         </span>
         <div style={{ display: "flex", gap: 8 }}>
           {hasEdits && (
-            <button
-              onClick={() => setEditMap({})}
-              disabled={saveAllLoading}
-              className="pos-btn pos-btn-secondary"
-            >
+            <Button variant="secondary" onClick={() => setEditMap({})} disabled={saveAllLoading}>
               Discard
-            </button>
+            </Button>
           )}
-          <button
-            onClick={onSaveAll}
-            disabled={!hasEdits || saveAllLoading}
-            className="pos-btn pos-btn-primary"
-          >
+          <Button variant="primary" onClick={onSaveAll} disabled={!hasEdits || saveAllLoading}>
             {saveAllLoading ? "Saving…" : "Save All Changes"}
-          </button>
+          </Button>
         </div>
       </div>
 
-      {/* New Item modal */}
-      {modalOpen && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            zIndex: 99999,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: "var(--pos-overlay)",
-          }}
-          onClick={closeModal}
-        >
-          <div
-            ref={addItemDialogRef}
-            role="dialog"
-            aria-modal="true"
-            aria-label="Add new menu item"
-            tabIndex={-1}
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              width: 480,
-              maxWidth: "95vw",
-              background: "var(--pos-surface)",
-              borderRadius: 14,
-              padding: "24px 28px",
-              boxShadow: "var(--pos-shadow-overlay)",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: 20,
-              }}
-            >
-              <h3
-                style={{
-                  margin: 0,
-                  fontSize: 18,
-                  fontWeight: 800,
-                  color: "var(--pos-tx)",
-                }}
-              >
-                New Menu Item
-              </h3>
-              <button
-                onClick={closeModal}
-                disabled={modalSaving}
-                style={{
-                  background: "none",
-                  border: "none",
-                  cursor: modalSaving ? "not-allowed" : "pointer",
-                  color: "var(--pos-tx-muted)",
-                  fontSize: 20,
-                  lineHeight: 1,
-                  opacity: modalSaving ? 0.55 : 1,
-                }}
-                aria-label="Close"
-              >
-                <Icon icon={X} size="sm" />
-              </button>
-            </div>
-
+      <Modal open={modalOpen} title="New Menu Item" onClose={closeModal} large>
             <div style={{ display: "grid", gap: 12 }}>
               <div>
                 <label
@@ -1464,9 +1392,10 @@ export default function ItemsEditor({
                   >
                     Variants (optional)
                   </label>
-                  <button
+                  <Button
                     type="button"
-                    className="pos-btn pos-btn-secondary"
+                    variant="secondary"
+                    size="sm"
                     style={{ padding: "4px 10px", fontSize: 12 }}
                     onClick={() =>
                       setModalVariants((prev) => [
@@ -1480,7 +1409,7 @@ export default function ItemsEditor({
                     }
                   >
                     + Add Variant
-                  </button>
+                  </Button>
                 </div>
                 {variantOptions.length === 0 && (
                   <div style={{ fontSize: 12, color: "var(--pos-saffron-text)", marginBottom: 8 }}>
@@ -1597,135 +1526,36 @@ export default function ItemsEditor({
               </label>
             </div>
 
-            <div
-              style={{
-                display: "flex",
-                gap: 8,
-                justifyContent: "flex-end",
-                marginTop: 22,
-                flexWrap: "wrap",
-              }}
-            >
-              <button
-                onClick={closeModal}
-                disabled={modalSaving}
-                style={{
-                  padding: "10px 20px",
-                  borderRadius: 8,
-                  border: "1px solid var(--pos-line)",
-                  background: "var(--pos-surface)",
-                  color: "var(--pos-tx-sec)",
-                  fontWeight: 600,
-                  fontSize: 13,
-                  cursor: modalSaving ? "not-allowed" : "pointer",
-                  opacity: modalSaving ? 0.65 : 1,
-                }}
-              >
+            <div className="ui-form-actions" style={{ marginTop: 18 }}>
+              <Button type="button" variant="secondary" onClick={closeModal} disabled={modalSaving}>
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
                 onClick={() => onModalSave(true)}
                 disabled={modalSaving}
-                style={{
-                  padding: "10px 20px",
-                  borderRadius: 8,
-                  border: "1.5px solid var(--pos-saffron-deep)",
-                  background: "var(--pos-surface)",
-                  color: "var(--pos-saffron-deep)",
-                  fontWeight: 700,
-                  fontSize: 13,
-                  cursor: modalSaving ? "not-allowed" : "pointer",
-                  opacity: modalSaving ? 0.65 : 1,
-                }}
               >
                 {modalSaving ? "Saving…" : "Save & Add Another"}
-              </button>
-              <button
-                onClick={() => onModalSave(false)}
-                disabled={modalSaving}
-                style={{
-                  padding: "10px 24px",
-                  borderRadius: 8,
-                  border: "none",
-                  background: "var(--pos-teal)",
-                  color: "var(--pos-surface)",
-                  fontWeight: 700,
-                  fontSize: 13,
-                  cursor: modalSaving ? "not-allowed" : "pointer",
-                  opacity: modalSaving ? 0.7 : 1,
-                  boxShadow: "0 2px 8px rgba(217,119,6,0.25)",
-                }}
-              >
+              </Button>
+              <Button type="button" variant="primary" onClick={() => onModalSave(false)} disabled={modalSaving}>
                 {modalSaving ? "Saving…" : "Save Item"}
-              </button>
+              </Button>
             </div>
-          </div>
-        </div>
-      )}
+      </Modal>
 
-      {/* Item variant editor modal */}
       {variantEditorItem && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            zIndex: 99999,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: "var(--pos-overlay)",
-          }}
-          onClick={() => setVariantEditorItemId(null)}
+        <Modal
+          open
+          title={`Variants · ${variantEditorItem.name}`}
+          onClose={() => setVariantEditorItemId(null)}
+          large
         >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label={`Variants for ${variantEditorItem.name}`}
-            tabIndex={-1}
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              width: 560,
-              maxWidth: "95vw",
-              background: "var(--pos-surface)",
-              borderRadius: 14,
-              padding: "22px 24px",
-              boxShadow: "var(--pos-shadow-overlay)",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: 12,
-              }}
-            >
-              <div>
-                <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: "var(--pos-tx)" }}>
-                  Variants · {variantEditorItem.name}
-                </h3>
-                <div style={{ fontSize: 12, color: "var(--pos-tx-sub)", marginTop: 2 }}>
-                  Add options like Half/Full with different prices.
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setVariantEditorItemId(null)}
-                style={{
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  color: "var(--pos-tx-muted)",
-                  fontSize: 20,
-                  lineHeight: 1,
-                }}
-                aria-label="Close"
-              >
-                <Icon icon={X} size="sm" />
-              </button>
-            </div>
+          <div style={{ fontSize: 12, color: "var(--pos-tx-sub)", marginBottom: 12 }}>
+            Add options like Half/Full with different prices.
+          </div>
 
-            <div style={{ display: "grid", gap: 8 }}>
+          <div style={{ display: "grid", gap: 8 }}>
               {variantOptions.length === 0 && (
                 <div style={{ fontSize: 12, color: "var(--pos-saffron-text)" }}>
                   Configure variant options in Settings to use dropdown variants.
@@ -1820,9 +1650,9 @@ export default function ItemsEditor({
             </div>
 
             <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginTop: 16 }}>
-              <button
+              <Button
                 type="button"
-                className="pos-btn pos-btn-secondary"
+                variant="secondary"
                 onClick={() =>
                   setVariantEditorDraft((prev) => [
                     ...prev,
@@ -1835,28 +1665,27 @@ export default function ItemsEditor({
                 }
               >
                 + Add Variant
-              </button>
+              </Button>
               <div style={{ display: "flex", gap: 8 }}>
-                <button
+                <Button
                   type="button"
-                  className="pos-btn pos-btn-secondary"
+                  variant="secondary"
                   onClick={() => setVariantEditorItemId(null)}
                   disabled={variantEditorSaving}
                 >
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
-                  className="pos-btn pos-btn-primary"
+                  variant="primary"
                   onClick={saveVariantEditor}
                   disabled={variantEditorSaving}
                 >
                   {variantEditorSaving ? "Saving..." : "Save Variants"}
-                </button>
+                </Button>
               </div>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

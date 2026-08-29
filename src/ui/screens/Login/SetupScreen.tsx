@@ -75,26 +75,6 @@ export default function SetupScreen({ onComplete }: { onComplete: () => void }) 
   const allValid =
     password.length > 0 && passwordErrors.length === 0 && password === confirmPassword;
 
-  const inputStyle: React.CSSProperties = {
-    width: "100%",
-    padding: "10px 12px",
-    borderRadius: 8,
-    border: "1px solid var(--pos-line-strong)",
-    fontSize: 14,
-    outline: "none",
-    boxSizing: "border-box",
-  };
-
-  const labelStyle: React.CSSProperties = {
-    display: "block",
-    fontSize: 12,
-    fontWeight: 700,
-    color: "var(--pos-tx-sec)",
-    marginBottom: 6,
-    textTransform: "uppercase",
-    letterSpacing: "0.4px",
-  };
-
   return (
     <div className={authStyles.screen}>
       <div className={`${authStyles.card} ${authStyles.cardWide}`}>
@@ -131,67 +111,59 @@ export default function SetupScreen({ onComplete }: { onComplete: () => void }) 
               {RECOVERY_CODE_COUNT} one-time recovery codes for offline password recovery.
             </p>
 
-            <label style={{ display: "block", marginBottom: 14 }}>
-              <span style={labelStyle}>Username</span>
+            <label className={authStyles.field}>
+              <span className={authStyles.fieldLabel}>Username</span>
               <input
                 type="text"
+                className={authStyles.input}
                 value={username}
                 onChange={(event) => setUsername(event.target.value)}
                 autoComplete="username"
                 autoFocus
                 disabled={isSubmitting}
-                style={inputStyle}
               />
             </label>
 
-            <label style={{ display: "block", marginBottom: 14 }}>
-              <span style={labelStyle}>Display Name</span>
+            <label className={authStyles.field}>
+              <span className={authStyles.fieldLabel}>Display Name</span>
               <input
                 type="text"
+                className={authStyles.input}
                 value={displayName}
                 onChange={(event) => setDisplayName(event.target.value)}
                 disabled={isSubmitting}
-                style={inputStyle}
               />
             </label>
 
-            <label style={{ display: "block", marginBottom: 14 }}>
-              <span style={labelStyle}>Password</span>
+            <label className={authStyles.field}>
+              <span className={authStyles.fieldLabel}>Password</span>
               <input
                 type="password"
+                className={authStyles.input}
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 autoComplete="new-password"
                 disabled={isSubmitting}
-                style={inputStyle}
               />
             </label>
 
             {password.length > 0 && passwordErrors.length > 0 && (
-              <ul
-                style={{
-                  margin: "0 0 14px",
-                  padding: "0 0 0 18px",
-                  fontSize: 12,
-                  color: "var(--pos-danger)",
-                  lineHeight: 1.7,
-                }}
-              >
+              <ul className={authStyles.errorList}>
                 {passwordErrors.map((err) => (
                   <li key={err}>{err}</li>
                 ))}
               </ul>
             )}
 
-            <label style={{ display: "block", marginBottom: 20 }}>
-              <span style={labelStyle}>Confirm Password</span>
+            <label className={authStyles.field}>
+              <span className={authStyles.fieldLabel}>Confirm Password</span>
               <input
                 type="password"
+                className={authStyles.input}
                 value={confirmPassword}
                 onChange={(event) => setConfirmPassword(event.target.value)}
                 autoComplete="new-password"
                 disabled={isSubmitting}
-                style={inputStyle}
               />
               {confirmPassword && password !== confirmPassword && (
                 <span style={{ fontSize: 12, color: "var(--pos-danger)", marginTop: 4, display: "block" }}>
@@ -200,37 +172,12 @@ export default function SetupScreen({ onComplete }: { onComplete: () => void }) 
               )}
             </label>
 
-            {error && (
-              <div
-                style={{
-                  padding: "10px 14px",
-                  borderRadius: 8,
-                  background: "var(--pos-danger-tint)",
-                  color: "var(--pos-danger)",
-                  fontSize: 13,
-                  marginBottom: 16,
-                  border: "1px solid var(--pos-danger-line)",
-                }}
-              >
-                {error}
-              </div>
-            )}
+            {error && <div className={`${authStyles.message} ${authStyles.messageError}`}>{error}</div>}
 
             <button
               type="submit"
+              className={authStyles.submitBtn}
               disabled={isSubmitting || !allValid}
-              style={{
-                width: "100%",
-                padding: "12px 0",
-                borderRadius: 9,
-                border: "none",
-                background: allValid ? "var(--pos-teal)" : "var(--pos-line-strong)",
-                color: allValid ? "var(--pos-surface)" : "var(--pos-tx-muted)",
-                fontWeight: 800,
-                fontSize: 15,
-                cursor: allValid ? "pointer" : "not-allowed",
-                opacity: isSubmitting ? 0.7 : 1,
-              }}
             >
               {isSubmitting ? "Creating account..." : "Create Admin Account"}
             </button>
@@ -290,18 +237,7 @@ function RecoveryCodesStep({
         ))}
       </div>
 
-      <div
-        style={{
-          padding: "10px 12px",
-          borderRadius: 8,
-          background: "var(--pos-saffron-tint)",
-          border: "1px solid var(--pos-saffron-line)",
-          color: "var(--pos-saffron-text)",
-          fontSize: 13,
-          lineHeight: 1.5,
-          marginBottom: 16,
-        }}
-      >
+      <div className={`${authStyles.message} ${authStyles.messageWarning}`}>
         Store these codes somewhere offline and private. The app stores only salted hashes, so the
         codes cannot be viewed again later.
       </div>
@@ -328,19 +264,9 @@ function RecoveryCodesStep({
 
       <button
         type="button"
+        className={authStyles.submitBtn}
         onClick={onComplete}
         disabled={!savedCodes}
-        style={{
-          width: "100%",
-          padding: "12px 0",
-          borderRadius: 9,
-          border: "none",
-          background: savedCodes ? "var(--pos-teal)" : "var(--pos-line-strong)",
-          color: savedCodes ? "var(--pos-surface)" : "var(--pos-tx-muted)",
-          fontWeight: 800,
-          fontSize: 15,
-          cursor: savedCodes ? "pointer" : "not-allowed",
-        }}
       >
         Continue to Login
       </button>

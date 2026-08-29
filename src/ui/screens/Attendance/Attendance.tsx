@@ -718,9 +718,9 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
             <strong>Could not load attendance</strong>
             <p>{error}</p>
           </div>
-          <button type="button" className="pos-btn pos-btn-secondary" onClick={() => void loadData()}>
+          <Button type="button"  onClick={() => void loadData()} variant="secondary">
             Retry
-          </button>
+          </Button>
         </div>
       )}
 
