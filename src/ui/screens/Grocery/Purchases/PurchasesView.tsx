@@ -11,6 +11,7 @@ import type { GroceryPurchaseDto } from "../../../../shared/pos";
 import { validationMessage } from "../../../../shared/validation";
 import { Badge } from "../../../components/ui/Badge";
 import { Button } from "../../../components/ui/Button";
+import { ConfirmModal } from "../../../components/ui/ConfirmModal";
 import { DataTable } from "../../../components/ui/DataTable";
 import { Drawer } from "../../../components/ui/Drawer";
 import { EmptyState } from "../../../components/ui/EmptyState";
@@ -28,9 +29,10 @@ import {
 import styles from "../Grocery.module.css";
 import { RecordPurchaseFlow } from "./RecordPurchaseFlow";
 
-function shortId(id?: string | null) {
-  if (!id) return "—";
-  return id.length > 8 ? `${id.slice(0, 8)}…` : id;
+function formatLinkedList(header: GroceryPurchaseDto) {
+  if (header.buyingListTitle) return header.buyingListTitle;
+  if (header.buyingListId) return "Deleted list";
+  return "—";
 }
 
 function paymentTone(status: string): "neutral" | "attention" | "success" | "danger" {
@@ -55,6 +57,7 @@ export function PurchasesView() {
   const [openLists, setOpenLists] = React.useState<GroceryListDoc[]>([]);
   const [pickedListId, setPickedListId] = React.useState("");
   const [purchaseListId, setPurchaseListId] = React.useState<string | null>(null);
+  const [voidTarget, setVoidTarget] = React.useState<GroceryPurchaseDto | null>(null);
 
   const applyPreset = (next: HistoryPreset) => {
     setPreset(next);
@@ -128,19 +131,22 @@ export function PurchasesView() {
     }
   };
 
-  const voidPurchase = async (header: GroceryPurchaseDto) => {
+  const requestVoidPurchase = (header: GroceryPurchaseDto) => {
     if (header.status === "voided") return;
-    if (!window.confirm(`Void purchase of ${formatCurrency(header.total)}? This cannot be undone.`)) {
-      return;
-    }
+    setVoidTarget(header);
+  };
+
+  const confirmVoidPurchase = async () => {
+    if (!voidTarget || voidTarget.status === "voided" || saving) return;
     setSaving(true);
     try {
-      await voidGroceryPurchaseHeader(header.id);
+      await voidGroceryPurchaseHeader(voidTarget.id);
       setStatus("Purchase voided — linked buying list updated");
-      if (selected?.id === header.id) {
+      if (selected?.id === voidTarget.id) {
         setSelected(null);
         setLines([]);
       }
+      setVoidTarget(null);
       await load();
     } catch (error) {
       setStatus(validationMessage(error, "Could not void purchase"));
@@ -152,6 +158,8 @@ export function PurchasesView() {
   const recordedSpend = headers
     .filter((h) => h.status !== "voided")
     .reduce((sum, h) => sum + Number(h.total || 0), 0);
+
+  const voidListLabel = voidTarget ? formatLinkedList(voidTarget) : "—";
 
   return (
     <div className={styles.listPage}>
@@ -225,7 +233,16 @@ export function PurchasesView() {
         />
       ) : (
         <DataTable
-          headers={["Date", "Vendor", "Total", "Payment", "Status", "List", ""]}
+          columns={[
+            { header: "Date", nowrap: true },
+            { header: "Vendor" },
+            { header: "Total", align: "right", nowrap: true },
+            { header: "Payment", nowrap: true },
+            { header: "Status", nowrap: true },
+            { header: "List" },
+            { header: "", nowrap: true, align: "right" },
+            { header: "", nowrap: true, align: "right" },
+          ]}
           rows={headers.map((header) => [
             <div key={`${header.id}-date`}>
               {formatListDate(header.purchaseDate)}
@@ -243,19 +260,23 @@ export function PurchasesView() {
             <Badge key={`${header.id}-st`} tone={header.status === "voided" ? "danger" : "success"}>
               {header.status}
             </Badge>,
-            shortId(header.buyingListId),
-            <div key={`${header.id}-actions`} className={styles.actions}>
+            <span key={`${header.id}-list`} className={styles.listNameCell} title={formatLinkedList(header)}>
+              {formatLinkedList(header)}
+            </span>,
+            <div key={`${header.id}-lines`} className={styles.tableActionCell}>
               <Button variant="ghost" size="sm" onClick={() => void openDetail(header)}>
                 Lines
               </Button>
+            </div>,
+            <div key={`${header.id}-void`} className={styles.tableActionCell}>
               {header.status !== "voided" ? (
                 <Button
                   variant="danger-ghost"
                   size="sm"
-                  onClick={() => void voidPurchase(header)}
+                  onClick={() => requestVoidPurchase(header)}
                   disabled={saving}
                 >
-                  Void Purchase
+                  Void
                 </Button>
               ) : null}
             </div>,
@@ -273,7 +294,11 @@ export function PurchasesView() {
         wide
         footer={
           selected && selected.status !== "voided" ? (
-            <Button variant="danger-ghost" onClick={() => void voidPurchase(selected)} disabled={saving}>
+            <Button
+              variant="danger-ghost"
+              onClick={() => requestVoidPurchase(selected)}
+              disabled={saving}
+            >
               Void Purchase
             </Button>
           ) : undefined
@@ -295,7 +320,7 @@ export function PurchasesView() {
               <div className={styles.kpi}>
                 <div className={styles.kpiLabel}>Linked list</div>
                 <div className={styles.kpiValue} style={{ fontSize: 16 }}>
-                  {shortId(selected.buyingListId)}
+                  {formatLinkedList(selected)}
                 </div>
               </div>
             </div>
@@ -321,6 +346,28 @@ export function PurchasesView() {
           </div>
         )}
       </Drawer>
+
+      <ConfirmModal
+        open={Boolean(voidTarget)}
+        title="Void purchase?"
+        onClose={() => setVoidTarget(null)}
+        onConfirm={confirmVoidPurchase}
+        confirmLabel="Void purchase"
+        loading={saving}
+      >
+        {voidTarget ? (
+          <p style={{ margin: 0 }}>
+            This will void a purchase of <strong>{formatCurrency(voidTarget.total)}</strong>
+            {voidListLabel !== "—" ? (
+              <>
+                {" "}
+                from <strong>{voidListLabel}</strong>
+              </>
+            ) : null}
+            . The linked buying list will be updated.
+          </p>
+        ) : null}
+      </ConfirmModal>
 
       <Modal open={pickListOpen} title="Record Purchase" onClose={() => setPickListOpen(false)}>
         <div className="ui-form-stack">

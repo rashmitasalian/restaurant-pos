@@ -21,6 +21,7 @@ import {
   groceryRecordKey,
   GROCERY_UNITS,
   isListTotalPurchase,
+  parseMoney,
   plannedTotal,
   statusLabel,
 } from "../groceryUtils";
@@ -30,6 +31,12 @@ const ADD_ITEM_MIN_SEARCH_CHARS = 2;
 const ADD_ITEM_RESULT_LIMIT = 15;
 const LINE_GRID =
   "minmax(160px, 2fr) minmax(64px, 0.45fr) minmax(80px, 0.55fr) minmax(88px, 0.65fr) minmax(100px, 120px) minmax(72px, 90px)";
+const PARTIAL_MONEY_INPUT = /^\d*\.?\d*$/;
+
+function formatEstimatedRate(value: number | null | undefined) {
+  if (value == null || Number.isNaN(Number(value))) return "";
+  return String(value);
+}
 
 type DraftLine = GroceryListDoc["lines"][number];
 
@@ -93,6 +100,7 @@ export function BuyingListEditor({ listId, onClose, onChanged, onRecordPurchase 
   const [addOpen, setAddOpen] = React.useState(false);
   const [addQuery, setAddQuery] = React.useState("");
   const [highlight, setHighlight] = React.useState(0);
+  const [rateDrafts, setRateDrafts] = React.useState<Record<string, string>>({});
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -106,6 +114,7 @@ export function BuyingListEditor({ listId, onClose, onChanged, onRecordPurchase 
       if (!doc) throw new Error("Buying list not found");
       setList(doc);
       setLines(doc.lines.map((line) => ({ ...line })));
+      setRateDrafts({});
       setTitle(doc.title);
       setNotes(doc.notes || "");
       setItems(groceryItems);
@@ -183,10 +192,10 @@ export function BuyingListEditor({ listId, onClose, onChanged, onRecordPurchase 
         const next = { ...line, ...updates };
         if (updates.estimatedUnitPrice !== undefined || updates.quantity !== undefined) {
           const qty = Number(next.quantity) || 0;
+          const rawRate = next.estimatedUnitPrice;
           const rate =
-            next.estimatedUnitPrice == null || Number.isNaN(Number(next.estimatedUnitPrice))
-              ? null
-              : Number(next.estimatedUnitPrice);
+            rawRate == null || Number.isNaN(Number(rawRate)) ? null : Number(rawRate);
+          next.estimatedUnitPrice = rate;
           next.estimatedTotal = rate == null ? null : +(rate * qty).toFixed(2);
         }
         return next;
@@ -195,7 +204,15 @@ export function BuyingListEditor({ listId, onClose, onChanged, onRecordPurchase 
   };
 
   const removeLine = (index: number) => {
+    const lineId = lines[index]?.id;
     setLines((current) => current.filter((_, i) => i !== index));
+    if (lineId) {
+      setRateDrafts((current) => {
+        const next = { ...current };
+        delete next[lineId];
+        return next;
+      });
+    }
   };
 
   const addLine = (item?: GroceryItemDoc) => {
@@ -465,12 +482,16 @@ export function BuyingListEditor({ listId, onClose, onChanged, onRecordPurchase 
                       label="Est. rate"
                       labelHidden
                       inputMode="decimal"
-                      value={line.estimatedUnitPrice == null ? "" : String(line.estimatedUnitPrice)}
+                      value={
+                        line.id in rateDrafts
+                          ? rateDrafts[line.id]
+                          : formatEstimatedRate(line.estimatedUnitPrice)
+                      }
                       onChange={(e) => {
                         const value = e.target.value;
-                        updateLine(index, {
-                          estimatedUnitPrice: value.trim() === "" ? null : Number(value),
-                        });
+                        if (value !== "" && !PARTIAL_MONEY_INPUT.test(value)) return;
+                        setRateDrafts((current) => ({ ...current, [line.id]: value }));
+                        updateLine(index, { estimatedUnitPrice: parseMoney(value) });
                       }}
                       disabled={recorded}
                     />

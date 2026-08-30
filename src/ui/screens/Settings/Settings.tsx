@@ -2,6 +2,7 @@
 import { ENV } from "../../../config/env";
 import { AuthContext } from "../../context/AuthContext";
 import { Button } from "../../components/ui/Button";
+import { ConfirmModal } from "../../components/ui/ConfirmModal";
 import { Input } from "../../components/ui/Input";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { Icon } from "../../components/ui/Icon";
@@ -127,6 +128,13 @@ export default function Settings({
   const [updateMessage, setUpdateMessage] = React.useState<string | null>(null);
   const [updateBusy, setUpdateBusy] = React.useState<
     "check" | "prepare" | "launch" | "rollback" | "diagnostics" | null
+  >(null);
+  const [settingsConfirm, setSettingsConfirm] = React.useState<
+    | { kind: "restore-backup" }
+    | { kind: "launch-update" }
+    | { kind: "prepare-with-activity"; activity: any }
+    | { kind: "rollback"; risk: any }
+    | null
   >(null);
   const [hotelName, setHotelName] = React.useState(ENV.HOTEL_NAME);
   const [hotelInitials, setHotelInitials] = React.useState(ENV.HOTEL_INITIALS);
@@ -634,12 +642,17 @@ export default function Settings({
     }
   };
 
-  const restoreBackup = async () => {
+  const restoreBackup = () => {
     if (!beginAction("backup.restore")) {
       return;
     }
-    if (!window.confirm("Restore replaces the current POS database. A safety backup will be created first. Continue?")) {
-      endAction("backup.restore");
+    endAction("backup.restore");
+    setSettingsConfirm({ kind: "restore-backup" });
+  };
+
+  const confirmRestoreBackup = async () => {
+    setSettingsConfirm(null);
+    if (!beginAction("backup.restore")) {
       return;
     }
     setBackupBusy("restore");
@@ -706,15 +719,9 @@ export default function Settings({
     try {
       let result = await prepareUpdate({ allowBusinessActivity });
       if (result?.ok === false && result.reason === "business-activity") {
-        const confirmed = window.confirm(
-          `Business activity detected:\n\n${businessActivityText(result.businessActivity)}\n\nUpdating now may interrupt operations. Continue anyway?`,
-        );
-        if (confirmed) {
-          result = await prepareUpdate({ allowBusinessActivity: true });
-        } else {
-          setUpdateMessage("Update preparation cancelled.");
-          return;
-        }
+        setSettingsConfirm({ kind: "prepare-with-activity", activity: result.businessActivity });
+        setUpdateMessage("Business activity detected. Confirm to continue preparing the update.");
+        return;
       }
       await loadUpdateSupport();
       setUpdateMessage("Update prepared. Backup and installers are verified.");
@@ -726,12 +733,40 @@ export default function Settings({
     }
   };
 
-  const launchUpdate = async () => {
+  const confirmPrepareWithActivity = async () => {
+    setSettingsConfirm(null);
+    if (!beginAction("update.prepare")) {
+      return;
+    }
+    setUpdateBusy("prepare");
+    setUpdateMessage(null);
+    try {
+      const result = await prepareUpdate({ allowBusinessActivity: true });
+      if (result?.ok === false && result.reason === "business-activity") {
+        setUpdateMessage("Update preparation cancelled.");
+        return;
+      }
+      await loadUpdateSupport();
+      setUpdateMessage("Update prepared. Backup and installers are verified.");
+    } catch (e: any) {
+      setUpdateMessage("Prepare update failed: " + (e?.message || String(e)));
+    } finally {
+      endAction("update.prepare");
+      setUpdateBusy(null);
+    }
+  };
+
+  const launchUpdate = () => {
     if (!beginAction("update.launch")) {
       return;
     }
-    if (!window.confirm("The POS will close and the installer will open. Continue?")) {
-      endAction("update.launch");
+    endAction("update.launch");
+    setSettingsConfirm({ kind: "launch-update" });
+  };
+
+  const confirmLaunchUpdate = async () => {
+    setSettingsConfirm(null);
+    if (!beginAction("update.launch")) {
       return;
     }
     setUpdateBusy("launch");
@@ -757,17 +792,35 @@ export default function Settings({
     try {
       const first = await rollbackLastUpdate();
       if (first?.ok === false && first.reason === "confirmation-required") {
-        const risk = first.risk || {};
-        const confirmed = window.confirm(
-          `Rollback will restore the database to the pre-update backup.\n\nOrders created after update: ${risk.orders || 0}\nPayments created after update: ${risk.payments || 0}\n\nThese records will be lost. Continue?`,
-        );
-        if (!confirmed) {
-          setUpdateMessage("Rollback cancelled.");
-          setUpdateBusy(null);
-          return;
-        }
-        await rollbackLastUpdate({ confirmed: true });
+        setSettingsConfirm({ kind: "rollback", risk: first.risk || {} });
+        setUpdateMessage("Review rollback impact and confirm to continue.");
+        setUpdateBusy(null);
+        endAction("update.rollback");
+        return;
       }
+      launched = true;
+      setUpdateMessage("Rollback installer launched. Complete the installer to finish rollback.");
+    } catch (e: any) {
+      setUpdateMessage("Rollback failed: " + (e?.message || String(e)));
+      setUpdateBusy(null);
+    } finally {
+      endAction("update.rollback");
+      if (!launched) {
+        setUpdateBusy(null);
+      }
+    }
+  };
+
+  const confirmRollbackUpdate = async () => {
+    setSettingsConfirm(null);
+    if (!beginAction("update.rollback")) {
+      return;
+    }
+    let launched = false;
+    setUpdateBusy("rollback");
+    setUpdateMessage(null);
+    try {
+      await rollbackLastUpdate({ confirmed: true });
       launched = true;
       setUpdateMessage("Rollback installer launched. Complete the installer to finish rollback.");
     } catch (e: any) {
@@ -3402,6 +3455,67 @@ export default function Settings({
       </div>
       </>
       )}
+
+      <ConfirmModal
+        open={settingsConfirm?.kind === "restore-backup"}
+        title="Restore database backup?"
+        onClose={() => setSettingsConfirm(null)}
+        onConfirm={confirmRestoreBackup}
+        confirmLabel="Restore backup"
+        loading={backupBusy === "restore"}
+        variant="primary"
+      >
+        <p style={{ margin: 0 }}>
+          Restore replaces the current POS database. A safety backup will be created first.
+        </p>
+      </ConfirmModal>
+
+      <ConfirmModal
+        open={settingsConfirm?.kind === "launch-update"}
+        title="Launch update installer?"
+        onClose={() => setSettingsConfirm(null)}
+        onConfirm={confirmLaunchUpdate}
+        confirmLabel="Launch installer"
+        loading={updateBusy === "launch"}
+        variant="primary"
+      >
+        <p style={{ margin: 0 }}>RestoNiti will close and the update installer will open.</p>
+      </ConfirmModal>
+
+      <ConfirmModal
+        open={settingsConfirm?.kind === "prepare-with-activity"}
+        title="Continue preparing update?"
+        onClose={() => setSettingsConfirm(null)}
+        onConfirm={confirmPrepareWithActivity}
+        confirmLabel="Continue anyway"
+        loading={updateBusy === "prepare"}
+        variant="primary"
+        warning="Updating now may interrupt operations."
+      >
+        {settingsConfirm?.kind === "prepare-with-activity" ? (
+          <pre className="ui-confirm-details">{businessActivityText(settingsConfirm.activity)}</pre>
+        ) : null}
+      </ConfirmModal>
+
+      <ConfirmModal
+        open={settingsConfirm?.kind === "rollback"}
+        title="Rollback update?"
+        onClose={() => setSettingsConfirm(null)}
+        onConfirm={confirmRollbackUpdate}
+        confirmLabel="Rollback update"
+        loading={updateBusy === "rollback"}
+      >
+        {settingsConfirm?.kind === "rollback" ? (
+          <>
+            <p style={{ margin: 0 }}>
+              Rollback will restore the database to the pre-update backup.
+            </p>
+            <pre className="ui-confirm-details">
+              {`Orders created after update: ${settingsConfirm.risk.orders || 0}\nPayments created after update: ${settingsConfirm.risk.payments || 0}\n\nThese records will be lost.`}
+            </pre>
+          </>
+        ) : null}
+      </ConfirmModal>
     </div>
   );
 }

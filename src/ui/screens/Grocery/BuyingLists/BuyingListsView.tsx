@@ -11,6 +11,7 @@ import {
 import type { BuyingListTemplateDto } from "../../../../shared/pos";
 import { Button } from "../../../components/ui/Button";
 import { Badge } from "../../../components/ui/Badge";
+import { ConfirmModal } from "../../../components/ui/ConfirmModal";
 import { EmptyState } from "../../../components/ui/EmptyState";
 import { Input } from "../../../components/ui/Input";
 import { Modal } from "../../../components/ui/Modal";
@@ -69,6 +70,7 @@ function ListMoreMenu({
   const [templateOpen, setTemplateOpen] = React.useState(false);
   const [templateName, setTemplateName] = React.useState(list.title);
   const [status, setStatus] = React.useState<string | null>(null);
+  const [pendingConfirm, setPendingConfirm] = React.useState<"cancel" | "delete" | null>(null);
 
   const run = async (fn: () => Promise<void>, fallback: string) => {
     if (busy) return;
@@ -108,16 +110,21 @@ function ListMoreMenu({
       await updateGroceryList(list.id, { status: "completed" });
     }, "Could not complete list");
 
-  const cancelList = () => {
-    if (!window.confirm("Cancel this buying list? It will remain in history.")) return;
-    void run(async () => {
-      await updateGroceryList(list.id, { status: "cancelled" });
-    }, "Could not cancel list");
-  };
+  const cancelList = () => setPendingConfirm("cancel");
 
-  const removeList = () => {
-    if (!window.confirm("Delete this draft buying list permanently?")) return;
-    void run(async () => {
+  const removeList = () => setPendingConfirm("delete");
+
+  const confirmListAction = async () => {
+    if (!pendingConfirm || busy) return;
+    const action = pendingConfirm;
+    setPendingConfirm(null);
+    if (action === "cancel") {
+      await run(async () => {
+        await updateGroceryList(list.id, { status: "cancelled" });
+      }, "Could not cancel list");
+      return;
+    }
+    await run(async () => {
       await deleteGroceryList(list.id);
     }, "Could not delete list");
   };
@@ -189,6 +196,32 @@ function ListMoreMenu({
           </div>
         </div>
       </Modal>
+
+      <ConfirmModal
+        open={pendingConfirm === "cancel"}
+        title="Cancel buying list?"
+        onClose={() => setPendingConfirm(null)}
+        onConfirm={confirmListAction}
+        confirmLabel="Cancel list"
+        loading={busy}
+      >
+        <p style={{ margin: 0 }}>
+          <strong>{list.title}</strong> will be marked cancelled and remain in history.
+        </p>
+      </ConfirmModal>
+
+      <ConfirmModal
+        open={pendingConfirm === "delete"}
+        title="Delete draft list?"
+        onClose={() => setPendingConfirm(null)}
+        onConfirm={confirmListAction}
+        confirmLabel="Delete permanently"
+        loading={busy}
+      >
+        <p style={{ margin: 0 }}>
+          Permanently delete draft list <strong>{list.title}</strong>?
+        </p>
+      </ConfirmModal>
     </>
   );
 }

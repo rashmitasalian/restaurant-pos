@@ -6,6 +6,7 @@ import {
   voidExpense,
 } from "../../../app/db/posRepository";
 import { Button } from "../../components/ui/Button";
+import { ConfirmModal } from "../../components/ui/ConfirmModal";
 import { Stat } from "../../components/ui/Stat";
 import { DataTable } from "../../components/ui/DataTable";
 import { EmptyState } from "../../components/ui/EmptyState";
@@ -13,6 +14,7 @@ import { Modal } from "../../components/ui/Modal";
 import { Input } from "../../components/ui/Input";
 import { Select } from "../../components/ui/Select";
 import { ManageShell } from "../Manager/ManageShell";
+import { validationMessage } from "../../../shared/validation";
 import "./Expenses.module.css";
 
 type ExpenseRow = {
@@ -90,6 +92,8 @@ export default function Expenses() {
     description: "",
     paymentMethod: "cash",
   });
+  const [voidTarget, setVoidTarget] = React.useState<ExpenseRow | null>(null);
+  const [voiding, setVoiding] = React.useState(false);
 
   const refresh = React.useCallback(async () => {
     setLoading(true);
@@ -107,7 +111,7 @@ export default function Expenses() {
       setExpenses(rows as ExpenseRow[]);
       setForm((f) => (f.categoryId || !mappedCats[0] ? f : { ...f, categoryId: mappedCats[0].id }));
     } catch (error: any) {
-      setStatus(error?.message || "Could not load expenses");
+      setStatus(validationMessage(error, "Could not load expenses"));
     } finally {
       setLoading(false);
     }
@@ -150,9 +154,28 @@ export default function Expenses() {
       setStatus("Expense recorded");
       await refresh();
     } catch (error: any) {
-      setStatus(error?.message || "Could not save expense");
+      setStatus(validationMessage(error, "Could not save expense"));
     }
   };
+
+  const confirmVoidExpense = async () => {
+    if (!voidTarget || voiding) return;
+    setVoiding(true);
+    try {
+      await voidExpense(voidTarget.id);
+      setVoidTarget(null);
+      setStatus("Expense voided");
+      await refresh();
+    } catch (error: any) {
+      setStatus(validationMessage(error, "Could not void expense"));
+    } finally {
+      setVoiding(false);
+    }
+  };
+
+  const voidExpenseLabel = voidTarget
+    ? voidTarget.description?.trim() || voidTarget.categoryName || "this expense"
+    : "";
 
   return (
     <ManageShell
@@ -285,16 +308,29 @@ export default function Expenses() {
               key={row.id}
               variant="danger-ghost"
               size="sm"
-              onClick={async () => {
-                await voidExpense(row.id);
-                await refresh();
-              }}
+              onClick={() => setVoidTarget(row)}
             >
               Void
             </Button>,
           ])}
         />
       )}
+
+      <ConfirmModal
+        open={Boolean(voidTarget)}
+        title="Void expense?"
+        onClose={() => setVoidTarget(null)}
+        onConfirm={confirmVoidExpense}
+        confirmLabel="Void expense"
+        loading={voiding}
+      >
+        {voidTarget ? (
+          <p style={{ margin: 0 }}>
+            This will void <strong>{voidExpenseLabel}</strong> (
+            <strong>₹{Number(voidTarget.amount).toLocaleString("en-IN")}</strong>).
+          </p>
+        ) : null}
+      </ConfirmModal>
 
       <Modal open={addOpen} title="Add Expense" onClose={() => setAddOpen(false)}>
         <div className="ui-form-stack">

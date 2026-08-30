@@ -4407,21 +4407,21 @@ export const posService = {
   ): GroceryPurchaseDto[] {
     const clauses: string[] = [];
     const params: unknown[] = [];
-    if (!opts.includeVoided) clauses.push("status = 'recorded'");
+    if (!opts.includeVoided) clauses.push("p.status = 'recorded'");
     if (opts.from != null) {
-      clauses.push("purchase_date >= ?");
+      clauses.push("p.purchase_date >= ?");
       params.push(opts.from);
     }
     if (opts.to != null) {
-      clauses.push("purchase_date <= ?");
+      clauses.push("p.purchase_date <= ?");
       params.push(opts.to);
     }
     if (opts.listId) {
-      clauses.push("buying_list_id = ?");
+      clauses.push("p.buying_list_id = ?");
       params.push(opts.listId);
     }
     if (opts.vendorId) {
-      clauses.push("vendor_id = ?");
+      clauses.push("p.vendor_id = ?");
       params.push(opts.vendorId);
     }
     const limit = Math.min(200, Math.max(1, Number(opts.limit || 50)));
@@ -4430,9 +4430,10 @@ export const posService = {
     const database = getDb();
     const rows = database
       .prepare(
-        `SELECT p.*, v.name AS vendor_name
+        `SELECT p.*, v.name AS vendor_name, gl.title AS buying_list_title
          FROM grocery_purchases p
          LEFT JOIN vendors v ON v.id = p.vendor_id
+         LEFT JOIN grocery_lists gl ON gl.id = p.buying_list_id
          ${clauses.length ? `WHERE ${clauses.join(" AND ")}` : ""}
          ORDER BY p.purchase_date DESC, p.created_at DESC
          LIMIT ? OFFSET ?`,
@@ -6228,6 +6229,7 @@ function groceryPurchaseHeaderFromRow(
     id: row.id,
     type: "grocery-purchase-header",
     buyingListId: row.buying_list_id || null,
+    buyingListTitle: row.buying_list_title || null,
     vendorId: row.vendor_id || null,
     vendorName: row.vendor_name || null,
     purchaseDate: row.purchase_date,

@@ -2,8 +2,10 @@ import {
   clipAttendanceQueryRange,
   hasLetter,
   isFutureDateOnly,
+  isTechnicalErrorMessage,
   isValidIndianMobile,
   isValidPersonName,
+  normalizeClientErrorMessage,
   normalizePhone,
   normalizeText,
   todayDateOnly,
@@ -32,6 +34,21 @@ describe("shared validation", () => {
     expect(validationMessage("customer-name-invalid")).toContain("include a letter");
     expect(validationMessage("staff-name-invalid")).toContain("include a letter");
     expect(validationMessage("display-name-invalid")).toContain("include a letter");
+  });
+
+  it("hides sqlite and ipc internals from the ui", () => {
+    const ipcError =
+      "Error invoking remote method 'pos:grocery:purchase-headers:list': SqliteError: ambiguous column name: status";
+    expect(validationMessage(ipcError, "Could not load purchases")).toBe("Could not load purchases");
+    expect(isTechnicalErrorMessage(normalizeClientErrorMessage(ipcError))).toBe(true);
+  });
+
+  it("keeps business error codes and user-facing messages", () => {
+    expect(validationMessage("grocery-purchase-not-found")).toContain("Purchase entry");
+    expect(validationMessage("forbidden")).toContain("permission");
+    expect(validationMessage("Password must be at least 8 characters")).toBe(
+      "Password must be at least 8 characters",
+    );
   });
 
   it("normalizes common Indian mobile formats to 10 digits", () => {

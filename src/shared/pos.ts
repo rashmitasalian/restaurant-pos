@@ -373,6 +373,7 @@ export type GroceryPurchaseDto = {
   id: string;
   type: "grocery-purchase-header";
   buyingListId?: string | null;
+  buyingListTitle?: string | null;
   vendorId?: string | null;
   vendorName?: string | null;
   purchaseDate: number;

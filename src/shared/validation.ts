@@ -71,6 +71,14 @@ export const VALIDATION_MESSAGES: Record<string, string> = {
   "grocery-list-purchase-mode-conflict": "Use either whole-list or item-wise purchase amounts for one buying list, not both.",
 };
 
+export const SYSTEM_MESSAGES: Record<string, string> = {
+  "auth-required": "Your session has expired. Please sign in again.",
+  "forbidden": "You do not have permission to do that.",
+  "password-change-required": "Please change your password before continuing.",
+  "internal-error": "Something went wrong. Please try again.",
+  "unknown-error": "Something went wrong. Please try again.",
+};
+
 export const STAFF_TEXT_LIMITS = {
   name: 80,
   designation: 80,
@@ -78,14 +86,58 @@ export const STAFF_TEXT_LIMITS = {
   notes: 500,
 } as const;
 
-export function validationMessage(error: unknown, defaultMessage = "Validation failed") {
-  const raw =
+export function normalizeClientErrorMessage(error: unknown): string {
+  const initial =
     error instanceof Error
       ? error.message
       : typeof error === "string"
         ? error
         : "";
-  return VALIDATION_MESSAGES[raw] || raw || defaultMessage;
+  let message = initial.trim();
+  const ipcMatch = message.match(/^Error invoking remote method '[^']+':\s*(.+)$/s);
+  if (ipcMatch) message = ipcMatch[1].trim();
+  if (message.startsWith("Error: ")) message = message.slice(7).trim();
+  const typedMatch = message.match(/^(?:SqliteError|TypeError|ReferenceError|RangeError):\s*(.+)$/i);
+  if (typedMatch) message = typedMatch[1].trim();
+  return message;
+}
+
+export function isTechnicalErrorMessage(message: string): boolean {
+  const trimmed = message.trim();
+  if (!trimmed) return true;
+  const lower = trimmed.toLowerCase();
+  if (lower.startsWith("error invoking remote method")) return true;
+  if (lower.includes("sqliteerror") || lower.includes("sqlite_")) return true;
+  if (/^(?:error|typeerror|referenceerror|rangeerror|syntaxerror)\b/.test(lower)) return true;
+  if (/^[a-z]+error:/i.test(trimmed)) return true;
+  if (/^[A-Z][A-Z0-9_]*:/.test(trimmed)) return true;
+  if (/\bambiguous column\b/.test(lower)) return true;
+  if (/\bsyntax error\b/.test(lower)) return true;
+  if (/\bno such table\b/.test(lower)) return true;
+  if (/\bno such column\b/.test(lower)) return true;
+  if (/\n\s+at\s+/m.test(trimmed)) return true;
+  if (trimmed.length > 240) return true;
+  return false;
+}
+
+export function validationMessage(error: unknown, defaultMessage = "Something went wrong. Please try again.") {
+  const raw = normalizeClientErrorMessage(error);
+  if (!raw) return defaultMessage;
+  if (raw === "internal-error") return defaultMessage;
+  if (VALIDATION_MESSAGES[raw]) return VALIDATION_MESSAGES[raw];
+  if (SYSTEM_MESSAGES[raw]) return SYSTEM_MESSAGES[raw];
+  if (isTechnicalErrorMessage(raw)) return defaultMessage;
+  return raw;
+}
+
+/** Strip internal failures before they reach the renderer over IPC. */
+export function sanitizeIpcError(error: unknown): never {
+  const raw = normalizeClientErrorMessage(error);
+  if (raw && !isTechnicalErrorMessage(raw)) {
+    throw error instanceof Error ? error : new Error(raw);
+  }
+  console.error("[ipc]", error);
+  throw new Error("internal-error");
 }
 
 export function normalizeText(value: unknown) {

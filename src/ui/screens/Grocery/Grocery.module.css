@@ -75,6 +75,24 @@
   gap: 16px;
 }
 
+.listNameCell {
+  display: block;
+  min-width: 120px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--pos-tx);
+  font-weight: 500;
+}
+
+.tableActionCell {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  white-space: nowrap;
+}
+
 .listCard,
 .templateCard {
   min-width: 0;

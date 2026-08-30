@@ -9,7 +9,16 @@ import { AuditArchiver } from "../../../app/utils/auditArchiver";
 import { CrashRecovery } from "../../../app/utils/crashRecovery";
 import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
+import { ConfirmModal } from "../../components/ui/ConfirmModal";
 import styles from "./LogSettings.module.css";
+
+type LogConfirm =
+  | { kind: "clear-logs" }
+  | { kind: "delete-archive"; archiveId: string }
+  | { kind: "bulk-delete"; count: number }
+  | { kind: "cleanup-old"; ageMonths: number }
+  | { kind: "clear-recovery" }
+  | null;
 
 interface LogEntry {
   timestamp: string;
@@ -40,6 +49,7 @@ export default function LogSettings() {
   const [recoveryState, setRecoveryState] = useState<any>(null);
   const [selectedArchives, setSelectedArchives] = useState<Set<string>>(new Set());
   const [exportingLogs, setExportingLogs] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<LogConfirm>(null);
 
   // Load log data
   useEffect(() => {
@@ -112,15 +122,11 @@ export default function LogSettings() {
   };
 
   const handleClearLogs = () => {
-    if (window.confirm("Are you sure you want to clear all logs? This action cannot be undone.")) {
-      try {
-        (logger as any).logs = [];
-        setRecentLogs([]);
-        alert("Logs cleared successfully");
-      } catch (error) {
-        console.error("Failed to clear logs", error);
-      }
-    }
+    setConfirmAction({ kind: "clear-logs" });
+  };
+
+  const handleDeleteArchive = (archiveId: string) => {
+    setConfirmAction({ kind: "delete-archive", archiveId });
   };
 
   const handleExportArchive = async (archiveId: string) => {
@@ -142,20 +148,6 @@ export default function LogSettings() {
     }
   };
 
-  const handleDeleteArchive = async (archiveId: string) => {
-    if (
-      window.confirm("Are you sure you want to delete this archive? This action cannot be undone.")
-    ) {
-      try {
-        await AuditArchiver.deleteArchive(archiveId);
-        await loadArchiveData();
-        alert("Archive deleted successfully");
-      } catch (error) {
-        console.error("Delete failed", error);
-      }
-    }
-  };
-
   const handleToggleArchiveSelection = (archiveId: string) => {
     const newSelected = new Set(selectedArchives);
     if (newSelected.has(archiveId)) {
@@ -171,29 +163,11 @@ export default function LogSettings() {
       alert("Please select archives to delete");
       return;
     }
-
-    if (window.confirm(`Delete ${selectedArchives.size} archive(s)? This cannot be undone.`)) {
-      try {
-        await Promise.all([...selectedArchives].map((archiveId) => AuditArchiver.deleteArchive(archiveId)));
-        await loadArchiveData();
-        setSelectedArchives(new Set());
-        alert("Archives deleted successfully");
-      } catch (error) {
-        console.error("Bulk delete failed", error);
-      }
-    }
+    setConfirmAction({ kind: "bulk-delete", count: selectedArchives.size });
   };
 
-  const handleCleanupOldArchives = async (ageMonths: number = 12) => {
-    if (window.confirm(`Delete archives older than ${ageMonths} months? This cannot be undone.`)) {
-      try {
-        await AuditArchiver.cleanupOldArchives(ageMonths);
-        await loadArchiveData();
-        alert("Old archives cleaned up successfully");
-      } catch (error) {
-        console.error("Cleanup failed", error);
-      }
-    }
+  const handleCleanupOldArchives = (ageMonths: number = 12) => {
+    setConfirmAction({ kind: "cleanup-old", ageMonths });
   };
 
   const handleViewRecoveryState = () => {
@@ -206,14 +180,38 @@ export default function LogSettings() {
   };
 
   const handleClearRecovery = () => {
-    if (window.confirm("Clear the recovery state? You may lose unsaved data.")) {
-      try {
+    setConfirmAction({ kind: "clear-recovery" });
+  };
+
+  const confirmLogAction = async () => {
+    if (!confirmAction) return;
+    try {
+      if (confirmAction.kind === "clear-logs") {
+        (logger as any).logs = [];
+        setRecentLogs([]);
+        alert("Logs cleared successfully");
+      } else if (confirmAction.kind === "delete-archive") {
+        await AuditArchiver.deleteArchive(confirmAction.archiveId);
+        await loadArchiveData();
+        alert("Archive deleted successfully");
+      } else if (confirmAction.kind === "bulk-delete") {
+        await Promise.all([...selectedArchives].map((archiveId) => AuditArchiver.deleteArchive(archiveId)));
+        await loadArchiveData();
+        setSelectedArchives(new Set());
+        alert("Archives deleted successfully");
+      } else if (confirmAction.kind === "cleanup-old") {
+        await AuditArchiver.cleanupOldArchives(confirmAction.ageMonths);
+        await loadArchiveData();
+        alert("Old archives cleaned up successfully");
+      } else if (confirmAction.kind === "clear-recovery") {
         CrashRecovery.clearRecoveryState();
         setRecoveryState(null);
         alert("Recovery state cleared");
-      } catch (error) {
-        console.error("Clear recovery failed", error);
       }
+      setConfirmAction(null);
+    } catch (error) {
+      console.error("Confirm action failed", error);
+      setConfirmAction(null);
     }
   };
 
@@ -246,6 +244,7 @@ return "0 B";
   };
 
   return (
+    <>
     <div className={styles.container}>
       <h2>System Logs & Archives</h2>
 
@@ -459,5 +458,63 @@ return "0 B";
         </div>
       )}
     </div>
+
+      <ConfirmModal
+        open={confirmAction?.kind === "clear-logs"}
+        title="Clear all logs?"
+        onClose={() => setConfirmAction(null)}
+        onConfirm={confirmLogAction}
+        confirmLabel="Clear logs"
+      >
+        <p style={{ margin: 0 }}>All application logs on this device will be cleared.</p>
+      </ConfirmModal>
+
+      <ConfirmModal
+        open={confirmAction?.kind === "delete-archive"}
+        title="Delete archive?"
+        onClose={() => setConfirmAction(null)}
+        onConfirm={confirmLogAction}
+        confirmLabel="Delete archive"
+      >
+        <p style={{ margin: 0 }}>This audit archive will be permanently deleted.</p>
+      </ConfirmModal>
+
+      <ConfirmModal
+        open={confirmAction?.kind === "bulk-delete"}
+        title="Delete selected archives?"
+        onClose={() => setConfirmAction(null)}
+        onConfirm={confirmLogAction}
+        confirmLabel="Delete archives"
+      >
+        <p style={{ margin: 0 }}>
+          Permanently delete <strong>{confirmAction?.kind === "bulk-delete" ? confirmAction.count : 0}</strong>{" "}
+          selected archive{confirmAction?.kind === "bulk-delete" && confirmAction.count === 1 ? "" : "s"}.
+        </p>
+      </ConfirmModal>
+
+      <ConfirmModal
+        open={confirmAction?.kind === "cleanup-old"}
+        title="Clean up old archives?"
+        onClose={() => setConfirmAction(null)}
+        onConfirm={confirmLogAction}
+        confirmLabel="Delete old archives"
+      >
+        <p style={{ margin: 0 }}>
+          Delete archives older than{" "}
+          <strong>{confirmAction?.kind === "cleanup-old" ? confirmAction.ageMonths : 12} months</strong>.
+        </p>
+      </ConfirmModal>
+
+      <ConfirmModal
+        open={confirmAction?.kind === "clear-recovery"}
+        title="Clear recovery state?"
+        onClose={() => setConfirmAction(null)}
+        onConfirm={confirmLogAction}
+        confirmLabel="Clear recovery"
+        warning="You may lose unsaved data."
+      >
+        <p style={{ margin: 0 }}>Remove the crash recovery snapshot stored on this device.</p>
+      </ConfirmModal>
+    </>
   );
 }

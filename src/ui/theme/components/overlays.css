@@ -86,6 +86,38 @@
   padding-top: 4px;
 }
 
+.ui-confirm-body {
+  color: var(--pos-tx-sub);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.ui-confirm-body > :first-child {
+  margin-top: 0;
+}
+
+.ui-confirm-body > :last-child {
+  margin-bottom: 0;
+}
+
+.ui-confirm-warning {
+  margin: 0;
+  color: var(--pos-danger);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ui-confirm-details {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--pos-r-md);
+  background: var(--pos-surface-sunken);
+  color: var(--pos-tx-sub);
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
 .ui-menu {
   position: fixed;
   z-index: 3200;

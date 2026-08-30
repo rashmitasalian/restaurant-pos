@@ -13,6 +13,7 @@ import type { BuyingListTemplateDto, GroceryUnit } from "../../../../shared/pos"
 import { validationMessage } from "../../../../shared/validation";
 import { Badge } from "../../../components/ui/Badge";
 import { Button } from "../../../components/ui/Button";
+import { ConfirmModal } from "../../../components/ui/ConfirmModal";
 import { DataTable } from "../../../components/ui/DataTable";
 import { EmptyState } from "../../../components/ui/EmptyState";
 import { Input } from "../../../components/ui/Input";
@@ -50,6 +51,11 @@ export function ItemsView() {
   const [search, setSearch] = React.useState("");
   const [itemModalOpen, setItemModalOpen] = React.useState(false);
   const [templateModalOpen, setTemplateModalOpen] = React.useState(false);
+  const [deleteTarget, setDeleteTarget] = React.useState<
+    | { kind: "item"; item: GroceryItemDoc }
+    | { kind: "template"; template: BuyingListTemplateDto }
+    | null
+  >(null);
   const [itemForm, setItemForm] = React.useState<ItemForm>(EMPTY_ITEM_FORM);
   const [templateName, setTemplateName] = React.useState("");
 
@@ -137,15 +143,30 @@ export function ItemsView() {
     }
   };
 
-  const removeItem = async (item: GroceryItemDoc) => {
-    if (!window.confirm(`Delete reusable item “${item.name}”?`)) return;
+  const removeItem = (item: GroceryItemDoc) => {
+    setDeleteTarget({ kind: "item", item });
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget || saving) return;
     setSaving(true);
     try {
-      await deleteGroceryItem(item.id);
-      setStatus(`Deleted ${item.name}`);
+      if (deleteTarget.kind === "item") {
+        await deleteGroceryItem(deleteTarget.item.id);
+        setStatus(`Deleted ${deleteTarget.item.name}`);
+      } else {
+        await deleteBuyingListTemplate(deleteTarget.template.id);
+        setStatus(`Deleted template ${deleteTarget.template.name}`);
+      }
+      setDeleteTarget(null);
       await load();
     } catch (error) {
-      setStatus(validationMessage(error, "Could not delete item"));
+      setStatus(
+        validationMessage(
+          error,
+          deleteTarget.kind === "item" ? "Could not delete item" : "Could not delete template",
+        ),
+      );
     } finally {
       setSaving(false);
     }
@@ -171,18 +192,8 @@ export function ItemsView() {
     }
   };
 
-  const removeTemplate = async (template: BuyingListTemplateDto) => {
-    if (!window.confirm(`Delete template “${template.name}”?`)) return;
-    setSaving(true);
-    try {
-      await deleteBuyingListTemplate(template.id);
-      setStatus(`Deleted template ${template.name}`);
-      await load();
-    } catch (error) {
-      setStatus(validationMessage(error, "Could not delete template"));
-    } finally {
-      setSaving(false);
-    }
+  const removeTemplate = (template: BuyingListTemplateDto) => {
+    setDeleteTarget({ kind: "template", template });
   };
 
   return (
@@ -365,6 +376,25 @@ export function ItemsView() {
           </div>
         </div>
       </Modal>
+
+      <ConfirmModal
+        open={Boolean(deleteTarget)}
+        title={deleteTarget?.kind === "template" ? "Delete template?" : "Delete item?"}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+        confirmLabel="Delete"
+        loading={saving}
+      >
+        {deleteTarget?.kind === "item" ? (
+          <p style={{ margin: 0 }}>
+            Delete reusable item <strong>{deleteTarget.item.name}</strong>?
+          </p>
+        ) : deleteTarget?.kind === "template" ? (
+          <p style={{ margin: 0 }}>
+            Delete template <strong>{deleteTarget.template.name}</strong>?
+          </p>
+        ) : null}
+      </ConfirmModal>
     </div>
   );
 }

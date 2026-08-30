@@ -10,6 +10,7 @@ import type { GroceryPurchaseDto, VendorDto } from "../../../../shared/pos";
 import { validationMessage } from "../../../../shared/validation";
 import { Badge } from "../../../components/ui/Badge";
 import { Button } from "../../../components/ui/Button";
+import { ConfirmModal } from "../../../components/ui/ConfirmModal";
 import { DataTable } from "../../../components/ui/DataTable";
 import { Drawer } from "../../../components/ui/Drawer";
 import { EmptyState } from "../../../components/ui/EmptyState";
@@ -51,6 +52,7 @@ export function VendorsView() {
   const [selected, setSelected] = React.useState<VendorDto | null>(null);
   const [detail, setDetail] = React.useState<VendorDetailStats | null>(null);
   const [detailLoading, setDetailLoading] = React.useState(false);
+  const [deleteTarget, setDeleteTarget] = React.useState<VendorDto | null>(null);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -121,16 +123,21 @@ export function VendorsView() {
     }
   };
 
-  const removeVendor = async (vendor: VendorDto) => {
-    if (!window.confirm(`Delete vendor “${vendor.name}”?`)) return;
+  const removeVendor = (vendor: VendorDto) => {
+    setDeleteTarget(vendor);
+  };
+
+  const confirmDeleteVendor = async () => {
+    if (!deleteTarget || saving) return;
     setSaving(true);
     try {
-      await deleteVendor(vendor.id);
-      if (selected?.id === vendor.id) {
+      await deleteVendor(deleteTarget.id);
+      if (selected?.id === deleteTarget.id) {
         setSelected(null);
         setDetail(null);
       }
-      setStatus(`Deleted ${vendor.name}`);
+      setStatus(`Deleted ${deleteTarget.name}`);
+      setDeleteTarget(null);
       await load();
     } catch (error) {
       setStatus(validationMessage(error, "Could not delete vendor"));
@@ -318,6 +325,21 @@ export function VendorsView() {
           </div>
         )}
       </Drawer>
+
+      <ConfirmModal
+        open={Boolean(deleteTarget)}
+        title="Delete vendor?"
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={confirmDeleteVendor}
+        confirmLabel="Delete vendor"
+        loading={saving}
+      >
+        {deleteTarget ? (
+          <p style={{ margin: 0 }}>
+            Delete vendor <strong>{deleteTarget.name}</strong>?
+          </p>
+        ) : null}
+      </ConfirmModal>
     </div>
   );
 }

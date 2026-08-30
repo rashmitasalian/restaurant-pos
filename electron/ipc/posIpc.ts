@@ -10,6 +10,7 @@ import path from "path";
 import type { Role, UserDto } from "../../src/shared/pos";
 import type { Permission } from "../../src/shared/permissions";
 import { roleHasPermission } from "../../src/shared/permissions";
+import { sanitizeIpcError } from "../../src/shared/validation";
 import { posService } from "../services/posService";
 import { updateService } from "../services/updateService";
 import {
@@ -125,7 +126,20 @@ function requirePermission(
   return user;
 }
 
+function installIpcErrorSanitizer() {
+  const originalHandle = ipcMain.handle.bind(ipcMain);
+  ipcMain.handle = (channel: string, listener: (...args: any[]) => any) =>
+    originalHandle(channel, async (event: IpcMainInvokeEvent, ...args: any[]) => {
+      try {
+        return await listener(event, ...args);
+      } catch (error) {
+        sanitizeIpcError(error);
+      }
+    });
+}
+
 export function registerPosIpc(getMainWindow: WindowGetter) {
+  installIpcErrorSanitizer();
   ipcMain.handle("pos:db:ready", () => posService.ensureReady());
 
   ipcMain.handle("pos:auth:has-users", () => posService.hasUsers());
