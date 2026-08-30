@@ -1182,6 +1182,19 @@ function normalizeAuditQuery(
   };
 }
 
+function buildAuditFtsQuery(search: string): string | null {
+  const tokens = String(search || "")
+    .trim()
+    .toLowerCase()
+    .replace(/["*()]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+  if (!tokens.length) {
+    return null;
+  }
+  return tokens.map((token) => `"${token.replace(/"/g, '""')}"*`).join(" ");
+}
+
 function buildAuditWhere(
   opts: { from?: number; to?: number; search?: string; limit?: number; offset?: number } = {},
 ) {
@@ -1198,15 +1211,21 @@ function buildAuditWhere(
     params.push(query.to);
   }
   if (query.search) {
-    const like = `%${query.search}%`;
-    clauses.push(`(
+    const ftsQuery = buildAuditFtsQuery(query.search);
+    if (ftsQuery) {
+      clauses.push("id IN (SELECT audit_id FROM audit_logs_fts WHERE audit_logs_fts MATCH ?)");
+      params.push(ftsQuery);
+    } else {
+      const like = `%${query.search}%`;
+      clauses.push(`(
       lower(action) LIKE ?
       OR lower(COALESCE(entity_type, '')) LIKE ?
       OR lower(COALESCE(entity_id, '')) LIKE ?
       OR lower(COALESCE(user, '')) LIKE ?
       OR lower(COALESCE(detail_json, '')) LIKE ?
     )`);
-    params.push(like, like, like, like, like);
+      params.push(like, like, like, like, like);
+    }
   }
 
   return {
@@ -3280,21 +3299,17 @@ export const posService = {
   },
 
   getProductSalesReport(opts: { from?: number; to?: number } = {}): ProductSalesReportDto {
-    const payments = this.getPaymentsInRange(opts);
-    const orderIds: string[] = Array.from(
-      new Set<string>(
-        payments.map((payment: any) => String(payment.order_id || "")).filter(Boolean),
-      ),
-    );
-    if (!orderIds.length) {
-      return {
-        categorySales: [],
-        itemSales: [],
-        totals: { totalSales: 0, totalUnits: 0 },
-      };
+    const paymentClauses = ["p.status = 'completed'", "o.status = 'paid'"];
+    const paymentParams: unknown[] = [];
+    if (opts.from !== null && opts.from !== undefined) {
+      paymentClauses.push("p.received_at >= ?");
+      paymentParams.push(opts.from);
+    }
+    if (opts.to !== null && opts.to !== undefined) {
+      paymentClauses.push("p.received_at < ?");
+      paymentParams.push(opts.to);
     }
 
-    const placeholders = orderIds.map(() => "?").join(", ");
     const rows = getDb()
       .prepare(
         `SELECT
@@ -3307,10 +3322,25 @@ export const posService = {
            l.line_total_paise
          FROM orders o
          JOIN order_lines l ON l.order_id = o.id
-         WHERE o.id IN (${placeholders})
+         WHERE o.id IN (
+           SELECT DISTINCT p.order_id
+           FROM payments p
+           JOIN orders o2 ON o2.id = p.order_id
+           WHERE ${paymentClauses.join(" AND ").replace(/\bo\./g, "o2.")}
+         )
          ORDER BY o.id, l.sort_order ASC, l.created_at ASC`,
       )
-      .all(...orderIds) as any[];
+      .all(...paymentParams) as any[];
+
+    if (!rows.length) {
+      return {
+        categorySales: [],
+        itemSales: [],
+        totals: { totalSales: 0, totalUnits: 0 },
+      };
+    }
+
+    const orderIds = Array.from(new Set(rows.map((row) => String(row.order_id || "")).filter(Boolean)));
 
     const rowsByOrder = new Map<string, any[]>();
     rows.forEach((row) => {

@@ -10,6 +10,9 @@ import { useToast } from "../../context/ToastContext";
 import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui/Input";
 import { PageHeader } from "../../components/ui/PageHeader";
+import { VirtualScrollList } from "../../components/VirtualScrollList";
+
+const CUSTOMER_ROW_HEIGHT = 88;
 
 interface Customer {
   id: string;
@@ -43,6 +46,7 @@ export default function Customers() {
   const [savingEdit, setSavingEdit] = React.useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = React.useState<string | null>(null);
   const [deletingId, setDeletingId] = React.useState<string | null>(null);
+  const [search, setSearch] = React.useState("");
   const savingAddRef = React.useRef(false);
   const savingEditRef = React.useRef(false);
   const deletingRef = React.useRef<string | null>(null);
@@ -166,6 +170,172 @@ export default function Customers() {
     }
   };
 
+  const filteredCustomers = React.useMemo(() => {
+    const query = normalizeText(search).toLowerCase();
+    if (!query) {
+      return customers;
+    }
+    return customers.filter((customer) => {
+      const haystack = `${customer.name} ${customer.phone}`.toLowerCase();
+      return haystack.includes(query);
+    });
+  }, [customers, search]);
+
+  const renderCustomerRow = (c: Customer) => {
+    const isEditing = editingId === c.id;
+    const isConfirmingDelete = confirmDeleteId === c.id;
+
+    return (
+      <div
+        className="pos-card"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "14px 18px",
+          flexWrap: "wrap",
+          gap: 10,
+          minHeight: CUSTOMER_ROW_HEIGHT - 10,
+          boxSizing: "border-box",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            flex: "1 1 300px",
+            minWidth: 0,
+          }}
+        >
+          <div
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: "50%",
+              background: "var(--pos-teal)",
+              color: "var(--pos-surface)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontWeight: 800,
+              fontSize: 14,
+              flexShrink: 0,
+            }}
+          >
+            {c.name.charAt(0).toUpperCase()}
+          </div>
+          {isEditing ? (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", flex: 1 }}>
+              <div style={{ flex: "1 1 160px" }}>
+                <Input
+                  label="Customer name"
+                  labelHidden
+                  value={editName}
+                  onChange={(e) => {
+                    setEditName(e.target.value);
+                    if (editNameError) {
+                      setEditNameError(null);
+                    }
+                  }}
+                  placeholder="Customer name"
+                  error={editNameError}
+                />
+              </div>
+              <div style={{ flex: "1 1 160px" }}>
+                <Input
+                  label="Phone"
+                  labelHidden
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="tel"
+                  value={editPhone}
+                  onChange={(e) => {
+                    setEditPhone(normalizePhone(e.target.value));
+                    if (editPhoneError) {
+                      setEditPhoneError(null);
+                    }
+                  }}
+                  placeholder="Phone (10 digits)"
+                  error={editPhoneError}
+                />
+              </div>
+            </div>
+          ) : (
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 14, color: "var(--pos-tx)" }}>{c.name}</div>
+              <div
+                style={{
+                  color: "var(--pos-tx-sub)",
+                  fontSize: 13,
+                  fontVariantNumeric: "tabular-nums",
+                }}
+              >
+                {c.phone}
+              </div>
+            </div>
+          )}
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {isEditing ? (
+            <>
+              <Button size="sm" variant="primary" onClick={() => saveCustomer(c)} disabled={savingEdit}>
+                {savingEdit ? "Saving..." : "Save"}
+              </Button>
+              <Button size="sm" variant="secondary" onClick={cancelEdit} disabled={savingEdit}>
+                Cancel
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                  try {
+                    navigator.clipboard?.writeText(c.phone);
+                    showToast("Phone copied");
+                  } catch (e) {
+                    showToast("Copied");
+                  }
+                }}
+              >
+                Copy
+              </Button>
+              <Button size="sm" variant="secondary" onClick={() => startEdit(c)}>
+                Edit
+              </Button>
+              {isConfirmingDelete ? (
+                <>
+                  <Button
+                    size="sm"
+                    variant="danger"
+                    onClick={() => removeCustomer(c.id)}
+                    disabled={deletingId === c.id}
+                  >
+                    {deletingId === c.id ? "Deleting..." : "Confirm Delete"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => setConfirmDeleteId(null)}
+                    disabled={deletingId === c.id}
+                  >
+                    Cancel
+                  </Button>
+                </>
+              ) : (
+                <Button size="sm" variant="danger" onClick={() => setConfirmDeleteId(c.id)}>
+                  Delete
+                </Button>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="pos-page pos-page-sm">
       <PageHeader title="Customers" subtitle="Collect customer name & phone for promotions" />
@@ -232,164 +402,32 @@ export default function Customers() {
         </div>
       </div>
 
+      {customers.length > 0 && (
+        <div className="pos-card pos-card-p" style={{ marginBottom: 16 }}>
+          <Input
+            label="Search customers"
+            labelHidden
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search by name or phone"
+          />
+          <div style={{ marginTop: 8, fontSize: 12, color: "var(--pos-tx-sub)" }}>
+            Showing {filteredCustomers.length.toLocaleString()} of {customers.length.toLocaleString()} customers
+          </div>
+        </div>
+      )}
+
       {customers.length === 0 ? (
         <div className="pos-empty">No customers yet. Add your first customer above.</div>
+      ) : filteredCustomers.length === 0 ? (
+        <div className="pos-empty">No customers match your search.</div>
       ) : (
-        <div style={{ display: "grid", gap: 10 }}>
-          {customers.map((c) => {
-            const isEditing = editingId === c.id;
-            const isConfirmingDelete = confirmDeleteId === c.id;
-
-            return (
-              <div
-                key={c.id}
-                className="pos-card"
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  padding: "14px 18px",
-                  flexWrap: "wrap",
-                  gap: 10,
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 12,
-                    flex: "1 1 300px",
-                    minWidth: 0,
-                  }}
-                >
-                  <div
-                    style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: "50%",
-                      background: "var(--pos-teal)",
-                      color: "var(--pos-surface)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      fontWeight: 800,
-                      fontSize: 14,
-                      flexShrink: 0,
-                    }}
-                  >
-                    {c.name.charAt(0).toUpperCase()}
-                  </div>
-                  {isEditing ? (
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", flex: 1 }}>
-                      <div style={{ flex: "1 1 160px" }}>
-                        <Input
-                          label="Customer name"
-                          labelHidden
-                          value={editName}
-                          onChange={(e) => {
-                            setEditName(e.target.value);
-                            if (editNameError) {
-                              setEditNameError(null);
-                            }
-                          }}
-                          placeholder="Customer name"
-                          error={editNameError}
-                        />
-                      </div>
-                      <div style={{ flex: "1 1 160px" }}>
-                        <Input
-                          label="Phone"
-                          labelHidden
-                          type="tel"
-                          inputMode="tel"
-                          autoComplete="tel"
-                          value={editPhone}
-                          onChange={(e) => {
-                            setEditPhone(normalizePhone(e.target.value));
-                            if (editPhoneError) {
-                              setEditPhoneError(null);
-                            }
-                          }}
-                          placeholder="Phone (10 digits)"
-                          error={editPhoneError}
-                        />
-                      </div>
-                    </div>
-                  ) : (
-                    <div>
-                      <div style={{ fontWeight: 700, fontSize: 14, color: "var(--pos-tx)" }}>{c.name}</div>
-                      <div
-                        style={{
-                          color: "var(--pos-tx-sub)",
-                          fontSize: 13,
-                          fontVariantNumeric: "tabular-nums",
-                        }}
-                      >
-                        {c.phone}
-                      </div>
-                    </div>
-                  )}
-                </div>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  {isEditing ? (
-                    <>
-                      <Button size="sm" variant="primary" onClick={() => saveCustomer(c)} disabled={savingEdit}>
-                        {savingEdit ? "Saving..." : "Save"}
-                      </Button>
-                      <Button size="sm" variant="secondary" onClick={cancelEdit} disabled={savingEdit}>
-                        Cancel
-                      </Button>
-                    </>
-                  ) : (
-                    <>
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => {
-                          try {
-                            navigator.clipboard?.writeText(c.phone);
-                            showToast("Phone copied");
-                          } catch (e) {
-                            showToast("Copied");
-                          }
-                        }}
-                      >
-                        Copy
-                      </Button>
-                      <Button size="sm" variant="secondary" onClick={() => startEdit(c)}>
-                        Edit
-                      </Button>
-                      {isConfirmingDelete ? (
-                        <>
-                          <Button
-                            size="sm"
-                            variant="danger"
-                            onClick={() => removeCustomer(c.id)}
-                            disabled={deletingId === c.id}
-                          >
-                            {deletingId === c.id ? "Deleting..." : "Confirm Delete"}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            onClick={() => setConfirmDeleteId(null)}
-                            disabled={deletingId === c.id}
-                          >
-                            Cancel
-                          </Button>
-                        </>
-                      ) : (
-                        <Button size="sm" variant="danger" onClick={() => setConfirmDeleteId(c.id)}>
-                          Delete
-                        </Button>
-                      )}
-                    </>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        <VirtualScrollList
+          items={filteredCustomers}
+          itemHeight={CUSTOMER_ROW_HEIGHT}
+          getKey={(customer) => customer.id}
+          renderItem={(customer) => renderCustomerRow(customer)}
+        />
       )}
     </div>
   );

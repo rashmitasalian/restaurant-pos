@@ -1416,6 +1416,46 @@ function runSchema(database: SqliteDatabase) {
     `);
   });
 
+  runMigration(database, 23, "Add audit log full-text search index", () => {
+    database.exec(`
+      CREATE VIRTUAL TABLE IF NOT EXISTS audit_logs_fts USING fts5(
+        audit_id UNINDEXED,
+        action,
+        entity_type,
+        entity_id,
+        user,
+        detail_json,
+        tokenize='unicode61'
+      );
+
+      INSERT INTO audit_logs_fts(audit_id, action, entity_type, entity_id, user, detail_json)
+      SELECT
+        id,
+        action,
+        COALESCE(entity_type, ''),
+        COALESCE(entity_id, ''),
+        COALESCE(user, ''),
+        COALESCE(detail_json, '')
+      FROM audit_logs;
+
+      CREATE TRIGGER IF NOT EXISTS audit_logs_fts_ai AFTER INSERT ON audit_logs BEGIN
+        INSERT INTO audit_logs_fts(audit_id, action, entity_type, entity_id, user, detail_json)
+        VALUES (
+          new.id,
+          new.action,
+          COALESCE(new.entity_type, ''),
+          COALESCE(new.entity_id, ''),
+          COALESCE(new.user, ''),
+          COALESCE(new.detail_json, '')
+        );
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS audit_logs_fts_ad AFTER DELETE ON audit_logs BEGIN
+        DELETE FROM audit_logs_fts WHERE audit_id = old.id;
+      END;
+    `);
+  });
+
   // Startup self-healing for pre-existing/partially migrated databases:
   // ensure area_id exists even if migration 12 was marked applied while the column was missing.
   addColumnIfMissing(database, "tables", "area_id", `TEXT NOT NULL DEFAULT '${DEFAULT_SEATING_AREA_ID}'`);

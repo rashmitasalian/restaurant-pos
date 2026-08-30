@@ -189,19 +189,9 @@ describe("posService strict SQLite APIs", () => {
     const query = mockDb.calls.find((call: any) => /FROM audit_logs/.test(call.sql));
     expect(query!.sql).toContain("timestamp >= ?");
     expect(query!.sql).toContain("timestamp <= ?");
-    expect(query!.sql).toContain("lower(action) LIKE ?");
+    expect(query!.sql).toContain("audit_logs_fts MATCH ?");
     expect(query!.sql).toContain("LIMIT ? OFFSET ?");
-    expect(query!.params).toEqual([
-      1000,
-      3000,
-      "%paid%",
-      "%paid%",
-      "%paid%",
-      "%paid%",
-      "%paid%",
-      100,
-      25,
-    ]);
+    expect(query!.params).toEqual([1000, 3000, '"paid"*', 100, 25]);
   });
 
   it("counts audits with the same server-side filters used by the audit viewer", () => {
@@ -213,8 +203,8 @@ describe("posService strict SQLite APIs", () => {
     const query = mockDb.calls.find((call: any) => /COUNT\(\*\).*FROM audit_logs/.test(call.sql));
     expect(query!.sql).toContain("timestamp >= ?");
     expect(query!.sql).toContain("timestamp <= ?");
-    expect(query!.sql).toContain("lower(COALESCE(user, '')) LIKE ?");
-    expect(query!.params).toEqual([1000, 3000, "%admin%", "%admin%", "%admin%", "%admin%", "%admin%"]);
+    expect(query!.sql).toContain("audit_logs_fts MATCH ?");
+    expect(query!.params).toEqual([1000, 3000, '"admin"*']);
   });
 
   it("expands split payments into reporting method totals", () => {
@@ -328,13 +318,12 @@ describe("posService strict SQLite APIs", () => {
     const result = posService.getProductSalesReport({ from: 1000, to: 2000 });
 
     expect(result.totals).toEqual({ totalSales: 100, totalUnits: 1 });
-    const paymentQuery = mockDb.calls.find((call: any) => /SELECT\s+p\.\*/.test(call.sql));
-    expect(paymentQuery!.sql).toContain("p.status = 'completed'");
-    expect(paymentQuery!.sql).toContain("p.received_at >= ?");
-    expect(paymentQuery!.sql).toContain("p.received_at < ?");
-    expect(paymentQuery!.params).toEqual([1000, 2000]);
     const lineQuery = mockDb.calls.find((call: any) => call.sql.includes("JOIN order_lines"));
-    expect(lineQuery!.params).toEqual(["order:1"]);
+    expect(lineQuery!.sql).toContain("SELECT DISTINCT p.order_id");
+    expect(lineQuery!.sql).toContain("p.status = 'completed'");
+    expect(lineQuery!.sql).toContain("p.received_at >= ?");
+    expect(lineQuery!.sql).toContain("p.received_at < ?");
+    expect(lineQuery!.params).toEqual([1000, 2000]);
   });
 
   it("summarizes grocery spend against net sales for food cost reporting", () => {
