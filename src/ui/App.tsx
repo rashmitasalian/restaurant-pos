@@ -39,21 +39,45 @@ import {
 } from "../app/db/posRepository";
 import { getDefaultServiceModes } from "../shared/serviceModes";
 import restoNitiMark from "./assets/restoniti-icon.png";
+import { PageLoadingFallback } from "./components/PageLoadingFallback";
+import {
+  prefetchScreen,
+  schedulePostLoginPrefetch,
+  screenImports,
+  type ScreenPrefetchKey,
+} from "./screenPrefetch";
 
-const Tables = React.lazy(() => import("./screens/Tables/Tables"));
-const Billing = React.lazy(() => import("./screens/Billing/Billing"));
-const KOTQueue = React.lazy(() => import("./screens/KOTQueue/KOTQueue"));
-const Customers = React.lazy(() => import("./screens/Customers/Customers"));
-const Manager = React.lazy(() => import("./screens/Manager/Manager"));
-const LoginScreen = React.lazy(() => import("./screens/Login/LoginScreen"));
-const ChangePasswordScreen = React.lazy(() => import("./screens/Login/ChangePasswordScreen"));
-const SetupScreen = React.lazy(() => import("./screens/Login/SetupScreen"));
-
-function ScreenLoadingFallback() {
-  return <div className="pos-skeleton">Loading…</div>;
-}
+const Tables = React.lazy(screenImports.tables);
+const Billing = React.lazy(screenImports.billing);
+const KOTQueue = React.lazy(screenImports.kot);
+const Customers = React.lazy(screenImports.customers);
+const Manager = React.lazy(screenImports.manager);
+const LoginScreen = React.lazy(screenImports.login);
+const ChangePasswordScreen = React.lazy(screenImports.changePassword);
+const SetupScreen = React.lazy(screenImports.setup);
 
 type Page = "tables" | "billing" | "kot" | "reports" | "customers" | "manager";
+
+function screenFallbackForPage(page: Page | null): React.ReactNode {
+  if (page === "manager") {
+    return <PageLoadingFallback variant="manage" label="Opening Manage" />;
+  }
+  return <PageLoadingFallback variant="page" />;
+}
+
+function prefetchForPage(page: Page) {
+  const map: Partial<Record<Page, ScreenPrefetchKey>> = {
+    tables: "tables",
+    billing: "billing",
+    kot: "kot",
+    customers: "customers",
+    manager: "manager",
+  };
+  const key = map[page];
+  if (key) {
+    prefetchScreen(key);
+  }
+}
 
 function getRendererStartupElapsedMs() {
   const t0 = Number((window as any).__posStartupT0 || 0);
@@ -266,6 +290,13 @@ function MainContent({
     }, [auth?.loading, auth?.session, hasUsers, page]);
 
     React.useEffect(() => {
+      if (auth?.loading || !auth?.session || auth.session.requirePasswordChange) {
+        return;
+      }
+      schedulePostLoginPrefetch();
+    }, [auth?.loading, auth?.session?.sessionToken, auth?.session?.requirePasswordChange]);
+
+    React.useEffect(() => {
       const loadModes = async () => {
         if (!auth?.session) {
           setEnabledServiceModes(getDefaultServiceModes().filter((mode) => mode.enabled));
@@ -419,19 +450,19 @@ function MainContent({
     // is in progress. This prevents any brief window where a tampered localStorage
     // role could be rendered.
     if (auth?.loading) {
-      return <div className="pos-skeleton">Loading…</div>;
+      return <PageLoadingFallback variant="auth" label="Starting RestoNiti" />;
     }
     if (!auth?.session) {
       // First-run: no users exist, so show setup wizard instead of login.
       if (hasUsers === false) {
         return (
-          <React.Suspense fallback={<ScreenLoadingFallback />}>
+          <React.Suspense fallback={<PageLoadingFallback variant="auth" label="Preparing setup" />}>
             <SetupScreen onComplete={onSetupComplete} />
           </React.Suspense>
         );
       }
       return (
-        <React.Suspense fallback={<ScreenLoadingFallback />}>
+        <React.Suspense fallback={<PageLoadingFallback variant="auth" label="Loading sign-in" />}>
           <LoginScreen />
         </React.Suspense>
       );
@@ -440,7 +471,7 @@ function MainContent({
     // gate access to the entire application until a new password is set.
     if (auth.session.requirePasswordChange) {
       return (
-        <React.Suspense fallback={<ScreenLoadingFallback />}>
+        <React.Suspense fallback={<PageLoadingFallback variant="auth" label="Loading account" />}>
           <ChangePasswordScreen />
         </React.Suspense>
       );
@@ -476,6 +507,8 @@ function MainContent({
                     type="button"
                     className={`hdr-nav-btn${active ? " hdr-active" : ""}`}
                     aria-current={active ? "page" : undefined}
+                    onMouseEnter={() => prefetchForPage(it.k === "reports" ? "manager" : (it.k as Page))}
+                    onFocus={() => prefetchForPage(it.k === "reports" ? "manager" : (it.k as Page))}
                     onClick={() => {
                       if (it.k === "reports") {
                         setManagerSection("reports");
@@ -569,7 +602,7 @@ function MainContent({
         </header>
 
         <div id="main-content" tabIndex={-1} className="pos-main-content">
-          <React.Suspense fallback={<ScreenLoadingFallback />}>
+          <React.Suspense fallback={screenFallbackForPage(page)}>
             {inlineLayout ? (
               <div id="split-view" className="pos-split-view">
                 <main id="tables-section" className="pos-tables-section">

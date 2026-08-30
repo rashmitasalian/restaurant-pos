@@ -735,6 +735,14 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
       {!error && filteredRows.length > 0 && (
         <div className={styles.gridWrap}>
           <table className={styles.grid}>
+            <colgroup>
+              <col className={styles.colEmployee} />
+              <col className={styles.colShift} />
+              <col className={styles.colStatus} />
+              <col className={styles.colLate} />
+              <col className={styles.colOt} />
+              <col className={styles.colNote} />
+            </colgroup>
             <thead>
               <tr>
                 <th className={styles.colEmployee}>Employee</th>

@@ -1,16 +1,8 @@
 import React from "react";
-import AuditViewer from "../Audit/AuditViewer";
-import Grocery from "../Grocery/Grocery";
-import Expenses from "../Expenses/Expenses";
-import History from "../History/History";
-import ItemsEditor from "../ItemsEditor/ItemsEditor";
-import Settings from "../Settings/Settings";
-import People from "../People/People";
-import Reports from "../Reports/Reports";
-import Overview from "./Overview";
 import { ManageShell } from "./ManageShell";
 import { CommandPalette, buildManageCommands } from "./CommandPalette";
 import styles from "./Manager.module.css";
+import { PageLoadingFallback } from "../../components/PageLoadingFallback";
 import {
   type ManagerSection,
   MANAGER_SECTION_HASH,
@@ -34,6 +26,16 @@ import {
   IndianRupee,
   Shield,
 } from "lucide-react";
+
+const Overview = React.lazy(() => import("./Overview"));
+const Grocery = React.lazy(() => import("../Grocery/Grocery"));
+const Expenses = React.lazy(() => import("../Expenses/Expenses"));
+const ItemsEditor = React.lazy(() => import("../ItemsEditor/ItemsEditor"));
+const Settings = React.lazy(() => import("../Settings/Settings"));
+const People = React.lazy(() => import("../People/People"));
+const Reports = React.lazy(() => import("../Reports/Reports"));
+const History = React.lazy(() => import("../History/History"));
+const AuditViewer = React.lazy(() => import("../Audit/AuditViewer"));
 
 type ManagerProps = {
   section: ManagerSection;
@@ -203,44 +205,35 @@ function ManagerInner({
   }, [allowedManageSections, allowedPeopleTabs, allowedSectionSet, reportsOnly, section]);
 
   const renderSection = () => {
-    if (effectiveSection === "overview") {
-      return <Overview onNavigate={onSectionChange} />;
-    }
-    if (effectiveSection === "grocery") {
-      return <Grocery />;
-    }
-    if (effectiveSection === "expenses") {
-      return <Expenses />;
-    }
-    if (effectiveSection === "menu") {
-      return <MenuSection />;
-    }
-    if (effectiveSection === "people") {
-      return <People allowedPeopleTabs={allowedPeopleTabs} />;
-    }
-    if (effectiveSection === "reports") {
-      return (
-        <ManageShell title="Reports" description="Sales and profitability" width="full">
-          <Reports embedded />
-        </ManageShell>
-      );
-    }
-    if (effectiveSection === "history") {
-      return (
-        <ManageShell title="Order History" description="Paid orders" width="full">
-          <div className={styles.embedBody}>
-            <History embedded />
-          </div>
-        </ManageShell>
-      );
-    }
-    if (effectiveSection === "audit") {
-      return <AuditViewer />;
-    }
-    if (effectiveSection === "settings") {
-      return <SettingsSection />;
-    }
-    return <SettingsSection />;
+    const section = (
+      <>
+        {effectiveSection === "overview" && <Overview onNavigate={onSectionChange} />}
+        {effectiveSection === "grocery" && <Grocery />}
+        {effectiveSection === "expenses" && <Expenses />}
+        {effectiveSection === "menu" && <MenuSection />}
+        {effectiveSection === "people" && <People allowedPeopleTabs={allowedPeopleTabs} />}
+        {effectiveSection === "reports" && (
+          <ManageShell title="Reports" description="Sales and profitability" width="full">
+            <Reports embedded />
+          </ManageShell>
+        )}
+        {effectiveSection === "history" && (
+          <ManageShell title="Order History" description="Paid orders" width="full">
+            <div className={styles.embedBody}>
+              <History embedded />
+            </div>
+          </ManageShell>
+        )}
+        {effectiveSection === "audit" && <AuditViewer />}
+        {effectiveSection === "settings" && <SettingsSection />}
+      </>
+    );
+
+    return (
+      <React.Suspense fallback={<PageLoadingFallback variant="manage" label="Loading section" />}>
+        {section}
+      </React.Suspense>
+    );
   };
 
   if (reportsOnly) {
