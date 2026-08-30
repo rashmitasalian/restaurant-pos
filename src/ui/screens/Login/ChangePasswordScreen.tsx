@@ -1,6 +1,7 @@
 import React from "react";
 import { AuthContext } from "../../context/AuthContext";
 import { PasswordValidator } from "../../../app/utils/validators";
+import { validationMessage } from "../../../shared/validation";
 import authStyles from "./Auth.module.css";
 
 export default function ChangePasswordScreen() {
@@ -54,8 +55,7 @@ export default function ChangePasswordScreen() {
         };
         setError(
           messages[result.error ?? ""] ||
-            result.error ||
-            "Failed to change password. Please try again.",
+            validationMessage(result.error, "Failed to change password. Please try again."),
         );
       }
     } finally {

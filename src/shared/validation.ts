@@ -120,13 +120,26 @@ export function isTechnicalErrorMessage(message: string): boolean {
   return false;
 }
 
+import { logger } from "../app/utils/logger";
+
+export function logSanitizedClientError(error: unknown, defaultMessage: string) {
+  const err = error instanceof Error ? error : new Error(String(error ?? "unknown"));
+  logger.error(`[ui] ${defaultMessage}`, err);
+}
+
 export function validationMessage(error: unknown, defaultMessage = "Something went wrong. Please try again.") {
   const raw = normalizeClientErrorMessage(error);
   if (!raw) return defaultMessage;
-  if (raw === "internal-error") return defaultMessage;
+  if (raw === "internal-error") {
+    logSanitizedClientError(error, defaultMessage);
+    return defaultMessage;
+  }
   if (VALIDATION_MESSAGES[raw]) return VALIDATION_MESSAGES[raw];
   if (SYSTEM_MESSAGES[raw]) return SYSTEM_MESSAGES[raw];
-  if (isTechnicalErrorMessage(raw)) return defaultMessage;
+  if (isTechnicalErrorMessage(raw)) {
+    logSanitizedClientError(error, defaultMessage);
+    return defaultMessage;
+  }
   return raw;
 }
 

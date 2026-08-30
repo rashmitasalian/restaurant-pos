@@ -42,6 +42,7 @@ import {
   parseNonNegativeMoney,
   validationMessage,
 } from "../../../shared/validation";
+import { reportClientError } from "../../../app/utils/clientError";
 import styles from "./Billing.module.css";
 import PaymentsModal, { type PaymentConfirm } from "../../components/PaymentsModal";
 import { AuthContext } from "../../context/AuthContext";
@@ -812,7 +813,7 @@ export default function Billing() {
       }
     } catch (e: any) {
       logger.error("Failed to add item", e);
-      showToast(e?.message || "Failed to add item", "error");
+      showToast(reportClientError("billing.add-item", e, "Failed to add item"), "error");
     }
   };
 
@@ -850,7 +851,7 @@ export default function Billing() {
         window.dispatchEvent(new Event("orders-changed"));
       } catch (e: any) {
         logger.error("Failed to remove order line", e);
-        showToast(e?.message || "Failed to remove item", "error");
+        showToast(reportClientError("billing.remove-item", e, "Failed to remove item"), "error");
       }
     };
     await doRemove();
@@ -880,7 +881,7 @@ export default function Billing() {
         setTimeout(() => searchRef.current?.focus(), 10);
       } catch (e: any) {
         logger.error("Failed to update order quantity", e);
-        showToast(e?.message || "Failed to update quantity", "error");
+        showToast(reportClientError("billing.update-qty", e, "Failed to update quantity"), "error");
       }
     };
     await doUpdate();
@@ -915,7 +916,7 @@ export default function Billing() {
         setTimeout(() => searchRef.current?.focus(), 10);
       } catch (e: any) {
         logger.error("Failed to save order quantity", e);
-        showToast(e?.message || "Failed to save quantity", "error");
+        showToast(reportClientError("billing.save-qty", e, "Failed to save quantity"), "error");
       }
     };
     await doCommit();
@@ -945,7 +946,7 @@ export default function Billing() {
       setTimeout(() => searchRef.current?.focus(), 10);
     } catch (e: any) {
       logger.error("Failed to save order rate", e);
-      showToast(e?.message || "Failed to save rate", "error");
+      showToast(reportClientError("billing.save-rate", e, "Failed to save rate"), "error");
     }
   };
 
@@ -1005,7 +1006,7 @@ export default function Billing() {
       setTimeout(() => searchRef.current?.focus(), 10);
     } catch (e: any) {
       logger.error("Failed to switch line variant", e);
-      showToast(e?.message || "Failed to switch variant", "error");
+      showToast(reportClientError("billing.switch-variant", e, "Failed to switch variant"), "error");
     }
   };
 
@@ -1112,7 +1113,7 @@ export default function Billing() {
     try {
       customer = await resolveTakeawayCustomer();
     } catch (error: any) {
-      showToast(validationMessage(error, "Could not save customer"), "error");
+      showToast(reportClientError("billing.save-customer", error, "Could not save customer"), "error");
       return;
     }
     if (customer === undefined) {
@@ -1334,7 +1335,10 @@ export default function Billing() {
       } catch (e: any) {
         console.warn("KOT print failed", e);
         try {
-          const updated = await markOrderKotFailed(order._id, e?.message || String(e));
+          const updated = await markOrderKotFailed(
+            order._id,
+            reportClientError("billing.kot-print", e, "print-failed"),
+          );
           setOrder(updated);
           window.dispatchEvent(new Event("orders-changed"));
         } catch (statusError) {
@@ -1424,7 +1428,11 @@ export default function Billing() {
       } catch (e: any) {
         logger.error("Void KOT print failed", e);
         showToast(
-          e?.message || "Void KOT could not be sent to the printer. Bill was not changed.",
+          reportClientError(
+            "billing.kot-void-print",
+            e,
+            "Void KOT could not be sent to the printer. Bill was not changed.",
+          ),
           "error",
         );
         return;
@@ -1452,7 +1460,11 @@ export default function Billing() {
       } catch (e: any) {
         logger.error("Void KOT printed but bill update failed", e);
         showToast(
-          validationMessage(e, "Void KOT was printed but the bill could not be updated. Please refresh."),
+          reportClientError(
+            "billing.kot-void-update",
+            e,
+            "Void KOT was printed but the bill could not be updated. Please refresh.",
+          ),
           "error",
         );
       }
@@ -1482,7 +1494,7 @@ export default function Billing() {
       showToast("Bill printed");
     } catch (e: any) {
       logger.error("Bill print failed", e);
-      showToast(e?.message || "Bill could not be printed. Please try again.", "error");
+      showToast(reportClientError("billing.print-bill", e, "Bill could not be printed. Please try again."), "error");
     } finally {
       endBusyAction("printBill");
     }
@@ -1512,7 +1524,7 @@ export default function Billing() {
         });
       } catch (e: any) {
         logger.error("Payment failed", e);
-        showToast(e?.message || "Payment failed. Please try again.", "error");
+        showToast(reportClientError("billing.payment", e, "Payment failed. Please try again."), "error");
         return; // keep modal open so user can retry
       }
 
@@ -1657,7 +1669,7 @@ export default function Billing() {
       window.localStorage.removeItem("currentTable");
     } catch (e) {
       console.error("Cancel failed", e);
-      showToast("Cancel failed: " + ((e as any)?.message || String(e)), "error");
+      showToast(reportClientError("billing.cancel-order", e, "Could not cancel order"), "error");
     } finally {
       endBusyAction("cancel");
     }
@@ -1679,7 +1691,7 @@ export default function Billing() {
           amountPaid: finalTotal,
         });
       } catch (e: any) {
-        showToast(e?.message || "Failed to mark delivered", "error");
+        showToast(reportClientError("billing.mark-delivered", e, "Failed to mark delivered"), "error");
         return;
       }
 
@@ -1727,7 +1739,7 @@ export default function Billing() {
         await attemptPrint();
       } catch (e: any) {
         logger.error("Delivery completion failed", e as Error);
-        showToast(e?.message || "Failed to finish delivered order", "error");
+        showToast(reportClientError("billing.finish-delivered", e, "Failed to finish delivered order"), "error");
       }
     } finally {
       endBusyAction("delivery");
@@ -1747,7 +1759,7 @@ export default function Billing() {
       setOrder(updated);
       window.dispatchEvent(new Event("orders-changed"));
     } catch (e) {
-      showToast("Could not mark as ready: " + ((e as any)?.message || String(e)), "error");
+      showToast(reportClientError("billing.mark-ready", e, "Could not mark as ready"), "error");
     } finally {
       endBusyAction("markReady");
     }
@@ -1794,7 +1806,7 @@ export default function Billing() {
       setRiderPhone("");
       window.dispatchEvent(new Event("orders-changed"));
     } catch (e) {
-      showToast("Could not assign rider: " + ((e as any)?.message || String(e)), "error");
+      showToast(reportClientError("billing.assign-rider", e, "Could not assign rider"), "error");
     } finally {
       endBusyAction("assignRider");
     }
@@ -1819,7 +1831,7 @@ export default function Billing() {
       await printReceipt({ lines });
     } catch (e) {
       console.warn("printAggregatorReceipt failed", e);
-      showToast("Print failed: " + ((e as any)?.message || String(e)), "error");
+      showToast(reportClientError("billing.print", e, "Print failed"), "error");
     } finally {
       endBusyAction("aggregatorPrint");
     }

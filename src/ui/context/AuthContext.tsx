@@ -9,6 +9,7 @@ import {
   logout as authLogout,
   LoginReason,
 } from "../../app/auth/auth";
+import { validationMessage } from "../../shared/validation";
 
 export type LoginResult = {
   ok: boolean;
@@ -155,7 +156,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setSession(s);
       return { ok: true };
     } catch (e: any) {
-      return { ok: false, error: e?.message || "unknown-error" };
+      return { ok: false, error: validationMessage(e, "unknown-error") };
     }
   };
 

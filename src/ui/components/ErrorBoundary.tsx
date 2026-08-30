@@ -70,7 +70,7 @@ export default class ErrorBoundary extends React.Component<{ children: React.Rea
           >
             Reload App
           </button>
-          {this.state.error && (
+          {this.state.error && import.meta.env.DEV ? (
             <details
               style={{
                 marginTop: 28,
@@ -96,7 +96,7 @@ export default class ErrorBoundary extends React.Component<{ children: React.Rea
                 {this.state.error.stack}
               </pre>
             </details>
-          )}
+          ) : null}
         </div>
       );
     }

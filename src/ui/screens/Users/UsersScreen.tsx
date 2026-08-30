@@ -10,7 +10,8 @@ import { PasswordValidator } from "../../../app/utils/validators";
 import { DEFAULT_ROLE, PAGE_LABELS, ROLE_KEYS, ROLES } from "../../../config/roles";
 import type { Role } from "../../../config/roles";
 import { roleHasPermission } from "../../../shared/permissions";
-import { isValidPersonName, normalizeText } from "../../../shared/validation";
+import { isValidPersonName, normalizeText, validationMessage } from "../../../shared/validation";
+import { reportClientError } from "../../../app/utils/clientError";
 import { AuthContext } from "../../context/AuthContext";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { Button } from "../../components/ui/Button";
@@ -41,6 +42,14 @@ function adminMutationError(message: string) {
     "display-name-invalid": "Display name must include a letter.",
   };
   return known[message] ?? "";
+}
+
+function userAdminError(scope: string, err: unknown, fallback: string) {
+  const raw =
+    err instanceof Error ? err.message : typeof err === "string" ? err : "";
+  const mapped = adminMutationError(raw);
+  if (mapped) return mapped;
+  return reportClientError(scope, err, fallback);
 }
 
 function userListErrorMessage(message: string) {
@@ -108,9 +117,11 @@ export default function UsersScreen({
     } catch (err: any) {
       const message = err?.message || "";
       setUsers([]);
-      setError(userListErrorMessage(message));
       if (message.includes("auth-required") || message.includes("password-change-required")) {
+        setError(userListErrorMessage(message));
         auth.logout();
+      } else {
+        setError(reportClientError("users.load", err, "Could not load users. Please try again."));
       }
     } finally {
       setLoading(false);
@@ -312,8 +323,7 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
       );
       onCreated();
     } catch (err: any) {
-      const message = err?.message || "";
-      setError(adminMutationError(message) || message || "Failed to create user. Please try again.");
+      setError(userAdminError("users.create", err, "Failed to create user. Please try again."));
     } finally {
       submittingRef.current = false;
       setIsSubmitting(false);
@@ -453,8 +463,7 @@ function ResetPasswordModal({
       setSuccess(true);
       setTimeout(onDone, 1200);
     } catch (err: any) {
-      const message = err?.message || "";
-      setError(adminMutationError(message) || message || "Failed to reset password. Please try again.");
+      setError(userAdminError("users.reset-password", err, "Failed to reset password. Please try again."));
     } finally {
       submittingRef.current = false;
       setIsSubmitting(false);
@@ -549,8 +558,7 @@ function ConfirmStatusModal({
       await updateUser(user.username, { active: nextActive }, auth.session.username, adminPassword);
       onDone();
     } catch (err: any) {
-      const message = err?.message || "";
-      setError(adminMutationError(message) || message || `Failed to ${action} this user.`);
+      setError(userAdminError("users.toggle-active", err, `Failed to ${action} this user.`));
     } finally {
       submittingRef.current = false;
       setIsSubmitting(false);

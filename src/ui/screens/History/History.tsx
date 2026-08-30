@@ -10,6 +10,7 @@ import {
 } from "../../../app/db/posRepository";
 import { printReceipt } from "../../../app/services/printer";
 import { useToast } from "../../context/ToastContext";
+import { reportClientError } from "../../../app/utils/clientError";
 import { useFocusTrap } from "../../hooks/useFocusTrap";
 import { useBusinessDateRange } from "../../hooks/useBusinessDateRange";
 import {
@@ -552,8 +553,7 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
       await printReceipt({ lines });
       showToast("Receipt reprinted", "success");
     } catch (e: any) {
-      const msg = e?.message || String(e);
-      showToast(`Reprint failed: ${msg}`, "error");
+      showToast(reportClientError("history.reprint", e, "Reprint failed"), "error");
     } finally {
       endAction(reprintingRef, setReprinting);
     }
@@ -716,7 +716,7 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
       }
       showToast("Export saved", "success");
     } catch (e: any) {
-      showToast(`Export failed: ${e?.message || e}`, "error");
+      showToast(reportClientError("history.export", e, "Export failed"), "error");
     } finally {
       endAction(exportingRef, setExporting);
     }

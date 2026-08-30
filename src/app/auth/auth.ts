@@ -1,6 +1,7 @@
 import { getUserByUsername } from "../db/posRepository";
 import type { Role } from "../../config/roles";
 import { ENV } from "../../config/env";
+import { validationMessage } from "../../shared/validation";
 
 export type Session = {
   sessionToken: string;
@@ -138,7 +139,7 @@ export async function changePassword(
     await window.pos?.auth?.changePassword(username, currentPassword, newPassword);
     return { ok: true };
   } catch (error: any) {
-    return { ok: false, error: error?.message || "unknown-error" };
+    return { ok: false, error: validationMessage(error, "unknown-error") };
   }
 }
 

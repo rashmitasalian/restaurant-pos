@@ -4,6 +4,7 @@ import { PasswordValidator } from "../../../app/utils/validators";
 import { ENV } from "../../../config/env";
 import { RECOVERY_CODE_COUNT } from "../../../shared/auth";
 import { isValidPersonName, normalizeText, validationMessage } from "../../../shared/validation";
+import { reportClientError } from "../../../app/utils/clientError";
 import restoNitiMark from "../../assets/restoniti-icon.png";
 import authStyles from "./Auth.module.css";
 
@@ -61,11 +62,11 @@ export default function SetupScreen({ onComplete }: { onComplete: () => void }) 
       });
       setRecoveryCodes(result.recoveryCodes);
     } catch (err: any) {
-      const message =
+      setError(
         err?.message === "setup-already-complete"
           ? "Setup is already complete. Please sign in."
-          : err?.message || "Failed to create admin account.";
-      setError(message);
+          : reportClientError("auth.setup", err, "Failed to create admin account."),
+      );
     } finally {
       submittingRef.current = false;
       setIsSubmitting(false);

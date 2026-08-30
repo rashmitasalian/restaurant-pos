@@ -59,6 +59,7 @@ import {
 import { DEFAULT_GST_CONFIG, isValidGstin, normalizeGstConfig } from "../../../shared/gst";
 import { RECOVERY_CODE_COUNT } from "../../../shared/auth";
 import { normalizeCategoryName, validationMessage } from "../../../shared/validation";
+import { reportClientError } from "../../../app/utils/clientError";
 import { getDefaultServiceModes, type ServiceMode } from "../../../shared/serviceModes";
 import { processRestaurantLogoFile, type ReceiptLogoRaster } from "../../utils/logoProcessing";
 import {
@@ -233,7 +234,7 @@ export default function Settings({
     try {
       setPrintJobs(await listPrintJobs());
     } catch (e: any) {
-      setPrintQueueStatus("Could not load print queue: " + (e?.message || String(e)));
+      setPrintQueueStatus(reportClientError("settings.print-queue.load", e, "Could not load print queue"));
     } finally {
       endAction("printQueue.load");
       setLoadingPrintQueue(false);
@@ -248,7 +249,7 @@ export default function Settings({
     try {
       setBackups(await listSqliteBackups());
     } catch (e: any) {
-      setBackupStatus("Could not load backups: " + (e?.message || String(e)));
+      setBackupStatus(reportClientError("settings.backup.load", e, "Could not load backups"));
     } finally {
       endAction("backup.load");
       setBackupBusy(null);
@@ -261,7 +262,7 @@ export default function Settings({
       setAppInfo(info);
       setUpdateStatus(status);
     } catch (e: any) {
-      setUpdateMessage("Could not load update support details: " + (e?.message || String(e)));
+      setUpdateMessage(reportClientError("settings.update.load", e, "Could not load update details"));
     }
   }, []);
 
@@ -434,7 +435,7 @@ export default function Settings({
       setStatus("Saved successfully ");
       setTimeout(() => setStatus(null), 3000);
     } catch (e: any) {
-      setStatus("Save failed: " + (e?.message || String(e)));
+      setStatus(reportClientError("settings.printers.save", e, "Could not save printer settings"));
     }
     setSaving(false);
     endAction("printers.save");
@@ -455,7 +456,7 @@ export default function Settings({
       setReceiptLogoRaster(processed.receiptLogoRaster);
       setBrandingStatus("Logo ready. Save Business Identity to apply it.");
     } catch (e: any) {
-      setBrandingStatus(e?.message || "Could not process logo");
+      setBrandingStatus(reportClientError("settings.branding.logo", e, "Could not process logo"));
     } finally {
       endAction("branding.logo");
       setProcessingLogo(false);
@@ -510,7 +511,7 @@ export default function Settings({
       setBrandingStatus("Business identity saved");
       setTimeout(() => setBrandingStatus(null), 3000);
     } catch (e: any) {
-      setBrandingStatus("Save failed: " + (e?.message || String(e)));
+      setBrandingStatus(reportClientError("settings.branding.save", e, "Could not save branding"));
     } finally {
       endAction("branding.save");
       setSavingBranding(false);
@@ -564,7 +565,7 @@ export default function Settings({
       setGstStatus("GST details saved");
       setTimeout(() => setGstStatus(null), 3000);
     } catch (e: any) {
-      setGstStatus("Save failed: " + (e?.message || String(e)));
+      setGstStatus(reportClientError("settings.gst.save", e, "Could not save GST settings"));
     } finally {
       endAction("gst.save");
       setSavingGst(false);
@@ -595,7 +596,7 @@ export default function Settings({
       await loadPrintQueue();
       setPrintQueueStatus(ok ? "Print job completed" : "Retry failed; job remains in queue");
     } catch (e: any) {
-      setPrintQueueStatus("Retry failed: " + (e?.message || String(e)));
+      setPrintQueueStatus(reportClientError("settings.print-queue.retry", e, "Could not retry print job"));
     } finally {
       endAction(`printQueue.retry.${jobId}`);
       setRetryingPrintJob(null);
@@ -613,7 +614,7 @@ export default function Settings({
       await loadPrintQueue();
       setPrintQueueStatus(`Cleared ${deleted} old completed/failed print jobs`);
     } catch (e: any) {
-      setPrintQueueStatus("Cleanup failed: " + (e?.message || String(e)));
+      setPrintQueueStatus(reportClientError("settings.print-queue.cleanup", e, "Could not clean up print jobs"));
     } finally {
       setClearingPrintJobs(false);
       endAction("printQueue.clear");
@@ -635,7 +636,7 @@ export default function Settings({
         setBackupStatus("Backup created");
       }
     } catch (e: any) {
-      setBackupStatus("Backup failed: " + (e?.message || String(e)));
+      setBackupStatus(reportClientError("settings.backup.create", e, "Could not create backup"));
     } finally {
       endAction("backup.create");
       setBackupBusy(null);
@@ -666,7 +667,7 @@ export default function Settings({
         window.setTimeout(() => window.location.reload(), 1000);
       }
     } catch (e: any) {
-      setBackupStatus("Restore failed: " + (e?.message || String(e)));
+      setBackupStatus(reportClientError("settings.backup.restore", e, "Could not restore backup"));
     } finally {
       endAction("backup.restore");
       setBackupBusy(null);
@@ -703,7 +704,7 @@ export default function Settings({
         setUpdateMessage("This POS is already up to date.");
       }
     } catch (e: any) {
-      setUpdateMessage("Update check failed: " + (e?.message || String(e)));
+      setUpdateMessage(reportClientError("settings.update.check", e, "Could not check for updates"));
     } finally {
       endAction("update.check");
       setUpdateBusy(null);
@@ -726,7 +727,7 @@ export default function Settings({
       await loadUpdateSupport();
       setUpdateMessage("Update prepared. Backup and installers are verified.");
     } catch (e: any) {
-      setUpdateMessage("Prepare update failed: " + (e?.message || String(e)));
+      setUpdateMessage(reportClientError("settings.update.prepare", e, "Could not prepare update"));
     } finally {
       endAction("update.prepare");
       setUpdateBusy(null);
@@ -749,7 +750,7 @@ export default function Settings({
       await loadUpdateSupport();
       setUpdateMessage("Update prepared. Backup and installers are verified.");
     } catch (e: any) {
-      setUpdateMessage("Prepare update failed: " + (e?.message || String(e)));
+      setUpdateMessage(reportClientError("settings.update.prepare", e, "Could not prepare update"));
     } finally {
       endAction("update.prepare");
       setUpdateBusy(null);
@@ -775,7 +776,7 @@ export default function Settings({
       await launchPreparedUpdate();
       setUpdateMessage("Installer launched. Complete the installer to finish the update.");
     } catch (e: any) {
-      setUpdateMessage("Could not launch installer: " + (e?.message || String(e)));
+      setUpdateMessage(reportClientError("settings.update.launch", e, "Could not launch installer"));
       setUpdateBusy(null);
     } finally {
       endAction("update.launch");
@@ -801,7 +802,7 @@ export default function Settings({
       launched = true;
       setUpdateMessage("Rollback installer launched. Complete the installer to finish rollback.");
     } catch (e: any) {
-      setUpdateMessage("Rollback failed: " + (e?.message || String(e)));
+      setUpdateMessage(reportClientError("settings.update.rollback", e, "Could not roll back update"));
       setUpdateBusy(null);
     } finally {
       endAction("update.rollback");
@@ -824,7 +825,7 @@ export default function Settings({
       launched = true;
       setUpdateMessage("Rollback installer launched. Complete the installer to finish rollback.");
     } catch (e: any) {
-      setUpdateMessage("Rollback failed: " + (e?.message || String(e)));
+      setUpdateMessage(reportClientError("settings.update.rollback", e, "Could not roll back update"));
       setUpdateBusy(null);
     } finally {
       endAction("update.rollback");
@@ -844,7 +845,7 @@ export default function Settings({
       const result = await exportDiagnostics();
       setUpdateMessage(`Diagnostics exported: ${result?.path || "complete"}`);
     } catch (e: any) {
-      setUpdateMessage("Diagnostics export failed: " + (e?.message || String(e)));
+      setUpdateMessage(reportClientError("settings.update.diagnostics", e, "Could not export diagnostics"));
     } finally {
       endAction("update.diagnostics");
       setUpdateBusy(null);
@@ -867,7 +868,7 @@ export default function Settings({
         setStatus(`${printer} failed: ${res?.error || "unknown"}`);
       }
     } catch (e: any) {
-      setStatus(`${printer} failed: ${e?.message || String(e)}`);
+      setStatus(reportClientError("settings.printers.test", e, `${printer} test failed`));
     } finally {
       setTestingPrinter(null);
       endAction(`printer.test.${printer}`);
@@ -899,7 +900,7 @@ export default function Settings({
       setTableStatus("Saved ");
       setTimeout(() => setTableStatus(null), 4000);
     } catch (e: any) {
-      setTableStatus("Save failed: " + (e?.message || String(e)));
+      setTableStatus(reportClientError("settings.tables.save", e, "Could not save table settings"));
     } finally {
       setSavingTables(false);
       endAction("tables.save");
@@ -969,7 +970,7 @@ export default function Settings({
       window.dispatchEvent(new Event("seating-areas-changed"));
       window.dispatchEvent(new Event("orders-changed"));
     } catch (e: any) {
-      setTableStatus("Delete failed: " + (e?.message || String(e)));
+      setTableStatus(reportClientError("settings.tables.delete", e, "Could not delete seating area"));
     }
   };
 
@@ -1002,7 +1003,7 @@ export default function Settings({
       window.dispatchEvent(new Event("orders-changed"));
       setTimeout(() => setTableStatus(null), 4000);
     } catch (e: any) {
-      setTableStatus("Save failed: " + (e?.message || String(e)));
+      setTableStatus(reportClientError("settings.tables.save", e, "Could not save table settings"));
     } finally {
       setSavingSeatingAreas(false);
       endAction("seatingAreas.save");
@@ -1048,7 +1049,7 @@ export default function Settings({
       window.dispatchEvent(new Event("service-modes-changed"));
       setTimeout(() => setServiceModeStatus(null), 4000);
     } catch (e: any) {
-      setServiceModeStatus("Save failed: " + (e?.message || String(e)));
+      setServiceModeStatus(reportClientError("settings.service-modes.save", e, "Could not save service modes"));
     } finally {
       setSavingServiceModes(false);
       endAction("serviceModes.save");
@@ -1106,7 +1107,7 @@ export default function Settings({
       setCategoryStatus("Saved \u2713");
       setTimeout(() => setCategoryStatus(null), 3000);
     } catch (e: any) {
-      setCategoryStatus("Save failed: " + (e?.message || String(e)));
+      setCategoryStatus(reportClientError("settings.categories.save", e, "Could not save categories"));
     }
     setSavingCategories(false);
     endAction("categories.save");
@@ -1163,7 +1164,7 @@ export default function Settings({
       setMenuVariantStatus("Saved ");
       setTimeout(() => setMenuVariantStatus(null), 3000);
     } catch (e: any) {
-      setMenuVariantStatus("Save failed: " + (e?.message || String(e)));
+      setMenuVariantStatus(reportClientError("settings.menu-variants.save", e, "Could not save menu variants"));
     }
     setSavingMenuVariantOptions(false);
     endAction("menuVariantOptions.save");
@@ -1180,7 +1181,7 @@ export default function Settings({
       setAuditStatus("Saved \u2713");
       setTimeout(() => setAuditStatus(null), 3000);
     } catch (e: any) {
-      setAuditStatus("Save failed: " + (e?.message || String(e)));
+      setAuditStatus(reportClientError("settings.audit.save", e, "Could not save audit settings"));
     }
     setSavingAudit(false);
     endAction("audit.save");
@@ -1197,7 +1198,7 @@ export default function Settings({
       setHistoryStatus("Saved \u2713");
       setTimeout(() => setHistoryStatus(null), 3000);
     } catch (e: any) {
-      setHistoryStatus("Save failed: " + (e?.message || String(e)));
+      setHistoryStatus(reportClientError("settings.history.save", e, "Could not save history settings"));
     }
     setSavingHistory(false);
     endAction("history.save");
@@ -1237,7 +1238,7 @@ export default function Settings({
       setShiftStatus("Saved ");
       setTimeout(() => setShiftStatus(null), 3000);
     } catch (e: any) {
-      setShiftStatus("Save failed: " + (e?.message || String(e)));
+      setShiftStatus(reportClientError("settings.shifts.save", e, "Could not save shift settings"));
     }
     setSavingShifts(false);
     endAction("attendance.shifts.save");
@@ -1263,7 +1264,7 @@ export default function Settings({
       setHolidayStatus("Saved ");
       setTimeout(() => setHolidayStatus(null), 3000);
     } catch (e: any) {
-      setHolidayStatus("Save failed: " + (e?.message || String(e)));
+      setHolidayStatus(reportClientError("settings.holidays.save", e, "Could not save holiday settings"));
     }
     setSavingHolidays(false);
     endAction("attendance.holidays.save");
@@ -1299,7 +1300,7 @@ export default function Settings({
       if (message === "admin-verification-required" || message === "admin-verification-failed") {
         setRecoveryStatus("Admin password verification failed.");
       } else {
-        setRecoveryStatus("Could not regenerate recovery codes.");
+        setRecoveryStatus(reportClientError("settings.recovery-codes", e, "Could not regenerate recovery codes."));
       }
     } finally {
       endAction("recovery.regenerate");

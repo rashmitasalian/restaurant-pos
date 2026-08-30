@@ -11,6 +11,7 @@ import {
 import { printKOT } from "../../../app/services/printer";
 import { AuthContext } from "../../context/AuthContext";
 import { formatKotAge, kotAgeTone } from "../../../shared/kotAge";
+import { validationMessage } from "../../../shared/validation";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
@@ -232,7 +233,10 @@ export default function KOTQueue() {
       console.error("Reprint failed:", e);
       if (k.pendingItems.length > 0) {
         try {
-          await markOrderKotFailed(k.orderId, e?.message || String(e));
+          await markOrderKotFailed(
+            k.orderId,
+            validationMessage(e, "print-failed"),
+          );
         } catch {}
       }
       setOrderErrors((prev) => ({
