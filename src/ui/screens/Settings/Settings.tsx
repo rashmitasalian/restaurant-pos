@@ -93,11 +93,16 @@ function mergeShiftConfig(input: AttendanceShiftConfig[]) {
 
 export default function Settings({
   embedded = false,
+  focusSection = "identity",
 }: {
   embedded?: boolean;
   focusSection?: string;
 } = {}) {
   const auth = React.useContext(AuthContext);
+  const sectionVisible = React.useCallback(
+    (section: string) => !embedded || focusSection === section,
+    [embedded, focusSection],
+  );
   const [kitchenIp, setKitchenIp] = React.useState("");
   const [counterIp, setCounterIp] = React.useState("");
   const [port, setPort] = React.useState<number>(9100);
@@ -253,15 +258,10 @@ export default function Settings({
   }, []);
 
   React.useEffect(() => {
+    if (!sectionVisible("identity")) {
+      return;
+    }
     (async () => {
-      try {
-        const cfg = await getConfigPrinters();
-        if (cfg) {
-          setKitchenIp(cfg.kitchenPrinterIp || "");
-          setCounterIp(cfg.counterPrinterIp || "");
-          setPort(cfg.printerPort || 9100);
-        }
-      } catch (e) {}
       try {
         const branding = await getConfigBranding();
         setHotelName(branding.hotelName || ENV.HOTEL_NAME);
@@ -272,6 +272,44 @@ export default function Settings({
         setHotelLogoDataUrl(typeof branding.logoDataUrl === "string" ? branding.logoDataUrl : null);
         setReceiptLogoRaster((branding.receiptLogoRaster as ReceiptLogoRaster | null) || null);
       } catch (e) {}
+      try {
+        const gstCfg = normalizeGstConfig(await getConfigGst());
+        setGstEnabled(gstCfg.enabled);
+        setGstin(gstCfg.gstin);
+        setGstLegalName(gstCfg.legalName);
+        setGstRegisteredAddress(gstCfg.registeredAddress);
+        setGstStateCode(gstCfg.stateCode);
+        setGstStateName(gstCfg.stateName);
+        setGstRate(gstCfg.gstRateBps / 100);
+        setGstPriceIncludesTax(gstCfg.priceIncludesTax);
+      } catch (e) {}
+    })();
+  }, [sectionVisible]);
+
+  React.useEffect(() => {
+    if (!sectionVisible("hardware")) {
+      return;
+    }
+    (async () => {
+      try {
+        const cfg = await getConfigPrinters();
+        if (cfg) {
+          setKitchenIp(cfg.kitchenPrinterIp || "");
+          setCounterIp(cfg.counterPrinterIp || "");
+          setPort(cfg.printerPort || 9100);
+        }
+      } catch (e) {}
+      await loadPrintQueue();
+      await loadBackups();
+      await loadUpdateSupport();
+    })();
+  }, [sectionVisible, loadBackups, loadPrintQueue, loadUpdateSupport]);
+
+  React.useEffect(() => {
+    if (!sectionVisible("operations")) {
+      return;
+    }
+    (async () => {
       try {
         const tCfg = await getConfigTables();
         if (tCfg) {
@@ -321,6 +359,21 @@ export default function Settings({
         setMenuVariantOptions(await getConfigMenuVariantOptions());
       } catch (e) {}
       try {
+        const shifts = await getConfigShifts();
+        setAttendanceShifts(mergeShiftConfig(shifts));
+      } catch (e) {}
+      try {
+        setAttendanceHolidays(await getConfigHolidays());
+      } catch (e) {}
+    })();
+  }, [sectionVisible]);
+
+  React.useEffect(() => {
+    if (!sectionVisible("retention")) {
+      return;
+    }
+    (async () => {
+      try {
         const auditCfg = await getConfigAudit();
         setRetentionDays(auditCfg.retentionDays);
       } catch (e) {}
@@ -328,29 +381,8 @@ export default function Settings({
         const historyCfg = await getConfigHistory();
         setHistoryRetentionDays(historyCfg.retentionDays);
       } catch (e) {}
-      try {
-        const shifts = await getConfigShifts();
-        setAttendanceShifts(mergeShiftConfig(shifts));
-      } catch (e) {}
-      try {
-        setAttendanceHolidays(await getConfigHolidays());
-      } catch (e) {}
-      try {
-        const gstCfg = normalizeGstConfig(await getConfigGst());
-        setGstEnabled(gstCfg.enabled);
-        setGstin(gstCfg.gstin);
-        setGstLegalName(gstCfg.legalName);
-        setGstRegisteredAddress(gstCfg.registeredAddress);
-        setGstStateCode(gstCfg.stateCode);
-        setGstStateName(gstCfg.stateName);
-        setGstRate(gstCfg.gstRateBps / 100);
-        setGstPriceIncludesTax(gstCfg.priceIncludesTax);
-      } catch (e) {}
-      await loadPrintQueue();
-      await loadBackups();
-      await loadUpdateSupport();
     })();
-  }, [loadBackups, loadPrintQueue, loadUpdateSupport]);
+  }, [sectionVisible]);
 
   const isValidIpOrHost = (s: string) => {
     if (!s.trim()) {
@@ -1285,6 +1317,8 @@ export default function Settings({
     <div className={embedded ? undefined : "pos-page pos-page-sm"}>
       {!embedded && <PageHeader title="Settings" subtitle="Configure your POS system" />}
 
+      {sectionVisible("identity") && (
+      <>
       {auth?.session?.role === "admin" && (
         <div
           className="pos-card pos-card-p"
@@ -1753,7 +1787,11 @@ export default function Settings({
           )}
         </div>
       </div>
+      </>
+      )}
 
+      {sectionVisible("hardware") && (
+      <>
       {/* Printers Section */}
       <div
         className="pos-card pos-card-p"
@@ -2287,7 +2325,11 @@ export default function Settings({
           </div>
         )}
       </div>
+      </>
+      )}
 
+      {sectionVisible("operations") && (
+      <>
       {/* ── Tables Section ─────────────────────────────────────────────── */}
       <div
         className="pos-card pos-card-p"
@@ -3194,7 +3236,11 @@ export default function Settings({
           ) : null}
         </div>
       </div>
+      </>
+      )}
 
+      {sectionVisible("retention") && (
+      <>
       {/* Audit Retention Section */}
       <div
         className="pos-card pos-card-p"
@@ -3354,6 +3400,8 @@ export default function Settings({
           )}
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 }

@@ -346,6 +346,7 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", () => {
+  destroyPdfExportWindow();
   closeDb();
 });
 
@@ -409,76 +410,107 @@ ipcMain.handle("log:write", async (event, token: string | null, level: string, m
   return { ok: true };
 });
 
+let pdfExportWindow: BrowserWindow | null = null;
+let pdfExportChain: Promise<unknown> = Promise.resolve();
+
+function getPdfExportWindow(): BrowserWindow {
+  if (pdfExportWindow && !pdfExportWindow.isDestroyed()) {
+    return pdfExportWindow;
+  }
+  pdfExportWindow = new BrowserWindow({
+    show: false,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true,
+      javascript: false,
+      allowRunningInsecureContent: false,
+    },
+  });
+  denyPopupWindows(pdfExportWindow.webContents);
+  bindRendererNavigationGuard(pdfExportWindow.webContents);
+  return pdfExportWindow;
+}
+
+function destroyPdfExportWindow() {
+  if (pdfExportWindow && !pdfExportWindow.isDestroyed()) {
+    pdfExportWindow.destroy();
+  }
+  pdfExportWindow = null;
+}
+
+async function loadHtmlIntoPdfWindow(pdfWin: BrowserWindow, htmlFile: string) {
+  await new Promise<void>((resolve, reject) => {
+    const onLoad = () => {
+      cleanup();
+      resolve();
+    };
+    const onFail = (_e: Electron.Event, code: number, desc: string) => {
+      cleanup();
+      reject(new Error(`Page load failed: ${desc} (${code})`));
+    };
+    const cleanup = () => {
+      pdfWin.webContents.removeListener("did-finish-load", onLoad);
+      pdfWin.webContents.removeListener("did-fail-load", onFail);
+    };
+    pdfWin.webContents.once("did-finish-load", onLoad);
+    pdfWin.webContents.once("did-fail-load", onFail);
+    void pdfWin.loadFile(htmlFile);
+  });
+}
+
 // Report PDF export: render HTML to PDF via printToPDF and save via native save dialog
 ipcMain.handle("report:exportPdf", async (event, token: string | null, html: string, defaultFileName: string) => {
   requireMainSession(event, token, ["admin"]);
-  let pdfWin: BrowserWindow | null = null;
-  let tmpFile: string | null = null;
-  try {
-    const os = require("os");
-    tmpFile = path.join(os.tmpdir(), `pos-report-${Date.now()}.html`);
-    fs.writeFileSync(tmpFile, html, "utf-8");
+  const runExport = async () => {
+    let tmpFile: string | null = null;
+    try {
+      const os = require("os");
+      tmpFile = path.join(os.tmpdir(), `pos-report-${Date.now()}.html`);
+      fs.writeFileSync(tmpFile, html, "utf-8");
 
-    pdfWin = new BrowserWindow({
-      show: false,
-      webPreferences: {
-        contextIsolation: true,
-        nodeIntegration: false,
-        sandbox: true,
-        webSecurity: true,
-        javascript: false,
-        allowRunningInsecureContent: false,
-      },
-    });
-    pdfWin.webContents.once("did-finish-load", () => {
-      pdfWin!.webContents.on("will-navigate", (navEvent) => navEvent.preventDefault());
-      pdfWin!.webContents.on("will-redirect", (redirectEvent) => redirectEvent.preventDefault());
-    });
+      const pdfWin = getPdfExportWindow();
+      await loadHtmlIntoPdfWindow(pdfWin, tmpFile);
 
-    await new Promise<void>((resolve, reject) => {
-      pdfWin!.webContents.once("did-finish-load", resolve);
-      pdfWin!.webContents.once("did-fail-load", (_e, code, desc) =>
-        reject(new Error(`Page load failed: ${desc} (${code})`)),
-      );
-      pdfWin!.loadFile(tmpFile!);
-    });
+      const pdfBuffer = await pdfWin.webContents.printToPDF({
+        printBackground: true,
+        pageSize: "A4",
+        margins: { marginType: "custom", top: 0.4, bottom: 0.4, left: 0.4, right: 0.4 },
+      });
 
-    const pdfBuffer = await pdfWin.webContents.printToPDF({
-      printBackground: true,
-      pageSize: "A4",
-      margins: { marginType: "custom", top: 0.4, bottom: 0.4, left: 0.4, right: 0.4 },
-    });
+      const timestamp = new Date().toISOString().slice(0, 10);
+      const safeName = defaultFileName.replace(/[^a-z0-9\-_]/gi, "-").toLowerCase();
+      const defaultPath = path.join(app.getPath("documents"), `${safeName}-${timestamp}.pdf`);
 
-    const timestamp = new Date().toISOString().slice(0, 10);
-    const safeName = defaultFileName.replace(/[^a-z0-9\-_]/gi, "-").toLowerCase();
-    const defaultPath = path.join(app.getPath("documents"), `${safeName}-${timestamp}.pdf`);
+      const result = await dialog.showSaveDialog(mainWindow!, {
+        title: "Save PDF",
+        defaultPath,
+        filters: [{ name: "PDF Document", extensions: ["pdf"] }],
+      });
 
-    const result = await dialog.showSaveDialog(mainWindow!, {
-      title: "Save PDF",
-      defaultPath,
-      filters: [{ name: "PDF Document", extensions: ["pdf"] }],
-    });
+      if (result.canceled || !result.filePath) {
+        return { ok: false, reason: "cancelled" };
+      }
 
-    if (result.canceled || !result.filePath) {
-      return { ok: false, reason: "cancelled" };
-    }
-
-    fs.writeFileSync(result.filePath, pdfBuffer);
-    console.log(`[REPORT-PDF] Saved to ${result.filePath}`);
-    return { ok: true, path: result.filePath };
-  } catch (err: any) {
-    console.error("[REPORT-PDF] Failed:", err);
-    return { ok: false, error: (err && err.message) || String(err) };
-  } finally {
-    if (pdfWin && !pdfWin.isDestroyed()) {
-pdfWin.destroy();
-}
-    if (tmpFile) {
-      try {
-        fs.unlinkSync(tmpFile);
-      } catch (_) {
-        /* best-effort */
+      fs.writeFileSync(result.filePath, pdfBuffer);
+      console.log(`[REPORT-PDF] Saved to ${result.filePath}`);
+      return { ok: true, path: result.filePath };
+    } catch (err: any) {
+      console.error("[REPORT-PDF] Failed:", err);
+      return { ok: false, error: (err && err.message) || String(err) };
+    } finally {
+      if (tmpFile) {
+        try {
+          fs.unlinkSync(tmpFile);
+        } catch (_) {
+          /* best-effort */
+        }
       }
     }
-  }
+  };
+
+  const exportPromise = pdfExportChain.then(runExport, runExport);
+  pdfExportChain = exportPromise.catch(() => undefined);
+  return exportPromise;
 });

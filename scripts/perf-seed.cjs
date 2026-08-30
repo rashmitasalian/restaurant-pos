@@ -29,6 +29,12 @@ function parseArgs(argv) {
     printJobs: 500,
     staff: 100,
     days: 180,
+    groceryItems: 80,
+    groceryLists: 90,
+    vendors: 25,
+    expenses: 400,
+    attendanceDays: 90,
+    salaryAdvances: 250,
     seed: null,
     anchor: null,
   };
@@ -61,6 +67,18 @@ function parseArgs(argv) {
       parsed.staff = parseNonNegativeInt(value, "staff");
     } else if (rawKey === "days") {
       parsed.days = parsePositiveInt(value, "days");
+    } else if (rawKey === "grocery-items") {
+      parsed.groceryItems = parseNonNegativeInt(value, "grocery-items");
+    } else if (rawKey === "grocery-lists") {
+      parsed.groceryLists = parseNonNegativeInt(value, "grocery-lists");
+    } else if (rawKey === "vendors") {
+      parsed.vendors = parseNonNegativeInt(value, "vendors");
+    } else if (rawKey === "expenses") {
+      parsed.expenses = parseNonNegativeInt(value, "expenses");
+    } else if (rawKey === "attendance-days") {
+      parsed.attendanceDays = parseNonNegativeInt(value, "attendance-days");
+    } else if (rawKey === "salary-advances") {
+      parsed.salaryAdvances = parseNonNegativeInt(value, "salary-advances");
     } else if (rawKey === "seed") {
       parsed.seed = String(value || "").trim();
     } else if (rawKey === "anchor") {
@@ -223,8 +241,20 @@ function removeExistingDatabase() {
 
 function clearPerfTables(database) {
   database.exec(`
+    DELETE FROM grocery_purchase_lines;
+    DELETE FROM grocery_purchases;
+    DELETE FROM grocery_list_lines;
+    DELETE FROM grocery_lists;
+    DELETE FROM grocery_list_template_lines;
+    DELETE FROM grocery_list_templates;
+    DELETE FROM grocery_items;
+    DELETE FROM expenses;
+    DELETE FROM salary_advances;
+    DELETE FROM attendance_records;
+    DELETE FROM vendors;
     DELETE FROM payments;
     DELETE FROM order_lines;
+    DELETE FROM menu_item_variants;
     DELETE FROM orders;
     DELETE FROM menu_items;
     DELETE FROM menu_categories;
@@ -360,8 +390,8 @@ function seedStaff(database, count, rng, anchorMs) {
   const insert = database.prepare(`
     INSERT INTO staff (
       id, name, phone, designation, joining_date, salary_paise, address, notes,
-      photo_mime, photo_base64, active, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?)
+      photo_mime, photo_base64, weekly_off_days, default_shift_id, active, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, 'morning', ?, ?, ?)
   `);
   const designations = ["Cashier", "Server", "Chef", "Manager", "Kitchen Assistant"];
 
@@ -377,6 +407,7 @@ function seedStaff(database, count, rng, anchorMs) {
       rupeesToPaise(randomInt(rng, 12000, 55000)),
       `${randomInt(rng, 1, 250)} Staff Colony`,
       null,
+      JSON.stringify(index % 5 === 0 ? [0] : []),
       index % 12 === 0 ? 0 : 1,
       createdAt,
       createdAt,
@@ -461,6 +492,334 @@ function seedPrintJobs(database, count, rng, anchorMs, orderCount) {
 
 function phoneNumber(prefix, index) {
   return `${prefix}${String(index).padStart(9, "0").slice(-9)}`;
+}
+
+function localDateFromMs(ms) {
+  const date = new Date(ms);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function startOfLocalDay(ms) {
+  const date = new Date(ms);
+  date.setHours(0, 0, 0, 0);
+  return date.getTime();
+}
+
+function seedVendors(database, count, rng, nowMs) {
+  const insert = database.prepare(`
+    INSERT INTO vendors (
+      id, name, contact_person, phone, email, address, gstin, notes,
+      active, created_by, created_at, updated_at, deleted_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 'perfadmin', ?, ?, NULL)
+  `);
+  const vendors = [];
+  for (let index = 1; index <= count; index += 1) {
+    const vendor = {
+      id: `perf:vendor:${pad(index, 3)}`,
+      name: `Vendor ${pad(index, 2)}`,
+    };
+    insert.run(
+      vendor.id,
+      vendor.name,
+      `Contact ${pad(index, 2)}`,
+      phoneNumber(6, index),
+      `vendor${pad(index, 2)}@example.test`,
+      `${randomInt(rng, 1, 90)} Wholesale Road`,
+      index % 4 === 0 ? `27AAAAA${pad(index, 4)}A1Z5` : null,
+      index % 7 === 0 ? "Prefers morning delivery" : null,
+      nowMs,
+      nowMs,
+    );
+    vendors.push(vendor);
+  }
+  return vendors;
+}
+
+function seedGroceryItems(database, count, rng, nowMs) {
+  const insert = database.prepare(`
+    INSERT INTO grocery_items (
+      id, name, category, default_unit, default_quantity, vendor_hint, active, created_at, updated_at, deleted_at
+    ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, NULL)
+  `);
+  const categories = ["Vegetables", "Dairy", "Spices", "Grains", "Oil", "Packaging", "Cleaning"];
+  const units = ["kg", "g", "L", "ml", "unit", "packet", "box", "dozen", "bunch"];
+  const items = [];
+  for (let index = 1; index <= count; index += 1) {
+    const item = {
+      id: `perf:grocery-item:${pad(index, 4)}`,
+      name: `Grocery ${pad(index, 3)}`,
+      category: categories[(index - 1) % categories.length],
+      unit: units[(index - 1) % units.length],
+    };
+    insert.run(
+      item.id,
+      item.name,
+      item.category,
+      item.unit,
+      randomInt(rng, 1, 10),
+      index % 3 === 0 ? `Vendor ${pad((index % 25) + 1, 2)}` : null,
+      nowMs,
+      nowMs,
+    );
+    items.push(item);
+  }
+  return items;
+}
+
+function seedGroceryLists(database, count, groceryItems, vendors, rng, opsAnchorMs) {
+  if (!count || !groceryItems.length) {
+    return { listCount: 0, lineCount: 0, purchaseCount: 0, purchaseLineCount: 0 };
+  }
+  const insertList = database.prepare(`
+    INSERT INTO grocery_lists (
+      id, title, list_date, list_type, status, notes, created_by, updated_by,
+      completed_at, print_count, last_printed_at, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, 'perfadmin', 'perfadmin', ?, ?, ?, ?, ?)
+  `);
+  const insertLine = database.prepare(`
+    INSERT INTO grocery_list_lines (
+      id, list_id, grocery_item_id, item_name, category, quantity, unit, vendor_hint,
+      sort_order, estimated_unit_price_paise, estimated_total_paise, purchased_quantity,
+      purchased_unit_price_paise, purchased_total_paise, line_status, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const insertPurchase = database.prepare(`
+    INSERT INTO grocery_purchases (
+      id, buying_list_id, vendor_id, purchase_date, invoice_number, payment_method,
+      status, payment_status, amount_paid_paise, subtotal_paise, tax_paise, total_paise,
+      notes, migration_source, created_by, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, 'recorded', 'paid', ?, ?, 0, ?, NULL, NULL, 'perfadmin', ?, ?)
+  `);
+  const insertPurchaseLine = database.prepare(`
+    INSERT INTO grocery_purchase_lines (
+      id, purchase_id, list_id, grocery_item_id, item_name, category, quantity, unit,
+      unit_price_paise, total_paise, vendor, vendor_id, payment_method, notes,
+      purchased_at, created_by, active, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, 'perfadmin', 1, ?, ?)
+  `);
+
+  const types = ["regular", "regular", "refill", "emergency", "custom"];
+  const statuses = ["draft", "open", "partial", "completed", "completed"];
+  const methods = ["cash", "upi", "card", "online"];
+  const dayStart = startOfLocalDay(opsAnchorMs);
+  let lineCount = 0;
+  let purchaseCount = 0;
+  let purchaseLineCount = 0;
+
+  for (let index = 1; index <= count; index += 1) {
+    const dayOffset = (index - 1) % Math.max(1, Math.min(count, 90));
+    const listDate = dayStart - dayOffset * DAY_MS + randomInt(rng, 8 * 60 * 60 * 1000, 12 * 60 * 60 * 1000);
+    const status = pick(rng, statuses);
+    const listId = `perf:grocery-list:${pad(index, 4)}`;
+    const completedAt = status === "completed" ? listDate + randomInt(rng, 2 * 60 * 60 * 1000, 8 * 60 * 60 * 1000) : null;
+    insertList.run(
+      listId,
+      `Buying List ${pad(index, 3)}`,
+      listDate,
+      pick(rng, types),
+      status,
+      index % 8 === 0 ? "Morning market run" : null,
+      completedAt,
+      status === "completed" ? 1 : 0,
+      status === "completed" ? listDate : null,
+      listDate,
+      completedAt || listDate,
+    );
+
+    const linesOnList = randomInt(rng, 4, 12);
+    const purchasedLines = [];
+    for (let lineIndex = 0; lineIndex < linesOnList; lineIndex += 1) {
+      const item = groceryItems[(index + lineIndex) % groceryItems.length];
+      const quantity = randomInt(rng, 1, 8);
+      const unitPricePaise = rupeesToPaise(randomInt(rng, 20, 280));
+      const estimatedTotalPaise = quantity * unitPricePaise;
+      const lineStatus =
+        status === "completed" ? "purchased" : status === "partial" && lineIndex < Math.ceil(linesOnList / 2) ? "purchased" : "pending";
+      const purchasedQty = lineStatus === "purchased" ? quantity : null;
+      const purchasedTotal = lineStatus === "purchased" ? estimatedTotalPaise : null;
+      insertLine.run(
+        `perf:grocery-line:${pad(index, 4)}:${pad(lineIndex + 1, 2)}`,
+        listId,
+        item.id,
+        item.name,
+        item.category,
+        quantity,
+        item.unit,
+        item.name,
+        lineIndex,
+        unitPricePaise,
+        estimatedTotalPaise,
+        purchasedQty,
+        lineStatus === "purchased" ? unitPricePaise : null,
+        purchasedTotal,
+        lineStatus,
+        listDate,
+        listDate,
+      );
+      lineCount += 1;
+      if (lineStatus === "purchased") {
+        purchasedLines.push({ item, quantity, unitPricePaise, estimatedTotalPaise });
+      }
+    }
+
+    if (purchasedLines.length && vendors.length) {
+      const vendor = vendors[(index - 1) % vendors.length];
+      const purchaseId = `perf:grocery-purchase:${pad(index, 4)}`;
+      const subtotalPaise = purchasedLines.reduce((sum, line) => sum + line.estimatedTotalPaise, 0);
+      const method = pick(rng, methods);
+      const purchaseDate = completedAt || listDate + 3 * 60 * 60 * 1000;
+      insertPurchase.run(
+        purchaseId,
+        listId,
+        vendor.id,
+        purchaseDate,
+        `GRN-${pad(index, 4)}`,
+        method,
+        subtotalPaise,
+        subtotalPaise,
+        subtotalPaise,
+        purchaseDate,
+        purchaseDate,
+      );
+      purchaseCount += 1;
+      purchasedLines.forEach((line, lineIndex) => {
+        insertPurchaseLine.run(
+          `perf:grocery-pline:${pad(index, 4)}:${pad(lineIndex + 1, 2)}`,
+          purchaseId,
+          listId,
+          line.item.id,
+          line.item.name,
+          line.item.category,
+          line.quantity,
+          line.item.unit,
+          line.unitPricePaise,
+          line.estimatedTotalPaise,
+          vendor.name,
+          vendor.id,
+          method,
+          purchaseDate,
+          purchaseDate,
+          purchaseDate,
+        );
+        purchaseLineCount += 1;
+      });
+    }
+  }
+
+  return { listCount: count, lineCount, purchaseCount, purchaseLineCount };
+}
+
+function seedExpenses(database, count, vendors, rng, opsAnchorMs) {
+  const categories = database
+    .prepare("SELECT id FROM expense_categories WHERE deleted_at IS NULL ORDER BY sort_order")
+    .all()
+    .map((row) => row.id);
+  if (!count || !categories.length) {
+    return 0;
+  }
+  const insert = database.prepare(`
+    INSERT INTO expenses (
+      id, category_id, amount_paise, expense_date, vendor_id, description, payment_method,
+      invoice_number, recurring_expense_id, created_by, created_at, updated_at, deleted_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, 'perfadmin', ?, ?, NULL)
+  `);
+  const methods = ["cash", "upi", "card", "online"];
+  const dayStart = startOfLocalDay(opsAnchorMs);
+  for (let index = 1; index <= count; index += 1) {
+    const dayOffset = (index - 1) % Math.max(1, Math.min(count, 180));
+    const expenseDate = dayStart - dayOffset * DAY_MS + randomInt(rng, 9 * 60 * 60 * 1000, 18 * 60 * 60 * 1000);
+    const vendor = vendors.length && index % 3 === 0 ? vendors[index % vendors.length] : null;
+    insert.run(
+      `perf:expense:${pad(index, 5)}`,
+      categories[(index - 1) % categories.length],
+      rupeesToPaise(randomInt(rng, 250, 18000)),
+      expenseDate,
+      vendor ? vendor.id : null,
+      `Expense ${pad(index, 5)}`,
+      pick(rng, methods),
+      index % 4 === 0 ? `EXP-${pad(index, 5)}` : null,
+      expenseDate,
+      expenseDate,
+    );
+  }
+  return count;
+}
+
+function seedAttendance(database, staffCount, days, rng, opsAnchorMs) {
+  if (!staffCount || !days) {
+    return 0;
+  }
+  const insert = database.prepare(`
+    INSERT INTO attendance_records (
+      id, staff_id, attendance_date, shift_id, status, is_late, check_in_time, check_out_time,
+      break_minutes, worked_minutes, overtime_minutes, remarks, created_by, created_on, updated_by, updated_on
+    ) VALUES (?, ?, ?, 'morning', ?, ?, ?, ?, ?, ?, ?, ?, 'perfadmin', ?, 'perfadmin', ?)
+  `);
+  const statuses = ["present", "present", "present", "present", "absent", "half-day", "leave", "holiday"];
+  const dayStart = startOfLocalDay(opsAnchorMs);
+  let count = 0;
+  for (let staffIndex = 1; staffIndex <= staffCount; staffIndex += 1) {
+    if (staffIndex % 12 === 0) {
+      continue;
+    }
+    const staffId = `perf:staff:${pad(staffIndex, 4)}`;
+    for (let dayIndex = 0; dayIndex < days; dayIndex += 1) {
+      const dateMs = dayStart - dayIndex * DAY_MS;
+      const attendanceDate = localDateFromMs(dateMs);
+      const status = pick(rng, statuses);
+      const isWorking = status === "present" || status === "half-day";
+      const worked = status === "present" ? 480 : status === "half-day" ? 240 : 0;
+      insert.run(
+        `perf:attendance:${pad(staffIndex, 4)}:${attendanceDate}`,
+        staffId,
+        attendanceDate,
+        status,
+        isWorking && rng() < 0.12 ? 1 : 0,
+        isWorking ? "09:00" : null,
+        isWorking ? (status === "half-day" ? "13:00" : "18:00") : null,
+        isWorking ? 30 : 0,
+        worked,
+        status === "present" && rng() < 0.15 ? randomInt(rng, 15, 90) : 0,
+        status === "leave" ? "Personal" : null,
+        dateMs,
+        dateMs,
+      );
+      count += 1;
+    }
+  }
+  return count;
+}
+
+function seedSalaryAdvances(database, count, staffCount, rng, opsAnchorMs) {
+  if (!count || !staffCount) {
+    return 0;
+  }
+  const insert = database.prepare(`
+    INSERT INTO salary_advances (
+      id, staff_id, amount_paise, advance_date, note, created_by, created_at, updated_at, deleted_at
+    ) VALUES (?, ?, ?, ?, ?, 'perfadmin', ?, ?, NULL)
+  `);
+  const dayStart = startOfLocalDay(opsAnchorMs);
+  for (let index = 1; index <= count; index += 1) {
+    const staffIndex = ((index - 1) % staffCount) + 1;
+    if (staffIndex % 12 === 0) {
+      continue;
+    }
+    const advanceDate = dayStart - ((index - 1) % 90) * DAY_MS + randomInt(rng, 10 * 60 * 60 * 1000, 16 * 60 * 60 * 1000);
+    insert.run(
+      `perf:advance:${pad(index, 4)}`,
+      `perf:staff:${pad(staffIndex, 4)}`,
+      rupeesToPaise(randomInt(rng, 500, 8000)),
+      advanceDate,
+      index % 4 === 0 ? "Festival advance" : null,
+      advanceDate,
+      advanceDate,
+    );
+  }
+  return count;
 }
 
 function entityIdForAudit(entityType, rng, orderCount, itemCount, customerCount, staffCount) {
@@ -622,6 +981,7 @@ async function main() {
   database.pragma("synchronous = NORMAL");
 
   const startedAt = Date.now();
+  const opsAnchorMs = Date.now();
   const result = database.transaction(() => {
     clearPerfTables(database);
     seedPerfAdmin(database, anchorMs);
@@ -642,7 +1002,47 @@ async function main() {
       staffCount,
     );
     const printJobCount = seedPrintJobs(database, opts.printJobs, rng, anchorMs, opts.orders);
-    return { ...orderResult, customerCount, staffCount, auditCount, printJobCount };
+    const vendors = seedVendors(database, opts.vendors, rng, opsAnchorMs);
+    const groceryItems = seedGroceryItems(database, opts.groceryItems, rng, opsAnchorMs);
+    const grocery = seedGroceryLists(
+      database,
+      opts.groceryLists,
+      groceryItems,
+      vendors,
+      rng,
+      opsAnchorMs,
+    );
+    const expenseCount = seedExpenses(database, opts.expenses, vendors, rng, opsAnchorMs);
+    const attendanceCount = seedAttendance(
+      database,
+      staffCount,
+      opts.attendanceDays,
+      rng,
+      opsAnchorMs,
+    );
+    const advanceCount = seedSalaryAdvances(
+      database,
+      opts.salaryAdvances,
+      staffCount,
+      rng,
+      opsAnchorMs,
+    );
+    return {
+      ...orderResult,
+      customerCount,
+      staffCount,
+      auditCount,
+      printJobCount,
+      vendorCount: vendors.length,
+      groceryItemCount: groceryItems.length,
+      groceryListCount: grocery.listCount,
+      groceryLineCount: grocery.lineCount,
+      groceryPurchaseCount: grocery.purchaseCount,
+      groceryPurchaseLineCount: grocery.purchaseLineCount,
+      expenseCount,
+      attendanceCount,
+      advanceCount,
+    };
   })();
 
   closeDb();
@@ -656,10 +1056,20 @@ async function main() {
   console.log(`Customers: ${result.customerCount}`);
   console.log(`Staff: ${result.staffCount}`);
   console.log(`Print jobs: ${result.printJobCount}`);
+  console.log(`Vendors: ${result.vendorCount}`);
+  console.log(`Grocery items: ${result.groceryItemCount}`);
+  console.log(`Grocery lists: ${result.groceryListCount}`);
+  console.log(`Grocery list lines: ${result.groceryLineCount}`);
+  console.log(`Grocery purchases: ${result.groceryPurchaseCount}`);
+  console.log(`Grocery purchase lines: ${result.groceryPurchaseLineCount}`);
+  console.log(`Expenses: ${result.expenseCount}`);
+  console.log(`Attendance records: ${result.attendanceCount}`);
+  console.log(`Salary advances: ${result.advanceCount}`);
   console.log(`Perf admin: ${PERF_ADMIN_USERNAME} / ${PERF_ADMIN_PASSWORD}`);
   console.log(`Sales: ${formatMoney(result.salesPaiseTotal)}`);
   console.log(`Days: ${opts.days}`);
-  console.log(`Anchor: ${new Date(anchorMs).toISOString().slice(0, 10)}`);
+  console.log(`Sales anchor: ${new Date(anchorMs).toISOString().slice(0, 10)}`);
+  console.log(`Operations anchor: ${localDateFromMs(opsAnchorMs)}`);
   if (opts.seed) {
     console.log(`Seed: ${opts.seed}`);
   }

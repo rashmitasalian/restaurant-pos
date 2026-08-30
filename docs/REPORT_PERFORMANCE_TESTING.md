@@ -54,27 +54,32 @@ data/perf/latest-report.txt
 
 This layer opens the real Electron renderer against the perf database.
 
-It benchmarks:
+It benchmarks, starting from the login page:
 
 - app startup timing
 - DB initialization timing
-- first screen ready timing
-- login timing
-- time to open major pages
+- login page ready timing
+- login submit timing
+- time to open every top-level page and Manage section
+- in-page tabs: Reports Profitability, Attendance History, Salary Advances Transactions, Settings Hardware / Operations / Retention
+- Grocery tabs: Buying Lists, Purchases, Vendors, Grocery Items
+- People tabs: Attendance, Roster, Salary Advances, Accounts
 - renderer responsiveness for search/filter inputs
 - Billing UI workflow: open table, add items, pay order
-- Reports PDF export total timing
-- Reports PDF breakdown: renderer HTML handoff, temp HTML write, Electron HTML load, and `printToPDF`
+- Reports PDF export total timing and breakdown
 - Audit CSV export timing
+- full app walk of every page and tab
 - repeated navigation through heavy pages
+- mixed service-layer load burst (`perf:app`)
 - rolled-back day simulation
-- memory checkpoints after login, page navigation, search tests, billing workflow, PDF export, repeated navigation, and day simulation
+- memory checkpoints after login, page navigation, tab tests, search tests, billing workflow, PDF export, full walk, repeated navigation, and day simulation
 
 It saves the report to:
 
 ```text
 data/perf/ui-report-YYYY-MM-DD-HH-MM-SS.txt
 data/perf/latest-ui-report.txt
+data/perf/latest-ui-report.json
 ```
 
 ## Default Dataset
@@ -91,6 +96,12 @@ Running the seed script with no size options creates:
 500 print jobs
 1 perf admin user
 180 days of sales history
+80 grocery items
+90 grocery lists
+25 vendors
+400 expenses
+90 days of attendance
+250 salary advances
 ```
 
 Each order has realistic order lines, stored item/category snapshots, final totals, and completed payments.
@@ -128,10 +139,17 @@ Run all commands from the repo root:
 cd C:\workspace\POS\restaurant-pos
 ```
 
-Run the default performance test:
+Run the default performance test (seed + service layer):
 
 ```powershell
 npm run perf
+```
+
+Run seed, service layer, and Electron UI together:
+
+```powershell
+npm run build:renderer
+npm run perf:all
 ```
 
 Run a reproducible benchmark:
@@ -223,6 +241,12 @@ npm run lint -- --quiet
 --staff <number>        Number of staff rows to generate. Default: 100
 --print-jobs <number>   Number of print queue rows to generate. Default: 500
 --days <number>         Number of days to spread sales across. Default: 180
+--grocery-items <n>     Grocery catalog items. Default: 80
+--grocery-lists <n>     Buying lists (with lines and purchases). Default: 90
+--vendors <number>      Vendors. Default: 25
+--expenses <number>     Operating expenses. Default: 400
+--attendance-days <n>   Attendance days per active staff member. Default: 90
+--salary-advances <n>   Salary advance rows. Default: 250
 --seed <value>          Deterministic random seed.
 --anchor YYYY-MM-DD     Anchor date for generated sales.
 ```
@@ -235,6 +259,7 @@ When `--seed` is provided and no `--anchor` is provided, the script uses a fixed
 --iterations <number>      Measured benchmark iterations. Default: 20
 --warmups <number>         Warmup iterations before measuring. Default: 3
 --history-limit <number>   Paid order history rows to load. Default: 25
+--load-cycles <number>     Mixed busy-terminal read burst size. Default: 50
 --output <path>            Optional output file path for the saved text report.
 ```
 

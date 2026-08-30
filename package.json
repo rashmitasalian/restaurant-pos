@@ -23,6 +23,7 @@
     "perf:app": "node scripts/perf-reports.cjs",
     "perf:ui": "node scripts/perf-ui.cjs",
     "perf": "npm run perf:seed && npm run perf:app",
+    "perf:all": "npm run perf:seed && npm run perf:app && npm run perf:ui",
     "audit": "npm audit --audit-level=low",
     "audit:json": "npm audit --json > audit.json",
     "audit:fix": "npm audit fix"

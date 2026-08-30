@@ -15,6 +15,7 @@ function parseArgs(argv) {
     warmups: 3,
     iterations: 20,
     historyLimit: 25,
+    loadCycles: 50,
     output: null,
   };
 
@@ -35,6 +36,8 @@ function parseArgs(argv) {
       parsed.iterations = parsePositiveInt(value, "iterations");
     } else if (rawKey === "history-limit") {
       parsed.historyLimit = parsePositiveInt(value, "history-limit");
+    } else if (rawKey === "load-cycles") {
+      parsed.loadCycles = parsePositiveInt(value, "load-cycles");
     } else if (rawKey === "output") {
       parsed.output = path.resolve(String(value || "").trim());
     } else {
@@ -403,9 +406,54 @@ function getAuditRange(database) {
   return { from: minTimestamp, to: maxTimestamp };
 }
 
-function writeBenchmarkResult(report, name, label, result, targetMs) {
+function writeJsonReport(outputPath, payload) {
+  const jsonPath = outputPath.replace(/\.txt$/i, ".json");
+  fs.writeFileSync(jsonPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+  fs.writeFileSync(path.join(PERF_DIR, "latest-report.json"), `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+  return jsonPath;
+}
+
+function todayDateOnly() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
+
+function shiftDateOnly(dateText, days) {
+  const [year, month, day] = String(dateText).split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+  date.setDate(date.getDate() + days);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function createMixedLoadBurst(posService, range, cycles) {
+  const today = todayDateOnly();
+  return () => {
+    for (let index = 0; index < cycles; index += 1) {
+      posService.getTables();
+      posService.getOpenOrders();
+      posService.getItems();
+      if (index % 2 === 0) {
+        posService.getSalesSummary(range);
+        posService.listAttendance({ date: today });
+      }
+      if (index % 3 === 0) {
+        posService.listPaidOrders({ ...range, limit: 25, offset: 0 });
+        posService.listExpenses({ ...range, limit: 50 });
+      }
+      if (index % 5 === 0) {
+        posService.getProductSalesReport(range);
+        posService.getAudits({ limit: 25, offset: 0 });
+        posService.listGroceryLists({ limit: 30 });
+      }
+    }
+    return { rows: cycles };
+  };
+}
+
+function writeBenchmarkResult(report, records, name, label, result, targetMs) {
   const overTarget = result.stats.p95 > targetMs;
-  report.line(label ? `${name} (${label})` : name);
+  const displayName = label ? `${name} (${label})` : name;
+  report.line(displayName);
   report.line(`Avg: ${formatMs(result.stats.avg)}`);
   report.line(`P95: ${formatMs(result.stats.p95)}`);
   report.line(`Max: ${formatMs(result.stats.max)}`);
@@ -415,6 +463,17 @@ function writeBenchmarkResult(report, name, label, result, targetMs) {
   } else {
     report.line(`Guideline: OK (P95 under ${formatMs(targetMs)})`);
   }
+  records.push({
+    layer: "service",
+    group: label || "Application Workflows",
+    name: displayName,
+    avg: Number(result.stats.avg.toFixed(1)),
+    p95: Number(result.stats.p95.toFixed(1)),
+    max: Number(result.stats.max.toFixed(1)),
+    rows: result.rows,
+    targetMs,
+    guideline: overTarget ? "REVIEW" : "OK",
+  });
   return overTarget;
 }
 
@@ -436,12 +495,14 @@ async function main() {
   const ranges = getRanges(getDataBounds(database));
   let failed = false;
   let reviewCount = 0;
+  const records = [];
   const report = createReportLogger();
   const outputPath = opts.output || path.join(PERF_DIR, `report-${timestampForFileName()}.txt`);
 
   report.line(`Performance database: ${PERF_DB_PATH}`);
   report.line(`Iterations: ${opts.iterations}`);
   report.line(`Warmups: ${opts.warmups}`);
+  report.line(`Load cycles: ${opts.loadCycles}`);
   report.line("Targets are guidelines, not build blockers.");
   report.line("");
 
@@ -462,6 +523,10 @@ async function main() {
         run: () => posService.getProductSalesReport(range.opts),
       },
       {
+        name: "Profitability",
+        run: () => posService.getProfitabilitySummary(range.opts),
+      },
+      {
         name: "Order History List",
         run: () => posService.listPaidOrders({ ...range.opts, limit: opts.historyLimit, offset: 0 }),
       },
@@ -477,19 +542,8 @@ async function main() {
         iterations: opts.iterations,
         warmups: opts.warmups,
       });
-      const overTarget = result.stats.p95 > range.targetMs;
-      if (overTarget) {
+      if (writeBenchmarkResult(report, records, benchmark.name, range.label, result, range.targetMs)) {
         reviewCount += 1;
-      }
-      report.line(`${benchmark.name} (${range.label})`);
-      report.line(`Avg: ${formatMs(result.stats.avg)}`);
-      report.line(`P95: ${formatMs(result.stats.p95)}`);
-      report.line(`Max: ${formatMs(result.stats.max)}`);
-      report.line(`Rows: ${result.rows}`);
-      if (overTarget) {
-        report.line(`Guideline: REVIEW (P95 over ${formatMs(range.targetMs)})`);
-      } else {
-        report.line(`Guideline: OK (P95 under ${formatMs(range.targetMs)})`);
       }
       if (benchmark.name === "Product Sales") {
         const reconciliation = checkReconciliation(posService, range);
@@ -510,6 +564,9 @@ async function main() {
   const auditRange = getAuditRange(database);
   const todayRange = ranges[0]?.opts || {};
   const largeRange = ranges[ranges.length - 1]?.opts || {};
+  const today = todayDateOnly();
+  const weekAgo = shiftDateOnly(today, -6);
+  const monthAgo = shiftDateOnly(today, -29);
   const appBenchmarks = [
     {
       name: "Menu Items List",
@@ -527,6 +584,16 @@ async function main() {
       run: () => posService.getTables(),
     },
     {
+      name: "Tables Snapshot",
+      targetMs: 200,
+      run: () => posService.getTablesSnapshot(),
+    },
+    {
+      name: "Open Orders",
+      targetMs: 150,
+      run: () => posService.getOpenOrders(),
+    },
+    {
       name: "Customers List",
       targetMs: 300,
       run: () => posService.listCustomers(),
@@ -535,6 +602,11 @@ async function main() {
       name: "Staff List",
       targetMs: 300,
       run: () => posService.listStaff({ includeInactive: true }),
+    },
+    {
+      name: "Users List",
+      targetMs: 100,
+      run: () => posService.listUsers(),
     },
     {
       name: "Audit List",
@@ -553,6 +625,61 @@ async function main() {
       label: "Large Range",
       targetMs: 1000,
       run: () => posService.countAudits({ ...(auditRange || largeRange), search: "order" }),
+    },
+    {
+      name: "Grocery Items List",
+      targetMs: 400,
+      run: () => posService.listGroceryItems(),
+    },
+    {
+      name: "Grocery Lists",
+      targetMs: 500,
+      run: () => posService.listGroceryLists({ limit: 30 }),
+    },
+    {
+      name: "Grocery Purchase Headers",
+      targetMs: 500,
+      run: () => posService.listGroceryPurchaseHeaders({ limit: 50 }),
+    },
+    {
+      name: "Grocery Purchase Lines",
+      targetMs: 400,
+      run: () => posService.listGroceryPurchases({ from: 0, to: Date.now(), limit: 100 }),
+    },
+    {
+      name: "Vendors List",
+      targetMs: 200,
+      run: () => posService.listVendors({ includeInactive: true }),
+    },
+    {
+      name: "Expense Categories",
+      targetMs: 100,
+      run: () => posService.listExpenseCategories(),
+    },
+    {
+      name: "Expenses List",
+      targetMs: 400,
+      run: () => posService.listExpenses({ limit: 50 }),
+    },
+    {
+      name: "Attendance Daily",
+      targetMs: 300,
+      run: () => posService.listAttendance({ date: today }),
+    },
+    {
+      name: "Attendance Week",
+      targetMs: 800,
+      run: () => posService.listAttendanceRange({ fromDate: weekAgo, toDate: today }),
+    },
+    {
+      name: "Attendance Month",
+      targetMs: 1500,
+      run: () => posService.listAttendanceRange({ fromDate: monthAgo, toDate: today }),
+    },
+    {
+      name: "Salary Advances",
+      targetMs: 400,
+      run: () => posService.listSalaryAdvances({ limit: 200 }),
     },
     {
       name: "Print Queue Pending",
@@ -593,20 +720,52 @@ async function main() {
       warmups: opts.warmups,
       rowCountFn: benchmark.rowCountFn,
     });
-    if (writeBenchmarkResult(report, benchmark.name, benchmark.label, result, benchmark.targetMs)) {
+    if (writeBenchmarkResult(report, records, benchmark.name, benchmark.label, result, benchmark.targetMs)) {
       reviewCount += 1;
     }
     report.line("");
   }
 
-  report.line(
-    reviewCount
-      ? `Overall performance: REVIEW (${reviewCount} benchmark${reviewCount === 1 ? "" : "s"} over guideline)`
-      : "Overall performance: OK (all P95 values under guidelines)",
-  );
+  report.line("=== Mixed Load Burst ===");
+  const mixedLoadResult = runBenchmark({
+    run: createMixedLoadBurst(posService, todayRange, opts.loadCycles),
+    iterations: Math.min(opts.iterations, 5),
+    warmups: 1,
+    rowCountFn: () => opts.loadCycles,
+  });
+  const mixedLoadTargetMs = Math.max(1, 40 * opts.loadCycles);
+  if (
+    writeBenchmarkResult(
+      report,
+      records,
+      `Busy-Terminal Mix (${opts.loadCycles} cycles)`,
+      "Load",
+      mixedLoadResult,
+      mixedLoadTargetMs,
+    )
+  ) {
+    reviewCount += 1;
+  }
+  report.line("");
+
+  const overall = reviewCount
+    ? `REVIEW (${reviewCount} benchmark${reviewCount === 1 ? "" : "s"} over guideline)`
+    : "OK (all P95 values under guidelines)";
+  report.line(`Overall performance: ${overall}`);
   report.line(failed ? "Overall reconciliation: FAIL" : "Overall reconciliation: PASS");
   report.line(`Saved report: ${outputPath}`);
   report.writeToFile(outputPath);
+  writeJsonReport(outputPath, {
+    generatedAt: new Date().toISOString(),
+    database: PERF_DB_PATH,
+    iterations: opts.iterations,
+    warmups: opts.warmups,
+    loadCycles: opts.loadCycles,
+    overall: reviewCount ? "REVIEW" : "OK",
+    reviewCount,
+    reconciliation: failed ? "FAIL" : "PASS",
+    benchmarks: records,
+  });
 
   closeDb();
   if (failed) {

@@ -196,6 +196,14 @@ function jsString(value) {
   return JSON.stringify(String(value));
 }
 
+function tabSelectedExpression(label) {
+  return `Array.from(document.querySelectorAll('[role="tab"]')).some((tab) => (tab.innerText || tab.textContent || "").replace(/\\s+/g, " ").trim().toLowerCase() === ${jsString(String(label).toLowerCase())} && tab.getAttribute("aria-selected") === "true")`;
+}
+
+function bodyIncludesExpression(text) {
+  return `document.body.innerText.toLowerCase().includes(${jsString(String(text).toLowerCase())})`;
+}
+
 function pageHeadingExpression(text) {
   return `Array.from(document.querySelectorAll("#main-content h1, #main-content h2, main h1, main h2, .pos-ph-title, [class*='pageTitle'], [class*='title']")).some((element) => (element.textContent || "").trim().includes(${jsString(text)}))`;
 }
@@ -282,7 +290,16 @@ async function runBenchmark({ run, iterations, warmups, rowCountFn }) {
   };
 }
 
-function writeBenchmarkResult(report, name, result, targetMs) {
+const collectedRecords = [];
+
+function writeJsonReport(outputPath, payload) {
+  const jsonPath = outputPath.replace(/\.txt$/i, ".json");
+  fs.writeFileSync(jsonPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+  fs.writeFileSync(path.join(PERF_DIR, "latest-ui-report.json"), `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+  return jsonPath;
+}
+
+function writeBenchmarkResult(report, name, result, targetMs, group = "UI") {
   const overTarget = result.stats.p95 > targetMs;
   report.line(name);
   report.line(`Avg: ${formatMs(result.stats.avg)}`);
@@ -294,6 +311,17 @@ function writeBenchmarkResult(report, name, result, targetMs) {
       ? `Guideline: REVIEW (P95 over ${formatMs(targetMs)})`
       : `Guideline: OK (P95 under ${formatMs(targetMs)})`,
   );
+  collectedRecords.push({
+    layer: "ui",
+    group,
+    name,
+    avg: Number(result.stats.avg.toFixed(1)),
+    p95: Number(result.stats.p95.toFixed(1)),
+    max: Number(result.stats.max.toFixed(1)),
+    rows: result.rows,
+    targetMs,
+    guideline: overTarget ? "REVIEW" : "OK",
+  });
   return overTarget;
 }
 
@@ -558,27 +586,6 @@ const PAGES = [
     targetMs: 1000,
   },
   {
-    name: "Reports",
-    hash: "#reports",
-    ready: `${pageHeadingExpression("Reports")} && (document.body.innerText.includes("TOTAL SALES") || document.body.innerText.includes("Total Sales")) && ${enabledButtonExpression("Export PDF")}`,
-    rows: `document.querySelectorAll("tbody tr").length || document.querySelectorAll("svg path").length`,
-    targetMs: 1500,
-  },
-  {
-    name: "Order History",
-    hash: "#history",
-    ready: `${pageHeadingExpression("Order History")} && ${inputPlaceholderExpression("Search order")}`,
-    rows: `Array.from(document.querySelectorAll("button")).filter((button) => button.innerText.includes("Preview")).length`,
-    targetMs: 1500,
-  },
-  {
-    name: "Menu",
-    hash: "#menu",
-    ready: `${pageHeadingExpression("Menu")} && ${inputPlaceholderExpression("Search by name")}`,
-    rows: `document.querySelectorAll("tbody tr").length || Array.from(document.querySelectorAll("button")).filter((button) => button.innerText.includes("Item")).length`,
-    targetMs: 1500,
-  },
-  {
     name: "Customers",
     hash: "#customers",
     ready: `${pageHeadingExpression("Customers")} && ${inputPlaceholderExpression("Customer name")}`,
@@ -586,49 +593,218 @@ const PAGES = [
     targetMs: 1000,
   },
   {
-    name: "Staff",
-    hash: "#staff",
-    ready: `${pageHeadingExpression("Staff")} && ${enabledButtonExpression("Export")}`,
+    name: "Overview",
+    hash: "#manage-overview",
+    ready: `${pageHeadingExpression("Overview")} && (document.body.innerText.toLowerCase().includes("procurement") || document.body.innerText.includes("Buying List") || document.body.innerText.includes("needs attention"))`,
+    rows: `document.querySelectorAll("li").length || document.querySelectorAll("button").length`,
+    targetMs: 1500,
+  },
+  {
+    name: "Grocery Buying Lists",
+    hash: "#manage-grocery-lists",
+    ready: `${pageHeadingExpression("Grocery")} && ${inputPlaceholderExpression("Search lists")}`,
+    rows: `document.querySelectorAll("article, li, tbody tr").length || document.querySelectorAll("button").length`,
+    targetMs: 1500,
+  },
+  {
+    name: "Grocery Purchases",
+    hash: "#manage-grocery-purchases",
+    ready: `${pageHeadingExpression("Grocery")} && (document.body.innerText.includes("Purchases") || document.body.innerText.includes("No purchases"))`,
     rows: `document.querySelectorAll("tbody tr").length || document.querySelectorAll("button").length`,
     targetMs: 1500,
   },
   {
-    name: "Settings",
-    hash: "#settings",
-    ready: `${pageHeadingExpression("Settings")} && (${inputPlaceholderExpression("Restaurant name")} || ${inputPlaceholderExpression("Current admin password")})`,
-    rows: `document.querySelectorAll("button").length`,
+    name: "Grocery Vendors",
+    hash: "#manage-grocery-vendors",
+    ready: `${pageHeadingExpression("Grocery")} && ${inputPlaceholderExpression("Search vendors")}`,
+    rows: `document.querySelectorAll("tbody tr").length || document.querySelectorAll("button").length`,
+    targetMs: 1000,
+  },
+  {
+    name: "Grocery Items",
+    hash: "#manage-grocery-items",
+    ready: `${pageHeadingExpression("Grocery")} && ${inputPlaceholderExpression("Search items")}`,
+    rows: `document.querySelectorAll("tbody tr").length || document.querySelectorAll("button").length`,
+    targetMs: 1500,
+  },
+  {
+    name: "Expenses",
+    hash: "#manage-expenses",
+    ready: `${pageHeadingExpression("Expenses")} && ${enabledButtonExpression("Add Expense")}`,
+    rows: `document.querySelectorAll("tbody tr").length || document.querySelectorAll("button").length`,
+    targetMs: 1500,
+  },
+  {
+    name: "Menu",
+    hash: "#manage-menu",
+    ready: `${pageHeadingExpression("Menu")} && ${inputPlaceholderExpression("Search by name")}`,
+    rows: `document.querySelectorAll("tbody tr").length || Array.from(document.querySelectorAll("button")).filter((button) => button.innerText.includes("Item")).length`,
+    targetMs: 1500,
+  },
+  {
+    name: "Attendance",
+    hash: "#manage-people-attendance",
+    ready: `${pageHeadingExpression("Attendance")} && ${inputPlaceholderExpression("Search employee")}`,
+    rows: `document.querySelectorAll("tbody tr").length || document.querySelectorAll("button").length`,
+    targetMs: 1500,
+  },
+  {
+    name: "Roster",
+    hash: "#manage-people-roster",
+    ready: `${pageHeadingExpression("Roster")} && ${inputPlaceholderExpression("Search by name")}`,
+    rows: `document.querySelectorAll("tbody tr").length || document.querySelectorAll("button").length`,
+    targetMs: 1500,
+  },
+  {
+    name: "Salary Advances",
+    hash: "#manage-people-advances",
+    ready: `${pageHeadingExpression("Salary Advances")} && (${enabledButtonExpression("Record Advance")} || document.body.innerText.includes("salary advance"))`,
+    rows: `document.querySelectorAll("tbody tr").length || document.querySelectorAll("button").length`,
+    targetMs: 1500,
+  },
+  {
+    name: "Accounts",
+    hash: "#manage-people-accounts",
+    ready: `${pageHeadingExpression("Accounts")} && ${enabledButtonExpression("Add User")}`,
+    rows: `document.querySelectorAll("tbody tr").length || document.querySelectorAll("button").length`,
+    targetMs: 1000,
+  },
+  {
+    name: "Reports",
+    hash: "#reports",
+    ready: `${pageHeadingExpression("Reports")} && (${bodyIncludesExpression("Sales and profitability")} || ${bodyIncludesExpression("Total Sales")} || ${bodyIncludesExpression("Export PDF")} || ${bodyIncludesExpression("Food Cost")})`,
+    rows: `document.querySelectorAll("tbody tr").length || document.querySelectorAll("svg path").length`,
+    targetMs: 1500,
+  },
+  {
+    name: "Order History",
+    hash: "#manage-history",
+    ready: `${pageHeadingExpression("Order History")} && ${inputPlaceholderExpression("Search order")}`,
+    rows: `Array.from(document.querySelectorAll("button")).filter((button) => (button.innerText || "").includes("Preview")).length`,
     targetMs: 1500,
   },
   {
     name: "Audit",
-    hash: "#audit",
+    hash: "#manage-audit",
     ready: `${pageHeadingExpression("Audit Log")} && ${inputPlaceholderExpression("Filter by action")}`,
-    rows: `document.body.innerText.match(/Page \\d+ of \\d+ . (\\d+) records/) ? Number(document.body.innerText.match(/Page \\d+ of \\d+ . (\\d+) records/)[1]) : 0`,
+    rows: `document.body.innerText.match(/Page \\d+ of \\d+ . (\\d+) records/) ? Number(document.body.innerText.match(/Page \\d+ of \\d+ . (\\d+) records/)[1]) : document.querySelectorAll("tbody tr").length`,
     targetMs: 1500,
   },
   {
-    name: "Users",
-    hash: "#users",
-    ready: pageHeadingExpression("User Management"),
-    rows: `document.querySelectorAll("tbody tr").length || document.querySelectorAll("button").length`,
-    targetMs: 1000,
+    name: "Settings",
+    hash: "#manage-settings",
+    ready: `${pageHeadingExpression("Settings")} && (${inputPlaceholderExpression("Restaurant name")} || ${inputPlaceholderExpression("Current admin password")})`,
+    rows: `document.querySelectorAll("button").length`,
+    targetMs: 1500,
+  },
+];
+
+const TAB_TESTS = [
+  {
+    name: "Reports Profitability Tab",
+    parent: "Reports",
+    tabLabel: "Profitability",
+    ready: `${tabSelectedExpression("Profitability")} && (${bodyIncludesExpression("operating expenses")} || ${bodyIncludesExpression("estimated operating profit")} || ${bodyIncludesExpression("food cost")})`,
+    targetMs: 1500,
+  },
+  {
+    name: "Attendance History Tab",
+    parent: "Attendance",
+    tabLabel: "History",
+    ready: `${tabSelectedExpression("History")} && ${bodyIncludesExpression("Attendance History")}`,
+    targetMs: 1500,
+  },
+  {
+    name: "Salary Advances Transactions Tab",
+    parent: "Salary Advances",
+    tabLabel: "Transactions",
+    ready: `${tabSelectedExpression("Transactions")} && (${bodyIncludesExpression("No salary advance transactions")} || ${bodyIncludesExpression("Individual advance records")} || Array.from(document.querySelectorAll("th")).some((cell) => (cell.textContent || "").toLowerCase().includes("date")))`,
+    targetMs: 1200,
+  },
+  {
+    name: "Settings Hardware Tab",
+    parent: "Settings",
+    tabLabel: "Hardware",
+    ready: `${tabSelectedExpression("Hardware")} && document.querySelector('[data-settings-focus="hardware"]')`,
+    targetMs: 800,
+  },
+  {
+    name: "Settings Operations Tab",
+    parent: "Settings",
+    tabLabel: "Operations",
+    ready: `${tabSelectedExpression("Operations")} && document.querySelector('[data-settings-focus="operations"]')`,
+    targetMs: 800,
+  },
+  {
+    name: "Settings Retention Tab",
+    parent: "Settings",
+    tabLabel: "Retention",
+    ready: `${tabSelectedExpression("Retention")} && document.querySelector('[data-settings-focus="retention"]')`,
+    targetMs: 800,
   },
 ];
 
 async function navigateToPage(win, page) {
   await evalInWindow(win, `window.location.hash = ${JSON.stringify(page.hash)}`);
+  if (page.hash === "#manage-settings") {
+    await waitForCondition(win, pageHeadingExpression("Settings"), 15000);
+    await clickRoleTab(win, "Identity");
+  }
   await waitForCondition(win, page.ready, 15000);
   await waitForPaint(win);
   const rows = await evalInWindow(win, `Number((() => { try { return ${page.rows}; } catch { return 0; } })())`);
   return { rows };
 }
 
+async function clickRoleTab(win, label) {
+  await waitForCondition(
+    win,
+    `Array.from(document.querySelectorAll('[role="tab"]')).some((tab) => (tab.innerText || tab.textContent || "").replace(/\\s+/g, " ").trim() === ${jsString(label)})`,
+    10000,
+  );
+  const clicked = await evalInWindow(
+    win,
+    `(() => {
+      const tab = Array.from(document.querySelectorAll('[role="tab"]')).find((candidate) =>
+        (candidate.innerText || candidate.textContent || "").replace(/\\s+/g, " ").trim() === ${jsString(label)}
+      );
+      if (!tab) {
+        return false;
+      }
+      tab.click();
+      return true;
+    })()`,
+  );
+  if (!clicked) {
+    throw new Error(`Tab was not clickable: ${label}`);
+  }
+}
+
+async function measureTab(win, test) {
+  const parent = PAGES.find((page) => page.name === test.parent);
+  if (!parent) {
+    throw new Error(`Unknown parent page for tab: ${test.name}`);
+  }
+  await navigateToPage(win, parent);
+  const startedAt = performance.now();
+  await clickRoleTab(win, test.tabLabel);
+  await waitForCondition(win, test.ready, 15000);
+  await waitForPaint(win);
+  const rows = await evalInWindow(win, `document.querySelectorAll("tbody tr").length || document.querySelectorAll("button").length`);
+  return { rows, totalMs: performance.now() - startedAt };
+}
+
 const SEARCH_TESTS = [
   { name: "Tables Search", hash: "#tables", placeholder: "Search table", query: "1", targetMs: 200 },
-  { name: "Menu Search", hash: "#menu", placeholder: "Search by name", query: "Item 0", targetMs: 250 },
+  { name: "Menu Search", hash: "#manage-menu", placeholder: "Search by name", query: "Item 0", targetMs: 250 },
   { name: "Reports Item Search", hash: "#reports", placeholder: "Search item", query: "Item", targetMs: 250 },
-  { name: "History Search", hash: "#history", placeholder: "Search order", query: "cash", clickSearch: true, targetMs: 500 },
-  { name: "Audit Search", hash: "#audit", placeholder: "Filter by action", query: "order", targetMs: 800 },
+  { name: "History Search", hash: "#manage-history", placeholder: "Search order", query: "cash", clickSearch: true, targetMs: 500 },
+  { name: "Audit Search", hash: "#manage-audit", placeholder: "Filter by action", query: "order", targetMs: 800 },
+  { name: "Attendance Search", hash: "#manage-people-attendance", placeholder: "Search employee", query: "Staff", targetMs: 300 },
+  { name: "Roster Search", hash: "#manage-people-roster", placeholder: "Search by name", query: "Staff 00", targetMs: 300 },
+  { name: "Grocery Lists Search", hash: "#manage-grocery-lists", placeholder: "Search lists", query: "Buying", targetMs: 300 },
+  { name: "Grocery Items Search", hash: "#manage-grocery-items", placeholder: "Search items", query: "Grocery", targetMs: 400 },
+  { name: "Vendors Search", hash: "#manage-grocery-vendors", placeholder: "Search vendors", query: "Vendor", targetMs: 250 },
 ];
 
 async function measureSearch(win, test) {
@@ -764,6 +940,7 @@ async function runBillingUiWorkflow(win, database) {
 async function runPdfExport(win) {
   const reportsPage = PAGES.find((page) => page.name === "Reports");
   await navigateToPage(win, reportsPage);
+  await clickRoleTab(win, "Sales");
   await waitForCondition(win, enabledButtonExpression("Export PDF"), 10000);
   const beforeCount = pdfExportMetrics.length;
   const startedAt = performance.now();
@@ -814,8 +991,17 @@ async function runAuditCsvExport(win, electronSession) {
 }
 
 async function runRepeatedNavigation(win, cycles, takeMemory = null) {
-  const pages = ["Reports", "History", "Audit", "Menu", "Tables"]
-    .map((name) => PAGES.find((page) => page.name === name || page.name === `Order ${name}`))
+  const pages = [
+    "Reports",
+    "Order History",
+    "Audit",
+    "Menu",
+    "Tables",
+    "Grocery Buying Lists",
+    "Expenses",
+    "Attendance",
+  ]
+    .map((name) => PAGES.find((page) => page.name === name))
     .filter(Boolean);
   const memorySamples = [];
   const pageMemorySummary = new Map();
@@ -1008,12 +1194,39 @@ function printRepeatedNavigationMemorySummary(report, summary) {
   report.line("");
 }
 
+async function runFullAppWalk(win) {
+  const startedAt = performance.now();
+  let rows = 0;
+  for (const page of PAGES) {
+    const result = await navigateToPage(win, page);
+    rows += Number(result.rows || 0);
+  }
+  for (const test of TAB_TESTS) {
+    const result = await measureTab(win, test);
+    rows += Number(result.rows || 0);
+  }
+  return { rows, totalMs: performance.now() - startedAt };
+}
+
 function getPaymentBounds(database) {
   return database
     .prepare(
       "SELECT MIN(received_at) AS minReceivedAt, MAX(received_at) AS maxReceivedAt FROM payments WHERE status = 'completed'",
     )
     .get();
+}
+
+let perfPdfExportWindow = null;
+
+function getPerfPdfExportWindow(BrowserWindow) {
+  if (perfPdfExportWindow && !perfPdfExportWindow.isDestroyed()) {
+    return perfPdfExportWindow;
+  }
+  perfPdfExportWindow = new BrowserWindow({
+    show: false,
+    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
+  });
+  return perfPdfExportWindow;
 }
 
 function registerPerfIpcHandlers({ BrowserWindow, ipcMain }, mainWindow) {
@@ -1024,7 +1237,6 @@ function registerPerfIpcHandlers({ BrowserWindow, ipcMain }, mainWindow) {
   ipcMain.handle("log:write", async () => ({ ok: true }));
   ipcMain.handle("report:exportPdf", async (_event, _token, html, defaultFileName) => {
     const handlerStartedAt = performance.now();
-    let pdfWin = null;
     let tmpFile = null;
     try {
       const htmlText = String(html || "");
@@ -1033,10 +1245,7 @@ function registerPerfIpcHandlers({ BrowserWindow, ipcMain }, mainWindow) {
       const writeStartedAt = performance.now();
       fs.writeFileSync(tmpFile, htmlText, "utf8");
       const tempHtmlWriteMs = performance.now() - writeStartedAt;
-      pdfWin = new BrowserWindow({
-        show: false,
-        webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
-      });
+      const pdfWin = getPerfPdfExportWindow(BrowserWindow);
       const loadStartedAt = performance.now();
       await pdfWin.loadFile(tmpFile);
       const loadHtmlMs = performance.now() - loadStartedAt;
@@ -1060,9 +1269,6 @@ function registerPerfIpcHandlers({ BrowserWindow, ipcMain }, mainWindow) {
       pdfExportMetrics.push(metrics);
       return { ok: true, path: path.join(PERF_DIR, "discarded-perf-export.pdf"), bytes: pdfBytes, metrics };
     } finally {
-      if (pdfWin && !pdfWin.isDestroyed()) {
-        pdfWin.destroy();
-      }
       if (tmpFile) {
         try {
           fs.unlinkSync(tmpFile);
@@ -1157,21 +1363,32 @@ async function main() {
 
     registerPerfIpcHandlers(electron, mainWindow);
 
+    collectedRecords.length = 0;
     const loadStart = performance.now();
     mainWindow = await createMainWindow(electron, rendererSource, opts.show);
     const rendererLoadMs = performance.now() - loadStart;
     await waitForCondition(
       mainWindow,
-      `document.querySelector("#app-root") || document.querySelector("input") || String(document.body?.innerText || "").trim().length > 0`,
+      `document.querySelector('input[type="password"]') && document.body.innerText.includes("Sign in")`,
       15000,
     );
     await waitForPaint(mainWindow);
+    const loginPageMs = performance.now() - loadStart;
     const firstScreenMs = performance.now() - appStart;
 
     report.line("=== Startup ===");
     report.line(`DB Initialization: ${formatMs(dbReadyMs)}`);
     report.line(`Renderer Load: ${formatMs(rendererLoadMs)}`);
+    report.line(`Login Page Ready: ${formatMs(loginPageMs)}`);
     report.line(`First Screen Ready: ${formatMs(firstScreenMs)}`);
+    report.line("");
+    writeBenchmarkResult(
+      report,
+      "Login Page Ready",
+      { stats: { avg: loginPageMs, p95: loginPageMs, max: loginPageMs }, rows: 1 },
+      1500,
+      "Auth",
+    );
     report.line("");
 
     const loginResult = await runBenchmark({
@@ -1179,7 +1396,7 @@ async function main() {
       iterations: 1,
       warmups: 0,
     });
-    writeBenchmarkResult(report, "Login", loginResult, 1500);
+    writeBenchmarkResult(report, "Login Submit", loginResult, 1500, "Auth");
     report.line("");
 
     const memoryCheckpoints = [];
@@ -1193,19 +1410,33 @@ async function main() {
     await captureMemory("Memory After Login");
 
     report.line("=== Page Navigation ===");
-    let reviewCount = 0;
+    let reviewCount = collectedRecords.filter((row) => row.guideline === "REVIEW").length;
     for (const page of PAGES) {
       const result = await runBenchmark({
         run: () => navigateToPage(mainWindow, page),
         iterations: opts.iterations,
         warmups: opts.warmups,
       });
-      if (writeBenchmarkResult(report, `Open ${page.name}`, result, page.targetMs)) {
+      if (writeBenchmarkResult(report, `Open ${page.name}`, result, page.targetMs, "Pages")) {
         reviewCount += 1;
       }
       report.line("");
     }
     await captureMemory("Memory After Page Navigation");
+
+    report.line("=== In-Page Tabs ===");
+    for (const test of TAB_TESTS) {
+      const result = await runBenchmark({
+        run: () => measureTab(mainWindow, test),
+        iterations: opts.iterations,
+        warmups: opts.warmups,
+      });
+      if (writeBenchmarkResult(report, test.name, result, test.targetMs, "Tabs")) {
+        reviewCount += 1;
+      }
+      report.line("");
+    }
+    await captureMemory("Memory After Tab Tests");
 
     report.line("=== Search And Filter Responsiveness ===");
     for (const test of SEARCH_TESTS) {
@@ -1214,7 +1445,7 @@ async function main() {
         iterations: opts.iterations,
         warmups: opts.warmups,
       });
-      if (writeBenchmarkResult(report, test.name, result, test.targetMs)) {
+      if (writeBenchmarkResult(report, test.name, result, test.targetMs, "Search")) {
         reviewCount += 1;
       }
       report.line("");
@@ -1227,7 +1458,7 @@ async function main() {
       iterations: Math.min(opts.iterations, 3),
       warmups: 0,
     });
-    if (writeBenchmarkResult(report, "Login -> Tables -> Billing -> Add Items -> Settle", workflowResult, 3000)) {
+    if (writeBenchmarkResult(report, "Tables -> Billing -> Add Items -> Settle", workflowResult, 3000, "Workflow")) {
       reviewCount += 1;
     }
     report.line("");
@@ -1250,10 +1481,22 @@ async function main() {
       iterations: Math.min(opts.iterations, 3),
       warmups: 0,
     });
-    if (writeBenchmarkResult(report, "Audit CSV Export", csvResult, 1000)) {
+    if (writeBenchmarkResult(report, "Audit CSV Export", csvResult, 1000, "Export")) {
       reviewCount += 1;
     }
     report.line("");
+
+    report.line("=== Full App Walk ===");
+    const walkResult = await runBenchmark({
+      run: () => runFullAppWalk(mainWindow),
+      iterations: 1,
+      warmups: 0,
+    });
+    if (writeBenchmarkResult(report, "Full App Walk (all pages and tabs)", walkResult, 45000, "Load")) {
+      reviewCount += 1;
+    }
+    report.line("");
+    await captureMemory("Memory After Full App Walk");
 
     report.line("=== Long-Running ===");
     const repeatedNavResult = await runBenchmark({
@@ -1261,7 +1504,7 @@ async function main() {
       iterations: 1,
       warmups: 0,
     });
-    const repeatedNavigationTargetMs = 1600 * opts.navCycles;
+    const repeatedNavigationTargetMs = 2500 * opts.navCycles;
     if (writeBenchmarkResult(report, `Repeated Navigation (${opts.navCycles} cycles)`, repeatedNavResult, repeatedNavigationTargetMs)) {
       reviewCount += 1;
     }
@@ -1309,6 +1552,30 @@ async function main() {
     );
     report.line(`Saved report: ${outputPath}`);
     report.writeToFile(outputPath);
+    writeJsonReport(outputPath, {
+      generatedAt: new Date().toISOString(),
+      database: PERF_DB_PATH,
+      renderer: rendererSource.type === "url" ? rendererSource.value : path.relative(ROOT_DIR, rendererSource.value),
+      iterations: opts.iterations,
+      warmups: opts.warmups,
+      navCycles: opts.navCycles,
+      dayCycles: opts.dayCycles,
+      overall: reviewCount ? "REVIEW" : "OK",
+      reviewCount,
+      startup: {
+        dbReadyMs: Number(dbReadyMs.toFixed(1)),
+        rendererLoadMs: Number(rendererLoadMs.toFixed(1)),
+        loginPageMs: Number(loginPageMs.toFixed(1)),
+        firstScreenMs: Number(firstScreenMs.toFixed(1)),
+      },
+      memory: memoryCheckpoints.map((snapshot) => ({
+        label: snapshot.label,
+        totalWorkingSetMb: Number((snapshot.totalWorkingSetKb / 1024).toFixed(1)),
+        rendererWorkingSetMb: Number((snapshot.rendererWorkingSetKb / 1024).toFixed(1)),
+        mainPrivateMb: Number((snapshot.mainPrivateKb / 1024).toFixed(1)),
+      })),
+      benchmarks: collectedRecords,
+    });
   } finally {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.destroy();

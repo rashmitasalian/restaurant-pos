@@ -3534,8 +3534,9 @@ export const posService = {
 
   listGroceryItems(_opts: { includeInactive?: boolean } = {}): GroceryItemDto[] {
     const database = getDb();
-    const rows = database.prepare("SELECT * FROM grocery_items ORDER BY lower(name) ASC").all();
-    return rows.map((row: any) => groceryItemFromRow(database, row));
+    const rows = database.prepare("SELECT * FROM grocery_items ORDER BY lower(name) ASC").all() as any[];
+    const priceHints = batchGroceryPriceHints(database, rows);
+    return rows.map((row: any) => groceryItemFromRow(database, row, true, priceHints.get(row.id)));
   },
 
   getGroceryItem(id: string): GroceryItemDto | null {
@@ -3651,8 +3652,12 @@ export const posService = {
          ORDER BY list_date DESC, created_at DESC
          LIMIT ?`,
       )
-      .all(...params);
-    return rows.map((row: any) => groceryListFromRow(database, row));
+      .all(...params) as any[];
+    const linesByList = batchGroceryListLines(
+      database,
+      rows.map((row) => row.id),
+    );
+    return rows.map((row: any) => groceryListFromRow(database, row, linesByList.get(row.id)));
   },
 
   getGroceryList(id: string): GroceryListDto | null {
@@ -3998,10 +4003,11 @@ export const posService = {
       params.push(limit, offset);
       limitSql = "LIMIT ? OFFSET ?";
     }
+    const whereSql = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
     return getDb()
       .prepare(
         `SELECT * FROM grocery_purchase_lines
-         WHERE ${clauses.join(" AND ")}
+         ${whereSql}
          ORDER BY purchased_at DESC, created_at DESC
          ${limitSql}`,
       )
@@ -4401,8 +4407,14 @@ export const posService = {
          ORDER BY p.purchase_date DESC, p.created_at DESC
          LIMIT ? OFFSET ?`,
       )
-      .all(...params);
-    return rows.map((row: any) => groceryPurchaseHeaderFromRow(database, row));
+      .all(...params) as any[];
+    const linesByPurchase = batchGroceryPurchaseLines(
+      database,
+      rows.map((row) => row.id),
+    );
+    return rows.map((row: any) =>
+      groceryPurchaseHeaderFromRow(database, row, linesByPurchase.get(row.id)),
+    );
   },
 
   voidGroceryPurchaseHeader(id: string, actor?: string | null) {
@@ -6164,15 +6176,21 @@ function vendorFromRow(row: any): VendorDto {
   };
 }
 
-function groceryPurchaseHeaderFromRow(database: Database.Database, row: any): GroceryPurchaseDto {
-  const lines = database
-    .prepare(
-      `SELECT * FROM grocery_purchase_lines
+function groceryPurchaseHeaderFromRow(
+  database: Database.Database,
+  row: any,
+  lines?: GroceryPurchaseLineDto[],
+): GroceryPurchaseDto {
+  const resolvedLines =
+    lines ??
+    database
+      .prepare(
+        `SELECT * FROM grocery_purchase_lines
        WHERE purchase_id = ?
        ORDER BY purchased_at ASC, created_at ASC`,
-    )
-    .all(row.id)
-    .map(groceryPurchaseFromRow);
+      )
+      .all(row.id)
+      .map(groceryPurchaseFromRow);
   const total = paiseToRupees(row.total_paise);
   const amountPaid = paiseToRupees(row.amount_paid_paise);
   return {
@@ -6194,7 +6212,7 @@ function groceryPurchaseHeaderFromRow(database: Database.Database, row: any): Gr
     total,
     notes: row.notes || null,
     migrationSource: row.migration_source || null,
-    lines,
+    lines: resolvedLines,
     createdBy: row.created_by || null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -6352,13 +6370,19 @@ function groceryListLineFromRow(row: any): GroceryListLineDto {
   };
 }
 
-function groceryListFromRow(database: Database.Database, row: any): GroceryListDto {
-  const lines = database
-    .prepare(
-      "SELECT * FROM grocery_list_lines WHERE list_id = ? ORDER BY sort_order ASC, created_at ASC",
-    )
-    .all(row.id)
-    .map(groceryListLineFromRow);
+function groceryListFromRow(
+  database: Database.Database,
+  row: any,
+  lines?: GroceryListLineDto[],
+): GroceryListDto {
+  const resolvedLines =
+    lines ??
+    database
+      .prepare(
+        "SELECT * FROM grocery_list_lines WHERE list_id = ? ORDER BY sort_order ASC, created_at ASC",
+      )
+      .all(row.id)
+      .map(groceryListLineFromRow);
   return {
     _id: row.id,
     id: row.id,
@@ -6368,7 +6392,7 @@ function groceryListFromRow(database: Database.Database, row: any): GroceryListD
     listType: normalizeGroceryListType(row.list_type),
     status: normalizeGroceryListStatus(row.status),
     notes: row.notes || null,
-    lines,
+    lines: resolvedLines,
     createdBy: row.created_by || null,
     updatedBy: row.updated_by || null,
     completedAt: row.completed_at || null,
@@ -6379,17 +6403,10 @@ function groceryListFromRow(database: Database.Database, row: any): GroceryListD
   };
 }
 
-function groceryPriceHint(database: Database.Database, row: any): GroceryItemDto["priceHint"] {
-  const defaultUnit = normalizeGroceryUnit(row.default_unit);
-  const purchases = database
-    .prepare(
-      `SELECT *
-       FROM grocery_purchase_lines
-       WHERE grocery_item_id = ?
-       ORDER BY purchased_at DESC, created_at DESC
-       LIMIT 100`,
-    )
-    .all(row.id) as any[];
+function computeGroceryPriceHint(
+  defaultUnit: ReturnType<typeof normalizeGroceryUnit>,
+  purchases: any[],
+): GroceryItemDto["priceHint"] {
   const last = purchases[0];
   const cutoff = now() - 30 * 24 * 60 * 60 * 1000;
   let totalPaise = 0;
@@ -6421,10 +6438,115 @@ function groceryPriceHint(database: Database.Database, row: any): GroceryItemDto
   };
 }
 
+function batchGroceryPriceHints(
+  database: Database.Database,
+  rows: Array<{ id: string; default_unit: string }>,
+): Map<string, GroceryItemDto["priceHint"]> {
+  const hints = new Map<string, GroceryItemDto["priceHint"]>();
+  if (!rows.length) {
+    return hints;
+  }
+  const placeholders = rows.map(() => "?").join(",");
+  const purchases = database
+    .prepare(
+      `SELECT *
+       FROM grocery_purchase_lines
+       WHERE grocery_item_id IN (${placeholders})
+       ORDER BY grocery_item_id, purchased_at DESC, created_at DESC`,
+    )
+    .all(...rows.map((row) => row.id)) as any[];
+  const purchasesByItem = new Map<string, any[]>();
+  for (const purchase of purchases) {
+    const itemId = purchase.grocery_item_id as string | null;
+    if (!itemId) {
+      continue;
+    }
+    const bucket = purchasesByItem.get(itemId) || [];
+    if (bucket.length < 100) {
+      bucket.push(purchase);
+      purchasesByItem.set(itemId, bucket);
+    }
+  }
+  for (const row of rows) {
+    hints.set(
+      row.id,
+      computeGroceryPriceHint(
+        normalizeGroceryUnit(row.default_unit),
+        purchasesByItem.get(row.id) || [],
+      ),
+    );
+  }
+  return hints;
+}
+
+function batchGroceryListLines(
+  database: Database.Database,
+  listIds: string[],
+): Map<string, GroceryListLineDto[]> {
+  const linesByList = new Map<string, GroceryListLineDto[]>();
+  if (!listIds.length) {
+    return linesByList;
+  }
+  const placeholders = listIds.map(() => "?").join(",");
+  const rows = database
+    .prepare(
+      `SELECT * FROM grocery_list_lines
+       WHERE list_id IN (${placeholders})
+       ORDER BY list_id, sort_order ASC, created_at ASC`,
+    )
+    .all(...listIds) as any[];
+  for (const row of rows) {
+    const listId = row.list_id as string;
+    const bucket = linesByList.get(listId) || [];
+    bucket.push(groceryListLineFromRow(row));
+    linesByList.set(listId, bucket);
+  }
+  return linesByList;
+}
+
+function batchGroceryPurchaseLines(
+  database: Database.Database,
+  purchaseIds: string[],
+): Map<string, GroceryPurchaseLineDto[]> {
+  const linesByPurchase = new Map<string, GroceryPurchaseLineDto[]>();
+  if (!purchaseIds.length) {
+    return linesByPurchase;
+  }
+  const placeholders = purchaseIds.map(() => "?").join(",");
+  const rows = database
+    .prepare(
+      `SELECT * FROM grocery_purchase_lines
+       WHERE purchase_id IN (${placeholders})
+       ORDER BY purchase_id, purchased_at ASC, created_at ASC`,
+    )
+    .all(...purchaseIds) as any[];
+  for (const row of rows) {
+    const purchaseId = row.purchase_id as string;
+    const bucket = linesByPurchase.get(purchaseId) || [];
+    bucket.push(groceryPurchaseFromRow(row));
+    linesByPurchase.set(purchaseId, bucket);
+  }
+  return linesByPurchase;
+}
+
+function groceryPriceHint(database: Database.Database, row: any): GroceryItemDto["priceHint"] {
+  const purchases = database
+    .prepare(
+      `SELECT *
+       FROM grocery_purchase_lines
+       WHERE grocery_item_id = ?
+       ORDER BY purchased_at DESC, created_at DESC
+       LIMIT 100`,
+    )
+    .all(row.id) as any[];
+  return computeGroceryPriceHint(normalizeGroceryUnit(row.default_unit), purchases);
+}
+
 function groceryItemFromRow(
   database: Database.Database,
   row: any,
   includePriceHint = true,
+  priceHint?: GroceryItemDto["priceHint"],
 ): GroceryItemDto {
   return {
     _id: row.id,
@@ -6438,7 +6560,7 @@ function groceryItemFromRow(
     active: Boolean(row.active),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-    priceHint: includePriceHint ? groceryPriceHint(database, row) : undefined,
+    priceHint: includePriceHint ? priceHint ?? groceryPriceHint(database, row) : undefined,
   };
 }
 
