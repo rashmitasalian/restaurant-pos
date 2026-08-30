@@ -1895,13 +1895,13 @@ export default function Settings({
 
         {/* Counter Printer */}
         <div style={{ marginBottom: 24 }}>
-          <label className="pos-label">Counter Printer IP Address</label>
+          <label className="pos-label">Counter / Receipt Printer</label>
           <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
             <input
               type="text"
               value={counterIp}
               onChange={(e) => setCounterIp(e.target.value)}
-              placeholder="e.g., 192.168.1.101"
+              placeholder="Leave blank to use kitchen printer"
               className="pos-input"
               style={{ fontFamily: "monospace" }}
             />
@@ -1950,6 +1950,10 @@ export default function Settings({
           </div>
           <div style={{ marginTop: 6 }}>
             After entering the IP address, use the Test button to verify connectivity.
+          </div>
+          <div style={{ marginTop: 6 }}>
+            Single-printer setup: enter the printer only under Kitchen and leave Counter blank.
+            Self Service will print one bill and one KOT instead of duplicating the KOT.
           </div>
         </div>
 

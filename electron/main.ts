@@ -10,6 +10,11 @@ import { posService } from "./services/posService";
 import { destroyMainSession, getMainSession, refreshMainSession } from "./services/sessionManager";
 import { updateService } from "./services/updateService";
 import { printPayload, type PrinterConfig } from "./printing/printService";
+import {
+  DEFAULT_USB_PRINTER_NAME,
+  resolveCounterPrinterTarget,
+  resolveKitchenPrinterTarget,
+} from "../src/shared/printerConfig";
 import { shutdownWindowsRawPrinter, warmUpWindowsRawPrinter } from "./printing/windowsRawWorker";
 import type { Role } from "../src/shared/pos";
 
@@ -356,17 +361,22 @@ app.on("before-quit", () => {
 async function getPrinterConfig(): Promise<PrinterConfig> {
   try {
     const cfg = (posService.getSetting("config:printers") as any) || {};
+    const kitchenFallback =
+      process.env.KITCHEN_PRINTER_USB_NAME || process.env.COUNTER_PRINTER_USB_NAME || DEFAULT_USB_PRINTER_NAME;
+    const counterFallback =
+      process.env.COUNTER_PRINTER_USB_NAME || process.env.KITCHEN_PRINTER_USB_NAME || DEFAULT_USB_PRINTER_NAME;
     return {
-      kitchenPrinterName:
-        String(cfg.kitchenPrinterIp || "").trim() || process.env.KITCHEN_PRINTER_USB_NAME || "POS-80C",
-      counterPrinterName:
-        String(cfg.counterPrinterIp || "").trim() || process.env.COUNTER_PRINTER_USB_NAME || "POS-80C",
+      kitchenPrinterName: resolveKitchenPrinterTarget(cfg, kitchenFallback),
+      counterPrinterName: resolveCounterPrinterTarget(cfg, counterFallback),
       printerPort: Number(cfg.printerPort || process.env.PRINTER_PORT || 9100),
     };
   } catch (e) {
     return {
-      kitchenPrinterName: process.env.KITCHEN_PRINTER_USB_NAME || "POS-80C",
-      counterPrinterName: process.env.COUNTER_PRINTER_USB_NAME || "POS-80C",
+      kitchenPrinterName: process.env.KITCHEN_PRINTER_USB_NAME || DEFAULT_USB_PRINTER_NAME,
+      counterPrinterName:
+        process.env.COUNTER_PRINTER_USB_NAME ||
+        process.env.KITCHEN_PRINTER_USB_NAME ||
+        DEFAULT_USB_PRINTER_NAME,
       printerPort: Number(process.env.PRINTER_PORT || 9100),
     };
   }

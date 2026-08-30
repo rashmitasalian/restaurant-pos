@@ -72,12 +72,18 @@ import {
   getDefaultServiceModes,
   type ServiceMode,
 } from "../../../shared/serviceModes";
+import {
+  resolveCounterPrinterTarget,
+  resolveKitchenPrinterTarget,
+  samePrinterTarget,
+} from "../../../shared/printerConfig";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 const DEFAULT_KOT_PRINTER = "kitchen";
 const KITCHEN_PRINTER_CACHE_MS = 60_000;
 let cachedKitchenPrinter: { value: string; expiresAt: number } | null = null;
+let cachedPrinterTargets: { kitchen: string; counter: string; expiresAt: number } | null = null;
 const QUICK_FAVORITE_SHORTCUT_LIMIT = 6;
 const CATEGORY_VISIBLE = 6;
 
@@ -268,6 +274,29 @@ function paymentFlowLabel(mode: ServiceMode | null | undefined) {
     return "Bill -> KOT";
   }
   return "Bill";
+}
+
+async function resolvePrinterTargets() {
+  const now = Date.now();
+  if (cachedPrinterTargets && cachedPrinterTargets.expiresAt > now) {
+    return cachedPrinterTargets;
+  }
+  try {
+    const cfg = await getConfigPrinters();
+    const targets = {
+      kitchen: resolveKitchenPrinterTarget(cfg),
+      counter: resolveCounterPrinterTarget(cfg),
+      expiresAt: now + KITCHEN_PRINTER_CACHE_MS,
+    };
+    cachedPrinterTargets = targets;
+    return targets;
+  } catch {
+    return {
+      kitchen: resolveKitchenPrinterTarget(null),
+      counter: resolveCounterPrinterTarget(null),
+      expiresAt: now + KITCHEN_PRINTER_CACHE_MS,
+    };
+  }
 }
 
 async function resolveKitchenPrinter() {
@@ -1580,6 +1609,7 @@ export default function Billing() {
         );
         const sentLines = pendingItems.map((it: any) => ({ id: it.id, sentQty: it.sentQty ?? it.qty }));
         const lines = buildKotLines(preview, paidOrder, snapTableNum, branding);
+        const printerTargets = await resolvePrinterTargets();
         await printKOT({
           lines,
           printer: await resolveKitchenPrinter(),
@@ -1588,7 +1618,10 @@ export default function Billing() {
         });
 
         let copiedToCounter = false;
-        if (activeMode?.id === "self_service") {
+        if (
+          activeMode?.id === "self_service" &&
+          !samePrinterTarget(printerTargets.kitchen, printerTargets.counter)
+        ) {
           await printKOT({
             lines,
             printer: "counter",

@@ -638,7 +638,10 @@ export class UpdateService {
       if (!String(printers.kitchenPrinterIp || "").trim()) {
         warnings.push("Kitchen printer is not configured.");
       }
-      if (!String(printers.counterPrinterIp || "").trim()) {
+      if (
+        !String(printers.counterPrinterIp || "").trim() &&
+        !String(printers.kitchenPrinterIp || "").trim()
+      ) {
         warnings.push("Counter printer is not configured.");
       }
       const pending = posService.listPrintJobs("pending").length;
