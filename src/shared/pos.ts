@@ -1,4 +1,6 @@
-export type { Role } from "./permissions";
+import type { Role } from "./permissions";
+
+export type { Role };
 
 export type OrderType = string;
 export type OrderStatus = "open" | "held" | "ready" | "assigned" | "paid" | "cancelled";

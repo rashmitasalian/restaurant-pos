@@ -10,6 +10,7 @@ import { posService } from "./services/posService";
 import { destroyMainSession, getMainSession, refreshMainSession } from "./services/sessionManager";
 import { updateService } from "./services/updateService";
 import { printPayload, type PrinterConfig } from "./printing/printService";
+import { shutdownWindowsRawPrinter, warmUpWindowsRawPrinter } from "./printing/windowsRawWorker";
 import type { Role } from "../src/shared/pos";
 
 const startupHrStart = process.hrtime.bigint();
@@ -328,6 +329,7 @@ app.whenReady().then(async () => {
     registerPosIpc(() => mainWindow);
     logStartupStage("ipc:register:done");
     await createWindow();
+    warmUpWindowsRawPrinter(app.getPath("userData"));
     logStartupStage("createWindow:done");
   } catch (err: any) {
     writeLogToFile("fatal", `Startup failed: ${err?.stack || err}`);
@@ -347,6 +349,7 @@ app.on("window-all-closed", () => {
 
 app.on("before-quit", () => {
   destroyPdfExportWindow();
+  shutdownWindowsRawPrinter();
   closeDb();
 });
 

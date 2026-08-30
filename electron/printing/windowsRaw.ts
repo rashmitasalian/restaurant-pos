@@ -2,6 +2,7 @@ import { execFile } from "child_process";
 import fs from "fs";
 import os from "os";
 import path from "path";
+import { printViaWindowsRawWorker } from "./windowsRawWorker";
 
 type ExecResult = {
   stdout: string;
@@ -49,133 +50,14 @@ export async function listWindowsPrinters(): Promise<string[]> {
   return (Array.isArray(parsed) ? parsed : [parsed]).map((name) => String(name));
 }
 
-function winspoolRawScript() {
-  return String.raw`
-param(
-  [Parameter(Mandatory = $true)][string]$PrinterName,
-  [Parameter(Mandatory = $true)][string]$DataPath,
-  [string]$DocumentName = "RestoNiti Raw ESC/POS"
-)
-
-$ErrorActionPreference = "Stop"
-
-Add-Type -TypeDefinition @"
-using System;
-using System.ComponentModel;
-using System.IO;
-using System.Runtime.InteropServices;
-
-public static class RawPrinterHelper
-{
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    public class DOC_INFO_1
-    {
-        [MarshalAs(UnmanagedType.LPWStr)]
-        public string pDocName;
-        [MarshalAs(UnmanagedType.LPWStr)]
-        public string pOutputFile;
-        [MarshalAs(UnmanagedType.LPWStr)]
-        public string pDatatype;
-    }
-
-    [DllImport("winspool.drv", SetLastError = true, CharSet = CharSet.Unicode)]
-    public static extern bool OpenPrinter(string pPrinterName, out IntPtr phPrinter, IntPtr pDefault);
-
-    [DllImport("winspool.drv", SetLastError = true)]
-    public static extern bool ClosePrinter(IntPtr hPrinter);
-
-    [DllImport("winspool.drv", SetLastError = true, CharSet = CharSet.Unicode)]
-    public static extern bool StartDocPrinter(IntPtr hPrinter, int Level, [In] DOC_INFO_1 pDocInfo);
-
-    [DllImport("winspool.drv", SetLastError = true)]
-    public static extern bool EndDocPrinter(IntPtr hPrinter);
-
-    [DllImport("winspool.drv", SetLastError = true)]
-    public static extern bool StartPagePrinter(IntPtr hPrinter);
-
-    [DllImport("winspool.drv", SetLastError = true)]
-    public static extern bool EndPagePrinter(IntPtr hPrinter);
-
-    [DllImport("winspool.drv", SetLastError = true)]
-    public static extern bool WritePrinter(
-        IntPtr hPrinter,
-        [MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 2)] byte[] pBytes,
-        int dwCount,
-        out int dwWritten
-    );
-
-    private static void ThrowLastWin32(string action)
-    {
-        int error = Marshal.GetLastWin32Error();
-        throw new Win32Exception(error, action + " failed (" + error + ")");
-    }
-
-    public static void SendFile(string printerName, string filePath, string documentName)
-    {
-        byte[] bytes = File.ReadAllBytes(filePath);
-        if (bytes.Length == 0)
-        {
-            throw new InvalidOperationException("No bytes to print");
-        }
-
-        IntPtr printerHandle;
-        if (!OpenPrinter(printerName, out printerHandle, IntPtr.Zero))
-        {
-            ThrowLastWin32("OpenPrinter");
-        }
-
-        try
-        {
-            DOC_INFO_1 docInfo = new DOC_INFO_1();
-            docInfo.pDocName = documentName;
-            docInfo.pOutputFile = null;
-            docInfo.pDatatype = "RAW";
-
-            if (!StartDocPrinter(printerHandle, 1, docInfo))
-            {
-                ThrowLastWin32("StartDocPrinter");
-            }
-
-            try
-            {
-                if (!StartPagePrinter(printerHandle))
-                {
-                    ThrowLastWin32("StartPagePrinter");
-                }
-
-                try
-                {
-                    int written;
-                    if (!WritePrinter(printerHandle, bytes, bytes.Length, out written))
-                    {
-                        ThrowLastWin32("WritePrinter");
-                    }
-                    if (written != bytes.Length)
-                    {
-                        throw new IOException("WritePrinter wrote " + written + " of " + bytes.Length + " bytes");
-                    }
-                }
-                finally
-                {
-                    EndPagePrinter(printerHandle);
-                }
-            }
-            finally
-            {
-                EndDocPrinter(printerHandle);
-            }
-        }
-        finally
-        {
-            ClosePrinter(printerHandle);
-        }
-    }
-}
-"@
-
-[RawPrinterHelper]::SendFile($PrinterName, $DataPath, $DocumentName)
-Write-Output "OK"
-`;
+function resolveUserDataDir() {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { app } = require("electron") as typeof import("electron");
+    return app.getPath("userData");
+  } catch {
+    return path.join(os.tmpdir(), "restoniti-print");
+  }
 }
 
 export async function printViaWindowsRaw(printerName: string, escPosBuffer: Buffer): Promise<void> {
@@ -185,47 +67,11 @@ export async function printViaWindowsRaw(printerName: string, escPosBuffer: Buff
 
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "pos-print-"));
   const dataPath = path.join(tempDir, "job.bin");
-  const scriptPath = path.join(tempDir, "write-raw.ps1");
 
   try {
-    try {
-      const names = await listWindowsPrinters();
-      const match = names.find((name) => name.toLowerCase() === printerName.toLowerCase());
-      if (!match) {
-        console.warn(
-          `[WIN-RAW] Printer "${printerName}" was not found in Get-Printer output. ` +
-            `Available printers: ${names.join(", ") || "(none)"}. Trying OpenPrinter anyway.`,
-        );
-      } else {
-        console.log(`[WIN-RAW] Printer "${match}" confirmed in Windows printer list.`);
-      }
-    } catch (error: any) {
-      console.warn(`[WIN-RAW] Could not list installed printers: ${error?.message || error}`);
-    }
-
     fs.writeFileSync(dataPath, escPosBuffer);
-    fs.writeFileSync(scriptPath, winspoolRawScript(), "utf-8");
-
     console.log(`[WIN-RAW] Sending ${escPosBuffer.length} raw bytes via Winspool WritePrinter.`);
-    const { stdout } = await execFileAsync(
-      POWERSHELL,
-      [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        scriptPath,
-        "-PrinterName",
-        printerName,
-        "-DataPath",
-        dataPath,
-      ],
-      20000,
-    );
-
-    if (!stdout.includes("OK")) {
-      console.warn(`[WIN-RAW] Winspool helper completed with unexpected output: ${stdout.trim()}`);
-    }
+    await printViaWindowsRawWorker(resolveUserDataDir(), printerName, dataPath);
   } finally {
     try {
       fs.rmSync(tempDir, { recursive: true, force: true });

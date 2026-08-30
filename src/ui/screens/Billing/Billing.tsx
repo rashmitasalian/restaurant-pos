@@ -75,6 +75,8 @@ import {
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 const DEFAULT_KOT_PRINTER = "kitchen";
+const KITCHEN_PRINTER_CACHE_MS = 60_000;
+let cachedKitchenPrinter: { value: string; expiresAt: number } | null = null;
 const QUICK_FAVORITE_SHORTCUT_LIMIT = 6;
 const CATEGORY_VISIBLE = 6;
 
@@ -268,9 +270,15 @@ function paymentFlowLabel(mode: ServiceMode | null | undefined) {
 }
 
 async function resolveKitchenPrinter() {
+  const now = Date.now();
+  if (cachedKitchenPrinter && cachedKitchenPrinter.expiresAt > now) {
+    return cachedKitchenPrinter.value;
+  }
   try {
     const cfg = await getConfigPrinters();
-    return cfg?.kitchenPrinterIp?.trim() || DEFAULT_KOT_PRINTER;
+    const value = cfg?.kitchenPrinterIp?.trim() || DEFAULT_KOT_PRINTER;
+    cachedKitchenPrinter = { value, expiresAt: now + KITCHEN_PRINTER_CACHE_MS };
+    return value;
   } catch {
     return DEFAULT_KOT_PRINTER;
   }
