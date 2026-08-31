@@ -1,14 +1,14 @@
 {
-  "version": "0.5.1",
-  "installerUrl": "https://github.com/rashmitasalian/restaurant-pos/releases/download/v0.5.1/RestoNiti.Setup.0.5.1.exe",
-  "sha256": "B9DEC9FF8EE6F395A50AF639A98EBF2AF80D4E7F747BCC247233B7CF70B8D54C",
+  "version": "0.5.6",
+  "installerUrl": "https://github.com/rashmitasalian/restaurant-pos/releases/download/v0.5.6/RestoNiti.Setup.0.5.6.exe",
+  "sha256": "89B693EA474BE5849D8A784ACF763D828219C5E804536EB325C844EDAB4C80D9",
   "rollbackInstallerUrl": "https://github.com/rashmitasalian/restaurant-pos/releases/download/v0.3.0/RestoNiti.Setup.0.3.0.exe",
   "rollbackSha256": "053479257e87b3fd51eee1711e2d8031f8ed4f93c85517ee5f02934449ff85b1",
-  "installerSizeBytes": 112223740,
+  "installerSizeBytes": 112293338,
   "rollbackInstallerSizeBytes": 109437713,
   "notes": [
-    "Fixed database upgrade crash when updating from 0.4.x.",
-    "Faster first launch and sign-in.",
-    "Added variation option in menu item creation."
+    "Restored Expenses and Reports screen styles.",
+    "Fixed blank login screen after update.",
+    "Fixed database upgrade crash when updating from 0.4.x."
   ]
 }

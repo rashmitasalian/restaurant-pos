@@ -53,11 +53,9 @@ contextBridge.exposeInMainWorld("pos", {
   testPrint: (printer) =>
     ipcRenderer.invoke("printer:print", getSessionToken(), buildTestPrintPayload(printer)),
   writeLog: (level, message, context) =>
-    getSessionToken()
-      ? ipcRenderer
-          .invoke("log:write", getSessionToken(), level, message, context)
-          .catch(() => ({ ok: false }))
-      : Promise.resolve({ ok: false }),
+    ipcRenderer
+      .invoke("log:write", getSessionToken(), level, message, context)
+      .catch(() => ({ ok: false })),
   exportReportPdf: (html, defaultFileName) =>
     ipcRenderer.invoke("report:exportPdf", getSessionToken(), html, defaultFileName),
   db: {

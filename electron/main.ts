@@ -1,5 +1,5 @@
 import "./env";
-import { app, BrowserWindow, ipcMain, dialog, session, Menu, type IpcMainInvokeEvent, type WebContents } from "electron";
+import { app, BrowserWindow, ipcMain, dialog, session, Menu, protocol, type IpcMainInvokeEvent, type WebContents } from "electron";
 import path from "path";
 import http from "http";
 import https from "https";
@@ -16,6 +16,13 @@ import {
   resolveKitchenPrinterTarget,
 } from "../src/shared/printerConfig";
 import { shutdownWindowsRawPrinter, warmUpWindowsRawPrinter } from "./printing/windowsRawWorker";
+import { resolveProductionRendererHtml } from "./rendererPath";
+import {
+  mimeTypeForRendererFile,
+  productionRendererUrl,
+  rendererFileFromRequestUrl,
+  RENDERER_PROTOCOL,
+} from "./rendererProtocol";
 import type { Role } from "../src/shared/pos";
 
 const startupHrStart = process.hrtime.bigint();
@@ -35,6 +42,19 @@ function logStartupStage(stage: string, context?: Record<string, unknown>) {
 // This prevents packaged releases from attempting to load the dev server.
 const isDev = process.env.NODE_ENV !== "production" && !app.isPackaged;
 
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: RENDERER_PROTOCOL,
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+      stream: true,
+    },
+  },
+]);
+
 function isAllowedRendererUrl(targetUrl: string) {
   try {
     const parsed = new URL(targetUrl);
@@ -42,7 +62,8 @@ function isAllowedRendererUrl(targetUrl: string) {
       isDev &&
       (parsed.origin.startsWith("http://localhost:") ||
         parsed.origin.startsWith("http://127.0.0.1:"));
-    const isProdRenderer = !isDev && parsed.protocol === "file:";
+    const isProdRenderer =
+      !isDev && (parsed.protocol === "file:" || parsed.protocol === `${RENDERER_PROTOCOL}:`);
     return isDevRenderer || isProdRenderer;
   } catch {
     return false;
@@ -205,6 +226,53 @@ async function waitForServer(url: string, timeoutMs = 15000) {
   return false;
 }
 
+let productionRendererRoot = "";
+let rendererProtocolRegistered = false;
+
+function registerProductionRendererProtocol(rendererRoot: string) {
+  productionRendererRoot = rendererRoot;
+  if (rendererProtocolRegistered) {
+    return;
+  }
+  protocol.handle(RENDERER_PROTOCOL, async (request) => {
+    const filePath = rendererFileFromRequestUrl(request.url, productionRendererRoot);
+    if (!filePath || !fs.existsSync(filePath)) {
+      writeLogToFile("error", "Renderer asset missing", { url: request.url, filePath });
+      return new Response("Not found", { status: 404, headers: { "content-type": "text/plain" } });
+    }
+    const body = await fs.promises.readFile(filePath);
+    return new Response(body, {
+      headers: {
+        "content-type": mimeTypeForRendererFile(filePath),
+        "cache-control": "no-cache",
+      },
+    });
+  });
+  rendererProtocolRegistered = true;
+}
+
+function bindRendererDiagnostics(contents: WebContents) {
+  contents.on("console-message", (event) => {
+    const text = String(event.message || "");
+    const lvl = String(event.level || "info");
+    if (
+      lvl !== "warning" &&
+      lvl !== "error" &&
+      !text.includes("[renderer-startup]") &&
+      !text.toLowerCase().includes("content security policy")
+    ) {
+      return;
+    }
+    writeLogToFile(lvl === "error" ? "error" : lvl === "warning" ? "warn" : "info", `[renderer-console] ${text}`, {
+      line: event.lineNumber,
+      sourceId: event.sourceId,
+    });
+  });
+  contents.on("preload-error", (_event, preloadPath, error) => {
+    writeLogToFile("fatal", "preload-error", { preloadPath, error: String(error) });
+  });
+}
+
 async function createWindow() {
   logStartupStage("createWindow:start");
   const icon = resolveAppIconPath();
@@ -244,6 +312,7 @@ async function createWindow() {
 
   denyPopupWindows(mainWindow.webContents);
   bindRendererNavigationGuard(mainWindow.webContents);
+  bindRendererDiagnostics(mainWindow.webContents);
 
   // ── Content Security Policy ──────────────────────────────────────────────
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
@@ -253,7 +322,7 @@ async function createWindow() {
         "Content-Security-Policy": [
           isDev
             ? "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws://localhost:* http://localhost:*;"
-            : "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self';",
+            : "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' blob:; font-src 'self' data:; img-src 'self' data:; connect-src 'self';",
         ],
       },
     });
@@ -292,10 +361,36 @@ async function createWindow() {
       }
     }
   } else {
-    // ── Production: load the built renderer from dist/ ──────────────────────
-    const rendererPath = path.join(__dirname, "..", "..", "dist", "index.html");
-    logStartupStage("renderer:load-file", { rendererPath });
-    mainWindow.loadFile(rendererPath);
+    const rendererPath = resolveProductionRendererHtml({
+      resourcesPath: process.resourcesPath,
+      dirname: __dirname,
+    });
+    const rendererRoot = path.dirname(rendererPath);
+    const rendererUrl = productionRendererUrl();
+    registerProductionRendererProtocol(rendererRoot);
+    logStartupStage("renderer:load-url", {
+      rendererPath,
+      rendererRoot,
+      rendererUrl,
+      exists: fs.existsSync(rendererPath),
+    });
+    mainWindow.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL) => {
+      writeLogToFile("fatal", "Renderer failed to load", {
+        errorCode,
+        errorDescription,
+        validatedURL,
+        rendererPath,
+        rendererUrl,
+      });
+      dialog.showErrorBox(
+        "Display Error",
+        `RestoNiti could not load its interface.\n\n${errorDescription} (${errorCode})\n${validatedURL}\n\nTry reinstalling the app or check logs in Settings.`,
+      );
+    });
+    mainWindow.webContents.on("render-process-gone", (_event, details) => {
+      writeLogToFile("fatal", "Renderer process gone", details);
+    });
+    await mainWindow.loadURL(rendererUrl);
   }
 
   mainWindow.on("closed", () => {
@@ -403,8 +498,7 @@ ipcMain.handle("printer:print", async (event, token: string | null, payload) => 
   }
 });
 // Log IPC: persist renderer logs to file
-ipcMain.handle("log:write", async (event, token: string | null, level: string, message: string, context?: any) => {
-  requireMainSession(event, token);
+ipcMain.handle("log:write", async (_event, _token: string | null, level: string, message: string, context?: any) => {
   const safeLevel = LOG_LEVELS.has(String(level || "").toLowerCase())
     ? String(level).toLowerCase()
     : "info";

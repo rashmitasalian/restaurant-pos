@@ -55,11 +55,9 @@ contextBridge.exposeInMainWorld("pos", {
     ipcRenderer.invoke("printer:print", getSessionToken(), buildTestPrintPayload(printer)),
   // Persist a log entry to file via main process
   writeLog: async (level: string, message: string, context?: any) =>
-    getSessionToken()
-      ? ipcRenderer
-          .invoke("log:write", getSessionToken(), level, message, context)
-          .catch(() => ({ ok: false }))
-      : Promise.resolve({ ok: false }),
+    ipcRenderer
+      .invoke("log:write", getSessionToken(), level, message, context)
+      .catch(() => ({ ok: false })),
   // Export report as PDF via native save dialog
   exportReportPdf: async (html: string, defaultFileName: string) =>
     ipcRenderer.invoke("report:exportPdf", getSessionToken(), html, defaultFileName),

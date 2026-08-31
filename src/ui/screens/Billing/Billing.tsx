@@ -343,9 +343,13 @@ export default function Billing() {
   // ── Sidebar state ───────────────────────────────────────────────────────
   const [tablesOpen, setTablesOpen] = React.useState(() => {
     try {
-      return typeof window !== "undefined" && window.localStorage.getItem("tablesOpen") === "1";
+      if (typeof window === "undefined") {
+        return true;
+      }
+      // Default expanded. Only collapse when the cashier previously hid it.
+      return window.localStorage.getItem("tablesOpen") !== "0";
     } catch {
-      return false;
+      return true;
     }
   });
   const setTablesOpenPersisted = (val: boolean) => {

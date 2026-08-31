@@ -1476,8 +1476,10 @@ function runSchema(database: SqliteDatabase) {
 
   // Grocery procurement columns: if migration 13 failed under FK constraints, later
   // migrations never ran while base CREATE IF NOT EXISTS already added empty vendor/purchase tables.
-  addColumnIfMissing(database, "grocery_purchase_lines", "vendor_id", "TEXT");
-  addColumnIfMissing(database, "grocery_purchase_lines", "purchase_id", "TEXT");
+  if (tableExists(database, "grocery_purchase_lines")) {
+    addColumnIfMissing(database, "grocery_purchase_lines", "vendor_id", "TEXT");
+    addColumnIfMissing(database, "grocery_purchase_lines", "purchase_id", "TEXT");
+  }
   addColumnIfMissing(database, "grocery_items", "deleted_at", "INTEGER");
   addColumnIfMissing(database, "grocery_list_lines", "estimated_unit_price_paise", "INTEGER");
   addColumnIfMissing(database, "grocery_list_lines", "estimated_total_paise", "INTEGER");
@@ -1490,10 +1492,15 @@ function runSchema(database: SqliteDatabase) {
     "line_status",
     "TEXT NOT NULL DEFAULT 'pending'",
   );
-  database.exec(`
-    CREATE INDEX IF NOT EXISTS idx_grocery_purchase_lines_purchase
-      ON grocery_purchase_lines(purchase_id);
-  `);
+  if (
+    tableExists(database, "grocery_purchase_lines") &&
+    columnExists(database, "grocery_purchase_lines", "purchase_id")
+  ) {
+    database.exec(`
+      CREATE INDEX IF NOT EXISTS idx_grocery_purchase_lines_purchase
+        ON grocery_purchase_lines(purchase_id);
+    `);
+  }
 }
 
 function runMigration(

@@ -26,7 +26,7 @@ import { FileDown } from "lucide-react";
 import { BUSINESS_RANGE_SEMANTICS } from "../../../shared/businessDateRange";
 import { BusinessRangeControls } from "../../components/BusinessRangeControls";
 import { useBusinessDateRange } from "../../hooks/useBusinessDateRange";
-import "./Reports.module.css";
+import "./Reports.css";
 
 type ReportTab = "sales" | "profitability";
 type CategoryMetric = "sales" | "units";

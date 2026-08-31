@@ -1,3 +1,5 @@
+import { logger } from "../app/utils/logger";
+
 export const VALIDATION_MESSAGES: Record<string, string> = {
   "item-name-required": "Item name is required.",
   "item-price-invalid": "Price must be greater than zero.",
@@ -119,8 +121,6 @@ export function isTechnicalErrorMessage(message: string): boolean {
   if (trimmed.length > 240) return true;
   return false;
 }
-
-import { logger } from "../app/utils/logger";
 
 export function logSanitizedClientError(error: unknown, defaultMessage: string) {
   const err = error instanceof Error ? error : new Error(String(error ?? "unknown"));

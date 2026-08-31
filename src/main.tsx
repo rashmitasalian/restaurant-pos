@@ -1,3 +1,5 @@
+(window as any).global = window;
+
 import React from "react";
 import { createRoot } from "react-dom/client";
 import "@fontsource/inter/latin-400.css";

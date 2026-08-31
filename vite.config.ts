@@ -1,9 +1,20 @@
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 import path from "path";
+
+/** Electron loads the UI via file:// — crossorigin blocks module/CSS loads and causes a blank window. */
+function electronFileProtocolHtml(): Plugin {
+  return {
+    name: "electron-file-protocol-html",
+    transformIndexHtml(html) {
+      return html.replace(/\s+crossorigin(="[^"]*")?/g, "");
+    },
+  };
+}
 
 export default defineConfig({
   // base must be "./" so Electron can load built assets via file:// protocol
   base: "./",
+  plugins: [electronFileProtocolHtml()],
   // Vite runs from the project root. root tells Vite where to find index.html.
   root: path.resolve(__dirname, "src"),
   // envDir is the project root — same directory as vite.config.ts and .env
@@ -12,6 +23,7 @@ export default defineConfig({
     // Output to project-root/dist
     outDir: path.resolve(__dirname, "dist"),
     emptyOutDir: true,
+    modulePreload: false,
   },
   resolve: {
     alias: {

@@ -35,7 +35,7 @@ import {
 } from "./salaryAdvanceUtils";
 import { formatMonthLabel, shiftMonth, shiftWeek } from "../Attendance/historyUtils";
 import styles from "./SalaryAdvances.module.css";
-import "../Expenses/Expenses.module.css";
+import "../Expenses/Expenses.css";
 
 export type SalaryAdvancesView = "summary" | "transactions";
 

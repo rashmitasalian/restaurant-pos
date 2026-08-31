@@ -15,7 +15,7 @@ import { Input } from "../../components/ui/Input";
 import { Select } from "../../components/ui/Select";
 import { ManageShell } from "../Manager/ManageShell";
 import { validationMessage } from "../../../shared/validation";
-import "./Expenses.module.css";
+import "./Expenses.css";
 
 type ExpenseRow = {
   id: string;
