@@ -574,8 +574,6 @@ function runSchema(database: SqliteDatabase) {
       ON grocery_purchase_lines(active, purchased_at DESC);
     CREATE INDEX IF NOT EXISTS idx_grocery_purchase_lines_item
       ON grocery_purchase_lines(grocery_item_id, active, purchased_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_grocery_purchase_lines_purchase
-      ON grocery_purchase_lines(purchase_id);
 
     CREATE TABLE IF NOT EXISTS expense_categories (
       id TEXT PRIMARY KEY,
@@ -660,6 +658,8 @@ function runSchema(database: SqliteDatabase) {
     CREATE INDEX IF NOT EXISTS idx_grocery_list_template_lines_template
       ON grocery_list_template_lines(template_id, sort_order);
   `);
+
+  bootstrapLegacyGroceryColumns(database);
 
   const existing = database
     .prepare("SELECT version FROM schema_migrations WHERE version = ?")
@@ -1514,9 +1514,24 @@ function runMigration(
     .run(version, name, Date.now());
 }
 
+function tableExists(database: SqliteDatabase, tableName: string) {
+  const row = database
+    .prepare("SELECT 1 AS ok FROM sqlite_master WHERE type = 'table' AND name = ?")
+    .get(tableName) as { ok: number } | undefined;
+  return Boolean(row?.ok);
+}
+
 function columnExists(database: SqliteDatabase, tableName: string, columnName: string) {
   const rows = database.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>;
   return rows.some((row) => row.name === columnName);
+}
+
+function bootstrapLegacyGroceryColumns(database: SqliteDatabase) {
+  if (!tableExists(database, "grocery_purchase_lines")) {
+    return;
+  }
+  addColumnIfMissing(database, "grocery_purchase_lines", "vendor_id", "TEXT");
+  addColumnIfMissing(database, "grocery_purchase_lines", "purchase_id", "TEXT");
 }
 
 function addColumnIfMissing(

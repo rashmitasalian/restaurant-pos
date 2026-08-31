@@ -1,6 +1,6 @@
 {
   "name": "restaurant-pos",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "RestoNiti desktop POS and operations app for a single restaurant.",
   "author": "RestoNiti",
   "private": true,
