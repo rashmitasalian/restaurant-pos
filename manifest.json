@@ -1,10 +1,10 @@
 {
-  "version": "0.4.0",
+  "version": "0.5.0",
   "installerUrl": "https://github.com/rashmitasalian/restaurant-pos/releases/download/v0.4.0/RestoNiti.Setup.0.4.0.exe",
-  "sha256": "c09f0b654151a5449b61e809321a2f88f9cb9bc016dd482ed2422a89d59d72b4",
+  "sha256": "362E60832450BEEAB2B73D5439D93D87AD1BF60E89A88EE298ACA747D3A6D523",
   "rollbackInstallerUrl": "https://github.com/rashmitasalian/restaurant-pos/releases/download/v0.3.0/RestoNiti.Setup.0.3.0.exe",
   "rollbackSha256": "053479257e87b3fd51eee1711e2d8031f8ed4f93c85517ee5f02934449ff85b1",
-  "installerSizeBytes": 108660038,
+  "installerSizeBytes": 112224652,
   "rollbackInstallerSizeBytes": 109437713,
   "notes": [
     "Fixed issue with the application not starting quickly on some systems.",
