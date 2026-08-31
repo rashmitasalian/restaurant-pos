@@ -1,10 +1,10 @@
 {
   "version": "0.5.6",
   "installerUrl": "https://github.com/rashmitasalian/restaurant-pos/releases/download/v0.5.6/RestoNiti.Setup.0.5.6.exe",
-  "sha256": "89B693EA474BE5849D8A784ACF763D828219C5E804536EB325C844EDAB4C80D9",
+  "sha256": "B273ECB4A2F5E136A8F75B7D521141BADFE3113007369F7B35BC2E0856A40495",
   "rollbackInstallerUrl": "https://github.com/rashmitasalian/restaurant-pos/releases/download/v0.3.0/RestoNiti.Setup.0.3.0.exe",
   "rollbackSha256": "053479257e87b3fd51eee1711e2d8031f8ed4f93c85517ee5f02934449ff85b1",
-  "installerSizeBytes": 112293338,
+  "installerSizeBytes": 112293336,
   "rollbackInstallerSizeBytes": 109437713,
   "notes": [
     "Restored Expenses and Reports screen styles.",
