@@ -91,6 +91,8 @@ contextBridge.exposeInMainWorld("pos", {
     snapshot: () => authInvoke("pos:tables:snapshot"),
     setArea: (tableId, areaId) => authInvoke("pos:tables:set-area", tableId, areaId),
     setSeats: (tableId, seats) => authInvoke("pos:tables:set-seats", tableId, seats),
+    setName: (tableId, name) => authInvoke("pos:tables:set-name", tableId, name),
+    applyFloorLayout: (payload) => authInvoke("pos:tables:apply-floor-layout", payload),
   },
   seatingAreas: {
     list: (includeDisabled) => authInvoke("pos:seating-areas:list", includeDisabled),
@@ -214,6 +216,7 @@ contextBridge.exposeInMainWorld("pos", {
       authInvoke("pos:audit:create", action, orderId, user, detail),
     list: (opts) => authInvoke("pos:audit:list", opts),
     count: (opts) => authInvoke("pos:audit:count", opts),
+    liveActivity: (opts) => authInvoke("pos:activity:live", opts),
   },
   auditArchives: {
     create: (retentionDays) => authInvoke("pos:audit-archives:create", retentionDays),
@@ -247,6 +250,19 @@ contextBridge.exposeInMainWorld("pos", {
   },
   support: {
     exportDiagnostics: () => authInvoke("pos:support:export-diagnostics"),
+  },
+  gateway: {
+    status: () => authInvoke("pos:gateway:status"),
+    start: () => authInvoke("pos:gateway:start"),
+    stop: () => authInvoke("pos:gateway:stop"),
+    rotatePairing: () => authInvoke("pos:gateway:rotate-pairing"),
+  },
+  events: {
+    onDomainEvent: (listener) => {
+      const handler = (_event, payload) => listener(payload);
+      ipcRenderer.on("pos:domain-event", handler);
+      return () => ipcRenderer.removeListener("pos:domain-event", handler);
+    },
   },
 });
 

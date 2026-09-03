@@ -2,6 +2,11 @@ import React from "react";
 import { normalizePhone } from "../../../../shared/validation";
 import { useFocusTrap } from "../../../hooks/useFocusTrap";
 import styles from "../Billing.module.css";
+import {
+  CANCEL_REASON_OTHER,
+  CANCEL_REASON_PRESETS,
+  resolveCancelReason,
+} from "../../../../shared/cancelReasons";
 
 interface FormatCurrency {
   (v: number): string;
@@ -251,7 +256,7 @@ export function KotPreviewModal({ data, onClose, onPrint, printing = false }: Ko
   );
 }
 
-// ── New Takeaway Order Modal ────────────────────────────────────────────────
+// ── Void Sent KOT Modal ─────────────────────────────────────────────────────
 
 interface KotVoidProps {
   itemName: string;
@@ -270,8 +275,9 @@ export function KotVoidModal({
   onConfirm,
   processing = false,
 }: KotVoidProps) {
-  const [reason, setReason] = React.useState("");
-  const cleanReason = reason.trim();
+  const [preset, setPreset] = React.useState<string>(CANCEL_REASON_PRESETS[0]);
+  const [otherText, setOtherText] = React.useState("");
+  const cleanReason = resolveCancelReason(preset, otherText);
   return (
     <DialogShell
       ariaLabel="Void sent KOT item"
@@ -294,13 +300,33 @@ export function KotVoidModal({
         <label className={styles.modalLabel} style={{ marginTop: 14 }}>
           Reason
         </label>
-        <input
-          value={reason}
-          onChange={(event) => setReason(event.target.value)}
-          placeholder="e.g. Customer changed order"
-          autoFocus
-          className={styles.modalInput}
-        />
+        <div className={styles.kotList} style={{ marginTop: 8 }}>
+          {CANCEL_REASON_PRESETS.map((option) => (
+            <label key={option} className={styles.kotItem} style={{ cursor: processing ? "default" : "pointer" }}>
+              <input
+                type="radio"
+                name="kot-void-reason"
+                value={option}
+                checked={preset === option}
+                disabled={processing}
+                onChange={() => setPreset(option)}
+                style={{ marginRight: 8 }}
+              />
+              {option}
+            </label>
+          ))}
+        </div>
+        {preset === CANCEL_REASON_OTHER ? (
+          <input
+            value={otherText}
+            onChange={(event) => setOtherText(event.target.value)}
+            placeholder="Describe the reason"
+            autoFocus
+            className={styles.modalInput}
+            style={{ marginTop: 10 }}
+            disabled={processing}
+          />
+        ) : null}
         <div className={styles.modalFooter}>
           <button onClick={onClose} className={styles.btn} disabled={processing}>
             Keep Item
@@ -316,6 +342,8 @@ export function KotVoidModal({
     </DialogShell>
   );
 }
+
+// ── New Takeaway Order Modal ────────────────────────────────────────────────
 
 interface NewTakeawayProps {
   title?: string;

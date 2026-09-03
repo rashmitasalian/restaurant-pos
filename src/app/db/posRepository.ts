@@ -119,6 +119,35 @@ export async function setTableSeats(tableId: number, seats: number): Promise<Tab
   return api().tables!.setSeats(tableId, seats);
 }
 
+export async function setTableName(tableId: number, name: string): Promise<TableDoc | null> {
+  return api().tables!.setName(tableId, name);
+}
+
+export async function applyFloorLayout(payload: {
+  areas: Array<{
+    id?: string;
+    name?: string;
+    active?: boolean;
+    order?: number;
+    tableCount?: number;
+    namingMode?: "number" | "prefix";
+    prefix?: string;
+    defaultSeats?: number;
+  }>;
+  tableOverrides?: Array<{
+    areaId?: string;
+    plannedName?: string;
+    name?: string;
+    seats?: number;
+  }>;
+}): Promise<{
+  areas: SeatingAreaDoc[];
+  tables: TableDoc[];
+  tableCount: number;
+}> {
+  return api().tables!.applyFloorLayout(payload);
+}
+
 export async function getSeatingAreas(includeDisabled = true): Promise<SeatingAreaDoc[]> {
   return api().seatingAreas!.list(includeDisabled);
 }
@@ -948,6 +977,13 @@ export type ConfigTablesDoc = ConfigDto & {
   _id: "config:tables";
   tableCount: number;
   defaultSeats?: number;
+  layout?: Array<{
+    id: string;
+    tableCount: number;
+    namingMode?: "number" | "prefix";
+    prefix?: string;
+    defaultSeats?: number;
+  }>;
   updatedAt: number;
 };
 
@@ -1133,6 +1169,10 @@ export async function getAudits(
 
 export async function countAudits(opts: { from?: number; to?: number; search?: string } = {}) {
   return api().audit!.count(opts);
+}
+
+export async function getLiveActivity(opts: { limit?: number; since?: number } = {}) {
+  return api().audit!.liveActivity(opts);
 }
 
 export async function listPrintJobs(status?: PrintJobDto["status"]): Promise<PrintJobDoc[]> {

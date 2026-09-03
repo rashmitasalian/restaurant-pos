@@ -858,3 +858,8 @@ For deployment, updates, or custom feature requirements, refer to project mainta
 - **Developers**: Start with `docs/ONBOARDING.md` and `docs/design-system.md`
 - **Performance**: See `docs/REPORT_PERFORMANCE_TESTING.md`
 - **Deploy**: See `docs/FIRST_TIME_INSTALLATION_RUNBOOK.md` and `docs/PRODUCTION_UPDATE_RUNBOOK.md`
+
+
+5D07-413C-1765-EEFF-E224-DF51
+F5AD-F398-4FDC-EFFC-7258-2605
+FBAC-94DD-959E-B1D7-E923-5755

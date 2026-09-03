@@ -169,7 +169,7 @@ function runSchema(database: SqliteDatabase) {
     CREATE TABLE IF NOT EXISTS users (
       username TEXT PRIMARY KEY,
       display_name TEXT NOT NULL,
-      role TEXT NOT NULL CHECK (role IN ('admin', 'cashier', 'manager')),
+      role TEXT NOT NULL CHECK (role IN ('admin', 'cashier', 'manager', 'captain')),
       password_hash TEXT NOT NULL,
       salt TEXT NOT NULL,
       hash_algo TEXT NOT NULL,
@@ -1453,6 +1453,52 @@ function runSchema(database: SqliteDatabase) {
       CREATE TRIGGER IF NOT EXISTS audit_logs_fts_ad AFTER DELETE ON audit_logs BEGIN
         DELETE FROM audit_logs_fts WHERE audit_id = old.id;
       END;
+    `);
+  });
+
+  runMigration(database, 24, "Captain role, client_ops idempotency", () => {
+    database.exec(`
+      CREATE TABLE users_v24 (
+        username TEXT PRIMARY KEY,
+        display_name TEXT NOT NULL,
+        role TEXT NOT NULL CHECK (role IN ('admin', 'cashier', 'manager', 'captain')),
+        password_hash TEXT NOT NULL,
+        salt TEXT NOT NULL,
+        hash_algo TEXT NOT NULL,
+        active INTEGER NOT NULL DEFAULT 1,
+        require_password_change INTEGER NOT NULL DEFAULT 0,
+        staff_id TEXT REFERENCES staff(id) ON UPDATE CASCADE ON DELETE SET NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+
+      INSERT INTO users_v24 (
+        username, display_name, role, password_hash, salt, hash_algo,
+        active, require_password_change, staff_id, created_at, updated_at
+      )
+      SELECT
+        username, display_name, role, password_hash, salt, hash_algo,
+        active, require_password_change, staff_id, created_at, updated_at
+      FROM users;
+
+      DROP TABLE users;
+      ALTER TABLE users_v24 RENAME TO users;
+
+      CREATE INDEX IF NOT EXISTS idx_users_staff_id ON users(staff_id) WHERE staff_id IS NOT NULL;
+
+      CREATE TABLE IF NOT EXISTS client_ops (
+        id TEXT PRIMARY KEY,
+        username TEXT NOT NULL,
+        action TEXT NOT NULL,
+        entity_id TEXT,
+        result_json TEXT,
+        created_at INTEGER NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_client_ops_created
+        ON client_ops(created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_client_ops_user_action
+        ON client_ops(username, action, created_at DESC);
     `);
   });
 

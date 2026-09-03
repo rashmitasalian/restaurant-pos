@@ -7,8 +7,9 @@ import {
 } from "../../../app/db/posRepository";
 import { useFocusTrap } from "../../hooks/useFocusTrap";
 import styles from "./Tables.module.css";
-import { StatusDot } from "../../components/ui/StatusDot";
+import { PageHeader } from "../../components/ui/PageHeader";
 import { SegmentedControl } from "../../components/ui/SegmentedControl";
+import { TableTile } from "../../components/ui/TableTile";
 import { formatKotAge } from "../../../shared/kotAge";
 
 type TableInfo = {
@@ -176,54 +177,61 @@ export default function Tables() {
   return (
     <div className={styles.page}>
       <div className={styles.content}>
-        <div className={styles.header}>
-          <div className={styles.headerLead}>
-            <h2 className={styles.title}>Tables</h2>
-            <p className={styles.meta}>
+        <PageHeader
+          title="Tables"
+          subtitle={
+            <>
               <span className="ui-dot ui-dot-occupied" aria-hidden="true" /> {occupied} occupied
               &nbsp;·&nbsp;
               <span className="ui-dot" aria-hidden="true" /> {available} available
-            </p>
-          </div>
-          <div className={styles.controls}>
-            <div className={styles.filterInline}>
-              <SegmentedControl
-                ariaLabel="Floor area"
-                value={selectedAreaId}
-                onChange={setSelectedAreaId}
-                options={[
-                  { id: "all", label: "All Areas" },
-                  ...areas
-                    .filter((area) => area.active !== false)
-                    .map((area) => ({ id: area.id, label: area.name })),
-                ]}
-              />
+            </>
+          }
+          actions={
+            <div className={styles.controls}>
+              <div className={styles.filterInline}>
+                <SegmentedControl
+                  ariaLabel="Floor area"
+                  value={selectedAreaId}
+                  onChange={setSelectedAreaId}
+                  options={[
+                    { id: "all", label: "All Areas" },
+                    ...areas
+                      .filter((area) => area.active !== false)
+                      .map((area) => ({ id: area.id, label: area.name })),
+                  ]}
+                />
+              </div>
+              <div className={styles.actions}>
+                <input
+                  aria-label="Search tables"
+                  placeholder="Search table…"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  className={styles.input}
+                />
+                <button
+                  ref={openOrdersBtnRef}
+                  aria-label="View all open dine-in orders"
+                  onClick={async () => {
+                    const ops = await getOpenOrders();
+                    setOpenOrders(
+                      ops.filter(
+                        (o) =>
+                          o.tableId !== null &&
+                          o.tableId !== undefined &&
+                          (o.items || []).length > 0,
+                      ),
+                    );
+                  }}
+                  disabled={openOrdersLoading}
+                  className={styles.btn}
+                >
+                  {openOrdersLoading ? "Loading..." : "Open Orders"}
+                </button>
+              </div>
             </div>
-            <div className={styles.actions}>
-              <input
-                aria-label="Search tables"
-                placeholder="Search table…"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                className={styles.input}
-              />
-              <button
-                ref={openOrdersBtnRef}
-                aria-label="View all open dine-in orders"
-                onClick={async () => {
-                  const ops = await getOpenOrders();
-                  setOpenOrders(
-                    ops.filter((o) => o.tableId !== null && o.tableId !== undefined && (o.items || []).length > 0),
-                  );
-                }}
-                disabled={openOrdersLoading}
-                className={styles.btn}
-              >
-                {openOrdersLoading ? "Loading..." : "Open Orders"}
-              </button>
-            </div>
-          </div>
-        </div>
+          }
+        />
 
         {Array.from(grouped.entries()).map(([areaId, areaTables]) => {
           const areaName = areaTables[0]?.areaName || areas.find((area) => area.id === areaId)?.name || "Area";
@@ -234,76 +242,43 @@ export default function Tables() {
                 {areaTables.map((t) => {
                   const isOpening = openingTableId === t.id;
                   const billPending = t.occupied && (t.status === "ready" || t.status === "held");
-                  const cardState = billPending
-                    ? styles.billPending
-                    : t.occupied
-                      ? styles.occupied
-                      : styles.available;
                   const elapsed = t.occupied && t.openedAt ? formatKotAge(t.openedAt) : "";
-                  const seatsLabel = Number(t.seats) > 0 ? `${t.seats} seats` : "";
+                  const seats = Number(t.seats) > 0 ? Number(t.seats) : null;
                   const titleLabel =
                     t.name && String(t.name).trim() && String(t.name).trim() !== `Table ${t.id}`
                       ? String(t.name).trim()
                       : String(t.id);
+                  const state = billPending ? "attention" : t.occupied ? "occupied" : "available";
+                  const stateLabel = isOpening
+                    ? "Opening…"
+                    : billPending
+                      ? "Pending"
+                      : t.occupied
+                        ? "Occupied"
+                        : "Available";
                   return (
-                    <article
+                    <TableTile
                       key={t.id}
-                      role="button"
-                      tabIndex={isOpening ? -1 : 0}
-                      aria-disabled={isOpening}
-                      aria-label={`Table ${t.id}, ${t.occupied ? "occupied" : "available"}${seatsLabel ? `, ${seatsLabel}` : ""}${t.orderSummary ? `, ${t.orderSummary}` : ""}${elapsed ? `, open ${elapsed}` : ""}. Press to open billing.`}
-                      onClick={() => !isOpening && openBilling(t)}
-                      onKeyDown={(e) => {
-                        if ((e.key === "Enter" || e.key === " ") && !isOpening) {
-                          e.preventDefault();
-                          openBilling(t);
-                        }
-                      }}
-                      className={`${styles.card} ${cardState}`}
-                      style={isOpening ? { pointerEvents: "none", opacity: 0.7 } : undefined}
-                    >
-                      <div className={styles.headerInfo}>
-                        <div className={styles.idBlock}>
-                          <div className={styles.id}>{titleLabel}</div>
-                        </div>
-                        <span
-                          className={`${styles.stateBadge} pos-badge ${
-                            billPending
-                              ? "ui-badge-attention"
-                              : t.occupied
-                                ? "ui-badge-occupied"
-                                : "ui-badge-neutral"
-                          }`}
-                        >
-                          <StatusDot
-                            tone={billPending ? "attention" : t.occupied ? "occupied" : "neutral"}
-                            label={billPending ? "Pending" : t.occupied ? "Occupied" : "Available"}
-                            decorative
-                          />
-                          {billPending ? "Pending" : t.occupied ? "Occupied" : "Available"}
-                        </span>
-                      </div>
-                      <div className={styles.body}>
-                        {t.occupied ? (
-                          <div className={styles.metrics}>
-                            <div className={styles.amount}>
-                              ₹{Number(t.total || 0).toLocaleString("en-IN")}
-                            </div>
-                            <div className={styles.elapsed}>
-                              {t.count} item{t.count !== 1 ? "s" : ""}
-                              {elapsed ? ` · ${elapsed}` : ""}
-                            </div>
-                          </div>
-                        ) : isOpening ? (
-                          <div className={styles.openingHint}>Opening…</div>
-                        ) : (
-                          <div className={styles.metrics}>
-                            <div className={styles.availableFoot}>Ready</div>
-                            {seatsLabel ? <div className={styles.availableMeta}>{seatsLabel}</div> : null}
-                          </div>
-                        )}
-                      </div>
-                    </article>
+                      number={titleLabel}
+                      variant="floor"
+                      state={state}
+                      stateLabel={stateLabel}
+                      seats={seats}
+                      itemCount={t.occupied ? Number(t.count || 0) : null}
+                      amountLabel={
+                        t.occupied
+                          ? `₹${Number(t.total || 0).toLocaleString("en-IN")}`
+                          : undefined
+                      }
+                      elapsed={elapsed || undefined}
+                      disabled={isOpening}
+                      onClick={() => openBilling(t)}
+                      aria-label={`Table ${titleLabel}, ${stateLabel}${
+                        seats ? `, ${seats} seats` : ""
+                      }${t.orderSummary ? `, ${t.orderSummary}` : ""}${
+                        elapsed ? `, open ${elapsed}` : ""
+                      }. Press to open billing.`}
+                    />
                   );
                 })}
               </div>

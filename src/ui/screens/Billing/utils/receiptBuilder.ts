@@ -222,92 +222,13 @@ export function buildReceiptLines(
   ];
 }
 
-// ── KOT builder ─────────────────────────────────────────────────────────────
+// ── KOT builder (shared with main-process / Local Gateway) ──────────────────
 
-export function buildKotLines(
-  previewData: any,
-  orderData: any,
-  tableNum: number | null,
-  brandingInput?: ReceiptBranding | null,
-): string[] {
-  const branding = getReceiptBranding(brandingInput);
-  const PAD = "  ";
-  const COL_ITEM = 32;
-  const COL_QTY = 8;
+export {
+  buildKotLines,
+  buildKotVoidLines,
+  type KotPreviewData,
+  type KotPreviewItem,
+  type KotTicketBranding,
+} from "../../../../shared/kotTicket";
 
-  const now = new Date();
-  const pad2 = (n: number) => String(n).padStart(2, "0");
-  const dateStr = `${pad2(now.getDate())}-${pad2(now.getMonth() + 1)}-${now.getFullYear()}`;
-  const timeStr = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-
-  const kotNum = String(previewData.kotId || "-");
-
-  return [
-    `BIGBOLD:${branding.hotelName}`,
-    "SUBHEADER:---------KOT---------",
-    `LEFT:${PAD}KOT No: ${kotNum}`,
-    `LEFT:${PAD}Date: ${dateStr}  Time: ${timeStr}`,
-    ...(previewData.sentBy ? [`LEFT:${PAD}Sent by: ${previewData.sentBy}`] : []),
-    ...(previewData.orderType === "table"
-      ? [`LEFT:${PAD}Table No: ${previewData.tableNum || tableNum || "-"}`]
-      : []),
-    ...(previewData.orderType === "delivery"
-      ? [
-          `LEFT:${PAD}Type: ${previewData.platform || "Delivery"}`,
-          ...(previewData.platformCode ? [`LEFT:${PAD}Code: ${previewData.platformCode}`] : []),
-        ]
-      : []),
-    ...(previewData.orderType === "takeaway" && previewData.customerName
-      ? [`LEFT:${PAD}Customer: ${previewData.customerName}`]
-      : []),
-    ...(previewData.orderType === "takeaway" && previewData.customerPhone
-      ? [`LEFT:${PAD}Phone: ${previewData.customerPhone}`]
-      : []),
-    "SEP",
-    `LEFT:${PAD}${rpad("Item", COL_ITEM)}${lpad("Qty", COL_QTY)}`,
-    "SEP",
-    ...((previewData.items || orderData.items || []) as any[]).map((it: any) => {
-      const name = rpad(String(it.name || "").trim(), COL_ITEM);
-      const qty = lpad(String(it.qty !== null ? it.qty : 1), COL_QTY);
-      return `LEFTDH:${PAD}${name}${qty}`;
-    }),
-    ...(orderData.notes ? ["SEP", `LEFT:${PAD}Note: ${orderData.notes}`] : []),
-    "BLANK",
-    "CUT",
-  ];
-}
-
-export function buildKotVoidLines(
-  previewData: any,
-  brandingInput?: ReceiptBranding | null,
-): string[] {
-  const branding = getReceiptBranding(brandingInput);
-  const PAD = "  ";
-  const COL_ITEM = 32;
-  const COL_QTY = 8;
-  const now = new Date();
-  const pad2 = (n: number) => String(n).padStart(2, "0");
-  const dateStr = `${pad2(now.getDate())}-${pad2(now.getMonth() + 1)}-${now.getFullYear()}`;
-  const timeStr = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-
-  return [
-    `BIGBOLD:${branding.hotelName}`,
-    "SUBHEADER:-------VOID KOT-------",
-    `LEFT:${PAD}Date: ${dateStr}  Time: ${timeStr}`,
-    ...(previewData.sentBy ? [`LEFT:${PAD}Voided by: ${previewData.sentBy}`] : []),
-    ...(previewData.orderType === "table"
-      ? [`LEFT:${PAD}Table No: ${previewData.tableNum || "-"}`]
-      : [`LEFT:${PAD}Type: ${previewData.orderType || "Order"}`]),
-    ...(previewData.reason ? [`LEFT:${PAD}Reason: ${previewData.reason}`] : []),
-    "SEP",
-    `LEFT:${PAD}${rpad("Cancel Item", COL_ITEM)}${lpad("Qty", COL_QTY)}`,
-    "SEP",
-    ...((previewData.items || []) as any[]).map((it: any) => {
-      const name = rpad(String(it.name || "").trim(), COL_ITEM);
-      const qty = lpad(String(it.qty || 1), COL_QTY);
-      return `LEFTDH:${PAD}${name}${qty}`;
-    }),
-    "BLANK",
-    "CUT",
-  ];
-}

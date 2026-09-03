@@ -7,7 +7,7 @@
  *   2. Add label + badgeClass here.
  * Nav gating, IPC checks, user management UI, and DB types derive from permissions.
  *
- * Waiter / Captain is intentionally not a desktop role — Phase 2+ tablet app.
+ * Captain is phone-only (Local Gateway) — not a desktop login role.
  */
 
 import {
@@ -43,6 +43,11 @@ export const ROLES: Record<Role, RoleConfig> = {
     label: "Cashier",
     pages: permissionsToPages(ROLE_PERMISSIONS.cashier),
     badgeClass: "cashier",
+  },
+  captain: {
+    label: "Captain",
+    pages: permissionsToPages(ROLE_PERMISSIONS.captain),
+    badgeClass: "captain",
   },
 };
 

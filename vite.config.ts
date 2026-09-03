@@ -24,6 +24,12 @@ export default defineConfig({
     outDir: path.resolve(__dirname, "dist"),
     emptyOutDir: true,
     modulePreload: false,
+    rollupOptions: {
+      input: {
+        main: path.resolve(__dirname, "src/index.html"),
+        captain: path.resolve(__dirname, "src/captain/index.html"),
+      },
+    },
   },
   resolve: {
     alias: {

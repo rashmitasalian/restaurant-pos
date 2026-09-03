@@ -59,6 +59,8 @@ declare global {
         snapshot: () => Promise<any>;
         setArea: (tableId: number, areaId: string) => Promise<any>;
         setSeats: (tableId: number, seats: number) => Promise<any>;
+        setName: (tableId: number, name: string) => Promise<any>;
+        applyFloorLayout: (payload: any) => Promise<any>;
       };
       seatingAreas?: {
         list: (includeDisabled?: boolean) => Promise<any[]>;
@@ -190,6 +192,7 @@ declare global {
         ) => Promise<any>;
         list: (opts?: any) => Promise<any[]>;
         count: (opts?: any) => Promise<number>;
+        liveActivity: (opts?: { limit?: number; since?: number }) => Promise<any[]>;
       };
       auditArchives?: {
         create: (retentionDays: number) => Promise<any | null>;
@@ -228,6 +231,15 @@ declare global {
       };
       support?: {
         exportDiagnostics: () => Promise<any>;
+      };
+      gateway?: {
+        status: () => Promise<any>;
+        start: () => Promise<any>;
+        stop: () => Promise<any>;
+        rotatePairing: () => Promise<any>;
+      };
+      events?: {
+        onDomainEvent: (listener: (event: any) => void) => () => void;
       };
     };
     __onehand_setters?: any;

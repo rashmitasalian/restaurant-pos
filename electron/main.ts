@@ -7,6 +7,8 @@ import fs from "fs";
 import { registerPosIpc } from "./ipc/posIpc";
 import { closeDb, initializeDatabase } from "./db/sqlite";
 import { posService } from "./services/posService";
+import { configureDomainEvents } from "./services/domainEvents";
+import { startLocalGateway, stopLocalGateway, getGatewayStatus, rotateGatewayPairingCode } from "./gateway/localGateway";
 import { destroyMainSession, getMainSession, refreshMainSession } from "./services/sessionManager";
 import { updateService } from "./services/updateService";
 import { printPayload, type PrinterConfig } from "./printing/printService";
@@ -427,9 +429,17 @@ app.whenReady().then(async () => {
     logStartupStage("updates:startup-state:done");
     logStartupStage("ipc:register:start");
     registerPosIpc(() => mainWindow);
+    configureDomainEvents(() => mainWindow);
     logStartupStage("ipc:register:done");
     await createWindow();
     warmUpWindowsRawPrinter(app.getPath("userData"));
+    try {
+      logStartupStage("gateway:start");
+      await startLocalGateway();
+      logStartupStage("gateway:ready", getGatewayStatus());
+    } catch (gatewayError: any) {
+      writeLogToFile("error", `Local gateway failed to start: ${gatewayError?.stack || gatewayError}`);
+    }
     logStartupStage("createWindow:done");
   } catch (err: any) {
     writeLogToFile("fatal", `Startup failed: ${err?.stack || err}`);
@@ -450,6 +460,7 @@ app.on("window-all-closed", () => {
 app.on("before-quit", () => {
   destroyPdfExportWindow();
   shutdownWindowsRawPrinter();
+  void stopLocalGateway();
   closeDb();
 });
 

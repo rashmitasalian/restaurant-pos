@@ -13,7 +13,7 @@ export type Session = {
   requirePasswordChange?: boolean;
 };
 
-export type LoginReason = "invalid-credentials" | "inactive" | "locked";
+export type LoginReason = "invalid-credentials" | "inactive" | "locked" | "captain-phone-only";
 
 export type LoginResult = {
   ok: boolean;

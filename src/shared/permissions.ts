@@ -1,6 +1,6 @@
 import type { ManagerSection, PeopleTab } from "./manageSections";
 
-export type Role = "admin" | "cashier" | "manager";
+export type Role = "admin" | "cashier" | "manager" | "captain";
 
 /** Capability keys — roles are bundles of these permissions. */
 export type Permission =
@@ -20,7 +20,13 @@ export type Permission =
   | "business:reports"
   | "business:history"
   | "system:audit"
-  | "system:settings";
+  | "system:settings"
+  | "order:open"
+  | "order:add-item"
+  | "order:send-kot"
+  | "order:void-item"
+  | "order:pay"
+  | "order:cancel";
 
 export const ALL_PERMISSIONS: readonly Permission[] = [
   "page:tables",
@@ -40,16 +46,32 @@ export const ALL_PERMISSIONS: readonly Permission[] = [
   "business:history",
   "system:audit",
   "system:settings",
+  "order:open",
+  "order:add-item",
+  "order:send-kot",
+  "order:void-item",
+  "order:pay",
+  "order:cancel",
 ] as const;
 
-/** Floor + Manage bundles per login role. Waiter is Phase 2+ (tablet app), not a desktop role. */
+const FLOOR_ORDER_PERMISSIONS: readonly Permission[] = [
+  "page:tables",
+  "page:billing",
+  "page:kot",
+  "page:customers",
+  "order:open",
+  "order:add-item",
+  "order:send-kot",
+  "order:void-item",
+  "order:pay",
+  "order:cancel",
+];
+
+/** Floor + Manage bundles per login role. Captain is phone-only (Local Gateway), not desktop. */
 export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   admin: ALL_PERMISSIONS,
   manager: [
-    "page:tables",
-    "page:billing",
-    "page:kot",
-    "page:customers",
+    ...FLOOR_ORDER_PERMISSIONS,
     "page:manager",
     "manage:overview",
     "manage:grocery",
@@ -59,12 +81,16 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "people:roster",
     "people:advances",
   ],
-  cashier: ["page:tables", "page:billing", "page:kot", "page:customers"],
+  cashier: [...FLOOR_ORDER_PERMISSIONS],
+  captain: ["order:open", "order:add-item", "order:send-kot", "order:void-item"],
 };
 
 export const ROLE_KEYS = Object.keys(ROLE_PERMISSIONS) as Role[];
 
 export const DEFAULT_ROLE: Role = "cashier";
+
+/** Roles allowed to log into the desktop POS window. */
+export const DESKTOP_LOGIN_ROLES: readonly Role[] = ["admin", "manager", "cashier"];
 
 const PERMISSION_SET_CACHE = new Map<Role, Set<Permission>>(
   ROLE_KEYS.map((role) => [role, new Set(ROLE_PERMISSIONS[role])]),
@@ -72,6 +98,10 @@ const PERMISSION_SET_CACHE = new Map<Role, Set<Permission>>(
 
 export function roleHasPermission(role: Role, permission: Permission): boolean {
   return PERMISSION_SET_CACHE.get(role)?.has(permission) ?? false;
+}
+
+export function isDesktopLoginRole(role: Role): boolean {
+  return (DESKTOP_LOGIN_ROLES as readonly string[]).includes(role);
 }
 
 export function permissionsToPages(permissions: readonly Permission[]): string[] {
@@ -165,3 +195,17 @@ export function getDefaultPeopleTab(role: Role): PeopleTab {
 export function isReportsOnlyRole(role: Role): boolean {
   return roleHasPermission(role, "business:reports") && !roleHasPermission(role, "page:manager");
 }
+
+/** Audit actions shown in Live Activity (operational projection). */
+export const LIVE_ACTIVITY_ACTIONS = [
+  "order.created",
+  "item.added",
+  "order.lines.updated",
+  "order.kot.sent",
+  "order.kot.void",
+  "order.kot.failed",
+  "order.kot.printed",
+  "order.cancelled",
+  "order.paid",
+  "order.discount.updated",
+] as const;

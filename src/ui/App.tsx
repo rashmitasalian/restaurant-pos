@@ -87,6 +87,65 @@ function getRendererStartupElapsedMs() {
   return Number((performance.now() - t0).toFixed(1));
 }
 
+function GatewayChip() {
+  const [status, setStatus] = React.useState<{
+    running?: boolean;
+    pairingCode?: string;
+    urls?: string[];
+    clients?: number;
+  } | null>(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const next = await window.pos?.gateway?.status?.();
+        if (!cancelled) {
+          setStatus(next || null);
+        }
+      } catch {
+        if (!cancelled) {
+          setStatus(null);
+        }
+      }
+    };
+    load();
+    const timer = setInterval(load, 15000);
+    const unsub = window.pos?.events?.onDomainEvent?.((event) => {
+      if (event?.type === "gateway-status") {
+        load();
+      }
+    });
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+      unsub?.();
+    };
+  }, []);
+
+  if (!status?.running) {
+    return null;
+  }
+  const url = status.urls?.[0] || "";
+  return (
+    <div
+      className="pos-clock"
+      title={url ? `Captain URL: ${url}` : "Local Gateway online"}
+      style={{ maxWidth: 220 }}
+    >
+      <div className="pos-clock-dot" aria-hidden="true" />
+      <div>
+        <div className="pos-clock-time" style={{ fontSize: 12 }}>
+          Gateway · {status.clients || 0}
+        </div>
+        <div className="pos-clock-date" style={{ fontSize: 11 }}>
+          Pair {String(status.pairingCode || "").toUpperCase()}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MainContent({
   hasUsers,
   onSetupComplete,
@@ -263,6 +322,21 @@ function MainContent({
     React.useEffect(() => {
       const id = setInterval(() => setNow(new Date()), 30000);
       return () => clearInterval(id);
+    }, []);
+
+    React.useEffect(() => {
+      const unsubscribe = window.pos?.events?.onDomainEvent?.((event) => {
+        const type = String(event?.type || "");
+        if (type === "orders-changed" || type === "tables-changed") {
+          window.dispatchEvent(new Event("orders-changed"));
+        }
+        if (type === "activity-changed") {
+          window.dispatchEvent(new Event("activity-changed"));
+        }
+      });
+      return () => {
+        unsubscribe?.();
+      };
     }, []);
 
     React.useEffect(() => {
@@ -527,6 +601,7 @@ function MainContent({
               })}
           </nav>
           <div className="pos-header-end">
+            <GatewayChip />
             <div className="pos-clock">
               <div className="pos-clock-dot" aria-label="Online" />
               <div>

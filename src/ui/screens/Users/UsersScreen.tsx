@@ -28,6 +28,9 @@ function avatarInitials(doc: UserDoc): string {
 }
 
 function accessiblePageLabels(role: Role): string {
+  if (role === "captain") {
+    return "Captain phone app";
+  }
   return ROLES[role].pages.map((key) => PAGE_LABELS[key] ?? key).join(", ");
 }
 

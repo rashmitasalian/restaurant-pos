@@ -75,6 +75,8 @@ export default function LoginScreen() {
           setError(null);
         } else if (result.reason === "inactive") {
           setError("This account has been disabled. Please contact your administrator.");
+        } else if (result.reason === "captain-phone-only") {
+          setError("Captain accounts sign in on the phone app, not this POS.");
         } else {
           setError("Invalid username or password.");
         }

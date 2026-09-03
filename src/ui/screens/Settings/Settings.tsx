@@ -11,8 +11,6 @@ import {
   getConfigPrinters,
   setConfigPrinters,
   getConfigTables,
-  setConfigTables,
-  seedTables,
   getConfigCategories,
   getConfigMenuVariantOptions,
   setConfigCategories,
@@ -33,11 +31,12 @@ import {
   getConfigServiceModes,
   setConfigServiceModes,
   getSeatingAreas,
-  saveSeatingAreas,
   deleteSeatingArea,
   getTables,
   setTableArea,
   setTableSeats,
+  setTableName,
+  applyFloorLayout,
   listPrintJobs,
   retryPrintJob,
   clearOldPrintJobs,
@@ -61,6 +60,13 @@ import { RECOVERY_CODE_COUNT } from "../../../shared/auth";
 import { normalizeCategoryName, validationMessage } from "../../../shared/validation";
 import { reportClientError } from "../../../app/utils/clientError";
 import { getDefaultServiceModes, type ServiceMode } from "../../../shared/serviceModes";
+import {
+  FLOOR_LAYOUT_LIMITS,
+  inferNamingFromTables,
+  planTablesFromAreas,
+  suggestPrefixFromAreaName,
+  type TableNamingMode,
+} from "../../../shared/floorLayout";
 import { processRestaurantLogoFile, type ReceiptLogoRaster } from "../../utils/logoProcessing";
 import {
   addSeatingAreaDraft,
@@ -69,6 +75,26 @@ import {
   moveSeatingAreaByDirection,
   reorderSeatingAreasByDrag,
 } from "./seatingAreaUtils";
+
+type AreaLayoutDraft = SeatingAreaDoc & {
+  tableCount: number;
+  namingMode: TableNamingMode;
+  prefix: string;
+  defaultSeats: number;
+};
+
+type PreviewOverride = { name: string; seats: number };
+
+function previewKey(areaId: string, plannedName: string) {
+  return `${areaId}::${plannedName}`;
+}
+
+function isTableStatusSuccess(status: string | null) {
+  if (!status) {
+    return false;
+  }
+  return /saved|deleted/i.test(status) && !/could not|must|keep|required|exceed|open orders/i.test(status);
+}
 
 const DEFAULT_ATTENDANCE_SHIFTS: AttendanceShiftConfig[] = [
   { id: "morning", label: "Morning", hours: 8 },
@@ -164,17 +190,18 @@ export default function Settings({
   const [gstStatus, setGstStatus] = React.useState<string | null>(null);
   const [savingGst, setSavingGst] = React.useState(false);
 
-  // â”€â”€ Tables config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  const [tableCount, setTableCount] = React.useState<number>(ENV.TABLE_COUNT);
-  const [defaultSeats, setDefaultSeats] = React.useState<number>(4);
-  const [tableStatus, setTableStatus] = React.useState<string | null>(null);
-  const [savingTables, setSavingTables] = React.useState(false);
-  const [seatingAreas, setSeatingAreas] = React.useState<SeatingAreaDoc[]>([]);
+  // ── Tables / floor layout config ───────────────────────────────────────────
+  const [seatingAreas, setSeatingAreas] = React.useState<AreaLayoutDraft[]>([]);
   const [newSeatingAreaName, setNewSeatingAreaName] = React.useState("");
   const [tableDocs, setTableDocs] = React.useState<TableDoc[]>([]);
   const [tableAreaDraft, setTableAreaDraft] = React.useState<Record<number, string>>({});
   const [tableSeatsDraft, setTableSeatsDraft] = React.useState<Record<number, number>>({});
-  const [savingSeatingAreas, setSavingSeatingAreas] = React.useState(false);
+  const [tableNameDraft, setTableNameDraft] = React.useState<Record<number, string>>({});
+  const [previewOverrides, setPreviewOverrides] = React.useState<Record<string, PreviewOverride>>({});
+  const [showAdvancedMapping, setShowAdvancedMapping] = React.useState(false);
+  const [tableStatus, setTableStatus] = React.useState<string | null>(null);
+  const [savingTables, setSavingTables] = React.useState(false);
+  const [savingAdvancedTables, setSavingAdvancedTables] = React.useState(false);
   const [dragAreaId, setDragAreaId] = React.useState<string | null>(null);
   const [serviceModes, setServiceModes] = React.useState<ServiceMode[]>(() =>
     getDefaultServiceModes(),
@@ -320,18 +347,44 @@ export default function Settings({
     }
     (async () => {
       try {
-        const tCfg = await getConfigTables();
-        if (tCfg) {
-          setTableCount(tCfg.tableCount);
-          const seats = Math.trunc(Number(tCfg.defaultSeats || 4));
-          setDefaultSeats(Number.isFinite(seats) && seats >= 1 ? Math.min(50, seats) : 4);
-        }
-      } catch (e) {}
-      try {
-        const [areas, tables] = await Promise.all([getSeatingAreas(true), getTables()]);
-        const mappedAreas =
+        const [tCfg, areas, tables] = await Promise.all([
+          getConfigTables().catch(() => null),
+          getSeatingAreas(true),
+          getTables(),
+        ]);
+        const layoutById = new Map(
+          (Array.isArray(tCfg?.layout) ? tCfg.layout : []).map((entry) => [entry.id, entry]),
+        );
+        const mappedAreas: AreaLayoutDraft[] =
           areas && areas.length
-            ? [...areas].sort((a, b) => Number(a.order || 0) - Number(b.order || 0))
+            ? [...areas]
+                .sort((a, b) => Number(a.order || 0) - Number(b.order || 0))
+                .map((area) => {
+                  const areaTables = (tables || []).filter(
+                    (table) => String(table.areaId || "") === area.id,
+                  );
+                  const saved = layoutById.get(area.id);
+                  const inferred = inferNamingFromTables(
+                    areaTables.map((table) => String(table.name || "")),
+                  );
+                  const seats =
+                    Math.trunc(
+                      Number(saved?.defaultSeats || tCfg?.defaultSeats || areaTables[0]?.seats || 4),
+                    ) || 4;
+                  return {
+                    ...area,
+                    tableCount: Math.max(
+                      0,
+                      Math.trunc(Number(saved?.tableCount ?? areaTables.length) || 0),
+                    ),
+                    namingMode:
+                      saved?.namingMode === "prefix" || saved?.namingMode === "number"
+                        ? saved.namingMode
+                        : inferred.namingMode,
+                    prefix: String(saved?.prefix ?? inferred.prefix ?? ""),
+                    defaultSeats: Math.max(1, Math.min(FLOOR_LAYOUT_LIMITS.MAX_SEATS, seats)),
+                  };
+                })
             : [
                 {
                   _id: "seating-area:area:main",
@@ -340,18 +393,26 @@ export default function Settings({
                   name: "Main Dining",
                   order: 1,
                   active: true,
-                } as SeatingAreaDoc,
+                  tableCount: 0,
+                  namingMode: "number",
+                  prefix: "",
+                  defaultSeats: 4,
+                },
               ];
         setSeatingAreas(mappedAreas);
         setTableDocs(tables || []);
+        setPreviewOverrides({});
         const assignment: Record<number, string> = {};
         const seatsDraft: Record<number, number> = {};
+        const nameDraft: Record<number, string> = {};
         for (const table of tables || []) {
           assignment[table.id] = String(table.areaId || mappedAreas[0]?.id || "area:main");
           seatsDraft[table.id] = Math.max(1, Math.min(50, Number(table.seats) || 4));
+          nameDraft[table.id] = String(table.name || table.id);
         }
         setTableAreaDraft(assignment);
         setTableSeatsDraft(seatsDraft);
+        setTableNameDraft(nameDraft);
       } catch (e) {}
       try {
         const modeCfg = await getConfigServiceModes();
@@ -875,51 +936,124 @@ export default function Settings({
     }
   };
 
-  const saveTables = async () => {
+  const floorPreview = React.useMemo(() => planTablesFromAreas(seatingAreas), [seatingAreas]);
+
+  const refreshSeatingConfig = async () => {
+    const [tCfg, areas, tables] = await Promise.all([
+      getConfigTables().catch(() => null),
+      getSeatingAreas(true),
+      getTables(),
+    ]);
+    const layoutById = new Map(
+      (Array.isArray(tCfg?.layout) ? tCfg.layout : []).map((entry) => [entry.id, entry]),
+    );
+    const ordered: AreaLayoutDraft[] = [...areas]
+      .sort((a, b) => Number(a.order || 0) - Number(b.order || 0))
+      .map((area) => {
+        const areaTables = (tables || []).filter((table) => String(table.areaId || "") === area.id);
+        const saved = layoutById.get(area.id);
+        const inferred = inferNamingFromTables(areaTables.map((table) => String(table.name || "")));
+        const seats =
+          Math.trunc(Number(saved?.defaultSeats || tCfg?.defaultSeats || areaTables[0]?.seats || 4)) ||
+          4;
+        return {
+          ...area,
+          tableCount: Math.max(0, Math.trunc(Number(saved?.tableCount ?? areaTables.length) || 0)),
+          namingMode:
+            saved?.namingMode === "prefix" || saved?.namingMode === "number"
+              ? saved.namingMode
+              : inferred.namingMode,
+          prefix: String(saved?.prefix ?? inferred.prefix ?? ""),
+          defaultSeats: Math.max(1, Math.min(FLOOR_LAYOUT_LIMITS.MAX_SEATS, seats)),
+        };
+      });
+    setSeatingAreas(ordered);
+    setTableDocs(tables || []);
+    setPreviewOverrides({});
+    const assignment: Record<number, string> = {};
+    const seatsDraft: Record<number, number> = {};
+    const nameDraft: Record<number, string> = {};
+    for (const table of tables || []) {
+      assignment[table.id] = String(table.areaId || ordered[0]?.id || "area:main");
+      seatsDraft[table.id] = Math.max(1, Math.min(50, Number(table.seats) || 4));
+      nameDraft[table.id] = String(table.name || table.id);
+    }
+    setTableAreaDraft(assignment);
+    setTableSeatsDraft(seatsDraft);
+    setTableNameDraft(nameDraft);
+  };
+
+  const saveFloorLayout = async () => {
     if (!beginAction("tables.save")) {
       return;
     }
-    if (tableCount < 1 || tableCount > 100) {
+    if (floorPreview.error) {
       endAction("tables.save");
-      setTableStatus("Table count must be between 1 and 100");
-      return;
-    }
-    if (defaultSeats < 1 || defaultSeats > 50) {
-      endAction("tables.save");
-      setTableStatus("Default seats must be between 1 and 50");
+      setTableStatus(floorPreview.error);
       return;
     }
     setSavingTables(true);
     setTableStatus(null);
     try {
-      await setConfigTables(tableCount, defaultSeats);
-      await seedTables(tableCount);
+      const tableOverrides = floorPreview.tables
+        .map((table) => {
+          const key = previewKey(table.areaId, table.name);
+          const override = previewOverrides[key];
+          if (!override) {
+            return null;
+          }
+          const nameChanged = override.name.trim() && override.name.trim() !== table.name;
+          const seatsChanged = Number(override.seats) !== Number(table.seats);
+          if (!nameChanged && !seatsChanged) {
+            return null;
+          }
+          return {
+            areaId: table.areaId,
+            plannedName: table.name,
+            name: override.name.trim() || table.name,
+            seats: override.seats,
+          };
+        })
+        .filter(Boolean) as Array<{
+        areaId: string;
+        plannedName: string;
+        name: string;
+        seats: number;
+      }>;
+
+      await applyFloorLayout({
+        areas: seatingAreas.map((area, index) => ({
+          id: area.id,
+          name: area.name,
+          active: area.active !== false,
+          order: index + 1,
+          tableCount: area.tableCount,
+          namingMode: area.namingMode,
+          prefix: area.prefix,
+          defaultSeats: area.defaultSeats,
+        })),
+        tableOverrides,
+      });
       await refreshSeatingConfig();
       window.dispatchEvent(new Event("orders-changed"));
       window.dispatchEvent(new Event("seating-areas-changed"));
-      setTableStatus("Saved ");
+      setTableStatus("Saved");
       setTimeout(() => setTableStatus(null), 4000);
     } catch (e: any) {
-      setTableStatus(reportClientError("settings.tables.save", e, "Could not save table settings"));
+      const message = String(e?.message || e || "");
+      setTableStatus(
+        reportClientError(
+          "settings.tables.save",
+          e,
+          message.includes("tables-have-open-orders")
+            ? "Cannot remove tables that still have open orders"
+            : "Could not save floor layout",
+        ),
+      );
     } finally {
       setSavingTables(false);
       endAction("tables.save");
     }
-  };
-
-  const refreshSeatingConfig = async () => {
-    const [areas, tables] = await Promise.all([getSeatingAreas(true), getTables()]);
-    const ordered = [...areas].sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
-    setSeatingAreas(ordered);
-    setTableDocs(tables || []);
-    const assignment: Record<number, string> = {};
-    const seatsDraft: Record<number, number> = {};
-    for (const table of tables || []) {
-      assignment[table.id] = String(table.areaId || ordered[0]?.id || "area:main");
-      seatsDraft[table.id] = Math.max(1, Math.min(50, Number(table.seats) || 4));
-    }
-    setTableAreaDraft(assignment);
-    setTableSeatsDraft(seatsDraft);
   };
 
   const addSeatingArea = () => {
@@ -928,20 +1062,34 @@ export default function Settings({
       setTableStatus(draft.error);
       return;
     }
-    setSeatingAreas((draft.areas || []).map((area) => ({
-      _id: `seating-area:${area.id}`,
-      type: "seating-area",
-      id: area.id,
-      name: area.name,
-      order: area.order,
-      active: area.active,
-    })));
+    const added = (draft.areas || []).map((area) => {
+      const existing = seatingAreas.find((entry) => entry.id === area.id);
+      if (existing) {
+        return { ...existing, ...area };
+      }
+      const prefix = suggestPrefixFromAreaName(area.name || "");
+      return {
+        _id: `seating-area:${area.id}`,
+        type: "seating-area" as const,
+        id: area.id,
+        name: area.name,
+        order: area.order,
+        active: area.active !== false,
+        tableCount: 0,
+        namingMode: (prefix ? "prefix" : "number") as TableNamingMode,
+        prefix,
+        defaultSeats: 4,
+      };
+    });
+    setSeatingAreas(added);
     setNewSeatingAreaName("");
     setTableStatus(null);
   };
 
   const moveSeatingArea = (id: string, direction: -1 | 1) => {
-    setSeatingAreas((current) => moveSeatingAreaByDirection(current, id, direction) as SeatingAreaDoc[]);
+    setSeatingAreas(
+      (current) => moveSeatingAreaByDirection(current, id, direction) as AreaLayoutDraft[],
+    );
   };
 
   const dropSeatingArea = (dropTargetId: string) => {
@@ -949,18 +1097,24 @@ export default function Settings({
       setDragAreaId(null);
       return;
     }
-    setSeatingAreas((current) => reorderSeatingAreasByDrag(current, dragAreaId, dropTargetId) as SeatingAreaDoc[]);
+    setSeatingAreas(
+      (current) =>
+        reorderSeatingAreasByDrag(current, dragAreaId, dropTargetId) as AreaLayoutDraft[],
+    );
     setDragAreaId(null);
   };
 
   const removeSeatingArea = async (id: string) => {
-    if (id === "area:main") {
-      setTableStatus("Main Dining cannot be deleted");
-      return;
-    }
     const fallback = seatingAreas.find((area) => area.id !== id && area.active !== false);
     if (!fallback) {
       setTableStatus("Keep at least one active area");
+      return;
+    }
+    const serverAreas = await getSeatingAreas(true).catch(() => []);
+    const known = serverAreas.some((area) => area.id === id);
+    if (!known) {
+      setSeatingAreas((current) => current.filter((area) => area.id !== id));
+      setTableStatus(null);
       return;
     }
     try {
@@ -974,21 +1128,16 @@ export default function Settings({
     }
   };
 
-  const saveSeatingAreasAndTables = async () => {
+  const saveAdvancedTableEdits = async () => {
     if (!beginAction("seatingAreas.save")) {
       return;
     }
-    setSavingSeatingAreas(true);
+    setSavingAdvancedTables(true);
     setTableStatus(null);
     try {
-      const payload = seatingAreas.map((area, index) => ({
-        id: area.id,
-        name: area.name,
-        active: area.active !== false,
-        order: index + 1,
-      }));
-      const saved = await saveSeatingAreas(payload);
-      const activeIds = new Set(saved.filter((area) => area.active !== false).map((area) => area.id));
+      const activeIds = new Set(
+        seatingAreas.filter((area) => area.active !== false).map((area) => area.id),
+      );
       const updates = computeTableAreaUpdates(tableDocs, tableAreaDraft, activeIds);
       for (const update of updates) {
         await setTableArea(update.tableId, update.areaId);
@@ -997,15 +1146,21 @@ export default function Settings({
       for (const update of seatUpdates) {
         await setTableSeats(update.tableId, update.seats);
       }
+      for (const table of tableDocs) {
+        const nextName = String(tableNameDraft[table.id] || "").trim();
+        if (nextName && nextName !== String(table.name || "").trim()) {
+          await setTableName(table.id, nextName);
+        }
+      }
       await refreshSeatingConfig();
-      setTableStatus("Seating Areas saved ");
+      setTableStatus("Saved");
       window.dispatchEvent(new Event("seating-areas-changed"));
       window.dispatchEvent(new Event("orders-changed"));
       setTimeout(() => setTableStatus(null), 4000);
     } catch (e: any) {
       setTableStatus(reportClientError("settings.tables.save", e, "Could not save table settings"));
     } finally {
-      setSavingSeatingAreas(false);
+      setSavingAdvancedTables(false);
       endAction("seatingAreas.save");
     }
   };
@@ -2399,7 +2554,7 @@ export default function Settings({
             fontSize: 11,
             fontWeight: 800,
             color: "var(--pos-muted,var(--pos-tx-muted))",
-            marginBottom: 20,
+            marginBottom: 12,
             textTransform: "uppercase",
             letterSpacing: "0.1em",
             display: "flex",
@@ -2410,110 +2565,59 @@ export default function Settings({
           <Icon icon={LayoutGrid} size="sm" />
           Table Configuration
         </div>
+        <p style={{ fontSize: 13, color: "var(--pos-tx-sub)", marginTop: 0, marginBottom: 18 }}>
+          Set up seating areas first, then tables per area. One Save creates names and assignments.
+        </p>
 
-        <div style={{ marginBottom: 20 }}>
-          <label className="pos-label">Number of Tables</label>
-          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-            <input
-              type="number"
-              min={1}
-              max={100}
-              value={tableCount}
-              onChange={(e) =>
-                setTableCount(Math.max(1, Math.min(100, Number(e.target.value) || 1)))
+        <label className="pos-label">Seating Areas</label>
+        <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+          <input
+            className="pos-input"
+            value={newSeatingAreaName}
+            onChange={(event) => setNewSeatingAreaName(event.target.value)}
+            placeholder="Garden, Ground Floor, First Floor, Bar..."
+            style={{ maxWidth: 320 }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                addSeatingArea();
               }
-              className="pos-input"
-              style={{ width: 100, fontWeight: 700, fontSize: 15, textAlign: "center" }}
-            />
-            <span style={{ fontSize: 13, color: "var(--pos-tx-sub,var(--pos-tx-sub))" }}>
-              tables (current: {tableCount})
-            </span>
-          </div>
-          <p style={{ fontSize: 12, color: "var(--pos-muted,var(--pos-tx-muted))", marginTop: 6 }}>
-            Tables with active orders will not be removed when reducing the count.
-          </p>
-        </div>
-
-        <div style={{ marginBottom: 20 }}>
-          <label className="pos-label">Default seats (new tables)</label>
-          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-            <input
-              type="number"
-              min={1}
-              max={50}
-              value={defaultSeats}
-              onChange={(e) =>
-                setDefaultSeats(Math.max(1, Math.min(50, Number(e.target.value) || 1)))
-              }
-              className="pos-input"
-              style={{ width: 100, fontWeight: 700, fontSize: 15, textAlign: "center" }}
-            />
-            <span style={{ fontSize: 13, color: "var(--pos-tx-sub,var(--pos-tx-sub))" }}>
-              seats per newly added table
-            </span>
-          </div>
-          <p style={{ fontSize: 12, color: "var(--pos-muted,var(--pos-tx-muted))", marginTop: 6 }}>
-            Existing tables keep their seat counts. Edit them in Table Mapping below.
-          </p>
-        </div>
-
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <Button
-            onClick={saveTables}
-            disabled={savingTables}
-            variant="primary"
-          >
-            {savingTables ? "Saving..." : "Save Tables"}
+            }}
+          />
+          <Button type="button" onClick={addSeatingArea} variant="secondary">
+            Add Area
           </Button>
-          {tableStatus && (
+        </div>
+
+        <div style={{ display: "grid", gap: 10 }}>
+          {seatingAreas.map((area, index) => (
             <div
+              key={area.id}
+              draggable
+              onDragStart={() => setDragAreaId(area.id)}
+              onDragEnd={() => setDragAreaId(null)}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={() => dropSeatingArea(area.id)}
               style={{
-                padding: "8px 12px",
+                display: "grid",
+                gap: 10,
+                padding: "12px 12px",
+                border:
+                  dragAreaId === area.id
+                    ? "1px solid var(--pos-saffron)"
+                    : "1px solid var(--pos-line)",
                 borderRadius: 8,
-                fontSize: 13,
-                fontWeight: 600,
-                background: tableStatus.includes("") ? "var(--pos-success-tint)" : "var(--pos-danger-tint)",
-                color: tableStatus.includes("") ? "var(--pos-success)" : "var(--pos-danger)",
+                background:
+                  dragAreaId === area.id ? "var(--pos-saffron-tint)" : "var(--pos-surface)",
+                cursor: "grab",
               }}
             >
-              {tableStatus}
-            </div>
-          )}
-        </div>
-
-        <div style={{ marginTop: 22, borderTop: "1px solid var(--pos-surface-sunken)", paddingTop: 18 }}>
-          <label className="pos-label">Seating Areas</label>
-          <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
-            <input
-              className="pos-input"
-              value={newSeatingAreaName}
-              onChange={(event) => setNewSeatingAreaName(event.target.value)}
-              placeholder="Ground Floor, Rooftop, AC Hall..."
-              style={{ maxWidth: 320 }}
-            />
-            <Button type="button" onClick={addSeatingArea}  variant="secondary">
-              Add Area
-            </Button>
-          </div>
-          <div style={{ display: "grid", gap: 8 }}>
-            {seatingAreas.map((area, index) => (
               <div
-                key={area.id}
-                draggable
-                onDragStart={() => setDragAreaId(area.id)}
-                onDragEnd={() => setDragAreaId(null)}
-                onDragOver={(event) => event.preventDefault()}
-                onDrop={() => dropSeatingArea(area.id)}
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "minmax(180px, 1fr) auto auto auto",
+                  gridTemplateColumns: "minmax(160px, 1.4fr) auto auto",
                   gap: 8,
                   alignItems: "center",
-                  padding: "8px 10px",
-                  border: dragAreaId === area.id ? "1px solid var(--pos-saffron)" : "1px solid var(--pos-line)",
-                  borderRadius: 8,
-                  background: dragAreaId === area.id ? "var(--pos-saffron-tint)" : "var(--pos-surface)",
-                  cursor: "grab",
                 }}
               >
                 <input
@@ -2526,6 +2630,7 @@ export default function Settings({
                       ),
                     )
                   }
+                  aria-label="Area name"
                 />
                 <label style={{ fontSize: 12, color: "var(--pos-tx-sec)", display: "flex", gap: 6 }}>
                   <input
@@ -2541,7 +2646,7 @@ export default function Settings({
                   />
                   Active
                 </label>
-                <div style={{ display: "flex", gap: 6 }}>
+                <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
                   <Button
                     type="button"
                     variant="secondary"
@@ -2560,106 +2665,389 @@ export default function Settings({
                   >
                     Down
                   </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => removeSeatingArea(area.id)}
+                    disabled={seatingAreas.filter((entry) => entry.active !== false).length <= 1}
+                  >
+                    Delete
+                  </Button>
                 </div>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => removeSeatingArea(area.id)}
-                  disabled={area.id === "area:main"}
-                >
-                  Delete
-                </Button>
               </div>
-            ))}
-          </div>
-        </div>
 
-        <div style={{ marginTop: 22, borderTop: "1px solid var(--pos-surface-sunken)", paddingTop: 18 }}>
-          <label className="pos-label">Table Mapping</label>
-          <p style={{ fontSize: 12, color: "var(--pos-muted,var(--pos-tx-muted))", marginTop: 0, marginBottom: 10 }}>
-            Set seating area and seat count for each table. Save with “Save Seating Areas”.
-          </p>
-          <div style={{ display: "grid", gap: 8, maxHeight: 320, overflow: "auto", paddingRight: 4 }}>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "120px 88px minmax(150px, 1fr)",
-                gap: 8,
-                alignItems: "center",
-                fontSize: 11,
-                fontWeight: 700,
-                color: "var(--pos-tx-muted)",
-                textTransform: "uppercase",
-                letterSpacing: "0.04em",
-              }}
-            >
-              <span>Table</span>
-              <span>Seats</span>
-              <span>Area</span>
-            </div>
-            {tableDocs
-              .slice()
-              .sort((a, b) => a.id - b.id)
-              .map((table) => (
-                <div
-                  key={table.id}
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "120px 88px minmax(150px, 1fr)",
-                    gap: 8,
-                    alignItems: "center",
-                  }}
-                >
-                  <div style={{ fontWeight: 700, color: "var(--pos-tx)", fontSize: 13 }}>
-                    {table.name || `Table ${table.id}`}
-                  </div>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+                  gap: 8,
+                  alignItems: "end",
+                }}
+              >
+                <div>
+                  <label className="pos-label">Tables</label>
                   <input
                     type="number"
-                    min={1}
-                    max={50}
+                    min={0}
+                    max={FLOOR_LAYOUT_LIMITS.MAX_AREA_TABLES}
                     className="pos-input"
-                    aria-label={`Seats for ${table.name || `Table ${table.id}`}`}
-                    value={tableSeatsDraft[table.id] ?? table.seats ?? 4}
+                    value={area.tableCount}
                     onChange={(event) =>
-                      setTableSeatsDraft((current) => ({
-                        ...current,
-                        [table.id]: Math.max(1, Math.min(50, Number(event.target.value) || 1)),
-                      }))
+                      setSeatingAreas((current) =>
+                        current.map((entry) =>
+                          entry.id === area.id
+                            ? {
+                                ...entry,
+                                tableCount: Math.max(
+                                  0,
+                                  Math.min(
+                                    FLOOR_LAYOUT_LIMITS.MAX_AREA_TABLES,
+                                    Number(event.target.value) || 0,
+                                  ),
+                                ),
+                              }
+                            : entry,
+                        ),
+                      )
                     }
                     style={{ textAlign: "center", fontWeight: 700 }}
                   />
+                </div>
+                <div>
+                  <label className="pos-label">Name style</label>
                   <select
                     className="pos-input"
-                    value={tableAreaDraft[table.id] || table.areaId || "area:main"}
+                    value={area.namingMode}
                     onChange={(event) =>
-                      setTableAreaDraft((current) => ({
-                        ...current,
-                        [table.id]: event.target.value,
-                      }))
+                      setSeatingAreas((current) =>
+                        current.map((entry) =>
+                          entry.id === area.id
+                            ? {
+                                ...entry,
+                                namingMode: event.target.value === "prefix" ? "prefix" : "number",
+                                prefix:
+                                  event.target.value === "prefix" && !entry.prefix
+                                    ? suggestPrefixFromAreaName(entry.name)
+                                    : entry.prefix,
+                              }
+                            : entry,
+                        ),
+                      )
                     }
                   >
-                    {seatingAreas
-                      .filter((area) => area.active !== false)
-                      .map((area) => (
-                        <option key={area.id} value={area.id}>
-                          {area.name}
-                        </option>
-                      ))}
+                    <option value="number">Number only (1, 2, 3…)</option>
+                    <option value="prefix">Prefix (G1, GF1…)</option>
                   </select>
                 </div>
-              ))}
-          </div>
+                {area.namingMode === "prefix" ? (
+                  <div>
+                    <label className="pos-label">Prefix</label>
+                    <input
+                      className="pos-input"
+                      value={area.prefix}
+                      onChange={(event) =>
+                        setSeatingAreas((current) =>
+                          current.map((entry) =>
+                            entry.id === area.id
+                              ? { ...entry, prefix: event.target.value.toUpperCase().slice(0, 6) }
+                              : entry,
+                          ),
+                        )
+                      }
+                      placeholder="G, GF, F, B"
+                      style={{ fontWeight: 700, textTransform: "uppercase" }}
+                    />
+                  </div>
+                ) : null}
+                <div>
+                  <label className="pos-label">Default seats</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={FLOOR_LAYOUT_LIMITS.MAX_SEATS}
+                    className="pos-input"
+                    value={area.defaultSeats}
+                    onChange={(event) =>
+                      setSeatingAreas((current) =>
+                        current.map((entry) =>
+                          entry.id === area.id
+                            ? {
+                                ...entry,
+                                defaultSeats: Math.max(
+                                  1,
+                                  Math.min(
+                                    FLOOR_LAYOUT_LIMITS.MAX_SEATS,
+                                    Number(event.target.value) || 1,
+                                  ),
+                                ),
+                              }
+                            : entry,
+                        ),
+                      )
+                    }
+                    style={{ textAlign: "center", fontWeight: 700 }}
+                  />
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
 
-        <div style={{ marginTop: 16 }}>
+        <div style={{ marginTop: 22, borderTop: "1px solid var(--pos-surface-sunken)", paddingTop: 18 }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 12,
+              alignItems: "baseline",
+              flexWrap: "wrap",
+            }}
+          >
+            <label className="pos-label" style={{ marginBottom: 0 }}>
+              Preview
+            </label>
+            <span style={{ fontSize: 12, color: "var(--pos-tx-muted)" }}>
+              {floorPreview.total} table{floorPreview.total === 1 ? "" : "s"} total
+              {floorPreview.error ? ` · ${floorPreview.error}` : ""}
+            </span>
+          </div>
+          <p style={{ fontSize: 12, color: "var(--pos-muted,var(--pos-tx-muted))", marginTop: 4, marginBottom: 10 }}>
+            Names restart per area. Optional overrides below become VIP / odd seat counts on Save.
+          </p>
+          {floorPreview.tables.length === 0 ? (
+            <div style={{ fontSize: 13, color: "var(--pos-tx-sub)" }}>
+              Add table counts above to preview names.
+            </div>
+          ) : (
+            <div style={{ display: "grid", gap: 12, maxHeight: 360, overflow: "auto", paddingRight: 4 }}>
+              {seatingAreas
+                .filter((area) => area.active !== false && area.tableCount > 0)
+                .map((area) => {
+                  const areaTables = floorPreview.tables.filter((table) => table.areaId === area.id);
+                  if (!areaTables.length) {
+                    return null;
+                  }
+                  return (
+                    <div key={area.id}>
+                      <div
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 700,
+                          color: "var(--pos-tx-sec)",
+                          marginBottom: 6,
+                        }}
+                      >
+                        {area.name}
+                      </div>
+                      <div style={{ display: "grid", gap: 6 }}>
+                        {areaTables.map((table) => {
+                          const key = previewKey(table.areaId, table.name);
+                          const override = previewOverrides[key];
+                          const displayName = override?.name ?? table.name;
+                          const displaySeats = override?.seats ?? table.seats;
+                          return (
+                            <div
+                              key={key}
+                              style={{
+                                display: "grid",
+                                gridTemplateColumns: "minmax(100px, 140px) 88px",
+                                gap: 8,
+                                alignItems: "center",
+                              }}
+                            >
+                              <input
+                                className="pos-input"
+                                value={displayName}
+                                aria-label={`Name for planned table ${table.name}`}
+                                onChange={(event) =>
+                                  setPreviewOverrides((current) => ({
+                                    ...current,
+                                    [key]: {
+                                      name: event.target.value,
+                                      seats: displaySeats,
+                                    },
+                                  }))
+                                }
+                                style={{ fontWeight: 700 }}
+                              />
+                              <input
+                                type="number"
+                                min={1}
+                                max={FLOOR_LAYOUT_LIMITS.MAX_SEATS}
+                                className="pos-input"
+                                aria-label={`Seats for planned table ${table.name}`}
+                                value={displaySeats}
+                                onChange={(event) =>
+                                  setPreviewOverrides((current) => ({
+                                    ...current,
+                                    [key]: {
+                                      name: displayName,
+                                      seats: Math.max(
+                                        1,
+                                        Math.min(
+                                          FLOOR_LAYOUT_LIMITS.MAX_SEATS,
+                                          Number(event.target.value) || 1,
+                                        ),
+                                      ),
+                                    },
+                                  }))
+                                }
+                                style={{ textAlign: "center", fontWeight: 700 }}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          )}
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 18, flexWrap: "wrap" }}>
           <Button
-            onClick={saveSeatingAreasAndTables}
-            disabled={savingSeatingAreas}
+            onClick={saveFloorLayout}
+            disabled={savingTables || Boolean(floorPreview.error)}
             variant="primary"
           >
-            {savingSeatingAreas ? "Saving..." : "Save Seating Areas"}
+            {savingTables ? "Saving..." : "Save"}
           </Button>
+          {tableStatus && (
+            <div
+              style={{
+                padding: "8px 12px",
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 600,
+                background: isTableStatusSuccess(tableStatus)
+                  ? "var(--pos-success-tint)"
+                  : "var(--pos-danger-tint)",
+                color: isTableStatusSuccess(tableStatus)
+                  ? "var(--pos-success)"
+                  : "var(--pos-danger)",
+              }}
+            >
+              {tableStatus}
+            </div>
+          )}
+        </div>
+        <p style={{ fontSize: 12, color: "var(--pos-muted,var(--pos-tx-muted))", marginTop: 8 }}>
+          Reducing table count will not remove tables that still have open orders.
+        </p>
+
+        <div style={{ marginTop: 22, borderTop: "1px solid var(--pos-surface-sunken)", paddingTop: 18 }}>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={() => setShowAdvancedMapping((open) => !open)}
+          >
+            {showAdvancedMapping ? "Hide advanced table edits" : "Advanced table edits"}
+          </Button>
+          {showAdvancedMapping ? (
+            <>
+              <p
+                style={{
+                  fontSize: 12,
+                  color: "var(--pos-muted,var(--pos-tx-muted))",
+                  marginTop: 10,
+                  marginBottom: 10,
+                }}
+              >
+                Rename one table, change odd seat counts, or move a table after the layout is saved.
+              </p>
+              <div style={{ display: "grid", gap: 8, maxHeight: 320, overflow: "auto", paddingRight: 4 }}>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "minmax(120px, 1fr) 88px minmax(150px, 1fr)",
+                    gap: 8,
+                    alignItems: "center",
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: "var(--pos-tx-muted)",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.04em",
+                  }}
+                >
+                  <span>Name</span>
+                  <span>Seats</span>
+                  <span>Area</span>
+                </div>
+                {tableDocs
+                  .slice()
+                  .sort((a, b) => a.id - b.id)
+                  .map((table) => (
+                    <div
+                      key={table.id}
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "minmax(120px, 1fr) 88px minmax(150px, 1fr)",
+                        gap: 8,
+                        alignItems: "center",
+                      }}
+                    >
+                      <input
+                        className="pos-input"
+                        value={tableNameDraft[table.id] ?? table.name ?? ""}
+                        aria-label={`Name for table ${table.id}`}
+                        onChange={(event) =>
+                          setTableNameDraft((current) => ({
+                            ...current,
+                            [table.id]: event.target.value,
+                          }))
+                        }
+                        style={{ fontWeight: 700 }}
+                      />
+                      <input
+                        type="number"
+                        min={1}
+                        max={50}
+                        className="pos-input"
+                        aria-label={`Seats for ${table.name || `Table ${table.id}`}`}
+                        value={tableSeatsDraft[table.id] ?? table.seats ?? 4}
+                        onChange={(event) =>
+                          setTableSeatsDraft((current) => ({
+                            ...current,
+                            [table.id]: Math.max(1, Math.min(50, Number(event.target.value) || 1)),
+                          }))
+                        }
+                        style={{ textAlign: "center", fontWeight: 700 }}
+                      />
+                      <select
+                        className="pos-input"
+                        value={tableAreaDraft[table.id] || table.areaId || "area:main"}
+                        onChange={(event) =>
+                          setTableAreaDraft((current) => ({
+                            ...current,
+                            [table.id]: event.target.value,
+                          }))
+                        }
+                      >
+                        {seatingAreas
+                          .filter((area) => area.active !== false)
+                          .map((area) => (
+                            <option key={area.id} value={area.id}>
+                              {area.name}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                  ))}
+              </div>
+              <div style={{ marginTop: 12 }}>
+                <Button
+                  onClick={saveAdvancedTableEdits}
+                  disabled={savingAdvancedTables || tableDocs.length === 0}
+                  variant="secondary"
+                >
+                  {savingAdvancedTables ? "Saving..." : "Save table edits"}
+                </Button>
+              </div>
+            </>
+          ) : null}
         </div>
       </div>
 

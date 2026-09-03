@@ -11,6 +11,7 @@ export function TableTile({
   itemCount,
   amountLabel,
   elapsed,
+  idleLabel = "Ready",
   active = false,
   variant = "rail",
   onClick,
@@ -25,6 +26,7 @@ export function TableTile({
   itemCount?: number | null;
   amountLabel?: string;
   elapsed?: string;
+  idleLabel?: string;
   active?: boolean;
   variant?: "rail" | "floor";
   onClick: () => void;
@@ -84,12 +86,12 @@ export function TableTile({
         </span>
       )}
       {!isRail && seats ? <span className="ui-table-tile-meta">{seats} seats</span> : null}
-      {isFloor || amountLabel || footMeta || (isRail && state === "available") ? (
+      {isFloor || amountLabel || footMeta || state === "available" ? (
         <span className="ui-table-tile-foot">
           {amountLabel ? (
             <span className="ui-table-tile-amount">{amountLabel}</span>
-          ) : isRail && state === "available" ? (
-            <span className="ui-table-tile-ready">Ready</span>
+          ) : state === "available" ? (
+            <span className="ui-table-tile-ready">{idleLabel}</span>
           ) : (
             <span className="ui-table-tile-amount-empty" aria-hidden="true" />
           )}

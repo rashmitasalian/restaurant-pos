@@ -19,6 +19,12 @@ import {
   getMainSession,
   refreshMainSession,
 } from "../services/sessionManager";
+import {
+  getGatewayStatus,
+  rotateGatewayPairingCode,
+  startLocalGateway,
+  stopLocalGateway,
+} from "../gateway/localGateway";
 
 type WindowGetter = () => BrowserWindow | null;
 
@@ -262,6 +268,14 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
   ipcMain.handle("pos:tables:set-seats", (event, token: string | null, tableId: number, seats: number) => {
     const user = requirePermission(event, token, "system:settings");
     return posService.setTableSeats(tableId, seats, user.username);
+  });
+  ipcMain.handle("pos:tables:set-name", (event, token: string | null, tableId: number, name: string) => {
+    const user = requirePermission(event, token, "system:settings");
+    return posService.setTableName(tableId, name, user.username);
+  });
+  ipcMain.handle("pos:tables:apply-floor-layout", (event, token: string | null, payload: any) => {
+    const user = requirePermission(event, token, "system:settings");
+    return posService.applyFloorLayout(payload || {}, user.username);
   });
   ipcMain.handle("pos:seating-areas:list", (event, token?: string | null, includeDisabled?: boolean) => {
     requireSession(event, token);
@@ -747,6 +761,10 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
     requirePermission(event, token, "system:audit");
     return posService.countAudits(opts);
   });
+  ipcMain.handle("pos:activity:live", (event, token: string | null, opts) => {
+    requirePermission(event, token, "page:tables");
+    return posService.getLiveActivity(opts);
+  });
   ipcMain.handle(
     "pos:audit-archives:create",
     (event, token: string | null, retentionDays: number) => {
@@ -878,5 +896,23 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
   ipcMain.handle("pos:support:export-diagnostics", (event, token?: string | null) => {
     requirePermission(event, token, "system:settings");
     return updateService.exportDiagnostics();
+  });
+
+  ipcMain.handle("pos:gateway:status", (event, token?: string | null) => {
+    requireSession(event, token);
+    return getGatewayStatus();
+  });
+  ipcMain.handle("pos:gateway:start", async (event, token?: string | null) => {
+    requirePermission(event, token, "system:settings");
+    return startLocalGateway();
+  });
+  ipcMain.handle("pos:gateway:stop", async (event, token?: string | null) => {
+    requirePermission(event, token, "system:settings");
+    return stopLocalGateway();
+  });
+  ipcMain.handle("pos:gateway:rotate-pairing", (event, token?: string | null) => {
+    requirePermission(event, token, "system:settings");
+    const pairingCode = rotateGatewayPairingCode();
+    return { ...getGatewayStatus(), pairingCode };
   });
 }

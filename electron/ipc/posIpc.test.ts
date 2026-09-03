@@ -90,7 +90,7 @@ describe("print queue IPC access", () => {
     getSessionMock.mockReturnValue({ token: "token", username: "cashier" });
   });
 
-  it("allows authenticated cashiers to enqueue print jobs", () => {
+  it("allows authenticated cashiers to enqueue print jobs", async () => {
     getUserMock.mockReturnValue({
       username: "cashier",
       role: "cashier",
@@ -99,17 +99,19 @@ describe("print queue IPC access", () => {
     });
     addPrintJobMock.mockReturnValue({ _id: "print-job:1" });
 
-    const result = handlerFor("pos:print-queue:add")(
-      { sender: { id: 1 } },
-      "token",
-      { printerName: "Kitchen", jobType: "kot", content: "KOT" },
-    );
-
-    expect(result).toEqual({ _id: "print-job:1" });
+    await expect(
+      Promise.resolve(
+        handlerFor("pos:print-queue:add")(
+          { sender: { id: 1 } },
+          "token",
+          { printerName: "Kitchen", jobType: "kot", content: "KOT" },
+        ),
+      ),
+    ).resolves.toEqual({ _id: "print-job:1" });
     expect(addPrintJobMock).toHaveBeenCalledTimes(1);
   });
 
-  it("blocks cashier access to print queue management", () => {
+  it("blocks cashier access to print queue management", async () => {
     getUserMock.mockReturnValue({
       username: "cashier",
       role: "cashier",
@@ -117,11 +119,11 @@ describe("print queue IPC access", () => {
       requirePasswordChange: false,
     });
 
-    expect(() => invoke("pos:print-queue:list")).toThrow("forbidden");
+    await expectForbidden("pos:print-queue:list");
     expect(listPrintJobsMock).not.toHaveBeenCalled();
   });
 
-  it("allows admins to manage the print queue", () => {
+  it("allows admins to manage the print queue", async () => {
     getSessionMock.mockReturnValue({ token: "token", username: "admin" });
     getUserMock.mockReturnValue({
       username: "admin",
@@ -131,10 +133,12 @@ describe("print queue IPC access", () => {
     });
     listPrintJobsMock.mockReturnValue([{ _id: "print-job:1" }]);
 
-    expect(invoke("pos:print-queue:list")).toEqual([{ _id: "print-job:1" }]);
+    await expect(Promise.resolve(invoke("pos:print-queue:list"))).resolves.toEqual([
+      { _id: "print-job:1" },
+    ]);
   });
 
-  it("allows authenticated users to read app info", () => {
+  it("allows authenticated users to read app info", async () => {
     getUserMock.mockReturnValue({
       username: "cashier",
       role: "cashier",
@@ -147,7 +151,7 @@ describe("print queue IPC access", () => {
       logPath: "C:\\secret\\logs",
     });
 
-    expect(invoke("pos:app:info")).toEqual({ version: "1.0.0" });
+    await expect(Promise.resolve(invoke("pos:app:info"))).resolves.toEqual({ version: "1.0.0" });
   });
 
   it.each([
@@ -221,9 +225,15 @@ describe("print queue IPC access", () => {
     createGroceryItemMock.mockReturnValue({ id: "grocery-item:2" });
     getFoodCostSummaryMock.mockReturnValue({ grocerySpend: 100 });
 
-    expect(invoke("pos:grocery:items:list")).toEqual([{ id: "grocery-item:1" }]);
-    expect(invoke("pos:grocery:items:create", { name: "Milk" })).toEqual({ id: "grocery-item:2" });
-    expect(invoke("pos:reports:food-cost-summary", { from: 1, to: 2 })).toEqual({
+    await expect(Promise.resolve(invoke("pos:grocery:items:list"))).resolves.toEqual([
+      { id: "grocery-item:1" },
+    ]);
+    await expect(
+      Promise.resolve(invoke("pos:grocery:items:create", { name: "Milk" })),
+    ).resolves.toEqual({ id: "grocery-item:2" });
+    await expect(
+      Promise.resolve(invoke("pos:reports:food-cost-summary", { from: 1, to: 2 })),
+    ).resolves.toEqual({
       grocerySpend: 100,
     });
   });
@@ -239,12 +249,14 @@ describe("print queue IPC access", () => {
     listAttendanceMock.mockReturnValue([{ id: "attendance:1" }]);
     upsertAttendanceRowsMock.mockReturnValue([{ id: "attendance:1" }]);
 
-    expect(invoke("pos:attendance:list", { date: "2026-08-01" })).toEqual([
-      { id: "attendance:1" },
-    ]);
-    expect(
-      invoke("pos:attendance:upsert", { attendanceDate: "2026-08-01", rows: [] }),
-    ).toEqual([{ id: "attendance:1" }]);
+    await expect(
+      Promise.resolve(invoke("pos:attendance:list", { date: "2026-08-01" })),
+    ).resolves.toEqual([{ id: "attendance:1" }]);
+    await expect(
+      Promise.resolve(
+        invoke("pos:attendance:upsert", { attendanceDate: "2026-08-01", rows: [] }),
+      ),
+    ).resolves.toEqual([{ id: "attendance:1" }]);
   });
 
   it.each([
@@ -281,11 +293,15 @@ describe("print queue IPC access", () => {
     listAttendanceMock.mockReturnValue([{ id: "attendance:1" }]);
     getConfigDocMock.mockReturnValue({ shifts: [], holidays: [] });
 
-    expect(invoke("pos:grocery:items:list")).toEqual([{ id: "grocery-item:1" }]);
-    expect(invoke("pos:attendance:list", { date: "2026-08-01" })).toEqual([
-      { id: "attendance:1" },
+    await expect(Promise.resolve(invoke("pos:grocery:items:list"))).resolves.toEqual([
+      { id: "grocery-item:1" },
     ]);
-    expect(invoke("pos:settings:get", "config:attendance")).toEqual({ shifts: [], holidays: [] });
+    await expect(
+      Promise.resolve(invoke("pos:attendance:list", { date: "2026-08-01" })),
+    ).resolves.toEqual([{ id: "attendance:1" }]);
+    await expect(Promise.resolve(invoke("pos:settings:get", "config:attendance"))).resolves.toEqual(
+      { shifts: [], holidays: [] },
+    );
     await expectForbidden("pos:reports:sales-summary", { from: 1, to: 2 });
     await expectForbidden("pos:users:list");
     await expectForbidden("pos:settings:set", "config:gst", { enabled: true });

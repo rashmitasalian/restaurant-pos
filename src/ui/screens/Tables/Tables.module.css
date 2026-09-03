@@ -19,45 +19,8 @@
   overflow-y: auto;
 }
 
-.header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
-  flex-wrap: wrap;
-  gap: 8px 12px;
-}
-
-.headerLead {
-  min-width: 0;
-}
-
-.title {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 800;
-  color: var(--pos-tx);
-  letter-spacing: -0.3px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.title::before {
-  content: "";
-  display: block;
-  width: 3px;
-  height: 18px;
-  background: var(--pos-teal);
-  border-radius: 2px;
-  flex-shrink: 0;
-}
-
-.meta {
-  margin: 2px 0 0;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--pos-tx-sub);
+.content :global(.pos-ph) {
+  margin-bottom: 14px;
 }
 
 .controls {
@@ -143,181 +106,12 @@
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
-  gap: 10px;
+  /* ~5 columns on typical 1280–1440 POS desktops */
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
   min-width: 0;
   width: 100%;
   align-items: stretch;
-}
-
-.card {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  height: 135px;
-  min-height: 135px;
-  max-height: 135px;
-  min-width: 0;
-  padding: 12px;
-  border-radius: var(--pos-r-md);
-  border: 1px solid var(--pos-line);
-  background: var(--pos-surface);
-  box-shadow: none;
-  cursor: pointer;
-  user-select: none;
-  outline: none;
-  box-sizing: border-box;
-  transition:
-    border-color 120ms,
-    background 120ms,
-    box-shadow 120ms;
-}
-
-.card:hover {
-  border-color: var(--pos-teal-line);
-  background: var(--pos-surface);
-}
-
-.card:focus-visible {
-  outline: 2px solid var(--pos-focus-color);
-  outline-offset: 1px;
-  box-shadow: var(--pos-focus-ring);
-}
-
-.available {
-  background: var(--pos-surface);
-  border-color: var(--pos-line);
-}
-
-.occupied {
-  background: var(--pos-surface);
-  border-color: var(--pos-state-occupied-line);
-  box-shadow: inset 5px 0 0 var(--pos-state-occupied-line);
-}
-
-.occupied:hover {
-  background: var(--pos-surface);
-  border-color: var(--pos-state-occupied-line);
-}
-
-.billPending {
-  background: var(--pos-surface);
-  border-color: var(--pos-state-attention-line);
-  box-shadow: inset 5px 0 0 var(--pos-state-attention-line);
-}
-
-.billPending:hover {
-  background: var(--pos-surface);
-  border-color: var(--pos-state-attention-line);
-}
-
-.headerInfo {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-.idBlock {
-  min-width: 0;
-}
-
-.id {
-  font-size: 36px;
-  font-weight: 800;
-  line-height: 0.95;
-  letter-spacing: -1px;
-  color: var(--pos-tx);
-  font-variant-numeric: tabular-nums;
-}
-
-.occupied .id,
-.billPending .id {
-  color: var(--pos-tx);
-}
-
-.stateBadge {
-  flex-shrink: 0;
-  margin-top: 4px;
-  font-size: 10px !important;
-  font-weight: 700 !important;
-  padding: 2px 0 !important;
-  line-height: 1.2 !important;
-  gap: 4px !important;
-  min-height: 0 !important;
-  background: transparent !important;
-  border-color: transparent !important;
-  border-radius: 0 !important;
-  color: var(--pos-tx-sub) !important;
-}
-
-.occupied .stateBadge {
-  color: var(--pos-state-occupied-text) !important;
-}
-
-.billPending .stateBadge {
-  color: var(--pos-state-attention-text) !important;
-}
-
-.body {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  min-height: 0;
-  min-width: 0;
-  padding-top: 4px;
-}
-
-.metrics {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-  min-width: 0;
-}
-
-.amount {
-  font-size: 20px;
-  font-weight: 800;
-  line-height: 1.15;
-  letter-spacing: -0.3px;
-  color: var(--pos-teal-strong);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.elapsed {
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 1.25;
-  color: var(--pos-tx-sec);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.openingHint {
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1.25;
-  color: var(--pos-tx-sub);
-}
-
-.availableFoot {
-  font-size: 15px;
-  font-weight: 700;
-  line-height: 1.25;
-  letter-spacing: -0.2px;
-  color: var(--pos-tx-sec);
-}
-
-.availableMeta {
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1.25;
-  color: var(--pos-tx-sub);
-  white-space: nowrap;
 }
 
 .areaSection {
@@ -412,49 +206,51 @@
   box-shadow: var(--pos-focus-ring);
 }
 
-@media (min-width: 1400px) {
+/* Wide desktop: keep ~6 cards, more breathing room */
+@media (min-width: 1600px) {
   .grid {
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-    gap: 12px;
-  }
-
-  .id {
-    font-size: 40px;
-  }
-
-  .amount {
-    font-size: 22px;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 14px;
   }
 }
 
+/* Large desktop still capped near 5–6 via min width */
+@media (min-width: 1400px) and (max-width: 1599px) {
+  .grid {
+    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+    gap: 12px;
+  }
+}
+
+/* Compact laptop / small desktop */
+@media (max-width: 1199px) {
+  .grid {
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 10px;
+  }
+}
+
+/* Tablet */
 @media (max-width: 991px) {
   .page {
     padding: 10px 14px 12px;
   }
 
   .grid {
-    grid-template-columns: repeat(auto-fill, minmax(136px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
     gap: 8px;
   }
+}
 
-  .card {
-    height: 128px;
-    min-height: 128px;
-    max-height: 128px;
-    padding: 10px;
-  }
-
-  .id {
-    font-size: 32px;
+/* Phone landscape / narrow tablet — about 3 per row */
+@media (max-width: 740px) {
+  .grid {
+    grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+    gap: 8px;
   }
 }
 
 @media (max-width: 640px) {
-  .header {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
   .controls {
     justify-content: stretch;
     width: 100%;
@@ -479,19 +275,16 @@
     width: 100%;
   }
 
+  /* Phone: 2 cards per row when possible */
   .grid {
-    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-    gap: 6px;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 8px;
   }
+}
 
-  .card {
-    height: 120px;
-    min-height: 120px;
-    max-height: 120px;
-    padding: 8px;
-  }
-
-  .id {
-    font-size: 28px;
+@media (max-width: 380px) {
+  .grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
   }
 }

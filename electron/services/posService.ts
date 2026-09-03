@@ -54,7 +54,15 @@ import type {
   UserDto,
   VendorDto,
 } from "../../src/shared/pos";
-import { ROLE_KEYS } from "../../src/shared/permissions";
+import { getUnsentKotLines, pendingKotQty } from "../../src/shared/kot";
+import {
+  FLOOR_LAYOUT_LIMITS,
+  planTablesFromAreas,
+  type AreaTablePlan,
+  type TableNamingMode,
+} from "../../src/shared/floorLayout";
+import { ROLE_KEYS, isDesktopLoginRole, LIVE_ACTIVITY_ACTIONS } from "../../src/shared/permissions";
+import { publishOrdersChanged } from "./domainEvents";
 import {
   STAFF_TEXT_LIMITS,
   isValidDateOnly,
@@ -1274,6 +1282,133 @@ function createAuditRow(
   return id;
 }
 
+function lookupActorRole(database: Database.Database, username?: string | null): Role | null {
+  const key = normalizeText(username)?.toLowerCase();
+  if (!key) {
+    return null;
+  }
+  const row = database.prepare("SELECT role FROM users WHERE username = ?").get(key) as
+    | { role?: string }
+    | undefined;
+  return (row?.role as Role) || null;
+}
+
+function orderTableAuditContext(
+  database: Database.Database,
+  order: Pick<OrderDto, "tableId" | "total"> | null | undefined,
+  actor?: string | null,
+) {
+  const tableId =
+    order?.tableId !== null && order?.tableId !== undefined ? Number(order.tableId) : null;
+  let tableName: string | null = null;
+  let areaId: string | null = null;
+  let areaName: string | null = null;
+  if (tableId !== null && Number.isFinite(tableId)) {
+    const row = database
+      .prepare(
+        `SELECT t.name AS table_name, t.area_id, sa.name AS area_name
+         FROM tables t
+         LEFT JOIN seating_areas sa ON sa.id = t.area_id
+         WHERE t.id = ?`,
+      )
+      .get(tableId) as
+      | { table_name?: string; area_id?: string; area_name?: string }
+      | undefined;
+    if (row) {
+      tableName = String(row.table_name || `Table ${tableId}`);
+      areaId = String(row.area_id || "") || null;
+      areaName = String(row.area_name || "") || null;
+    }
+  }
+  return {
+    tableId,
+    tableName,
+    areaId,
+    areaName,
+    amountPaise: rupeesToPaise(Number(order?.total || 0)),
+    role: lookupActorRole(database, actor),
+  };
+}
+
+function mergeOrderAuditDetail(
+  database: Database.Database,
+  order: Pick<OrderDto, "tableId" | "total"> | null | undefined,
+  actor: string | null | undefined,
+  detail?: Record<string, unknown>,
+) {
+  return {
+    ...orderTableAuditContext(database, order, actor),
+    ...(detail || {}),
+  };
+}
+
+function getClientOp(database: Database.Database, id: string) {
+  const key = normalizeText(id);
+  if (!key) {
+    return null;
+  }
+  const row = database
+    .prepare("SELECT id, username, action, entity_id, result_json, created_at FROM client_ops WHERE id = ?")
+    .get(key) as
+    | {
+        id: string;
+        username: string;
+        action: string;
+        entity_id: string | null;
+        result_json: string | null;
+        created_at: number;
+      }
+    | undefined;
+  if (!row) {
+    return null;
+  }
+  let result: unknown = null;
+  if (row.result_json) {
+    try {
+      result = JSON.parse(row.result_json);
+    } catch {
+      result = row.result_json;
+    }
+  }
+  return {
+    id: row.id,
+    username: row.username,
+    action: row.action,
+    entityId: row.entity_id,
+    result,
+    createdAt: row.created_at,
+  };
+}
+
+function saveClientOp(
+  database: Database.Database,
+  input: {
+    id: string;
+    username: string;
+    action: string;
+    entityId?: string | null;
+    result?: unknown;
+  },
+) {
+  const id = normalizeText(input.id);
+  if (!id) {
+    throw new Error("client-op-id-required");
+  }
+  database
+    .prepare(
+      `INSERT INTO client_ops (id, username, action, entity_id, result_json, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      id,
+      String(input.username || "").trim().toLowerCase(),
+      String(input.action || "").trim(),
+      input.entityId || null,
+      input.result === undefined ? null : stringifyJson(input.result),
+      now(),
+    );
+}
+
 function upsertOrderLines(database: Database.Database, orderId: string, lines: OrderLineDto[]) {
   database.prepare("DELETE FROM order_lines WHERE order_id = ?").run(orderId);
   const insert = database.prepare(`
@@ -1517,10 +1652,6 @@ function sanitizeOrderLines(lines: OrderLineDto[]) {
     .filter((line) => line.name.length > 0);
 }
 
-function getUnsentKotLines(lines: OrderLineDto[]) {
-  return (lines || []).filter((line) => Number(line.qty || 0) > Number(line.kotPrintedQty || 0));
-}
-
 function assertNoSentKotReduction(order: OrderDto, nextLines: OrderLineDto[]) {
   const nextById = new Map(nextLines.map((line) => [line.id, line]));
   for (const current of order.items || []) {
@@ -1647,15 +1778,18 @@ function getOrderPaidAt(order: Partial<OrderDto> | any) {
 }
 
 function ensureDefaultSeatingArea(database: Database.Database) {
+  const countRow = database.prepare("SELECT COUNT(*) AS count FROM seating_areas").get() as {
+    count: number;
+  };
+  if (Number(countRow?.count || 0) > 0) {
+    return;
+  }
   const at = now();
   database
     .prepare(
       `INSERT INTO seating_areas (id, name, sort_order, active, created_at, updated_at)
        VALUES (?, ?, 1, 1, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET
-         name = excluded.name,
-         active = 1,
-         updated_at = excluded.updated_at`,
+       ON CONFLICT(id) DO NOTHING`,
     )
     .run(DEFAULT_SEATING_AREA_ID, DEFAULT_SEATING_AREA_NAME, at, at);
 }
@@ -1814,6 +1948,32 @@ export const posService = {
   },
 
   login(username: string, password: string) {
+    const res = this.verifyUser(username, password) as any;
+    if (!res.ok || !res.user) {
+      const reason =
+        res.reason === "inactive"
+          ? "inactive"
+          : res.reason === "locked"
+            ? "locked"
+            : "invalid-credentials";
+      return { ok: false, reason, lockedSeconds: res.lockedSeconds };
+    }
+    if (!isDesktopLoginRole(res.user.role)) {
+      return { ok: false, reason: "captain-phone-only" as const };
+    }
+    return {
+      ok: true,
+      user: {
+        username: res.user.username,
+        role: res.user.role,
+        displayName: res.user.displayName,
+        requirePasswordChange: res.user.requirePasswordChange,
+      },
+    };
+  },
+
+  /** Phone / Local Gateway login — captains allowed; same credential verification. */
+  loginForGateway(username: string, password: string) {
     const res = this.verifyUser(username, password) as any;
     if (!res.ok || !res.user) {
       const reason =
@@ -2035,6 +2195,10 @@ export const posService = {
 
   seedTables(count = 12, actor?: string | null) {
     const at = now();
+    const safeCount = Math.max(0, Math.trunc(Number(count) || 0));
+    if (safeCount > FLOOR_LAYOUT_LIMITS.MAX_TOTAL_TABLES) {
+      throw new Error("table-count-invalid");
+    }
     return inTransaction((database) => {
       ensureDefaultSeatingArea(database);
       const areaId = getPrimaryActiveSeatingAreaId(database);
@@ -2044,6 +2208,21 @@ export const posService = {
         Number.isInteger(configuredDefault) && configuredDefault >= 1 && configuredDefault <= 50
           ? configuredDefault
           : 4;
+      if (safeCount < this.getTables().length) {
+        const statuses = ACTIVE_ORDER_STATUSES.map(() => "?").join(",");
+        const blocked = database
+          .prepare(
+            `SELECT DISTINCT table_id AS id
+             FROM orders
+             WHERE table_id IS NOT NULL
+               AND table_id > ?
+               AND status IN (${statuses})`,
+          )
+          .all(safeCount, ...ACTIVE_ORDER_STATUSES) as Array<{ id: number }>;
+        if (blocked.length) {
+          throw new Error("tables-have-open-orders");
+        }
+      }
       const insert = database.prepare(`
         INSERT INTO tables (id, name, seats, area_id, sort_order, active, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, 1, ?, ?)
@@ -2052,18 +2231,18 @@ export const posService = {
           area_id = COALESCE(NULLIF(tables.area_id, ''), excluded.area_id),
           updated_at = excluded.updated_at
       `);
-      for (let i = 1; i <= count; i++) {
-        insert.run(i, `Table ${i}`, defaultSeats, areaId, i, at, at);
+      for (let i = 1; i <= safeCount; i++) {
+        insert.run(i, String(i), defaultSeats, areaId, i, at, at);
       }
-      database.prepare("UPDATE tables SET active = 0, updated_at = ? WHERE id > ?").run(at, count);
+      database.prepare("UPDATE tables SET active = 0, updated_at = ? WHERE id > ?").run(at, safeCount);
       if (
-        Number(tableConfig?.tableCount || 0) !== count ||
+        Number(tableConfig?.tableCount || 0) !== safeCount ||
         Number(tableConfig?.defaultSeats || 0) !== defaultSeats
       ) {
         this.setSetting(
           "config:tables",
           {
-            tableCount: count,
+            tableCount: safeCount,
             defaultSeats,
           },
           actor,
@@ -2074,7 +2253,181 @@ export const posService = {
   },
 
   ensureConfiguredTables() {
-    return this.seedTables(this.getConfiguredTableCount());
+    const count = (() => {
+      try {
+        return this.getConfiguredTableCount();
+      } catch {
+        return 0;
+      }
+    })();
+    return this.seedTables(count);
+  },
+
+  applyFloorLayout(
+    input: {
+      areas?: Array<{
+        id?: string;
+        name?: string;
+        active?: boolean;
+        order?: number;
+        tableCount?: number;
+        namingMode?: TableNamingMode;
+        prefix?: string;
+        defaultSeats?: number;
+      }>;
+      tableOverrides?: Array<{
+        areaId?: string;
+        plannedName?: string;
+        name?: string;
+        seats?: number;
+      }>;
+    } = {},
+    actor?: string | null,
+  ) {
+    const sourceAreas = Array.isArray(input?.areas) ? input.areas : [];
+    const areaPlans: AreaTablePlan[] = sourceAreas.map((entry, index) => {
+      const id = normalizeSeatingAreaId(entry?.id, `area:${randomUUID()}`);
+      const name = normalizeSeatingAreaName(entry?.name);
+      const namingMode: TableNamingMode = entry?.namingMode === "prefix" ? "prefix" : "number";
+      const defaultSeats = Math.trunc(Number(entry?.defaultSeats));
+      return {
+        id,
+        name,
+        active: entry?.active !== false,
+        order: Number.isFinite(Number(entry?.order)) ? Math.trunc(Number(entry?.order)) : index + 1,
+        tableCount: Math.max(0, Math.trunc(Number(entry?.tableCount) || 0)),
+        namingMode,
+        prefix: String(entry?.prefix || ""),
+        defaultSeats:
+          Number.isInteger(defaultSeats) && defaultSeats >= 1 && defaultSeats <= FLOOR_LAYOUT_LIMITS.MAX_SEATS
+            ? defaultSeats
+            : 4,
+      };
+    });
+
+    const planned = planTablesFromAreas(areaPlans);
+    if (planned.error) {
+      throw new Error(planned.error);
+    }
+
+    const overrideMap = new Map<string, { name?: string; seats?: number }>();
+    for (const entry of Array.isArray(input?.tableOverrides) ? input.tableOverrides : []) {
+      const areaId = normalizeSeatingAreaId(entry?.areaId);
+      const plannedName = String(entry?.plannedName || "").trim();
+      if (!areaId || !plannedName) {
+        continue;
+      }
+      const seats = Math.trunc(Number(entry?.seats));
+      const name = String(entry?.name || "").trim();
+      overrideMap.set(`${areaId}::${plannedName}`, {
+        name: name || undefined,
+        seats:
+          Number.isInteger(seats) && seats >= 1 && seats <= FLOOR_LAYOUT_LIMITS.MAX_SEATS
+            ? seats
+            : undefined,
+      });
+    }
+
+    const finalTables = planned.tables.map((table) => {
+      const override = overrideMap.get(`${table.areaId}::${table.name}`);
+      return {
+        ...table,
+        name: override?.name || table.name,
+        seats: override?.seats || table.seats,
+      };
+    });
+
+    return inTransaction((database) => {
+      ensureDefaultSeatingArea(database);
+      this.setSeatingAreas(
+        areaPlans.map((area) => ({
+          id: area.id,
+          name: area.name,
+          active: area.active !== false,
+          order: area.order,
+        })),
+        actor,
+      );
+
+      const statuses = ACTIVE_ORDER_STATUSES.map(() => "?").join(",");
+      const nextCount = finalTables.length;
+      if (nextCount < this.getTables().length) {
+        const blocked = database
+          .prepare(
+            `SELECT DISTINCT table_id AS id
+             FROM orders
+             WHERE table_id IS NOT NULL
+               AND table_id > ?
+               AND status IN (${statuses})`,
+          )
+          .all(nextCount, ...ACTIVE_ORDER_STATUSES) as Array<{ id: number }>;
+        if (blocked.length) {
+          throw new Error("tables-have-open-orders");
+        }
+      }
+
+      const existingSeats = new Map<number, number>();
+      const seatRows = database
+        .prepare("SELECT id, seats FROM tables WHERE active = 1")
+        .all() as Array<{ id: number; seats: number }>;
+      for (const row of seatRows) {
+        existingSeats.set(Number(row.id), Number(row.seats) || 4);
+      }
+
+      const at = now();
+      const upsert = database.prepare(`
+        INSERT INTO tables (id, name, seats, area_id, sort_order, active, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, 1, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          name = excluded.name,
+          seats = excluded.seats,
+          area_id = excluded.area_id,
+          sort_order = excluded.sort_order,
+          active = 1,
+          updated_at = excluded.updated_at
+      `);
+
+      finalTables.forEach((table, index) => {
+        const id = index + 1;
+        const hasOverride = overrideMap.has(`${table.areaId}::${planned.tables[index].name}`);
+        const seats =
+          hasOverride || !existingSeats.has(id)
+            ? table.seats
+            : existingSeats.get(id) || table.seats;
+        upsert.run(id, table.name, seats, table.areaId, table.sortOrder, at, at);
+      });
+      database.prepare("UPDATE tables SET active = 0, updated_at = ? WHERE id > ?").run(at, nextCount);
+
+      const primaryArea = areaPlans.find((area) => area.active !== false);
+      const defaultSeats = primaryArea?.defaultSeats || 4;
+
+      this.setSetting(
+        "config:tables",
+        {
+          tableCount: nextCount,
+          defaultSeats,
+          layout: areaPlans.map((area) => ({
+            id: area.id,
+            tableCount: area.tableCount,
+            namingMode: area.namingMode,
+            prefix: area.prefix,
+            defaultSeats: area.defaultSeats,
+          })),
+        },
+        actor,
+      );
+
+      createAuditRow(database, "tables.floor_layout.updated", "config", "tables", actor || null, {
+        tableCount: nextCount,
+        areaCount: areaPlans.length,
+      });
+
+      return {
+        areas: this.getSeatingAreas(true),
+        tables: this.getTables(),
+        tableCount: nextCount,
+      };
+    });
   },
 
   getSeatingAreas(includeDisabled = false): SeatingAreaDto[] {
@@ -2133,16 +2486,17 @@ export const posService = {
 
       const fallbackId =
         normalized.find((entry) => entry.active)?.id || normalizeSeatingAreaId(undefined, DEFAULT_SEATING_AREA_ID);
-      const idsToDelete = Array.from(existingIds).filter(
-        (id) => id !== DEFAULT_SEATING_AREA_ID && !nextIds.has(id),
-      );
+      const idsToDelete = Array.from(existingIds).filter((id) => !nextIds.has(id));
       for (const id of idsToDelete) {
         database.prepare("UPDATE tables SET area_id = ? WHERE area_id = ?").run(fallbackId, id);
         database.prepare("DELETE FROM seating_areas WHERE id = ?").run(id);
       }
 
-      if (!nextIds.has(DEFAULT_SEATING_AREA_ID)) {
-        upsert.run(DEFAULT_SEATING_AREA_ID, DEFAULT_SEATING_AREA_NAME, normalized.length + 1, 1, at, at);
+      const remaining = database
+        .prepare("SELECT COUNT(*) AS count FROM seating_areas")
+        .get() as { count: number };
+      if (!Number(remaining?.count || 0)) {
+        upsert.run(DEFAULT_SEATING_AREA_ID, DEFAULT_SEATING_AREA_NAME, 1, 1, at, at);
       }
 
       createAuditRow(database, "seating_areas.updated", "config", "seating_areas", actor || null, {
@@ -2155,9 +2509,6 @@ export const posService = {
   deleteSeatingArea(areaId: string, reassignToAreaId: string, actor?: string | null) {
     const normalizedAreaId = normalizeSeatingAreaId(areaId);
     const targetId = normalizeSeatingAreaId(reassignToAreaId);
-    if (normalizedAreaId === DEFAULT_SEATING_AREA_ID) {
-      throw new Error("seating-area-default-protected");
-    }
     if (normalizedAreaId === targetId) {
       throw new Error("seating-area-reassign-target-invalid");
     }
@@ -2174,6 +2525,12 @@ export const posService = {
         .get(targetId) as { id?: string } | undefined;
       if (!target) {
         throw new Error("seating-area-reassign-target-missing");
+      }
+      const remainingActive = database
+        .prepare("SELECT COUNT(*) AS count FROM seating_areas WHERE active = 1 AND id != ?")
+        .get(normalizedAreaId) as { count: number };
+      if (!Number(remainingActive?.count || 0)) {
+        throw new Error("seating-area-at-least-one-active");
       }
       database.prepare("UPDATE tables SET area_id = ? WHERE area_id = ?").run(targetId, normalizedAreaId);
       database.prepare("DELETE FROM seating_areas WHERE id = ?").run(normalizedAreaId);
@@ -2229,6 +2586,29 @@ export const posService = {
       }
       createAuditRow(database, "table.seats.updated", "table", String(safeTableId), actor || null, {
         seats: safeSeats,
+      });
+      return this.getTables().find((table) => table.id === safeTableId) || null;
+    });
+  },
+
+  setTableName(tableId: number, name: string, actor?: string | null) {
+    const safeTableId = Number(tableId);
+    if (!Number.isInteger(safeTableId) || safeTableId <= 0) {
+      throw new Error("table-id-invalid");
+    }
+    const safeName = String(name || "").trim().slice(0, 40);
+    if (!safeName) {
+      throw new Error("table-name-invalid");
+    }
+    return inTransaction((database) => {
+      const result = database
+        .prepare("UPDATE tables SET name = ?, updated_at = ? WHERE id = ? AND active = 1")
+        .run(safeName, now(), safeTableId);
+      if (!result.changes) {
+        throw new Error("table-not-found");
+      }
+      createAuditRow(database, "table.name.updated", "table", String(safeTableId), actor || null, {
+        name: safeName,
       });
       return this.getTables().find((table) => table.id === safeTableId) || null;
     });
@@ -2318,7 +2698,7 @@ export const posService = {
   getConfiguredTableCount() {
     const cfg = this.getSetting("config:tables") as any;
     const tableCount = Number(cfg?.tableCount);
-    if (!Number.isInteger(tableCount) || tableCount < 1) {
+    if (!Number.isInteger(tableCount) || tableCount < 0) {
       throw new Error("table-count-not-configured");
     }
     return tableCount;
@@ -2556,7 +2936,7 @@ export const posService = {
       normalizeModeId(input.serviceModeId || input.orderType) || fallbackModeId;
     const orderType = resolveLegacyOrderTypeForWrite(modeConfig, serviceModeId, input.tableId);
     const id = `order:${randomUUID()}`;
-    return inTransaction((database) => {
+    const created = inTransaction((database) => {
       const customerId = resolveActiveCustomerId(database, input.customerId);
       const orderSeq = nextOrderSeq(database);
       const meta = { ...(input.meta || {}), orderSeq, serviceModeId };
@@ -2578,14 +2958,28 @@ export const posService = {
           at,
           at,
         );
-      createAuditRow(database, "order.created", "order", id, input.createdBy || null, {
-        orderType,
-        serviceModeId,
-        tableId: input.tableId ?? null,
-        customerId,
-      });
+      createAuditRow(
+        database,
+        "order.created",
+        "order",
+        id,
+        input.createdBy || null,
+        mergeOrderAuditDetail(
+          database,
+          { tableId: input.tableId ?? null, total: 0 },
+          input.createdBy || null,
+          {
+            orderType,
+            serviceModeId,
+            tableId: input.tableId ?? null,
+            customerId,
+          },
+        ),
+      );
       return this.getOrderById(id)!;
     });
+    publishOrdersChanged({ orderId: created._id, action: "order.created" });
+    return created;
   },
 
   getNextKotSeq(): number {
@@ -2619,6 +3013,40 @@ export const posService = {
       .map((row: any) => orderFromRow(database, row));
   },
 
+  getCaptainKots() {
+    const tables = this.getTables();
+    const tableById = new Map(tables.map((table) => [table.id, table]));
+    const tickets = this.getOpenOrders()
+          .filter((order) => order.tableId !== null && order.tableId !== undefined)
+      .map((order) => {
+        const items = order.items || [];
+        const sentLines = items.filter((line) => Number(line.kotPrintedQty || 0) > 0);
+        const sentCount = sentLines.reduce((sum, line) => sum + Number(line.kotPrintedQty || 0), 0);
+        const unsentCount = items.reduce((sum, line) => sum + pendingKotQty(line), 0);
+        if (sentCount === 0 && unsentCount === 0) {
+          return null;
+        }
+        const table = tableById.get(Number(order.tableId));
+        return {
+          orderId: order._id,
+          tableId: Number(order.tableId),
+          tableName: table?.name || `T${order.tableId}`,
+          kotStatus: order.kotStatus || "pending",
+          lastSendAt: order.kotSent || order.kotPrinted ? Number(order.updatedAt || 0) || null : null,
+          sentSummary: sentLines
+            .slice(0, 4)
+            .map((line) => `${line.name} ×${Number(line.kotPrintedQty || 0)}`)
+            .join(", "),
+          sentCount,
+          unsentCount,
+        };
+      })
+      .filter((ticket): ticket is NonNullable<typeof ticket> => Boolean(ticket));
+
+    tickets.sort((a, b) => (b.lastSendAt || 0) - (a.lastSendAt || 0) || a.tableName.localeCompare(b.tableName));
+    return { tickets };
+  },
+
   getActiveOrders(): OrderDto[] {
     const database = getDb();
     return database
@@ -2645,8 +3073,9 @@ export const posService = {
       menuItemId?: string | null;
       categoryName?: string | null;
     },
+    actor?: string | null,
   ) {
-    return inTransaction((database) => {
+    const updated = inTransaction((database) => {
       const order = this.getOrderById(orderId);
       assertOrderCanBeEdited(order);
       const existing = order.items.find(
@@ -2677,13 +3106,23 @@ export const posService = {
         .prepare("UPDATE orders SET kot_status = ?, updated_at = ? WHERE id = ?")
         .run(kotStatusAfterLineChange(order, order.items), now(), orderId);
       updateOrderTotals(database, orderId, order.items, order.discountPercent || 0);
-      createAuditRow(database, "item.added", "order", orderId, order.createdBy || null, { item });
+      const auditActor = actor || order.createdBy || null;
+      createAuditRow(
+        database,
+        "item.added",
+        "order",
+        orderId,
+        auditActor,
+        mergeOrderAuditDetail(database, order, auditActor, { item }),
+      );
       return this.getOrderById(orderId)!;
     });
+    publishOrdersChanged({ orderId, action: "item.added" });
+    return updated;
   },
 
   updateOrderLines(orderId: string, lines: OrderLineDto[], actor?: string | null) {
-    return inTransaction((database) => {
+    const updated = inTransaction((database) => {
       const order = this.getOrderById(orderId);
       assertOrderCanBeEdited(order);
       const sanitized = sanitizeOrderLines(lines);
@@ -2693,18 +3132,21 @@ export const posService = {
         .prepare("UPDATE orders SET kot_status = ?, updated_at = ? WHERE id = ?")
         .run(kotStatusAfterLineChange(order, sanitized), now(), orderId);
       updateOrderTotals(database, orderId, sanitized, Number(order.discountPercent || 0));
+      const auditActor = actor || order.createdBy || null;
       createAuditRow(
         database,
         "order.lines.updated",
         "order",
         orderId,
-        actor || order.createdBy || null,
-        {
+        auditActor,
+        mergeOrderAuditDetail(database, order, auditActor, {
           lineCount: sanitized.length,
-        },
+        }),
       );
       return this.getOrderById(orderId)!;
     });
+    publishOrdersChanged({ orderId, action: "order.lines.updated" });
+    return updated;
   },
 
   voidKotLine(
@@ -2712,7 +3154,7 @@ export const posService = {
     input: { lineId: string; finalQty: number; reason: string },
     actor?: string | null,
   ) {
-    return inTransaction((database) => {
+    const updated = inTransaction((database) => {
       const order = this.getOrderById(orderId);
       assertOrderCanBeEdited(order);
       const lineId = String(input?.lineId || "").trim();
@@ -2729,6 +3171,8 @@ export const posService = {
       if (sentQty <= 0 || finalQty >= sentQty) {
         throw new Error("kot-void-not-required");
       }
+      const voidQty = sentQty - finalQty;
+      const voidAmountPaise = rupeesToPaise(Number(line.rate || 0) * voidQty);
       const nextLines = order.items
         .map((candidate) =>
           candidate.id === lineId
@@ -2745,22 +3189,26 @@ export const posService = {
         .prepare("UPDATE orders SET kot_status = ?, updated_at = ? WHERE id = ?")
         .run(kotStatusAfterLineChange(order, nextLines), now(), orderId);
       updateOrderTotals(database, orderId, nextLines, Number(order.discountPercent || 0));
+      const auditActor = actor || order.createdBy || null;
       createAuditRow(
         database,
         "order.kot.void",
         "order",
         orderId,
-        actor || order.createdBy || null,
-        {
+        auditActor,
+        mergeOrderAuditDetail(database, this.getOrderById(orderId), auditActor, {
           lineId,
           name: line.name,
-          voidQty: sentQty - finalQty,
+          voidQty,
           finalQty,
           reason,
-        },
+          amountPaise: voidAmountPaise,
+        }),
       );
       return this.getOrderById(orderId)!;
     });
+    publishOrdersChanged({ orderId, action: "order.kot.void" });
+    return updated;
   },
 
   setOrderDiscount(orderId: string, discountPercent: number, actor?: string | null) {
@@ -2816,7 +3264,7 @@ export const posService = {
     sentLines: Array<{ id: string; sentQty: number }> = [],
     actor?: string | null,
   ) {
-    return inTransaction((database) => {
+    const updated = inTransaction((database) => {
       const order = this.getOrderById(orderId);
       assertOrderCanBeEdited(order);
       const requested = new Map(
@@ -2854,18 +3302,21 @@ export const posService = {
       database
         .prepare("UPDATE orders SET kot_status = 'sent', updated_at = ? WHERE id = ?")
         .run(at, orderId);
+      const auditActor = actor || order.createdBy || null;
       createAuditRow(
         database,
         "order.kot.sent",
         "order",
         orderId,
-        actor || order.createdBy || null,
-        {
+        auditActor,
+        mergeOrderAuditDetail(database, order, auditActor, {
           lines: auditLines,
-        },
+        }),
       );
       return this.getOrderById(orderId)!;
     });
+    publishOrdersChanged({ orderId, action: "order.kot.sent" });
+    return updated;
   },
 
   markKotFailed(orderId: string, error?: string | null, actor?: string | null) {
@@ -2972,7 +3423,7 @@ export const posService = {
   },
 
   setOrderPaid(orderId: string, payment: PaymentDto) {
-    return inTransaction((database) => {
+    const paid = inTransaction((database) => {
       const order = this.getOrderById(orderId);
       assertOrderCanBeEdited(order);
       const rawPayment = (payment || {}) as any;
@@ -3031,24 +3482,32 @@ export const posService = {
         "order",
         orderId,
         safePayment.receivedBy || order.createdBy || null,
-        {
-          payment: {
-            id: paymentId,
-            method: preparedPayment.method,
-            amount: paiseToRupees(preparedPayment.amountPaise),
-            amountPaid: paiseToRupees(preparedPayment.amountPaidPaise),
-            change: paiseToRupees(preparedPayment.changePaise),
+        mergeOrderAuditDetail(
+          database,
+          { tableId: order.tableId, total: paiseToRupees(preparedPayment.amountPaise) },
+          safePayment.receivedBy || order.createdBy || null,
+          {
+            payment: {
+              id: paymentId,
+              method: preparedPayment.method,
+              amount: paiseToRupees(preparedPayment.amountPaise),
+              amountPaid: paiseToRupees(preparedPayment.amountPaidPaise),
+              change: paiseToRupees(preparedPayment.changePaise),
+            },
+            invoice,
+            gstDetailsEnabled: gstConfig.enabled,
+            amountPaise: preparedPayment.amountPaise,
           },
-          invoice,
-          gstDetailsEnabled: gstConfig.enabled,
-        },
+        ),
       );
       return this.getOrderById(orderId)!;
     });
+    publishOrdersChanged({ orderId, action: "order.paid" });
+    return paid;
   },
 
   cancelOrder(orderId: string, actor?: string | null) {
-    return inTransaction((database) => {
+    const updated = inTransaction((database) => {
       const order = this.getOrderById(orderId);
       if (!order) {
         throw new Error("order-not-found");
@@ -3056,16 +3515,19 @@ export const posService = {
       database
         .prepare("UPDATE orders SET status = 'cancelled', updated_at = ? WHERE id = ?")
         .run(now(), orderId);
+      const auditActor = actor || order.createdBy || null;
       createAuditRow(
         database,
         "order.cancelled",
         "order",
         orderId,
-        actor || order.createdBy || null,
-        {},
+        auditActor,
+        mergeOrderAuditDetail(database, order, auditActor, {}),
       );
       return this.getOrderById(orderId)!;
     });
+    publishOrdersChanged({ orderId, action: "order.cancelled" });
+    return updated;
   },
 
   deleteOrder(orderId: string, actor?: string | null) {
@@ -3552,6 +4014,46 @@ export const posService = {
       )
       .all(...params)
       .map(auditFromRow);
+  },
+
+  getLiveActivity(opts: { limit?: number; since?: number } = {}) {
+    const limit = Math.min(100, Math.max(1, Number(opts.limit) || 40));
+    const since = Number(opts.since) || 0;
+    const actions = LIVE_ACTIVITY_ACTIONS as readonly string[];
+    const placeholders = actions.map(() => "?").join(",");
+    const params: Array<string | number> = [...actions];
+    let sql = `SELECT * FROM audit_logs WHERE action IN (${placeholders})`;
+    if (since > 0) {
+      sql += " AND timestamp >= ?";
+      params.push(since);
+    }
+    sql += " ORDER BY timestamp DESC LIMIT ?";
+    params.push(limit);
+    return getDb()
+      .prepare(sql)
+      .all(...params)
+      .map(auditFromRow);
+  },
+
+  getClientOp(id: string) {
+    return getClientOp(getDb(), id);
+  },
+
+  rememberClientOp(input: {
+    id: string;
+    username: string;
+    action: string;
+    entityId?: string | null;
+    result?: unknown;
+  }) {
+    return inTransaction((database) => {
+      const existing = getClientOp(database, input.id);
+      if (existing) {
+        return { replay: true as const, op: existing };
+      }
+      saveClientOp(database, input);
+      return { replay: false as const, op: getClientOp(database, input.id)! };
+    });
   },
 
   countAudits(opts: { from?: number; to?: number; search?: string } = {}) {

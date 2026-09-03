@@ -207,11 +207,13 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 6px;
+  gap: 8px;
   width: 100%;
+  min-width: 0;
 }
 
 .ui-table-tile-num {
+  flex: 1 1 auto;
   font-size: var(--pos-type-13);
   font-weight: 800;
   line-height: 1.1;
@@ -309,6 +311,11 @@
   color: var(--pos-tx-sec);
 }
 
+.ui-table-tile-floor .ui-table-tile-ready {
+  font-size: var(--pos-type-15);
+  letter-spacing: -0.2px;
+}
+
 .ui-table-tile-amount-empty {
   display: block;
   min-height: 1em;
@@ -385,11 +392,13 @@
 .ui-table-tile-floor .ui-table-tile-num {
   font-size: var(--pos-type-22);
   letter-spacing: -0.45px;
-  line-height: 1;
+  line-height: 1.05;
 }
 
 .ui-table-tile-floor .ui-table-tile-state {
-  margin-top: 2px;
+  margin-top: 3px;
+  max-width: 48%;
+  font-size: 11px;
 }
 
 .ui-table-tile-floor .ui-table-tile-meta {
@@ -403,12 +412,41 @@
 }
 
 .ui-table-tile-floor .ui-table-tile-foot {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
   min-height: 22px;
   padding-top: 4px;
 }
 
 .ui-table-tile-floor .ui-table-tile-foot-meta {
   font-size: 11px;
+  max-width: 100%;
+}
+
+@media (max-width: 740px) {
+  .ui-table-tile-floor {
+    min-height: 88px;
+    padding: 9px 10px;
+  }
+
+  .ui-table-tile-floor .ui-table-tile-num {
+    font-size: var(--pos-type-18);
+  }
+
+  .ui-table-tile-floor .ui-table-tile-amount {
+    font-size: var(--pos-type-15);
+  }
+
+  .ui-table-tile-floor .ui-table-tile-ready {
+    font-size: var(--pos-type-13);
+  }
+}
+
+@media (max-width: 380px) {
+  .ui-table-tile-floor .ui-table-tile-state {
+    max-width: 42%;
+  }
 }
 
 /* Order line — compact ticket row */

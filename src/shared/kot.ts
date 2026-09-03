@@ -1,9 +1,18 @@
-import type { OrderDto } from "./pos";
+import type { OrderDto, OrderLineDto } from "./pos";
 
 export type KotSentLine = {
   id: string;
   sentQty: number;
 };
+
+/** Lines that still have quantity not yet sent to kitchen. */
+export function getUnsentKotLines(lines: OrderLineDto[] | null | undefined): OrderLineDto[] {
+  return (lines || []).filter((line) => Number(line.qty || 0) > Number(line.kotPrintedQty || 0));
+}
+
+export function pendingKotQty(line: Pick<OrderLineDto, "qty" | "kotPrintedQty">) {
+  return Math.max(0, Number(line.qty || 0) - Number(line.kotPrintedQty || 0));
+}
 
 export function kotSentLinesNeedPrint(
   order: Pick<OrderDto, "items"> | null | undefined,
