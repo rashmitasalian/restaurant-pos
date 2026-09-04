@@ -19,6 +19,7 @@ export type Permission =
   | "people:accounts"
   | "business:reports"
   | "business:history"
+  | "manage:review"
   | "system:audit"
   | "system:settings"
   | "order:open"
@@ -44,6 +45,7 @@ export const ALL_PERMISSIONS: readonly Permission[] = [
   "people:accounts",
   "business:reports",
   "business:history",
+  "manage:review",
   "system:audit",
   "system:settings",
   "order:open",
@@ -126,6 +128,8 @@ export function managerSectionPermission(section: ManagerSection): Permission {
       return "business:reports";
     case "history":
       return "business:history";
+    case "review":
+      return "manage:review";
     case "audit":
       return "system:audit";
     case "settings":
@@ -169,6 +173,7 @@ const MANAGE_SECTION_ORDER: ManagerSection[] = [
   "people",
   "reports",
   "history",
+  "review",
   "audit",
   "settings",
 ];
@@ -208,4 +213,5 @@ export const LIVE_ACTIVITY_ACTIONS = [
   "order.cancelled",
   "order.paid",
   "order.discount.updated",
+  "order.bill.printed",
 ] as const;

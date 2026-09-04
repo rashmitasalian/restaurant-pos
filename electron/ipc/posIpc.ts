@@ -445,6 +445,10 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
     const user = requireSession(event, token);
     return posService.markKotPrinted(orderId, user.username);
   });
+  ipcMain.handle("pos:orders:mark-bill-printed", (event, token: string | null, orderId: string) => {
+    const user = requireSession(event, token);
+    return posService.markBillPrinted(orderId, user.username);
+  });
   ipcMain.handle("pos:orders:pay", (event, token: string | null, orderId: string, payment) => {
     const user = requireSession(event, token);
     return posService.setOrderPaid(orderId, {
@@ -452,9 +456,9 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
       receivedBy: user.username,
     });
   });
-  ipcMain.handle("pos:orders:cancel", (event, token: string | null, orderId: string) => {
-    const user = requireSession(event, token);
-    return posService.cancelOrder(orderId, user.username);
+  ipcMain.handle("pos:orders:cancel", (event, token: string | null, orderId: string, reason: string) => {
+    const user = requirePermission(event, token, "order:cancel");
+    return posService.cancelOrder(orderId, user.username, reason);
   });
   ipcMain.handle("pos:orders:delete-history", (event, token: string | null, orderIds: string[]) => {
     const user = requirePermission(event, token, "business:history");
@@ -764,6 +768,22 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
   ipcMain.handle("pos:activity:live", (event, token: string | null, opts) => {
     requirePermission(event, token, "page:tables");
     return posService.getLiveActivity(opts);
+  });
+  ipcMain.handle("pos:review:summary", (event, token: string | null, opts) => {
+    requirePermission(event, token, "manage:review");
+    return posService.getReviewSummary(opts || {});
+  });
+  ipcMain.handle("pos:review:items", (event, token: string | null, opts) => {
+    requirePermission(event, token, "manage:review");
+    return posService.listReviewItems(opts || {});
+  });
+  ipcMain.handle("pos:review:staff-activity", (event, token: string | null, opts) => {
+    requirePermission(event, token, "manage:review");
+    return posService.getStaffActivity(opts || {});
+  });
+  ipcMain.handle("pos:review:timeline", (event, token: string | null, orderId: string) => {
+    requirePermission(event, token, "manage:review");
+    return posService.getOrderTimeline(orderId);
   });
   ipcMain.handle(
     "pos:audit-archives:create",

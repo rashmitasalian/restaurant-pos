@@ -106,8 +106,9 @@ declare global {
         ) => Promise<any>;
         markKotDone: (orderId: string) => Promise<any>;
         markKotPrinted: (orderId: string) => Promise<any>;
+        markBillPrinted: (orderId: string) => Promise<any>;
         pay: (orderId: string, payment: any) => Promise<any>;
-        cancel: (orderId: string, actor?: string | null) => Promise<any>;
+        cancel: (orderId: string, reason: string) => Promise<any>;
         deleteHistory: (orderIds: string[]) => Promise<any>;
         restoreHistory: (orders: any[]) => Promise<any[]>;
       };
@@ -144,6 +145,12 @@ declare global {
         orderHistory: (opts?: any) => Promise<any[]>;
         foodCostSummary: (opts?: any) => Promise<any>;
         profitability: (opts?: any) => Promise<any>;
+      };
+      review?: {
+        summary: (opts?: any) => Promise<any>;
+        items: (opts?: any) => Promise<any[]>;
+        staffActivity: (opts?: any) => Promise<any[]>;
+        timeline: (orderId: string) => Promise<any>;
       };
       grocery?: {
         listItems: (opts?: any) => Promise<any[]>;

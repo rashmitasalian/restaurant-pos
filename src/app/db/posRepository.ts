@@ -26,6 +26,13 @@ import type {
 import { DEFAULT_GST_CONFIG, normalizeGstConfig, type GstConfig } from "../../shared/gst";
 import { clipAttendanceQueryRange, todayDateOnly } from "../../shared/validation";
 import { kotSentLinesNeedPrint } from "../../shared/kot";
+import type {
+  OrderTimelineEventDto,
+  ReviewItemDto,
+  ReviewRangeQuery,
+  ReviewSummaryDto,
+  StaffActivityRowDto,
+} from "../../shared/ownerReview";
 import {
   SERVICE_MODE_CONFIG_KEY,
   normalizeServiceModes,
@@ -54,6 +61,14 @@ function api() {
     throw new Error("pos-api-unavailable");
   }
   return window.pos;
+}
+
+function reviewApi() {
+  const review = api().review;
+  if (!review?.summary || !review.items || !review.staffActivity || !review.timeline) {
+    throw new Error("pos-review-api-unavailable");
+  }
+  return review;
 }
 
 function staffApi() {
@@ -239,6 +254,10 @@ export async function markOrderKotPrinted(orderId: string) {
   return api().orders!.markKotPrinted(orderId);
 }
 
+export async function markOrderBillPrinted(orderId: string) {
+  return api().orders!.markBillPrinted(orderId);
+}
+
 export async function markOrderKotSent(
   orderId: string,
   sentLines?: Array<{ id: string; sentQty: number }>,
@@ -269,8 +288,8 @@ export async function nextKotSeq(): Promise<number> {
   return api().orders!.nextKotSeq();
 }
 
-export async function cancelOrder(orderId: string) {
-  return api().orders!.cancel(orderId);
+export async function cancelOrder(orderId: string, reason: string) {
+  return api().orders!.cancel(orderId, reason);
 }
 
 export async function listPaidOrders(opts?: PaidOrderQueryDto): Promise<OrderDoc[]> {
@@ -1179,6 +1198,24 @@ export async function countAudits(opts: { from?: number; to?: number; search?: s
 
 export async function getLiveActivity(opts: { limit?: number; since?: number } = {}) {
   return api().audit!.liveActivity(opts);
+}
+
+export async function getReviewSummary(opts: ReviewRangeQuery = {}): Promise<ReviewSummaryDto> {
+  return reviewApi().summary(opts);
+}
+
+export async function listReviewItems(opts: ReviewRangeQuery = {}): Promise<ReviewItemDto[]> {
+  return reviewApi().items(opts);
+}
+
+export async function getStaffActivity(opts: ReviewRangeQuery = {}): Promise<StaffActivityRowDto[]> {
+  return reviewApi().staffActivity(opts);
+}
+
+export async function getOrderTimeline(
+  orderId: string,
+): Promise<{ order: OrderDto; events: OrderTimelineEventDto[] }> {
+  return reviewApi().timeline(orderId);
 }
 
 export async function listPrintJobs(status?: PrintJobDto["status"]): Promise<PrintJobDoc[]> {

@@ -206,6 +206,7 @@ export function buildManageCommands(
       : []),
     go("reports", "Reports"),
     go("history", "History"),
+    go("review", "Owner Review", "Needs Review"),
     go("audit", "Audit"),
     go("settings", "Settings"),
   ].filter((item) => {

@@ -155,9 +155,9 @@ contextBridge.exposeInMainWorld("pos", {
       authInvoke("pos:orders:void-kot-line", orderId, payload),
     markKotDone: (orderId: string) => authInvoke("pos:orders:mark-kot-done", orderId),
     markKotPrinted: (orderId: string) => authInvoke("pos:orders:mark-kot-printed", orderId),
+    markBillPrinted: (orderId: string) => authInvoke("pos:orders:mark-bill-printed", orderId),
     pay: (orderId: string, payment: any) => authInvoke("pos:orders:pay", orderId, payment),
-    cancel: (orderId: string, actor?: string | null) =>
-      authInvoke("pos:orders:cancel", orderId, actor),
+    cancel: (orderId: string, reason: string) => authInvoke("pos:orders:cancel", orderId, reason),
     deleteHistory: (orderIds: string[]) => authInvoke("pos:orders:delete-history", orderIds),
     restoreHistory: (orders: any[]) => authInvoke("pos:orders:restore-history", orders),
   },
@@ -194,6 +194,12 @@ contextBridge.exposeInMainWorld("pos", {
     orderHistory: (opts?: any) => authInvoke("pos:reports:order-history", opts),
     foodCostSummary: (opts?: any) => authInvoke("pos:reports:food-cost-summary", opts),
     profitability: (opts?: any) => authInvoke("pos:reports:profitability", opts),
+  },
+  review: {
+    summary: (opts?: any) => authInvoke("pos:review:summary", opts),
+    items: (opts?: any) => authInvoke("pos:review:items", opts),
+    staffActivity: (opts?: any) => authInvoke("pos:review:staff-activity", opts),
+    timeline: (orderId: string) => authInvoke("pos:review:timeline", orderId),
   },
   grocery: {
     listItems: (opts?: any) => authInvoke("pos:grocery:items:list", opts),

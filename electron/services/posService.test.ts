@@ -52,7 +52,25 @@ function createMockDb() {
             return db.expenseBreakdownRows;
           }
           if (sql.includes("FROM audit_logs")) {
+            if (sql.includes("action = 'order.discount.updated'")) {
+              return db.auditRows.filter((row: any) => row.action === "order.discount.updated");
+            }
+            if (sql.includes("action = 'order.kot.void'")) {
+              return db.auditRows.filter((row: any) => row.action === "order.kot.void");
+            }
+            if (sql.includes("action = 'order.kot.sent'")) {
+              return db.auditRows.filter((row: any) => row.action === "order.kot.sent");
+            }
+            if (sql.includes("action = 'order.bill.printed'")) {
+              return db.auditRows.filter((row: any) => row.action === "order.bill.printed");
+            }
             return db.auditRows;
+          }
+          if (sql.includes("FROM orders o") && sql.includes("discount_percent > 0")) {
+            return db.orderRows.filter((row: any) => Number(row.discount_percent || 0) > 0);
+          }
+          if (sql.includes("FROM orders o") && sql.includes("status = 'cancelled'")) {
+            return db.orderRows.filter((row: any) => row.status === "cancelled");
           }
           if (sql.includes("FROM orders o") && !sql.includes("COUNT(*)")) {
             return db.orderRows;
@@ -678,5 +696,274 @@ describe("posService strict SQLite APIs", () => {
     });
     expect(replay.replay).toBe(true);
     expect(replay.op.result).toEqual({ ok: true });
+  });
+
+  it("requires a reason and records cancellation actor, time, and KOT state", () => {
+    mockDb.orderById = {
+      id: "order:1",
+      order_type: "table",
+      table_id: 7,
+      status: "open",
+      kot_status: "sent",
+      discount_percent: 0,
+      subtotal_paise: 185000,
+      tax_total_paise: 0,
+      discount_total_paise: 0,
+      total_paise: 185000,
+      invoice_number: null,
+      paid_at: null,
+      meta_json: JSON.stringify({ orderSeq: 1042 }),
+      created_at: 1000,
+      updated_at: 1000,
+      created_by: "rahul",
+    };
+    mockDb.lineRows.set("order:1", [
+      {
+        id: "line:1",
+        item_name: "Paneer Tikka",
+        quantity: 1,
+        rate_paise: 185000,
+        tax_rate_bps: 1800,
+        kot_printed_qty: 1,
+      },
+    ]);
+
+    expect(() => posService.cancelOrder("order:1", "rahul", "")).toThrow("cancel-reason-required");
+
+    posService.cancelOrder("order:1", "rahul", "Customer changed mind");
+    const update = mockDb.calls.find((call: any) =>
+      call.sql.includes("SET status = 'cancelled'"),
+    );
+    expect(update?.params[1]).toBe("rahul");
+    expect(update?.params[2]).toBe("Customer changed mind");
+    const audit = mockDb.calls.find((call: any) => call.sql.includes("INSERT INTO audit_logs"));
+    expect(audit?.params[1]).toBe("order.cancelled");
+    expect(String(audit?.params[5])).toContain("Customer changed mind");
+    expect(String(audit?.params[5])).toContain("\"kotSent\":true");
+  });
+
+  it("rejects cancelling a paid order", () => {
+    mockDb.orderById = {
+      id: "order:1",
+      order_type: "table",
+      table_id: 7,
+      status: "paid",
+      kot_status: "printed",
+      discount_percent: 0,
+      subtotal_paise: 10000,
+      tax_total_paise: 0,
+      discount_total_paise: 0,
+      total_paise: 10000,
+      invoice_number: "INV-1",
+      paid_at: 2000,
+      meta_json: "{}",
+      created_at: 1000,
+      updated_at: 2000,
+      created_by: "rahul",
+    };
+    expect(() => posService.cancelOrder("order:1", "rahul", "Customer changed mind")).toThrow(
+      "order-closed",
+    );
+  });
+
+  it("refuses to hard-delete cancelled orders", () => {
+    mockDb.orderById = {
+      id: "order:1",
+      order_type: "table",
+      table_id: 7,
+      status: "cancelled",
+      kot_status: "sent",
+      discount_percent: 0,
+      subtotal_paise: 10000,
+      tax_total_paise: 0,
+      discount_total_paise: 0,
+      total_paise: 10000,
+      invoice_number: null,
+      paid_at: null,
+      meta_json: "{}",
+      created_at: 1000,
+      updated_at: 2000,
+      created_by: "rahul",
+    };
+    expect(() => posService.deleteClosedOrders(["order:1"], "admin")).toThrow(
+      "cannot-delete-cancelled-order",
+    );
+    expect(mockDb.calls.some((call: any) => call.sql.includes("DELETE FROM orders"))).toBe(false);
+  });
+
+  it("stores previous and new discount percents on discount audits", () => {
+    mockDb.orderById = {
+      id: "order:1",
+      order_type: "table",
+      table_id: 3,
+      status: "open",
+      kot_status: "pending",
+      discount_percent: 10,
+      subtotal_paise: 10000,
+      tax_total_paise: 0,
+      discount_total_paise: 1000,
+      total_paise: 9000,
+      invoice_number: null,
+      paid_at: null,
+      meta_json: "{}",
+      created_at: 1000,
+      updated_at: 1000,
+      created_by: "rahul",
+    };
+    mockDb.lineRows.set("order:1", [
+      {
+        id: "line:1",
+        item_name: "Tea",
+        quantity: 1,
+        rate_paise: 10000,
+        tax_rate_bps: 0,
+        kot_printed_qty: 0,
+      },
+    ]);
+    mockDb.orderSummaryRows.set("order:1", {
+      subtotal_paise: 10000,
+      tax_total_paise: 0,
+      discount_total_paise: 2500,
+      total_paise: 7500,
+    });
+
+    posService.setOrderDiscount("order:1", 25, "rahul");
+    const audit = mockDb.calls.find((call: any) => call.sql.includes("INSERT INTO audit_logs"));
+    expect(audit?.params[1]).toBe("order.discount.updated");
+    expect(String(audit?.params[5])).toContain("\"previousDiscountPercent\":10");
+    expect(String(audit?.params[5])).toContain("\"discountPercent\":25");
+  });
+
+  it("keeps cancelled-after-KOT orders in Needs Review", () => {
+    mockDb.orderRows = [
+      {
+        id: "order:1",
+        order_type: "table",
+        table_id: 7,
+        status: "cancelled",
+        kot_status: "sent",
+        discount_percent: 0,
+        subtotal_paise: 185000,
+        tax_total_paise: 0,
+        discount_total_paise: 0,
+        total_paise: 185000,
+        invoice_number: null,
+        paid_at: null,
+        cancelled_at: 3000,
+        cancelled_by: "rahul",
+        cancellation_reason: "Customer changed mind",
+        meta_json: JSON.stringify({ orderSeq: 1042 }),
+        created_at: 1000,
+        updated_at: 3000,
+        created_by: "rahul",
+      },
+    ];
+    mockDb.lineRows.set("order:1", [
+      {
+        id: "line:1",
+        item_name: "Paneer Tikka",
+        quantity: 1,
+        rate_paise: 185000,
+        tax_rate_bps: 1800,
+        kot_printed_qty: 1,
+      },
+    ]);
+
+    const items = posService.listReviewItems({ from: 500, to: 4000 });
+    expect(items.some((item) => item.rule === "cancellation_after_kot")).toBe(true);
+    expect(items.find((item) => item.rule === "cancellation_after_kot")?.orderId).toBe("order:1");
+  });
+
+  it("does not put unsent single cancellations in Needs Review", () => {
+    mockDb.orderRows = [
+      {
+        id: "order:2",
+        order_type: "takeaway",
+        table_id: null,
+        status: "cancelled",
+        kot_status: "pending",
+        discount_percent: 0,
+        subtotal_paise: 5000,
+        tax_total_paise: 0,
+        discount_total_paise: 0,
+        total_paise: 5000,
+        invoice_number: null,
+        paid_at: null,
+        cancelled_at: 3000,
+        cancelled_by: "priya",
+        cancellation_reason: "Wrong item",
+        meta_json: "{}",
+        created_at: 1000,
+        updated_at: 3000,
+        created_by: "priya",
+      },
+    ];
+    mockDb.lineRows.set("order:2", [
+      {
+        id: "line:2",
+        item_name: "Tea",
+        quantity: 1,
+        rate_paise: 5000,
+        tax_rate_bps: 0,
+        kot_printed_qty: 0,
+      },
+    ]);
+
+    expect(posService.listReviewItems({ from: 500, to: 4000 })).toEqual([]);
+  });
+
+  it("surfaces discounted orders in Needs Review even without discount audits", () => {
+    mockDb.orderRows = [
+      {
+        id: "order:disc",
+        order_type: "table",
+        table_id: 2,
+        status: "paid",
+        kot_status: "printed",
+        discount_percent: 50,
+        subtotal_paise: 19000,
+        tax_total_paise: 0,
+        discount_total_paise: 9500,
+        total_paise: 9500,
+        invoice_number: "INV-9",
+        paid_at: 2000,
+        cancelled_at: null,
+        cancelled_by: null,
+        cancellation_reason: null,
+        meta_json: JSON.stringify({ orderSeq: 9 }),
+        created_at: 1000,
+        updated_at: 2000,
+        created_by: "admin",
+      },
+    ];
+    mockDb.orderById = mockDb.orderRows[0];
+    mockDb.lineRows.set("order:disc", [
+      {
+        id: "line:1",
+        item_name: "Tea",
+        quantity: 1,
+        rate_paise: 19000,
+        tax_rate_bps: 0,
+        kot_printed_qty: 1,
+      },
+    ]);
+    mockDb.auditRows = [];
+
+    const items = posService.listReviewItems({ from: 500, to: 4000 });
+    expect(items.some((item) => item.rule === "discount_applied")).toBe(true);
+    expect(items.find((item) => item.rule === "discount_applied")?.discountPercent).toBe(50);
+    expect(posService.getStaffActivity({ from: 500, to: 4000 })[0]?.discounts).toBe(1);
+  });
+
+  it("does not prune order-lifecycle audit events", () => {
+    posService.pruneAuditLogs();
+    const prune = mockDb.calls.find((call: any) =>
+      call.sql.includes("DELETE FROM audit_logs"),
+    );
+    expect(prune).toBeDefined();
+    expect(prune!.sql).toContain("action NOT IN");
+    expect(prune!.params).toContain("order.cancelled");
+    expect(prune!.params).toContain("order.kot.void");
+    expect(prune!.params).toContain("order.bill.printed");
   });
 });

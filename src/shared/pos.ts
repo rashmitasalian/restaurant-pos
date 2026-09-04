@@ -117,6 +117,9 @@ export type OrderDto = {
   total?: number;
   invoiceNumber?: string | null;
   paidAt?: number | null;
+  cancelledAt?: number | null;
+  cancelledBy?: string | null;
+  cancellationReason?: string | null;
   createdAt: number;
   updatedAt: number;
   createdBy?: string | null;

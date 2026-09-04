@@ -6,6 +6,7 @@ export type ManagerSection =
   | "people"
   | "reports"
   | "history"
+  | "review"
   | "audit"
   | "settings";
 

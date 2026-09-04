@@ -17,6 +17,7 @@ import {
   markOrderKotFailed,
   markOrderKotSent,
   voidOrderKotLine,
+  markOrderBillPrinted,
   getConfigPrinters,
   getConfigGst,
   getConfigBranding,
@@ -574,6 +575,23 @@ export default function Billing() {
   const canStartCancel = canCancel && !cancelProcessing;
   const billPrinting = Boolean(busyActions.printBill);
   const canPrintBill = allowsManualBillPrint && hasItems && !isPaid && !billPrinting;
+
+  const persistDiscountIfNeeded = React.useCallback(
+    async (nextPercent = discountPercent) => {
+      if (!order || order.status === "paid" || order.status === "cancelled") {
+        return order;
+      }
+      const safePercent = Math.max(0, Math.min(100, Number(nextPercent || 0)));
+      if (Number(order.discountPercent || 0) === safePercent) {
+        return order;
+      }
+      const updated = await setOrderDiscount(order._id, safePercent);
+      setOrder(updated);
+      setDiscountPercent(Number(updated.discountPercent || 0));
+      return updated;
+    },
+    [order, discountPercent],
+  );
 
   // ── Data loading ────────────────────────────────────────────────────────
   const loadQueues = React.useCallback(async () => {
@@ -1520,6 +1538,7 @@ export default function Billing() {
       return;
     }
     try {
+      await persistDiscountIfNeeded();
       const lines = buildReceiptLines(
         order,
         tableNum,
@@ -1530,6 +1549,11 @@ export default function Billing() {
         { preview: true },
       );
       await printReceipt({ lines });
+      try {
+        await markOrderBillPrinted(order._id);
+      } catch (recordError) {
+        logger.error("Bill printed but could not record it for review", recordError);
+      }
       showToast("Bill printed");
     } catch (e: any) {
       logger.error("Bill print failed", e);
@@ -1550,17 +1574,17 @@ export default function Billing() {
     try {
       let paidOrder: any;
       try {
-        if (Number(order.discountPercent || 0) !== Number(discountPercent || 0)) {
-          await setOrderDiscount(order._id, discountPercent);
-        }
-        paidOrder = await setOrderPaid(order._id, {
-          amount: finalTotal,
-          method: payment.method,
-          amountPaid: payment.amountPaid,
-          change: payment.change,
-          txnRef: payment.txnRef,
-          splitBreakdown: payment.splitBreakdown,
-        });
+        paidOrder = await (async () => {
+          await persistDiscountIfNeeded();
+          return setOrderPaid(order._id, {
+            amount: finalTotal,
+            method: payment.method,
+            amountPaid: payment.amountPaid,
+            change: payment.change,
+            txnRef: payment.txnRef,
+            splitBreakdown: payment.splitBreakdown,
+          });
+        })();
       } catch (e: any) {
         logger.error("Payment failed", e);
         showToast(reportClientError("billing.payment", e, "Payment failed. Please try again."), "error");
@@ -1695,15 +1719,20 @@ export default function Billing() {
     }
   };
 
-  const handleConfirmCancel = async () => {
+  const handleConfirmCancel = async (reason: string) => {
     if (!order) {
+      return;
+    }
+    const cleanReason = normalizeText(reason);
+    if (!cleanReason) {
+      showToast(validationMessage("cancel-reason-required"), "error");
       return;
     }
     if (!beginBusyAction("cancel")) {
       return;
     }
     try {
-      await cancelOrder(order._id);
+      await cancelOrder(order._id, cleanReason);
       window.dispatchEvent(new Event("orders-changed"));
       setConfirmCancelOpen(false);
       setOrder(null);
@@ -1863,6 +1892,7 @@ export default function Billing() {
       return;
     }
     try {
+      await persistDiscountIfNeeded();
       const lines = buildReceiptLines(
         order,
         tableNum,
@@ -1872,6 +1902,11 @@ export default function Billing() {
         branding,
       );
       await printReceipt({ lines });
+      try {
+        await markOrderBillPrinted(order._id);
+      } catch (recordError) {
+        logger.error("Bill printed but could not record it for review", recordError);
+      }
     } catch (e) {
       console.warn("printAggregatorReceipt failed", e);
       showToast(reportClientError("billing.print", e, "Print failed"), "error");
@@ -2230,11 +2265,25 @@ export default function Billing() {
                             min={0}
                             max={100}
                             value={discountPercent}
+                            disabled={isPaid}
                             onChange={(e) =>
                               setDiscountPercent(
                                 Math.max(0, Math.min(100, Number(e.target.value || 0))),
                               )
                             }
+                            onBlur={() => {
+                              void persistDiscountIfNeeded().catch((e) => {
+                                logger.error("Failed to save discount", e);
+                                showToast(
+                                  reportClientError(
+                                    "billing.discount",
+                                    e,
+                                    "Discount could not be saved.",
+                                  ),
+                                  "error",
+                                );
+                              });
+                            }}
                             className={styles.discountInput}
                             aria-label="Discount percent"
                           />

@@ -21,6 +21,7 @@ import {
   ScrollText,
   Settings as SettingsIcon,
   BarChart3,
+  ClipboardCheck,
   CalendarDays,
   Users,
   IndianRupee,
@@ -35,6 +36,7 @@ const Settings = React.lazy(() => import("../Settings/Settings"));
 const People = React.lazy(() => import("../People/People"));
 const Reports = React.lazy(() => import("../Reports/Reports"));
 const History = React.lazy(() => import("../History/History"));
+const OwnerReview = React.lazy(() => import("../Review/OwnerReview"));
 const AuditViewer = React.lazy(() => import("../Audit/AuditViewer"));
 
 type ManagerProps = {
@@ -58,6 +60,7 @@ const SECTIONS: Array<{
   { key: "menu", label: "Menu", group: "Operations", icon: UtensilsCrossed },
   { key: "reports", label: "Reports", group: "Business", icon: BarChart3 },
   { key: "history", label: "History", group: "Business", icon: HistoryIcon },
+  { key: "review", label: "Review", group: "Business", icon: ClipboardCheck },
   { key: "audit", label: "Audit", group: "System", icon: ScrollText },
   { key: "settings", label: "Settings", group: "System", icon: SettingsIcon },
 ];
@@ -223,6 +226,9 @@ function ManagerInner({
               <History embedded />
             </div>
           </ManageShell>
+        )}
+        {effectiveSection === "review" && (
+          <OwnerReview onOpenHistory={() => navigate("history")} />
         )}
         {effectiveSection === "audit" && <AuditViewer />}
         {effectiveSection === "settings" && <SettingsSection />}

@@ -330,6 +330,9 @@ function runSchema(database: SqliteDatabase) {
       total_paise INTEGER NOT NULL DEFAULT 0,
       invoice_number TEXT,
       paid_at INTEGER,
+      cancelled_at INTEGER,
+      cancelled_by TEXT REFERENCES users(username) ON UPDATE CASCADE ON DELETE SET NULL,
+      cancellation_reason TEXT,
       meta_json TEXT,
       created_by TEXT REFERENCES users(username) ON UPDATE CASCADE ON DELETE SET NULL,
       created_at INTEGER NOT NULL,
@@ -1506,10 +1509,59 @@ function runSchema(database: SqliteDatabase) {
     addColumnIfMissing(database, "client_ops", "request_hash", "TEXT");
   });
 
+  runMigration(database, 26, "Order cancellation actor time and reason", () => {
+    addColumnIfMissing(database, "orders", "cancelled_at", "INTEGER");
+    addColumnIfMissing(database, "orders", "cancelled_by", "TEXT");
+    addColumnIfMissing(database, "orders", "cancellation_reason", "TEXT");
+    if (!columnExists(database, "orders", "cancelled_at")) {
+      throw new Error("migration-26-cancelled-at-missing");
+    }
+    database.exec(`
+      CREATE INDEX IF NOT EXISTS idx_orders_cancelled_at
+        ON orders(status, cancelled_at DESC);
+    `);
+    // Backfill only after columns exist. Safe on restaurants with no cancelled rows.
+    database.exec(`
+      UPDATE orders
+      SET
+        cancelled_at = COALESCE(
+          (
+            SELECT a.timestamp
+            FROM audit_logs a
+            WHERE a.entity_id = orders.id AND a.action = 'order.cancelled'
+            ORDER BY a.timestamp DESC
+            LIMIT 1
+          ),
+          updated_at
+        ),
+        cancelled_by = COALESCE(
+          (
+            SELECT a.user
+            FROM audit_logs a
+            WHERE a.entity_id = orders.id AND a.action = 'order.cancelled'
+            ORDER BY a.timestamp DESC
+            LIMIT 1
+          ),
+          created_by
+        )
+      WHERE status = 'cancelled' AND cancelled_at IS NULL;
+    `);
+  });
+
   // Startup self-healing for pre-existing/partially migrated databases:
   // ensure area_id exists even if migration 12 was marked applied while the column was missing.
   addColumnIfMissing(database, "tables", "area_id", `TEXT NOT NULL DEFAULT '${DEFAULT_SEATING_AREA_ID}'`);
   addColumnIfMissing(database, "client_ops", "request_hash", "TEXT");
+  // Self-heal cancel columns even if migration 26 was skipped / partially applied.
+  addColumnIfMissing(database, "orders", "cancelled_at", "INTEGER");
+  addColumnIfMissing(database, "orders", "cancelled_by", "TEXT");
+  addColumnIfMissing(database, "orders", "cancellation_reason", "TEXT");
+  if (columnExists(database, "orders", "cancelled_at")) {
+    database.exec(`
+      CREATE INDEX IF NOT EXISTS idx_orders_cancelled_at
+        ON orders(status, cancelled_at DESC);
+    `);
+  }
   database
     .prepare("UPDATE tables SET area_id = ? WHERE area_id IS NULL OR trim(area_id) = ''")
     .run(DEFAULT_SEATING_AREA_ID);

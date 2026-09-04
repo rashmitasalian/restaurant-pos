@@ -284,7 +284,8 @@ async function createWindow() {
     autoHideMenuBar: true,
     ...(icon ? { icon } : {}),
     webPreferences: {
-      // Always use the JS shim for preload. The shim will register ts-node and require preload.ts during dev.
+      // Dev loads electron/preload.js (plain CJS). Production build emits dist-electron/electron/preload.js from preload.ts.
+      // Keep preload.js and preload.ts in sync — Electron does not hot-reload preload.
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,

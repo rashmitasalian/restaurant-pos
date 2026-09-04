@@ -169,7 +169,7 @@ interface ConfirmCancelProps {
   tableNum: number | null;
   activeOrderType: string;
   onClose: () => void;
-  onConfirm: () => void;
+  onConfirm: (reason: string) => void;
   processing?: boolean;
 }
 
@@ -180,6 +180,14 @@ export function ConfirmCancelModal({
   onConfirm,
   processing = false,
 }: ConfirmCancelProps) {
+  const [preset, setPreset] = React.useState<string>(CANCEL_REASON_PRESETS[0]);
+  const [otherText, setOtherText] = React.useState("");
+  const cleanReason = resolveCancelReason(preset, otherText);
+  const targetLabel = tableNum
+    ? `Table ${tableNum}`
+    : activeOrderType === "delivery"
+      ? "this delivery order"
+      : "this order";
   return (
     <DialogShell
       ariaLabel="Cancel order confirmation"
@@ -188,21 +196,52 @@ export function ConfirmCancelModal({
     >
         <h3 className={styles.modalTitle}>Cancel Order?</h3>
         <p className={styles.modalPara}>
-          This will clear all items for{" "}
-          <strong>
-            {tableNum
-              ? `Table ${tableNum}`
-              : activeOrderType === "delivery"
-                ? "this delivery order"
-                : "this order"}
-          </strong>
-          . The order will be marked as held.
+          This will cancel all items for <strong>{targetLabel}</strong>. The order stays in records
+          for review and is no longer active on the floor.
         </p>
+        <label className={styles.modalLabel} style={{ marginTop: 14 }}>
+          Reason
+        </label>
+        <div className={styles.kotList} style={{ marginTop: 8 }}>
+          {CANCEL_REASON_PRESETS.map((option) => (
+            <label
+              key={option}
+              className={styles.kotItem}
+              style={{ cursor: processing ? "default" : "pointer" }}
+            >
+              <input
+                type="radio"
+                name="order-cancel-reason"
+                value={option}
+                checked={preset === option}
+                disabled={processing}
+                onChange={() => setPreset(option)}
+                style={{ marginRight: 8 }}
+              />
+              {option}
+            </label>
+          ))}
+        </div>
+        {preset === CANCEL_REASON_OTHER ? (
+          <input
+            value={otherText}
+            onChange={(event) => setOtherText(event.target.value)}
+            placeholder="Describe the reason"
+            autoFocus
+            className={styles.modalInput}
+            style={{ marginTop: 10 }}
+            disabled={processing}
+          />
+        ) : null}
         <div className={styles.modalFooter}>
           <button onClick={onClose} className={styles.btn} disabled={processing}>
             No, Keep
           </button>
-          <button onClick={onConfirm} className={styles.btnDanger} disabled={processing}>
+          <button
+            onClick={() => onConfirm(cleanReason)}
+            className={styles.btnDanger}
+            disabled={processing || !cleanReason}
+          >
             {processing ? "Cancelling..." : "Yes, Cancel"}
           </button>
         </div>

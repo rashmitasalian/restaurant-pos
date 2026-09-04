@@ -25,6 +25,11 @@ jest.mock("../services/posService", () => ({
     listAttendance: jest.fn(),
     upsertAttendanceRows: jest.fn(),
     getConfigDoc: jest.fn(),
+    cancelOrder: jest.fn(),
+    getReviewSummary: jest.fn(),
+    listReviewItems: jest.fn(),
+    getStaffActivity: jest.fn(),
+    getOrderTimeline: jest.fn(),
   },
 }));
 
@@ -306,5 +311,52 @@ describe("print queue IPC access", () => {
     await expectForbidden("pos:users:list");
     await expectForbidden("pos:settings:set", "config:gst", { enabled: true });
     await expectForbidden("pos:settings:get", "config:audit");
+    await expectForbidden("pos:review:summary", { from: 1, to: 2 });
+    await expectForbidden("pos:review:items", { from: 1, to: 2 });
+  });
+});
+
+describe("owner review IPC access", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    registerPosIpc(() => null);
+  });
+
+  it("allows admins to load owner review data", async () => {
+    getSessionMock.mockReturnValue({ token: "token", username: "admin" });
+    getUserMock.mockReturnValue({
+      username: "admin",
+      role: "admin",
+      active: true,
+      requirePasswordChange: false,
+    });
+    const summary = { needsReview: 1, paidOrders: 2, cancelledOrders: 1, itemVoids: 0 };
+    (posService.getReviewSummary as jest.Mock).mockReturnValue(summary);
+
+    await expect(Promise.resolve(invoke("pos:review:summary", { from: 1, to: 2 }))).resolves.toEqual(
+      summary,
+    );
+  });
+
+  it("blocks cashiers and managers from owner review", async () => {
+    getSessionMock.mockReturnValue({ token: "token", username: "cashier" });
+    getUserMock.mockReturnValue({
+      username: "cashier",
+      role: "cashier",
+      active: true,
+      requirePasswordChange: false,
+    });
+    await expectForbidden("pos:review:summary", { from: 1, to: 2 });
+    await expectForbidden("pos:review:timeline", "order:1");
+
+    getSessionMock.mockReturnValue({ token: "token", username: "manager" });
+    getUserMock.mockReturnValue({
+      username: "manager",
+      role: "manager",
+      active: true,
+      requirePasswordChange: false,
+    });
+    await expectForbidden("pos:review:items", { from: 1, to: 2 });
+    await expectForbidden("pos:review:staff-activity", { from: 1, to: 2 });
   });
 });

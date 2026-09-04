@@ -17,6 +17,7 @@ export const MANAGER_SECTION_HASH: Record<ManagerSection, string> = {
   people: "#manage-people-attendance",
   reports: "#reports",
   history: "#manage-history",
+  review: "#manage-review",
   audit: "#manage-audit",
   settings: "#manage-settings",
 };
@@ -70,6 +71,9 @@ export function managerSectionFromHash(hash: string): ManagerSection | null {
     "#manage-reports": "reports",
     "#history": "history",
     "#manage-history": "history",
+    "#review": "review",
+    "#manage-review": "review",
+    "#owner-review": "review",
     "#staff": "people",
     "#manage-people": "people",
     "#manage-people-roster": "people",

@@ -63,6 +63,22 @@ import {
   type TableNamingMode,
 } from "../../src/shared/floorLayout";
 import { ROLE_KEYS, isDesktopLoginRole, LIVE_ACTIVITY_ACTIONS } from "../../src/shared/permissions";
+import {
+  ORDER_LIFECYCLE_AUDIT_ACTIONS,
+  REPEATED_CANCELLATION_THRESHOLD,
+  actorKey,
+  buildReviewItems,
+  orderHadKotSent,
+  summarizeReviewItems,
+  timelineActionLabel,
+  type OrderTimelineEventDto,
+  type ReviewItemDto,
+  type ReviewRangeQuery,
+  type ReviewSummaryDto,
+  type ReviewDiscountEvent,
+  type ReviewVoidEvent,
+  type StaffActivityRowDto,
+} from "../../src/shared/ownerReview";
 import { publishOrdersChanged } from "./domainEvents";
 import {
   STAFF_TEXT_LIMITS,
@@ -1103,6 +1119,9 @@ function orderFromRow(database: Database.Database, row: any): OrderDto {
     total: paiseToRupees(row.total_paise),
     invoiceNumber: row.invoice_number || null,
     paidAt: row.paid_at || null,
+    cancelledAt: row.cancelled_at || null,
+    cancelledBy: row.cancelled_by || null,
+    cancellationReason: row.cancellation_reason || null,
     meta,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -1340,6 +1359,117 @@ function mergeOrderAuditDetail(
   return {
     ...orderTableAuditContext(database, order, actor),
     ...(detail || {}),
+  };
+}
+
+function appendReviewRange(
+  clauses: string[],
+  params: unknown[],
+  expression: string,
+  opts: ReviewRangeQuery = {},
+) {
+  const from = Number(opts.from);
+  const to = Number(opts.to);
+  if (Number.isFinite(from)) {
+    clauses.push(`${expression} >= ?`);
+    params.push(from);
+  }
+  if (Number.isFinite(to)) {
+    clauses.push(`${expression} < ?`);
+    params.push(to);
+  }
+}
+
+function detailRecord(detail: unknown): Record<string, unknown> {
+  if (detail && typeof detail === "object" && !Array.isArray(detail)) {
+    return detail as Record<string, unknown>;
+  }
+  return {};
+}
+
+function voidEventFromAudit(
+  database: Database.Database,
+  audit: AuditDto,
+  order: OrderDto | null,
+): ReviewVoidEvent {
+  const detail = detailRecord(audit.detail);
+  const context = orderTableAuditContext(database, order, audit.user);
+  const amountPaise = Number(detail.amountPaise);
+  return {
+    auditId: audit._id,
+    orderId: String(audit.entityId || audit.orderId || order?._id || ""),
+    timestamp: Number(audit.timestamp || 0),
+    actor: audit.user || null,
+    reason: detail.reason != null ? String(detail.reason) : null,
+    itemName: detail.name != null ? String(detail.name) : null,
+    voidQty: detail.voidQty != null ? Number(detail.voidQty) : null,
+    amount: Number.isFinite(amountPaise)
+      ? paiseToRupees(amountPaise)
+      : Number(order?.total || 0),
+    tableId: order?.tableId ?? context.tableId,
+    tableName: context.tableName,
+    createdAt: order?.createdAt || null,
+    meta: order?.meta,
+  };
+}
+
+function discountEventFromAudit(
+  database: Database.Database,
+  audit: AuditDto,
+  order: OrderDto | null,
+): ReviewDiscountEvent {
+  const detail = detailRecord(audit.detail);
+  const context = orderTableAuditContext(database, order, audit.user);
+  const amountPaise = Number(detail.amountPaise);
+  const detailPercent =
+    detail.discountPercent != null
+      ? Number(detail.discountPercent)
+      : detail.discount_percent != null
+        ? Number(detail.discount_percent)
+        : null;
+  const orderPercent = order?.discountPercent != null ? Number(order.discountPercent) : null;
+  const discountPercent =
+    detailPercent != null && Number.isFinite(detailPercent) ? detailPercent : orderPercent;
+  return {
+    auditId: audit._id,
+    orderId: String(audit.entityId || audit.orderId || order?._id || ""),
+    timestamp: Number(audit.timestamp || 0),
+    actor: audit.user || null,
+    previousDiscountPercent:
+      detail.previousDiscountPercent != null
+        ? Number(detail.previousDiscountPercent)
+        : detail.previous_discount_percent != null
+          ? Number(detail.previous_discount_percent)
+          : null,
+    discountPercent,
+    amount: Number.isFinite(amountPaise)
+      ? paiseToRupees(amountPaise)
+      : Number(order?.total || 0),
+    tableId: order?.tableId ?? context.tableId,
+    tableName: context.tableName,
+    createdAt: order?.createdAt || null,
+    meta: order?.meta,
+  };
+}
+
+function discountEventFromOrder(
+  database: Database.Database,
+  order: OrderDto,
+): ReviewDiscountEvent {
+  const context = orderTableAuditContext(database, order, order.createdBy);
+  const occurredAt = Number(order.paidAt || order.updatedAt || order.createdAt || 0);
+  return {
+    auditId: `order-discount:${order._id}`,
+    orderId: order._id,
+    timestamp: occurredAt,
+    actor: order.createdBy || null,
+    previousDiscountPercent: null,
+    discountPercent: Number(order.discountPercent || 0),
+    amount: Number(order.total || 0),
+    tableId: order.tableId ?? context.tableId,
+    tableName: context.tableName,
+    createdAt: order.createdAt || null,
+    meta: order.meta,
   };
 }
 
@@ -3252,6 +3382,7 @@ export const posService = {
     return inTransaction((database) => {
       const order = this.getOrderById(orderId);
       assertOrderCanBeEdited(order);
+      const previousDiscount = Number(order.discountPercent || 0);
       const safeDiscount = Math.max(0, Math.min(100, Number(discountPercent) || 0));
       updateOrderTotals(database, orderId, order.items || [], safeDiscount);
       createAuditRow(
@@ -3260,9 +3391,10 @@ export const posService = {
         "order",
         orderId,
         actor || order.createdBy || null,
-        {
+        mergeOrderAuditDetail(database, order, actor || order.createdBy || null, {
+          previousDiscountPercent: previousDiscount,
           discountPercent: safeDiscount,
-        },
+        }),
       );
       return this.getOrderById(orderId)!;
     });
@@ -3413,6 +3545,25 @@ export const posService = {
     return this.markKotDone(orderId, actor);
   },
 
+  markBillPrinted(orderId: string, actor?: string | null) {
+    const updated = inTransaction((database) => {
+      const order = this.getOrderById(orderId);
+      assertOrderCanBeEdited(order);
+      const auditActor = actor || order.createdBy || null;
+      createAuditRow(
+        database,
+        "order.bill.printed",
+        "order",
+        orderId,
+        auditActor,
+        mergeOrderAuditDetail(database, order, auditActor, {}),
+      );
+      return this.getOrderById(orderId)!;
+    });
+    publishOrdersChanged({ orderId, action: "order.bill.printed" });
+    return updated;
+  },
+
   updateOrder(order: OrderDto) {
     return inTransaction((database) => {
       const current = database.prepare("SELECT * FROM orders WHERE id = ?").get(order._id) as any;
@@ -3464,16 +3615,32 @@ export const posService = {
       const order = this.getOrderById(orderId);
       assertOrderCanBeEdited(order);
       const rawPayment = (payment || {}) as any;
+      const previousDiscount = Number(order.discountPercent || 0);
       const discountPercent =
         rawPayment.discountPercent !== undefined
           ? Number(rawPayment.discountPercent || 0)
-          : Number(order.discountPercent || 0);
+          : previousDiscount;
+      const safeDiscount = Math.max(0, Math.min(100, Number(discountPercent) || 0));
+      const payActor = rawPayment.receivedBy || order.createdBy || null;
+      if (safeDiscount !== previousDiscount) {
+        createAuditRow(
+          database,
+          "order.discount.updated",
+          "order",
+          orderId,
+          payActor,
+          mergeOrderAuditDetail(database, order, payActor, {
+            previousDiscountPercent: previousDiscount,
+            discountPercent: safeDiscount,
+          }),
+        );
+      }
       const gstConfig = getGstSettingFromDb(database);
       const totals = updateOrderTotals(
         database,
         orderId,
         order.items || [],
-        discountPercent,
+        safeDiscount,
         gstConfig,
       );
       const safePayment =
@@ -3543,23 +3710,40 @@ export const posService = {
     return paid;
   },
 
-  cancelOrder(orderId: string, actor?: string | null) {
+  cancelOrder(orderId: string, actor?: string | null, reason?: string) {
+    const reasonText = normalizeText(reason);
+    if (!reasonText) {
+      throw new Error("cancel-reason-required");
+    }
     const updated = inTransaction((database) => {
       const order = this.getOrderById(orderId);
       if (!order) {
         throw new Error("order-not-found");
       }
-      database
-        .prepare("UPDATE orders SET status = 'cancelled', updated_at = ? WHERE id = ?")
-        .run(now(), orderId);
+      if (order.status === "paid" || order.status === "cancelled") {
+        throw new Error("order-closed");
+      }
+      const at = now();
       const auditActor = actor || order.createdBy || null;
+      const kotSent = orderHadKotSent(order);
+      database
+        .prepare(
+          `UPDATE orders
+           SET status = 'cancelled', cancelled_at = ?, cancelled_by = ?, cancellation_reason = ?, updated_at = ?
+           WHERE id = ?`,
+        )
+        .run(at, auditActor, reasonText, at, orderId);
       createAuditRow(
         database,
         "order.cancelled",
         "order",
         orderId,
         auditActor,
-        mergeOrderAuditDetail(database, order, auditActor, {}),
+        mergeOrderAuditDetail(database, order, auditActor, {
+          reason: reasonText,
+          kotSent,
+          amountPaise: rupeesToPaise(Number(order.total || 0)),
+        }),
       );
       return this.getOrderById(orderId)!;
     });
@@ -3585,7 +3769,10 @@ export const posService = {
         if (!order) {
           continue;
         }
-        if (order.status !== "paid" && order.status !== "cancelled") {
+        if (order.status === "cancelled") {
+          throw new Error("cannot-delete-cancelled-order");
+        }
+        if (order.status !== "paid") {
           throw new Error("cannot-delete-active-order");
         }
         database.prepare("DELETE FROM orders WHERE id = ?").run(id);
@@ -3620,8 +3807,9 @@ export const posService = {
           `INSERT INTO orders (
             id, order_type, table_id, customer_id, status, kot_status, subtotal_paise,
             tax_total_paise, discount_percent, discount_total_paise, total_paise,
-            invoice_number, paid_at, meta_json, created_by, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?, 0, 0, ?, ?, ?, ?, ?, ?)`,
+            invoice_number, paid_at, cancelled_at, cancelled_by, cancellation_reason,
+            meta_json, created_by, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?, 0, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           order._id,
@@ -3633,6 +3821,9 @@ export const posService = {
           Number(order.discountPercent || 0),
           getOrderInvoiceNumber(order),
           paidAt,
+          order.status === "cancelled" ? Number(order.cancelledAt || order.updatedAt || createdAt) : null,
+          order.status === "cancelled" ? order.cancelledBy || actor || null : null,
+          order.status === "cancelled" ? order.cancellationReason || null : null,
           stringifyJson({ ...(order.meta || {}), serviceModeId }),
           order.createdBy || actor || null,
           createdAt,
@@ -4005,7 +4196,13 @@ export const posService = {
       return 0;
     }
     const cutoff = now() - Number(retentionDays) * 24 * 60 * 60 * 1000;
-    const result = getDb().prepare("DELETE FROM audit_logs WHERE timestamp < ?").run(cutoff);
+    const actions = ORDER_LIFECYCLE_AUDIT_ACTIONS as readonly string[];
+    const placeholders = actions.map(() => "?").join(",");
+    const result = getDb()
+      .prepare(
+        `DELETE FROM audit_logs WHERE timestamp < ? AND action NOT IN (${placeholders})`,
+      )
+      .run(cutoff, ...actions);
     return result.changes;
   },
 
@@ -4021,6 +4218,300 @@ export const posService = {
       .all(cutoff) as any[];
     rows.forEach((row) => this.deleteOrder(row.id));
     return rows.length;
+  },
+
+  listCancelledOrdersInRange(opts: ReviewRangeQuery = {}): OrderDto[] {
+    const clauses = ["o.status = 'cancelled'"];
+    const params: unknown[] = [];
+    appendReviewRange(clauses, params, "COALESCE(o.cancelled_at, o.updated_at)", opts);
+    const actor = actorKey(opts.actor);
+    if (actor) {
+      clauses.push("LOWER(COALESCE(o.cancelled_by, o.created_by, '')) = ?");
+      params.push(actor);
+    }
+    const database = getDb();
+    return database
+      .prepare(
+        `SELECT o.* FROM orders o
+         WHERE ${clauses.join(" AND ")}
+         ORDER BY COALESCE(o.cancelled_at, o.updated_at) DESC, o.id DESC`,
+      )
+      .all(...params)
+      .map((row: any) => orderFromRow(database, row));
+  },
+
+  listVoidAuditsInRange(opts: ReviewRangeQuery = {}): AuditDto[] {
+    const clauses = ["action = 'order.kot.void'"];
+    const params: unknown[] = [];
+    appendReviewRange(clauses, params, "timestamp", opts);
+    const actor = actorKey(opts.actor);
+    if (actor) {
+      clauses.push("LOWER(COALESCE(user, '')) = ?");
+      params.push(actor);
+    }
+    return getDb()
+      .prepare(
+        `SELECT * FROM audit_logs
+         WHERE ${clauses.join(" AND ")}
+         ORDER BY timestamp DESC`,
+      )
+      .all(...params)
+      .map(auditFromRow);
+  },
+
+  listDiscountAuditsInRange(opts: ReviewRangeQuery = {}): AuditDto[] {
+    const clauses = ["action = 'order.discount.updated'"];
+    const params: unknown[] = [];
+    appendReviewRange(clauses, params, "timestamp", opts);
+    const actor = actorKey(opts.actor);
+    if (actor) {
+      clauses.push("LOWER(COALESCE(user, '')) = ?");
+      params.push(actor);
+    }
+    return getDb()
+      .prepare(
+        `SELECT * FROM audit_logs
+         WHERE ${clauses.join(" AND ")}
+         ORDER BY timestamp DESC`,
+      )
+      .all(...params)
+      .map(auditFromRow);
+  },
+
+  /** Orders that still carry a positive discount in-range (History truth), even if audit rows are missing. */
+  listDiscountedOrdersInRange(opts: ReviewRangeQuery = {}): OrderDto[] {
+    const database = getDb();
+    const clauses = ["o.discount_percent > 0"];
+    const params: unknown[] = [];
+    // Prefer payment time; fall back to update/create so open discounted tickets still appear.
+    appendReviewRange(clauses, params, "COALESCE(o.paid_at, o.updated_at, o.created_at)", opts);
+    const actor = actorKey(opts.actor);
+    if (actor) {
+      clauses.push("LOWER(COALESCE(o.created_by, '')) = ?");
+      params.push(actor);
+    }
+    return database
+      .prepare(
+        `SELECT o.*
+         FROM orders o
+         WHERE ${clauses.join(" AND ")}
+         ORDER BY COALESCE(o.paid_at, o.updated_at, o.created_at) DESC`,
+      )
+      .all(...params)
+      .map((row: any) => orderFromRow(database, row));
+  },
+
+  listReviewItems(opts: ReviewRangeQuery = {}): ReviewItemDto[] {
+    const database = getDb();
+    const cancelled = this.listCancelledOrdersInRange(opts);
+    const voidAudits = this.listVoidAuditsInRange(opts);
+    const discountAudits = this.listDiscountAuditsInRange(opts);
+    const discountedOrders = this.listDiscountedOrdersInRange(opts);
+    const voidOrderIds = voidAudits
+      .map((audit) => String(audit.entityId || audit.orderId || ""))
+      .filter(Boolean);
+    const lookupIds = [...new Set([...cancelled.map((order) => order._id), ...voidOrderIds])];
+    const kotSentAt = new Map<string, number>();
+    const billPrintedAt = new Map<string, number>();
+    if (lookupIds.length) {
+      const placeholders = lookupIds.map(() => "?").join(",");
+      const kotRows = database
+        .prepare(
+          `SELECT entity_id, MIN(timestamp) AS kot_sent_at
+           FROM audit_logs
+           WHERE action = 'order.kot.sent' AND entity_id IN (${placeholders})
+           GROUP BY entity_id`,
+        )
+        .all(...lookupIds) as Array<{ entity_id: string; kot_sent_at: number }>;
+      kotRows.forEach((row) => {
+        kotSentAt.set(String(row.entity_id), Number(row.kot_sent_at));
+      });
+      const billRows = database
+        .prepare(
+          `SELECT entity_id, MIN(timestamp) AS bill_printed_at
+           FROM audit_logs
+           WHERE action = 'order.bill.printed' AND entity_id IN (${placeholders})
+           GROUP BY entity_id`,
+        )
+        .all(...lookupIds) as Array<{ entity_id: string; bill_printed_at: number }>;
+      billRows.forEach((row) => {
+        billPrintedAt.set(String(row.entity_id), Number(row.bill_printed_at));
+      });
+    }
+    const cancelCountsByActor: Record<string, number> = {};
+    const cancelledSnapshots = cancelled.map((order) => {
+      const actor = actorKey(order.cancelledBy || order.createdBy);
+      if (actor) {
+        cancelCountsByActor[actor] = (cancelCountsByActor[actor] || 0) + 1;
+      }
+      const context = orderTableAuditContext(database, order, order.cancelledBy || order.createdBy);
+      return {
+        _id: order._id,
+        tableId: order.tableId,
+        tableName: context.tableName,
+        total: Number(order.total || 0),
+        createdAt: Number(order.createdAt || 0),
+        cancelledAt: order.cancelledAt || null,
+        cancelledBy: order.cancelledBy || null,
+        cancellationReason: order.cancellationReason || null,
+        createdBy: order.createdBy || null,
+        kotStatus: order.kotStatus || null,
+        items: order.items || [],
+        meta: order.meta,
+        kotSentAt: kotSentAt.get(order._id) || null,
+        billPrintedAt: billPrintedAt.get(order._id) || null,
+      };
+    });
+    const voidEvents = voidAudits.map((audit) => {
+      const orderId = String(audit.entityId || audit.orderId || "");
+      const event = voidEventFromAudit(database, audit, orderId ? this.getOrderById(orderId) : null);
+      return {
+        ...event,
+        kotSentAt: kotSentAt.get(event.orderId) || null,
+      };
+    });
+    const discountEventsByOrder = new Map<string, ReviewDiscountEvent>();
+    const rememberDiscount = (event: ReviewDiscountEvent) => {
+      const orderId = String(event.orderId || "").trim();
+      const percent = Number(event.discountPercent);
+      if (!orderId || !Number.isFinite(percent) || percent <= 0) {
+        return;
+      }
+      const existing = discountEventsByOrder.get(orderId);
+      // Prefer real discount audits over synthetic order snapshots; then newest timestamp.
+      const existingIsAudit = Boolean(existing && !String(existing.auditId).startsWith("order-discount:"));
+      const nextIsAudit = !String(event.auditId).startsWith("order-discount:");
+      if (
+        !existing ||
+        (nextIsAudit && !existingIsAudit) ||
+        (nextIsAudit === existingIsAudit && event.timestamp >= existing.timestamp)
+      ) {
+        discountEventsByOrder.set(orderId, event);
+      }
+    };
+    for (const audit of discountAudits) {
+      const orderId = String(audit.entityId || audit.orderId || "");
+      rememberDiscount(
+        discountEventFromAudit(database, audit, orderId ? this.getOrderById(orderId) : null),
+      );
+    }
+    for (const order of discountedOrders) {
+      rememberDiscount(discountEventFromOrder(database, order));
+    }
+    return buildReviewItems({
+      cancelledOrders: cancelledSnapshots,
+      voidEvents,
+      discountEvents: Array.from(discountEventsByOrder.values()),
+      cancelCountsByActor,
+      actorFilter: opts.actor,
+      threshold: REPEATED_CANCELLATION_THRESHOLD,
+    });
+  },
+
+  getReviewSummary(opts: ReviewRangeQuery = {}): ReviewSummaryDto {
+    const items = this.listReviewItems(opts);
+    const counts = summarizeReviewItems(items);
+    return {
+      paidOrders: this.countPaidOrders({ from: opts.from, to: opts.to }),
+      cancelledOrders: this.listCancelledOrdersInRange(opts).length,
+      ...counts,
+    };
+  },
+
+  getStaffActivity(opts: ReviewRangeQuery = {}): StaffActivityRowDto[] {
+    const database = getDb();
+    const tally = new Map<
+      string,
+      {
+        username: string;
+        orders: number;
+        voids: number;
+        discounts: number;
+        afterKot: number;
+      }
+    >();
+    const bump = (
+      username: string | null | undefined,
+      field: "orders" | "voids" | "discounts" | "afterKot",
+      amount = 1,
+    ) => {
+      const key = actorKey(username);
+      if (!key) {
+        return;
+      }
+      const current = tally.get(key) || {
+        username: String(username || key),
+        orders: 0,
+        voids: 0,
+        discounts: 0,
+        afterKot: 0,
+      };
+      current[field] += amount;
+      tally.set(key, current);
+    };
+
+    const createdClauses: string[] = ["created_by IS NOT NULL"];
+    const createdParams: unknown[] = [];
+    appendReviewRange(createdClauses, createdParams, "created_at", opts);
+    (
+      database
+        .prepare(
+          `SELECT created_by AS username, COUNT(*) AS count
+           FROM orders
+           WHERE ${createdClauses.join(" AND ")}
+           GROUP BY created_by`,
+        )
+        .all(...createdParams) as Array<{ username: string; count: number }>
+    ).forEach((row) => bump(row.username, "orders", Number(row.count || 0)));
+
+    for (const item of this.listReviewItems({ from: opts.from, to: opts.to })) {
+      if (item.rule === "item_void") {
+        bump(item.actor, "voids");
+      } else if (item.rule === "discount_applied") {
+        bump(item.actor, "discounts");
+      } else if (item.rule === "cancellation_after_kot") {
+        bump(item.actor, "afterKot");
+      }
+    }
+
+    const rows = Array.from(tally.values()).sort((a, b) => a.username.localeCompare(b.username));
+    return rows.map((row) => {
+      const user = database
+        .prepare("SELECT username, display_name FROM users WHERE username = ?")
+        .get(row.username) as { username?: string; display_name?: string } | undefined;
+      return {
+        username: user?.username || row.username,
+        displayName: user?.display_name || null,
+        orders: row.orders,
+        voids: row.voids,
+        discounts: row.discounts,
+        afterKot: row.afterKot,
+      };
+    });
+  },
+
+  getOrderTimeline(orderId: string): { order: OrderDto; events: OrderTimelineEventDto[] } {
+    const key = String(orderId || "").trim();
+    const order = this.getOrderById(key);
+    if (!order) {
+      throw new Error("order-not-found");
+    }
+    const events = getDb()
+      .prepare(
+        `SELECT * FROM audit_logs
+         WHERE entity_id = ?
+         ORDER BY timestamp ASC, id ASC`,
+      )
+      .all(key)
+      .map((row: any) => auditFromRow(row))
+      .map((audit: AuditDto) => ({
+        timestamp: Number(audit.timestamp || 0),
+        action: audit.action,
+        label: timelineActionLabel(audit.action),
+        actor: audit.user || null,
+        detail: audit.detail,
+      }));
+    return { order, events };
   },
 
   createAudit(action: string, orderId?: string | null, user?: string | null, detail?: unknown) {

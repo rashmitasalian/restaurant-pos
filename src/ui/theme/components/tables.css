@@ -59,12 +59,16 @@
   padding: 8px 10px;
 }
 
-.ui-table-num {
+.ui-table-num,
+.pos-table th.ui-table-num,
+.ui-table th.ui-table-num {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
 
-.ui-table-center {
+.ui-table-center,
+.pos-table th.ui-table-center,
+.ui-table th.ui-table-center {
   text-align: center;
 }
 
