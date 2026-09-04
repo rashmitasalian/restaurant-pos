@@ -382,6 +382,8 @@ export default function Billing() {
         total?: number;
         seats?: number;
         openedAt?: number | null;
+        unsentCount?: number;
+        sentCount?: number;
       }>
     >
   >({});
@@ -623,6 +625,8 @@ export default function Billing() {
           total?: number;
           seats?: number;
           openedAt?: number | null;
+          unsentCount?: number;
+          sentCount?: number;
         }>
       > = {};
       for (const area of activeAreas) {
@@ -643,6 +647,8 @@ export default function Billing() {
           openedAt: occupied
             ? Number((table as { openedAt?: number }).openedAt || 0) || null
             : null,
+          unsentCount: Number(table.unsentCount || 0),
+          sentCount: Number(table.sentCount || 0),
         });
       }
       setTablesByArea(grouped);

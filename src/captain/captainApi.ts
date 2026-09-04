@@ -1,6 +1,8 @@
 const DEVICE_KEY = "captain-device-id";
 const SESSION_KEY = "captain-session-token";
 const USER_KEY = "captain-user";
+const REQUEST_TIMEOUT_MS = 20_000;
+const SSE_BACKOFF_MS = [1000, 2000, 4000, 8000, 15000, 30000];
 
 export type CaptainUser = {
   username: string;
@@ -56,6 +58,13 @@ function storeSession(token: string, user: CaptainUser) {
   localStorage.setItem(USER_KEY, JSON.stringify(user));
 }
 
+function isAbortError(err: unknown) {
+  return (
+    (err instanceof DOMException && err.name === "AbortError") ||
+    String((err as any)?.name || "") === "AbortError"
+  );
+}
+
 async function request<T>(
   path: string,
   options: {
@@ -63,6 +72,7 @@ async function request<T>(
     body?: unknown;
     token?: string | null;
     clientOpId?: string | null;
+    timeoutMs?: number;
   } = {},
 ): Promise<T> {
   const headers: Record<string, string> = {
@@ -75,26 +85,44 @@ async function request<T>(
   if (options.clientOpId) {
     headers["X-Client-Op-Id"] = options.clientOpId;
   }
-  const res = await fetch(`${apiBase()}${path}`, {
-    method: options.method || "GET",
-    headers,
-    body: options.body === undefined ? undefined : JSON.stringify(options.body),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error(String((data as any)?.error || `http-${res.status}`));
+  const timeoutMs = options.timeoutMs ?? REQUEST_TIMEOUT_MS;
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(`${apiBase()}${path}`, {
+      method: options.method || "GET",
+      headers,
+      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      signal: controller.signal,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(String((data as any)?.error || `http-${res.status}`));
+    }
+    return data as T;
+  } catch (err: any) {
+    if (isAbortError(err)) {
+      throw new Error("request-timeout");
+    }
+    throw err;
+  } finally {
+    window.clearTimeout(timer);
   }
-  return data as T;
 }
 
 export function newClientOpId(prefix: string) {
   return `${prefix}:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 10)}`;
 }
 
+export function nextSseBackoffMs(attempt: number) {
+  const index = Math.max(0, Math.min(SSE_BACKOFF_MS.length - 1, attempt - 1));
+  return SSE_BACKOFF_MS[index];
+}
+
 export const captainApi = {
-  health: () => request<{ ok: boolean }>("/api/health"),
+  health: () => request<{ ok: boolean }>("/api/health", { timeoutMs: 8000 }),
   branding: () =>
-    request<{ hotelName?: string; tagline?: string }>("/api/branding"),
+    request<{ hotelName?: string; tagline?: string }>("/api/branding", { timeoutMs: 8000 }),
   login: async (username: string, password: string, pairingCode: string) => {
     const result = await request<{
       ok: boolean;
@@ -108,7 +136,7 @@ export const captainApi = {
     return result;
   },
   logout: (token: string) =>
-    request("/api/auth/logout", { method: "POST", token }).finally(clearStoredSession),
+    request("/api/auth/logout", { method: "POST", token, timeoutMs: 8000 }).finally(clearStoredSession),
   tables: (token: string) => request<any>("/api/tables", { token }),
   kots: (token: string) =>
     request<{
@@ -124,11 +152,12 @@ export const captainApi = {
       }>;
     }>("/api/kots", { token }),
   menu: (token: string) => request<{ items: any[]; categories: string[] }>("/api/menu", { token }),
-  openTable: (token: string, tableId: number) =>
+  openTable: (token: string, tableId: number, clientOpId: string) =>
     request<any>("/api/orders/open-table", {
       method: "POST",
       token,
-      body: { tableId },
+      clientOpId,
+      body: { tableId, clientOpId },
     }),
   getOrder: (token: string, orderId: string) =>
     request<any>(`/api/orders/${encodeURIComponent(orderId)}`, { token }),
@@ -136,17 +165,20 @@ export const captainApi = {
     token: string,
     orderId: string,
     item: { name: string; qty: number; rate: number; menuItemId?: string; categoryName?: string },
+    clientOpId: string,
   ) =>
     request<any>(`/api/orders/${encodeURIComponent(orderId)}/items`, {
       method: "POST",
       token,
-      body: item,
+      clientOpId,
+      body: { ...item, clientOpId },
     }),
-  updateLines: (token: string, orderId: string, lines: any[]) =>
+  updateLines: (token: string, orderId: string, lines: any[], clientOpId: string) =>
     request<any>(`/api/orders/${encodeURIComponent(orderId)}/lines`, {
       method: "PUT",
       token,
-      body: { lines },
+      clientOpId,
+      body: { lines, clientOpId },
     }),
   sendKot: (token: string, orderId: string, clientOpId: string) =>
     request<any>(`/api/orders/${encodeURIComponent(orderId)}/send-kot`, {

@@ -8,17 +8,7 @@ import "@fontsource/inter/latin-800.css";
 import "../ui/theme/base.css";
 import "../ui/theme/components/index.css";
 import "./captain.css";
-import iconUrl from "../ui/assets/restoniti-icon.png";
 import { CaptainApp } from "./CaptainApp";
-
-function installAppMeta() {
-  const appleIcon = document.querySelector('link[rel="apple-touch-icon"]') || document.createElement("link");
-  appleIcon.setAttribute("rel", "apple-touch-icon");
-  appleIcon.setAttribute("href", iconUrl);
-  document.head.appendChild(appleIcon);
-}
-
-installAppMeta();
 
 const root = document.getElementById("root");
 if (root) {

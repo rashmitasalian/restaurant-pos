@@ -142,6 +142,19 @@ export function suggestPrefixFromAreaName(name: string) {
   return normalizeTablePrefix(words.map((word) => word[0]).join(""));
 }
 
+/** Display label for a table — prefers configured name (G1, Patio), else Table N. */
+export function formatTableLabel(
+  tableId: number | null | undefined,
+  name?: string | null,
+): string {
+  if (tableId === null || tableId === undefined || !Number.isFinite(Number(tableId))) {
+    return "";
+  }
+  const id = Number(tableId);
+  const trimmed = String(name || "").trim();
+  return trimmed || `Table ${id}`;
+}
+
 export const FLOOR_LAYOUT_LIMITS = {
   MAX_TOTAL_TABLES,
   MAX_AREA_TABLES,

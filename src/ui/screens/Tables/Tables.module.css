@@ -134,6 +134,22 @@
   padding-left: 2px;
 }
 
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin: -4px 0 14px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--pos-tx-sub);
+}
+
+.legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .noMatch {
   margin-top: 40px;
   text-align: center;

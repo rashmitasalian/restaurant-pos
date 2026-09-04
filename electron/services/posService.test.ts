@@ -6,7 +6,7 @@ jest.mock("../db/sqlite", () => ({
 }));
 
 import { getDb } from "../db/sqlite";
-import { posService } from "./posService";
+import { hashClientOpRequest, posService } from "./posService";
 
 const mockGetDb = getDb as jest.Mock;
 
@@ -29,6 +29,7 @@ function createMockDb() {
     auditRows: [] as any[],
     auditCount: 0,
     lineRows: new Map<string, any[]>(),
+    clientOps: new Map<string, any>(),
     paymentRows: new Map<string, any[]>(),
     orderSummaryRows: new Map<string, any>(),
     prepare(sql: string) {
@@ -90,10 +91,24 @@ function createMockDb() {
             }
             return db.groceryConflictRow;
           }
+          if (sql.includes("FROM client_ops")) {
+            return db.clientOps.get(String(params[0]));
+          }
           return undefined;
         },
         run: jest.fn((...params: unknown[]) => {
           calls.push({ sql, params });
+          if (sql.includes("INSERT INTO client_ops")) {
+            db.clientOps.set(String(params[0]), {
+              id: params[0],
+              username: params[1],
+              action: params[2],
+              entity_id: params[3],
+              result_json: params[4],
+              request_hash: params[5],
+              created_at: params[6],
+            });
+          }
           return { changes: 1 };
         }),
       };
@@ -594,5 +609,74 @@ describe("posService strict SQLite APIs", () => {
     const audit = mockDb.calls.find((call: any) => call.sql.includes("INSERT INTO audit_logs"));
     expect(audit?.params[1]).toBe("order.kot.void");
     expect(String(audit?.params[5])).toContain("Customer changed order");
+  });
+
+  it("hashes client-op requests independently of object key order", () => {
+    expect(hashClientOpRequest({ orderId: "o1", qty: 1, name: "Tea" })).toBe(
+      hashClientOpRequest({ name: "Tea", qty: 1, orderId: "o1" }),
+    );
+    expect(hashClientOpRequest({ orderId: "o1", qty: 1 })).not.toBe(
+      hashClientOpRequest({ orderId: "o1", qty: 2 }),
+    );
+  });
+
+  it("replays the same client op and rejects the same id with a different body", () => {
+    const request = { orderId: "order:1", name: "Tea", qty: 1 };
+    const first = posService.rememberClientOp({
+      id: "op:add-1",
+      username: "priya",
+      action: "order.add-item",
+      entityId: "order:1",
+      request,
+      result: { _id: "order:1", qty: 1 },
+    });
+    expect(first.replay).toBe(false);
+
+    const replay = posService.rememberClientOp({
+      id: "op:add-1",
+      username: "priya",
+      action: "order.add-item",
+      entityId: "order:1",
+      request,
+      result: { _id: "order:1", qty: 99 },
+    });
+    expect(replay.replay).toBe(true);
+    expect(replay.op.result).toEqual({ _id: "order:1", qty: 1 });
+
+    expect(() =>
+      posService.rememberClientOp({
+        id: "op:add-1",
+        username: "priya",
+        action: "order.add-item",
+        entityId: "order:1",
+        request: { ...request, qty: 2 },
+        result: { _id: "order:1", qty: 2 },
+      }),
+    ).toThrow("client-op-conflict");
+  });
+
+  it("replays a legacy client op that has no stored request hash", () => {
+    mockDb.clientOps.set("op:legacy", {
+      id: "op:legacy",
+      username: "priya",
+      action: "order.send-kot",
+      entity_id: "order:1",
+      result_json: JSON.stringify({ ok: true }),
+      request_hash: null,
+      created_at: 1,
+    });
+    expect(() =>
+      posService.assertClientOpRequest({ requestHash: null }, { orderId: "order:other" }),
+    ).not.toThrow();
+    const replay = posService.rememberClientOp({
+      id: "op:legacy",
+      username: "priya",
+      action: "order.send-kot",
+      entityId: "order:1",
+      request: { orderId: "order:1" },
+      result: { ok: false },
+    });
+    expect(replay.replay).toBe(true);
+    expect(replay.op.result).toEqual({ ok: true });
   });
 });

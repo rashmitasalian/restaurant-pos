@@ -93,6 +93,9 @@ export async function getTablesSnapshot(): Promise<{
       total?: number;
       occupied?: boolean;
       orderId?: string | null;
+      openedAt?: number | null;
+      unsentCount?: number;
+      sentCount?: number;
     }
   >;
   byArea: Record<
@@ -104,6 +107,9 @@ export async function getTablesSnapshot(): Promise<{
         total?: number;
         occupied?: boolean;
         orderId?: string | null;
+        openedAt?: number | null;
+        unsentCount?: number;
+        sentCount?: number;
       }
     >
   >;

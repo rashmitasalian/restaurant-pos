@@ -1502,9 +1502,14 @@ function runSchema(database: SqliteDatabase) {
     `);
   });
 
+  runMigration(database, 25, "client_ops request hash", () => {
+    addColumnIfMissing(database, "client_ops", "request_hash", "TEXT");
+  });
+
   // Startup self-healing for pre-existing/partially migrated databases:
   // ensure area_id exists even if migration 12 was marked applied while the column was missing.
   addColumnIfMissing(database, "tables", "area_id", `TEXT NOT NULL DEFAULT '${DEFAULT_SEATING_AREA_ID}'`);
+  addColumnIfMissing(database, "client_ops", "request_hash", "TEXT");
   database
     .prepare("UPDATE tables SET area_id = ? WHERE area_id IS NULL OR trim(area_id) = ''")
     .run(DEFAULT_SEATING_AREA_ID);

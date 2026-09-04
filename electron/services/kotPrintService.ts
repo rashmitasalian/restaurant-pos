@@ -75,6 +75,7 @@ export const kotPrintService = {
     if (clientOpId) {
       const existing = posService.getClientOp(clientOpId);
       if (existing) {
+        posService.assertClientOpRequest(existing, { orderId });
         return {
           replay: true as const,
           result: existing.result,
@@ -136,6 +137,7 @@ export const kotPrintService = {
         username: actorUsername,
         action: "order.send-kot",
         entityId: orderId,
+        request: { orderId },
         result,
       });
     }
@@ -152,6 +154,12 @@ export const kotPrintService = {
     if (clientOpId) {
       const existing = posService.getClientOp(clientOpId);
       if (existing) {
+        posService.assertClientOpRequest(existing, {
+          orderId,
+          lineId: input.lineId,
+          finalQty: input.finalQty,
+          reason: input.reason,
+        });
         return {
           replay: true as const,
           result: existing.result,
@@ -196,6 +204,12 @@ export const kotPrintService = {
         username: actorUsername,
         action: "order.void-item",
         entityId: orderId,
+        request: {
+          orderId,
+          lineId: input.lineId,
+          finalQty: input.finalQty,
+          reason: input.reason,
+        },
         result,
       });
     }

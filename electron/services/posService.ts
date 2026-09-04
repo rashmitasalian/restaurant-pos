@@ -57,6 +57,7 @@ import type {
 import { getUnsentKotLines, pendingKotQty } from "../../src/shared/kot";
 import {
   FLOOR_LAYOUT_LIMITS,
+  formatTableLabel,
   planTablesFromAreas,
   type AreaTablePlan,
   type TableNamingMode,
@@ -1342,13 +1343,32 @@ function mergeOrderAuditDetail(
   };
 }
 
+function canonicalJson(value: unknown): string {
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => canonicalJson(item)).join(",")}]`;
+  }
+  const keys = Object.keys(value as Record<string, unknown>).sort();
+  return `{${keys
+    .map((key) => `${JSON.stringify(key)}:${canonicalJson((value as Record<string, unknown>)[key])}`)
+    .join(",")}}`;
+}
+
+export function hashClientOpRequest(value: unknown): string {
+  return createHash("sha256").update(canonicalJson(value)).digest("hex");
+}
+
 function getClientOp(database: Database.Database, id: string) {
   const key = normalizeText(id);
   if (!key) {
     return null;
   }
   const row = database
-    .prepare("SELECT id, username, action, entity_id, result_json, created_at FROM client_ops WHERE id = ?")
+    .prepare(
+      "SELECT id, username, action, entity_id, result_json, request_hash, created_at FROM client_ops WHERE id = ?",
+    )
     .get(key) as
     | {
         id: string;
@@ -1356,6 +1376,7 @@ function getClientOp(database: Database.Database, id: string) {
         action: string;
         entity_id: string | null;
         result_json: string | null;
+        request_hash?: string | null;
         created_at: number;
       }
     | undefined;
@@ -1376,6 +1397,7 @@ function getClientOp(database: Database.Database, id: string) {
     action: row.action,
     entityId: row.entity_id,
     result,
+    requestHash: row.request_hash || null,
     createdAt: row.created_at,
   };
 }
@@ -1388,6 +1410,7 @@ function saveClientOp(
     action: string;
     entityId?: string | null;
     result?: unknown;
+    requestHash?: string | null;
   },
 ) {
   const id = normalizeText(input.id);
@@ -1396,8 +1419,8 @@ function saveClientOp(
   }
   database
     .prepare(
-      `INSERT INTO client_ops (id, username, action, entity_id, result_json, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO client_ops (id, username, action, entity_id, result_json, request_hash, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       id,
@@ -1405,6 +1428,7 @@ function saveClientOp(
       String(input.action || "").trim(),
       input.entityId || null,
       input.result === undefined ? null : stringifyJson(input.result),
+      input.requestHash || null,
       now(),
     );
 }
@@ -2636,7 +2660,18 @@ export const posService = {
              SELECT COALESCE(SUM(ol.quantity * ol.rate_paise), 0)
              FROM order_lines ol
              WHERE ol.order_id = o.id
-           ) AS total_paise
+           ) AS total_paise,
+           (
+             SELECT COALESCE(SUM(CASE WHEN ol.quantity > COALESCE(ol.kot_printed_qty, 0)
+               THEN ol.quantity - COALESCE(ol.kot_printed_qty, 0) ELSE 0 END), 0)
+             FROM order_lines ol
+             WHERE ol.order_id = o.id
+           ) AS unsent_qty,
+           (
+             SELECT COALESCE(SUM(ol.kot_printed_qty), 0)
+             FROM order_lines ol
+             WHERE ol.order_id = o.id
+           ) AS sent_qty
          FROM tables t
          LEFT JOIN seating_areas sa ON sa.id = t.area_id
          LEFT JOIN orders o
@@ -2661,6 +2696,8 @@ export const posService = {
       occupied: Boolean(row.order_id) && Number(row.item_count || 0) > 0,
       orderId: row.order_id || null,
       openedAt: Number(row.order_created_at || 0) || null,
+      unsentCount: Number(row.unsent_qty || 0),
+      sentCount: Number(row.sent_qty || 0),
     }));
 
     const byArea: Record<string, Array<(typeof tableRows)[number]>> = {};
@@ -3030,7 +3067,7 @@ export const posService = {
         return {
           orderId: order._id,
           tableId: Number(order.tableId),
-          tableName: table?.name || `T${order.tableId}`,
+          tableName: formatTableLabel(Number(order.tableId), table?.name),
           kotStatus: order.kotStatus || "pending",
           lastSendAt: order.kotSent || order.kotPrinted ? Number(order.updatedAt || 0) || null : null,
           sentSummary: sentLines
@@ -4039,19 +4076,34 @@ export const posService = {
     return getClientOp(getDb(), id);
   },
 
+  assertClientOpRequest(existing: { requestHash?: string | null }, request: unknown) {
+    const stored = String(existing.requestHash || "");
+    if (!stored) {
+      return;
+    }
+    if (stored !== hashClientOpRequest(request)) {
+      throw new Error("client-op-conflict");
+    }
+  },
+
   rememberClientOp(input: {
     id: string;
     username: string;
     action: string;
     entityId?: string | null;
     result?: unknown;
+    request?: unknown;
   }) {
+    const requestHash = input.request === undefined ? null : hashClientOpRequest(input.request);
     return inTransaction((database) => {
       const existing = getClientOp(database, input.id);
       if (existing) {
+        if (requestHash) {
+          this.assertClientOpRequest(existing, input.request);
+        }
         return { replay: true as const, op: existing };
       }
-      saveClientOp(database, input);
+      saveClientOp(database, { ...input, requestHash });
       return { replay: false as const, op: getClientOp(database, input.id)! };
     });
   },

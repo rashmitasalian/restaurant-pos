@@ -227,6 +227,7 @@
 .ui-table-tile-rail .ui-table-tile-num {
   font-size: 18px;
   letter-spacing: -0.4px;
+  padding-right: 22px;
 }
 
 .ui-table-tile-state {
@@ -244,7 +245,8 @@
 }
 
 .ui-table-tile-state-rail {
-  max-width: none;
+  max-width: 100%;
+  margin-top: 1px;
 }
 
 .ui-table-tile-meta {
@@ -366,10 +368,6 @@
   box-sizing: border-box;
 }
 
-.ui-table-tile-count-attention {
-  background: var(--pos-saffron);
-}
-
 /* Tables page floor tiles — equal height, stronger hierarchy */
 .ui-table-tile-floor {
   min-height: 96px;
@@ -397,7 +395,7 @@
 
 .ui-table-tile-floor .ui-table-tile-state {
   margin-top: 3px;
-  max-width: 48%;
+  max-width: 58%;
   font-size: 11px;
 }
 

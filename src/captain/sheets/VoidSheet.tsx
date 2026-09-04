@@ -40,9 +40,9 @@ export function VoidSheet({
       }}
     >
       <div className="cap-modal-card">
-        <h3>Cancel item</h3>
+        <h3>Reduce sent item</h3>
         <div className="cap-meta">
-          {lineName} · sent {sentQty} → {targetQty}
+          {lineName} · kitchen has {sentQty}, change to {targetQty}
         </div>
         <div className="cap-reason">
           {CANCEL_REASON_PRESETS.map((option) => (

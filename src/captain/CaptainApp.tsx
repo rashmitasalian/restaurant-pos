@@ -6,11 +6,13 @@ import {
 import {
   captainApi,
   clearStoredSession,
-  getDeviceId,
   getStoredSession,
   newClientOpId,
+  nextSseBackoffMs,
   type CaptainUser,
 } from "./captainApi";
+import { formatTableLabel } from "../shared/floorLayout";
+import { isAuthRequiredError, waiterError, type ConnectionState } from "./copy";
 import { CaptainShell, type CaptainTab } from "./CaptainShell";
 import { LoginScreen } from "./screens/LoginScreen";
 import { TablesScreen, type TableRow } from "./screens/TablesScreen";
@@ -18,10 +20,10 @@ import { MenuScreen } from "./screens/MenuScreen";
 import { KotsScreen, type CaptainKotTicket } from "./screens/KotsScreen";
 import { MeScreen } from "./screens/MeScreen";
 import { VariantSheet, type Variant } from "./sheets/VariantSheet";
-import { OrderSheet } from "./sheets/OrderSheet";
+import { OrderSheet, type KotSendPhase } from "./sheets/OrderSheet";
 import { VoidSheet } from "./sheets/VoidSheet";
 
-type Screen = "login" | "floor" | "session" | "kots" | "me";
+type Screen = "login" | "floor" | "menu" | "kots" | "me";
 
 export function CaptainApp() {
   const stored = getStoredSession();
@@ -29,12 +31,14 @@ export function CaptainApp() {
   const [token, setToken] = React.useState<string | null>(stored.token);
   const [user, setUser] = React.useState<CaptainUser | null>(stored.user);
   const [branding, setBranding] = React.useState<{ hotelName?: string }>({});
-  const [connected, setConnected] = React.useState(false);
+  const [connection, setConnection] = React.useState<ConnectionState>(stored.token ? "reconnecting" : "offline");
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
   const [addingItemId, setAddingItemId] = React.useState<string | null>(null);
   const [tablesLoading, setTablesLoading] = React.useState(Boolean(stored.token));
   const [kotsLoading, setKotsLoading] = React.useState(Boolean(stored.token));
+  const [sendPhase, setSendPhase] = React.useState<KotSendPhase>("idle");
+  const [sendError, setSendError] = React.useState<string | null>(null);
 
   const [username, setUsername] = React.useState("");
   const [password, setPassword] = React.useState("");
@@ -64,6 +68,7 @@ export function CaptainApp() {
   const [voidOther, setVoidOther] = React.useState("");
   const [toast, setToast] = React.useState<string | null>(null);
   const toastTimer = React.useRef<number | null>(null);
+  const sendTimer = React.useRef<number | null>(null);
 
   const showToast = React.useCallback((msg: string) => {
     setToast(msg);
@@ -87,14 +92,14 @@ export function CaptainApp() {
   }, []);
 
   const orderIdRef = React.useRef<string | null>(null);
+  const orderRef = React.useRef<any>(null);
+  const ensureOrderLock = React.useRef<Promise<any> | null>(null);
   React.useEffect(() => {
     orderIdRef.current = order?._id || null;
-  }, [order?._id]);
+    orderRef.current = order;
+  }, [order, order?._id]);
 
-  const isAuthRequiredError = React.useCallback((err: any) => {
-    const msg = String(err?.message || err || "");
-    return msg === "auth-required" || msg === "http-401" || msg.includes("http-401");
-  }, []);
+  const mutationError = React.useCallback((err: any, fallback: string) => waiterError(err, fallback), []);
 
   React.useEffect(() => {
     captainApi
@@ -103,8 +108,8 @@ export function CaptainApp() {
       .catch(() => setBranding({}));
     captainApi
       .health()
-      .then(() => setConnected(true))
-      .catch(() => setConnected(false));
+      .then(() => setConnection("live"))
+      .catch(() => setConnection("offline"));
   }, []);
 
   React.useEffect(() => {
@@ -123,7 +128,8 @@ export function CaptainApp() {
       stopEvents = captainApi.openEvents(
         token,
         (event) => {
-          setConnected(true);
+          setConnection("live");
+          attempt = 0;
           if (
             event?.type === "orders-changed" ||
             event?.type === "tables-changed" ||
@@ -132,26 +138,30 @@ export function CaptainApp() {
             void refreshTables(token);
             void refreshKots(token);
             if (orderIdRef.current) {
+              const id = orderIdRef.current;
               void captainApi
-                .getOrder(token, orderIdRef.current)
-                .then(setOrder)
+                .getOrder(token, id)
+                .then((next) => {
+                  if (orderIdRef.current === id) {
+                    setOrder(next);
+                  }
+                })
                 .catch(() => undefined);
             }
           }
         },
         {
           onError: (err) => {
-            const msg = String(err?.message || "");
-            if (isAuthRequiredError({ message: msg, status: err.status })) {
-              void logout();
+            if (isAuthRequiredError({ message: err?.message, status: err.status })) {
+              void logout("pos-restart");
               return;
             }
             if (cancelled) {
               return;
             }
-            setConnected(false);
+            setConnection("reconnecting");
             attempt += 1;
-            const delay = Math.min(8000, 700 * Math.pow(2, attempt - 1));
+            const delay = nextSseBackoffMs(attempt);
             retryTimer = window.setTimeout(connect, delay);
           },
         },
@@ -166,15 +176,15 @@ export function CaptainApp() {
         if (!cancelled) {
           setMenuItems(menu.items || []);
           setCategories(menu.categories || []);
-          setConnected(true);
+          setConnection("live");
         }
       } catch (err: any) {
         if (!cancelled) {
           if (isAuthRequiredError(err)) {
-            void logout();
+            void logout("pos-restart");
             return;
           }
-          setConnected(false);
+          setConnection("offline");
           setTablesLoading(false);
           setKotsLoading(false);
         }
@@ -190,7 +200,46 @@ export function CaptainApp() {
       }
       stopEvents();
     };
-  }, [token, refreshTables, refreshKots, isAuthRequiredError]);
+  }, [token, refreshTables, refreshKots]);
+
+  React.useEffect(() => {
+    if (!token) {
+      return;
+    }
+    const onVisibility = () => {
+      if (document.visibilityState !== "visible") {
+        return;
+      }
+      void (async () => {
+        try {
+          setConnection("reconnecting");
+          await captainApi.health();
+          await refreshTables(token);
+          await refreshKots(token);
+          if (orderIdRef.current) {
+            const id = orderIdRef.current;
+            const next = await captainApi.getOrder(token, id);
+            if (orderIdRef.current === id) {
+              setOrder(next);
+            }
+          }
+          setConnection("live");
+        } catch (err: any) {
+          if (isAuthRequiredError(err)) {
+            void logout("pos-restart");
+            return;
+          }
+          setConnection("offline");
+        }
+      })();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("focus", onVisibility);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("focus", onVisibility);
+    };
+  }, [token, refreshTables, refreshKots]);
 
   const login = async () => {
     setBusy(true);
@@ -201,24 +250,20 @@ export function CaptainApp() {
       setUser(result.user);
       try {
         localStorage.setItem("captain-pairing-code", pairingCode.trim());
-      } catch {}
+      } catch {
+        /* ignore */
+      }
       setScreen("floor");
       setTablesLoading(true);
-      setConnected(true);
+      setConnection("live");
     } catch (err: any) {
-      setError(
-        err?.message === "invalid-pairing-code"
-          ? "Pairing code is wrong. Check the POS gateway panel."
-          : err?.message === "captain-phone-only" || err?.message === "forbidden"
-            ? "This account cannot use Captain."
-            : "Login failed. Check username, password, and pairing code.",
-      );
+      setError(waiterError(err, "Couldn’t sign in. Check username, password, and pairing code."));
     } finally {
       setBusy(false);
     }
   };
 
-  const logout = async () => {
+  const logout = async (reason?: "pos-restart") => {
     if (token) {
       try {
         await captainApi.logout(token);
@@ -234,48 +279,93 @@ export function CaptainApp() {
     setSelectedTable(null);
     setKotTickets([]);
     setShowOrderSheet(false);
+    setSendPhase("idle");
     setScreen("login");
+    setConnection("offline");
+    if (reason === "pos-restart") {
+      setError("The restaurant POS was restarted. Sign in again when it is ready.");
+    }
   };
 
-  const openTable = async (table: TableRow) => {
+  const enterTable = async (table: TableRow) => {
     if (!token) {
       return;
     }
-    setBusy(true);
     setError(null);
+    setShowOrderSheet(false);
+    setSendPhase("idle");
+    setSelectedTable(table);
+    const hasLiveOrder = Boolean(table.occupied && (table.orderId || table.count));
+    if (!hasLiveOrder) {
+      orderIdRef.current = null;
+      orderRef.current = { items: [], total: 0 };
+      setOrder({ items: [], total: 0 });
+      setScreen("menu");
+      return;
+    }
+    setBusy(true);
+    orderIdRef.current = null;
     try {
-      const next = await captainApi.openTable(token, table.id);
-      setSelectedTable(table);
+      const next = table.orderId
+        ? await captainApi.getOrder(token, table.orderId)
+        : await captainApi.openTable(token, table.id, newClientOpId("open-table"));
+      orderRef.current = next;
+      orderIdRef.current = next?._id || null;
       setOrder(next);
-      setScreen("session");
-      setShowOrderSheet(false);
+      setScreen("menu");
     } catch (err: any) {
       if (isAuthRequiredError(err)) {
-        void logout();
+        void logout("pos-restart");
         return;
       }
-      setError(err?.message || "Could not open table");
+      setError(mutationError(err, "Couldn’t open this table."));
     } finally {
       setBusy(false);
     }
   };
 
+  const ensureOrder = async () => {
+    const existing = orderRef.current;
+    if (existing?._id) {
+      return existing;
+    }
+    if (!token || !selectedTable) {
+      throw new Error("no-table");
+    }
+    if (!ensureOrderLock.current) {
+      ensureOrderLock.current = (async () => {
+        const next = await captainApi.openTable(
+          token,
+          selectedTable.id,
+          newClientOpId("open-table"),
+        );
+        orderRef.current = next;
+        orderIdRef.current = next?._id || null;
+        setOrder(next);
+        return next;
+      })().finally(() => {
+        ensureOrderLock.current = null;
+      });
+    }
+    return ensureOrderLock.current;
+  };
+
   const openTableById = (tableId: number) => {
     const table = tables.find((row) => row.id === tableId);
     if (table) {
-      void openTable(table);
+      void enterTable(table);
     }
   };
 
   const addMenuItem = (item: any) => {
-    if (!token || !order) {
+    if (!token || !selectedTable) {
       return;
     }
     if (item.variants?.length > 0) {
       setVariantItem(item);
       return;
     }
-    void doAddItem(item.name, Number(item.price || 0), item._id, item.category);
+    void doAddItem(item.name, Number(item.price || 0), item._id, item.category, 1);
   };
 
   const doAddItem = async (
@@ -283,33 +373,41 @@ export function CaptainApp() {
     rate: number,
     menuItemId?: string,
     categoryName?: string,
+    qty = 1,
   ) => {
-    if (!token || !order) {
+    if (!token || !selectedTable) {
       return;
     }
     setAddingItemId(menuItemId || name);
     setError(null);
     try {
-      const next = await captainApi.addItem(token, order._id, {
-        name,
-        qty: 1,
-        rate,
-        menuItemId,
-        categoryName,
-      });
+      const ticket = await ensureOrder();
+      const next = await captainApi.addItem(
+        token,
+        ticket._id,
+        {
+          name,
+          qty,
+          rate,
+          menuItemId,
+          categoryName,
+        },
+        newClientOpId("add-item"),
+      );
+      orderRef.current = next;
       setOrder(next);
     } catch (err: any) {
       if (isAuthRequiredError(err)) {
-        void logout();
+        void logout("pos-restart");
         return;
       }
-      setError(err?.message || "Could not add item");
+      setError(mutationError(err, "Couldn’t add that item."));
     } finally {
       setAddingItemId(null);
     }
   };
 
-  const onVariantSelect = (variant: Variant | null) => {
+  const onVariantSelect = (variant: Variant | null, qty: number) => {
     if (!variantItem) {
       return;
     }
@@ -318,7 +416,7 @@ export function CaptainApp() {
     const itemId = variantItem._id;
     const categoryName = variantItem.category;
     setVariantItem(null);
-    void doAddItem(name, rate, itemId, categoryName);
+    void doAddItem(name, rate, itemId, categoryName, qty);
   };
 
   const changeQty = async (line: any, nextQty: number) => {
@@ -340,42 +438,53 @@ export function CaptainApp() {
       .filter((candidate: any) => Number(candidate.qty || 0) > 0);
     setBusy(true);
     try {
-      const next = await captainApi.updateLines(token, order._id, lines);
+      const next = await captainApi.updateLines(
+        token,
+        order._id,
+        lines,
+        newClientOpId("update-lines"),
+      );
       setOrder(next);
     } catch (err: any) {
       if (isAuthRequiredError(err)) {
-        void logout();
+        void logout("pos-restart");
         return;
       }
-      setError(err?.message || "Could not update item");
+      setError(mutationError(err, "Couldn’t update that item."));
     } finally {
       setBusy(false);
     }
   };
 
   const sendKot = async () => {
-    if (!token || !order) {
+    if (!token || !order || sendPhase === "sending") {
       return;
     }
-    setBusy(true);
+    setShowOrderSheet(true);
+    setSendPhase("sending");
+    setSendError(null);
     setError(null);
     try {
       const result = await captainApi.sendKot(token, order._id, newClientOpId("send-kot"));
       setOrder(result.order || (await captainApi.getOrder(token, order._id)));
-      showToast("KOT sent to kitchen");
+      setSendPhase("sent");
       void refreshKots(token);
+      if (sendTimer.current) {
+        clearTimeout(sendTimer.current);
+      }
+      sendTimer.current = window.setTimeout(() => {
+        setShowOrderSheet(false);
+        setSendPhase("idle");
+        setScreen("menu");
+      }, 1400);
     } catch (err: any) {
       if (isAuthRequiredError(err)) {
-        void logout();
+        void logout("pos-restart");
         return;
       }
-      setError(
-        err?.message === "kot-no-unsent-items"
-          ? "No new items to send"
-          : err?.message || "KOT failed",
-      );
-    } finally {
-      setBusy(false);
+      const message = mutationError(err, "Your order has not been confirmed.");
+      setSendPhase("failed");
+      setSendError(message);
     }
   };
 
@@ -385,7 +494,7 @@ export function CaptainApp() {
     }
     const reason = resolveCancelReason(voidPreset, voidOther);
     if (!reason) {
-      setError("Choose a cancellation reason");
+      setError("Choose a reason before reducing a sent item.");
       return;
     }
     setBusy(true);
@@ -399,13 +508,13 @@ export function CaptainApp() {
       );
       setOrder(result.order || (await captainApi.getOrder(token, order._id)));
       setVoidLine(null);
-      showToast("Item cancelled");
+      showToast("Item updated");
     } catch (err: any) {
       if (isAuthRequiredError(err)) {
-        void logout();
+        void logout("pos-restart");
         return;
       }
-      setError(err?.message || "Cancel failed");
+      setError(mutationError(err, "Couldn’t update that item."));
     } finally {
       setBusy(false);
     }
@@ -415,20 +524,25 @@ export function CaptainApp() {
     if (!token) {
       try {
         await captainApi.health();
-        setConnected(true);
+        setConnection("live");
       } catch {
-        setConnected(false);
+        setConnection("offline");
       }
       return;
     }
     try {
+      setConnection("reconnecting");
       await captainApi.health();
       await refreshTables(token);
       await refreshKots(token);
-      setConnected(true);
+      setConnection("live");
       setError(null);
-    } catch {
-      setConnected(false);
+    } catch (err: any) {
+      if (isAuthRequiredError(err)) {
+        void logout("pos-restart");
+        return;
+      }
+      setConnection("offline");
     }
   };
 
@@ -436,22 +550,22 @@ export function CaptainApp() {
     setScreen(tab === "floor" ? "floor" : tab);
   };
 
-  const occupied = tables.filter((table) => table.occupied).length;
   const unsentCount = kotTickets.reduce((sum, ticket) => sum + Number(ticket.unsentCount || 0), 0);
   const activeTab: CaptainTab | null =
-    screen === "login" ? null : screen === "session" || screen === "floor" ? "floor" : screen;
-  const shellTitle =
-    screen === "kots" ? "KOTs" : screen === "me" ? "Me" : "Floor";
+    screen === "login"
+      ? null
+      : screen === "menu" || screen === "floor"
+        ? "floor"
+        : screen;
+  const tableName = formatTableLabel(selectedTable?.id, selectedTable?.name);
 
   return (
     <CaptainShell
-      title={shellTitle}
-      occupancy={activeTab === "floor" && screen !== "session" ? `${occupied}/${tables.length} occupied` : undefined}
-      connected={connected}
+      connection={connection}
       error={screen === "login" ? null : error}
       showNav={Boolean(token)}
-      hideHeader={screen === "login" || screen === "session"}
-      lockBody={screen === "session"}
+      hideHeader={screen === "login" || screen === "menu"}
+      lockBody={screen === "menu"}
       activeTab={activeTab}
       unsentCount={unsentCount}
       onTabChange={onTabChange}
@@ -473,21 +587,23 @@ export function CaptainApp() {
 
       {screen === "floor" ? (
         <TablesScreen
+          waiterName={user?.displayName}
+          waiterUsername={user?.username}
           areas={areas}
           tables={tables}
           areaId={areaId}
           setAreaId={setAreaId}
+          kotTickets={kotTickets}
           busy={busy}
           loading={tablesLoading}
           activeTableId={selectedTable?.id}
-          onOpenTable={openTable}
-          onResume={order && selectedTable ? () => setScreen("session") : undefined}
+          onOpenTable={enterTable}
         />
       ) : null}
 
-      {screen === "session" && order ? (
+      {screen === "menu" && selectedTable ? (
         <MenuScreen
-          tableName={selectedTable?.name || `Table ${selectedTable?.id || ""}`}
+          tableName={tableName}
           menuItems={menuItems}
           categories={categories}
           order={order}
@@ -496,7 +612,10 @@ export function CaptainApp() {
           onBack={() => setScreen("floor")}
           onAddItem={addMenuItem}
           onChangeQty={changeQty}
-          onReview={() => setShowOrderSheet(true)}
+          onReview={() => {
+            setSendPhase("idle");
+            setShowOrderSheet(true);
+          }}
         />
       ) : null}
 
@@ -508,26 +627,40 @@ export function CaptainApp() {
         <MeScreen
           user={user}
           hotelName={branding.hotelName}
-          connected={connected}
-          deviceId={getDeviceId()}
+          connection={connection}
           pairingCode={pairingCode}
           onRetry={() => void retryConnection()}
-          onLogout={logout}
+          onLogout={() => logout()}
         />
       ) : null}
 
       {variantItem ? (
-        <VariantSheet item={variantItem} onSelect={onVariantSelect} onClose={() => setVariantItem(null)} />
+        <VariantSheet
+          item={variantItem}
+          busy={Boolean(addingItemId)}
+          onSelect={onVariantSelect}
+          onClose={() => setVariantItem(null)}
+        />
       ) : null}
 
       {showOrderSheet && order ? (
         <OrderSheet
           order={order}
-          tableName={selectedTable?.name || `Table ${selectedTable?.id || ""}`}
-          busy={busy}
+          tableName={tableName}
+          sendPhase={sendPhase}
+          sendError={sendError}
           onChangeQty={changeQty}
           onSendKot={sendKot}
-          onClose={() => setShowOrderSheet(false)}
+          onAddMore={() => {
+            setShowOrderSheet(false);
+            setScreen("menu");
+          }}
+          onClose={() => {
+            if (sendPhase !== "sending") {
+              setShowOrderSheet(false);
+              setSendPhase("idle");
+            }
+          }}
         />
       ) : null}
 

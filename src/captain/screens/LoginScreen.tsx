@@ -35,14 +35,16 @@ export function LoginScreen({
     }
   }, []);
   const [editPairing, setEditPairing] = React.useState(!storedPairing || !pairingCode);
-  const title = brandingName || "RestoNiti Captain";
-
   return (
     <div className="cap-login">
       <div className="cap-login-brand">
         <img src={restoNitiMark} alt="" className="cap-login-mark" width={56} height={56} />
-        <h1>{title}</h1>
+        <h1 className="cap-login-wordmark" aria-label="RestoNiti">
+          <span className="cap-brand-resto">Resto</span>
+          <span className="cap-brand-niti">Niti</span>
+        </h1>
         <p>Captain</p>
+        {brandingName ? <p className="cap-login-hotel">{brandingName}</p> : null}
       </div>
 
       <form
@@ -89,19 +91,19 @@ export function LoginScreen({
 
         {editPairing ? (
           <div className="cap-field">
-            <label htmlFor="cap-pair">POS pairing code</label>
+            <label htmlFor="cap-pair">Pairing code</label>
             <input
               id="cap-pair"
               autoCapitalize="characters"
               autoComplete="one-time-code"
               value={pairingCode}
               onChange={(e) => setPairingCode(e.target.value)}
-              placeholder="Shown on POS"
+              placeholder="Shown on the restaurant POS"
             />
           </div>
         ) : (
           <div className="cap-paired-row">
-            <span>Paired with POS</span>
+            <span>Paired with this restaurant</span>
             <button type="button" className="cap-text-btn" onClick={() => setEditPairing(true)}>
               Change
             </button>
@@ -117,7 +119,7 @@ export function LoginScreen({
         </button>
       </form>
 
-      <p className="cap-login-hint">Needs the POS Local Gateway on this Wi-Fi.</p>
+      <p className="cap-login-hint">Use the same Wi-Fi as the restaurant POS.</p>
     </div>
   );
 }

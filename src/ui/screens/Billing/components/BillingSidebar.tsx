@@ -8,6 +8,7 @@ import TabButton from "./TabButton";
 import OrderRow from "./OrderRow";
 import ScrollableList from "./ScrollableList";
 import { TableTile } from "../../../components/ui/TableTile";
+import { tableKotAppearance } from "../../../../shared/kot";
 
 interface TableInfo {
   id: number;
@@ -19,6 +20,8 @@ interface TableInfo {
   updatedAt?: string;
   seats?: number;
   openedAt?: number | null;
+  unsentCount?: number;
+  sentCount?: number;
 }
 
 interface BillingSidebarProps {
@@ -122,18 +125,14 @@ export default function BillingSidebar({
                         Boolean(info.occupied) || Number(info.count || 0) > 0;
                       const elapsed =
                         occupied && info.openedAt ? formatKotAge(info.openedAt) : "";
-                      const state =
-                        !occupied
-                          ? "available"
-                          : info.status === "held" || info.status === "ready"
-                            ? "attention"
-                            : "occupied";
-                      const stateLabel =
-                        state === "attention"
-                          ? "Pending"
-                          : state === "occupied"
-                            ? "Occupied"
-                            : "Available";
+                      const appearance = tableKotAppearance({
+                        occupied,
+                        unsentCount: info.unsentCount,
+                        sentCount: info.sentCount,
+                        billPending: occupied && (info.status === "held" || info.status === "ready"),
+                        itemCount: info.count,
+                        elapsed: elapsed || undefined,
+                      });
                       const amount =
                         occupied
                           ? formatCurrency(info.total || 0).replace(/\.00$/, "")
@@ -142,17 +141,19 @@ export default function BillingSidebar({
                         <TableTile
                           key={t}
                           number={t}
-                          state={state}
-                          stateLabel={stateLabel}
+                          state={appearance.state}
+                          stateLabel={appearance.stateLabel}
                           active={active}
                           seats={info.seats}
                           itemCount={occupied ? info.count ?? 0 : null}
                           amountLabel={amount}
-                          elapsed={elapsed || undefined}
+                          elapsed={appearance.elapsed}
+                          metaLabel={appearance.metaLabel}
+                          idleLabel="Available"
                           onClick={() => onLoadTable(t)}
                           aria-label={
                             occupied
-                              ? `Table ${t}, ${stateLabel}${info.seats ? `, ${info.seats} seats` : ""}, ${info.count || 0} items, ${formatCurrency(info.total || 0)}${elapsed ? `, open ${elapsed}` : ""}`
+                              ? `Table ${t}, ${appearance.stateLabel}${info.seats ? `, ${info.seats} seats` : ""}, ${info.count || 0} items, ${formatCurrency(info.total || 0)}${elapsed ? `, open ${elapsed}` : ""}`
                               : `Table ${t}, Available${info.seats ? `, ${info.seats} seats` : ""}`
                           }
                         />

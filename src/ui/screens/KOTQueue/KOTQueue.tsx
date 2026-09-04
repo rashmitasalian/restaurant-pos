@@ -2,6 +2,7 @@ import React from "react";
 import {
   getActiveOrders,
   getConfigPrinters,
+  getTables,
   markOrderKotDone,
   markOrderKotFailed,
   markOrderKotSent,
@@ -11,6 +12,7 @@ import {
 import { printKOT } from "../../../app/services/printer";
 import { AuthContext } from "../../context/AuthContext";
 import { formatKotAge, kotAgeTone } from "../../../shared/kotAge";
+import { formatTableLabel } from "../../../shared/floorLayout";
 import { validationMessage } from "../../../shared/validation";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { Badge } from "../../components/ui/Badge";
@@ -22,6 +24,7 @@ import styles from "./KOTQueue.module.css";
 type KOTItem = {
   orderId: string;
   table: number;
+  tableLabel: string;
   status: OrderDoc["kotStatus"];
   order: OrderDoc;
   sentItems: { name: string; qty: number }[];
@@ -101,7 +104,8 @@ export default function KOTQueue() {
   // Load KOT items from database
   const loadKOTs = React.useCallback(async () => {
     try {
-      const orders = await getActiveOrders();
+      const [orders, tables] = await Promise.all([getActiveOrders(), getTables()]);
+      const nameById = new Map(tables.map((table) => [Number(table.id), table.name]));
       const kots: KOTItem[] = orders
         .filter((o) => {
           const sentItems = getPrintedItems(o);
@@ -115,9 +119,13 @@ export default function KOTQueue() {
         .map((o) => {
           const printedItems = getPrintedItems(o);
           const pendingItems = getPendingItems(o);
+          const tableId = o.tableId ?? 0;
           return {
             orderId: o._id,
-            table: o.tableId ?? 0,
+            table: tableId,
+            tableLabel: tableId
+              ? formatTableLabel(tableId, nameById.get(tableId))
+              : "",
             status: o.kotStatus,
             order: o,
             sentItems: printedItems,
@@ -136,13 +144,17 @@ export default function KOTQueue() {
     loadKOTs();
   }, [loadKOTs]);
 
-  // Listen for order changes
+  // Listen for order / floor changes so renamed tables stay in sync
   React.useEffect(() => {
-    const handleOrdersChanged = () => {
+    const handleRefresh = () => {
       loadKOTs();
     };
-    window.addEventListener("orders-changed", handleOrdersChanged);
-    return () => window.removeEventListener("orders-changed", handleOrdersChanged);
+    window.addEventListener("orders-changed", handleRefresh);
+    window.addEventListener("seating-areas-changed", handleRefresh);
+    return () => {
+      window.removeEventListener("orders-changed", handleRefresh);
+      window.removeEventListener("seating-areas-changed", handleRefresh);
+    };
   }, [loadKOTs]);
 
   // Refresh every 30 seconds
@@ -194,7 +206,7 @@ export default function KOTQueue() {
     });
     try {
       const currentUserLabel = auth?.session?.displayName || auth?.session?.username || "";
-      const label = k.table ? `Table ${k.table}` : "Order";
+      const label = k.tableLabel || (k.table ? `Table ${k.table}` : "Order");
       const itemsToPrint = k.pendingItems.length > 0 ? k.pendingItems : k.sentItems;
       let kotSeqNum: number | undefined;
       if (k.pendingItems.length > 0) {
@@ -289,7 +301,7 @@ export default function KOTQueue() {
             <Card key={k.orderId} padded className={styles.ticket}>
               <div className={styles.head}>
                 <div className={styles.tableAnchor}>
-                  {k.table ? `Table ${k.table}` : "Takeaway / Delivery"}
+                  {k.table ? k.tableLabel || `Table ${k.table}` : "Takeaway / Delivery"}
                 </div>
                 <div className={styles.badges}>
                   {k.status === "failed" && <Badge tone="danger">Print failed</Badge>}

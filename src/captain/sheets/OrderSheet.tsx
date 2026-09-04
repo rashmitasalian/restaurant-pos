@@ -4,25 +4,47 @@ import { Icon } from "../../ui/components/ui/Icon";
 import { pendingKotQty } from "../../shared/kot";
 import { money } from "../money";
 
+export type KotSendPhase = "idle" | "sending" | "sent" | "failed";
+
 export function OrderSheet({
   order,
   tableName,
-  busy,
+  sendPhase,
+  sendError,
   onChangeQty,
   onSendKot,
+  onAddMore,
   onClose,
 }: {
   order: any;
   tableName: string;
-  busy: boolean;
+  sendPhase: KotSendPhase;
+  sendError?: string | null;
   onChangeQty: (line: any, nextQty: number) => void;
   onSendKot: () => void;
+  onAddMore: () => void;
   onClose: () => void;
 }) {
   const items: any[] = order?.items || [];
   const sentLines = items.filter((line) => Number(line.kotPrintedQty || 0) > 0);
   const newLines = items.filter((line) => Number(line.kotPrintedQty || 0) === 0);
   const newCount = items.reduce((sum, line) => sum + pendingKotQty(line), 0);
+  const sending = sendPhase === "sending";
+
+  if (sendPhase === "sent") {
+    return (
+      <div className="cap-modal" role="dialog" aria-modal="true" aria-label="KOT sent">
+        <div className="cap-modal-card cap-order-sheet cap-kot-success">
+          <div className="cap-success-mark" aria-hidden="true">
+            ✓
+          </div>
+          <h3>KOT sent</h3>
+          <p className="cap-meta">{tableName}</p>
+          <p>Kitchen has received your order.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -31,7 +53,7 @@ export function OrderSheet({
       aria-modal="true"
       aria-label="Review order"
       onClick={(event) => {
-        if (event.target === event.currentTarget) {
+        if (event.target === event.currentTarget && !sending) {
           onClose();
         }
       }}
@@ -39,10 +61,16 @@ export function OrderSheet({
       <div className="cap-modal-card cap-order-sheet">
         <div className="cap-sheet-head">
           <div>
-            <h3>Order</h3>
+            <h3>Review order</h3>
             <div className="cap-meta">{tableName}</div>
           </div>
-          <button type="button" className="cap-icon-btn cap-icon-btn-light" onClick={onClose} aria-label="Close">
+          <button
+            type="button"
+            className="cap-icon-btn cap-icon-btn-light"
+            onClick={onClose}
+            disabled={sending}
+            aria-label="Close"
+          >
             <Icon icon={X} size="lg" />
           </button>
         </div>
@@ -58,15 +86,15 @@ export function OrderSheet({
               <section className="cap-ticket-group cap-ticket-new">
                 <div className="cap-ticket-label">New — not sent</div>
                 {newLines.map((line) => (
-                  <TicketLine key={line.id} line={line} busy={busy} onChangeQty={onChangeQty} />
+                  <TicketLine key={line.id} line={line} busy={sending} onChangeQty={onChangeQty} />
                 ))}
               </section>
             ) : null}
             {sentLines.length > 0 ? (
               <section className="cap-ticket-group">
-                <div className="cap-ticket-label">Sent to kitchen</div>
+                <div className="cap-ticket-label">KOT sent</div>
                 {sentLines.map((line) => (
-                  <TicketLine key={line.id} line={line} sent busy={busy} onChangeQty={onChangeQty} />
+                  <TicketLine key={line.id} line={line} sent busy={sending} onChangeQty={onChangeQty} />
                 ))}
               </section>
             ) : null}
@@ -75,22 +103,27 @@ export function OrderSheet({
 
         <div className="cap-sheet-footer">
           <div className="cap-sheet-total">
-            <span>Total</span>
+            <span>{items.reduce((sum, line) => sum + Number(line.qty || 0), 0)} items</span>
             <strong>{money(Number(order.total || 0))}</strong>
           </div>
-          {newCount === 0 ? (
+          {sendPhase === "failed" ? (
+            <div className="cap-error">
+              <strong>Couldn't send KOT</strong>
+              <div>{sendError || "Your order has not been confirmed."}</div>
+            </div>
+          ) : newCount === 0 ? (
             <p className="cap-meta">Add new items to send a KOT.</p>
           ) : null}
           <button
             type="button"
             className="cap-btn cap-btn-accent"
-            disabled={busy || newCount === 0}
+            disabled={sending || newCount === 0}
             onClick={onSendKot}
           >
-            {busy ? "Sending…" : `Send KOT${newCount ? ` · ${newCount}` : ""}`}
+            {sending ? "Sending…" : sendPhase === "failed" ? "Try again" : "Send KOT"}
           </button>
-          <button type="button" className="cap-btn cap-btn-quiet" onClick={onClose}>
-            Keep adding
+          <button type="button" className="cap-btn cap-btn-quiet" disabled={sending} onClick={onAddMore}>
+            Add more items
           </button>
         </div>
       </div>
@@ -117,12 +150,12 @@ function TicketLine({
       <div className="cap-line-copy">
         <strong>{line.name}</strong>
         <div className="cap-meta">
-          {money(Number(line.rate || 0))}
+          {qty} × {money(Number(line.rate || 0))}
           {sent ? ` · sent ${printed}` : ""}
           {sent && pending > 0 ? ` (+${pending} new)` : ""}
         </div>
       </div>
-      <div className="cap-qty">
+      <div className="cap-qty cap-qty-compact">
         <button
           type="button"
           disabled={busy}

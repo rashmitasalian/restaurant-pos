@@ -11,6 +11,7 @@ import { PageHeader } from "../../components/ui/PageHeader";
 import { SegmentedControl } from "../../components/ui/SegmentedControl";
 import { TableTile } from "../../components/ui/TableTile";
 import { formatKotAge } from "../../../shared/kotAge";
+import { tableKotAppearance } from "../../../shared/kot";
 
 type TableInfo = {
   id: number;
@@ -24,6 +25,8 @@ type TableInfo = {
   occupied: boolean;
   orderSummary?: string;
   openedAt?: number | null;
+  unsentCount?: number;
+  sentCount?: number;
 };
 
 export default function Tables() {
@@ -61,7 +64,9 @@ export default function Tables() {
         count,
         total,
         occupied,
-        openedAt: Number((table as { openedAt?: number }).openedAt || 0) || null,
+        openedAt: Number(table.openedAt || 0) || null,
+        unsentCount: Number(table.unsentCount || 0),
+        sentCount: Number(table.sentCount || 0),
         orderSummary: occupied
           ? `${count} item${count !== 1 ? "s" : ""} · ₹${total.toLocaleString("en-IN")}`
           : undefined,
@@ -233,6 +238,21 @@ export default function Tables() {
           }
         />
 
+        <div className={styles.legend} aria-label="Table status">
+          <span>
+            <span className="ui-dot" aria-hidden="true" />
+            Available
+          </span>
+          <span>
+            <span className="ui-dot ui-dot-attention" aria-hidden="true" />
+            Send KOT
+          </span>
+          <span>
+            <span className="ui-dot ui-dot-occupied" aria-hidden="true" />
+            KOT sent
+          </span>
+        </div>
+
         {Array.from(grouped.entries()).map(([areaId, areaTables]) => {
           const areaName = areaTables[0]?.areaName || areas.find((area) => area.id === areaId)?.name || "Area";
           return (
@@ -248,20 +268,21 @@ export default function Tables() {
                     t.name && String(t.name).trim() && String(t.name).trim() !== `Table ${t.id}`
                       ? String(t.name).trim()
                       : String(t.id);
-                  const state = billPending ? "attention" : t.occupied ? "occupied" : "available";
-                  const stateLabel = isOpening
-                    ? "Opening…"
-                    : billPending
-                      ? "Pending"
-                      : t.occupied
-                        ? "Occupied"
-                        : "Available";
+                  const appearance = tableKotAppearance({
+                    occupied: t.occupied,
+                    unsentCount: t.unsentCount,
+                    sentCount: t.sentCount,
+                    billPending,
+                    itemCount: t.count,
+                    elapsed: elapsed || undefined,
+                  });
+                  const stateLabel = isOpening ? "Opening…" : appearance.stateLabel;
                   return (
                     <TableTile
                       key={t.id}
                       number={titleLabel}
                       variant="floor"
-                      state={state}
+                      state={appearance.state}
                       stateLabel={stateLabel}
                       seats={seats}
                       itemCount={t.occupied ? Number(t.count || 0) : null}
@@ -270,7 +291,9 @@ export default function Tables() {
                           ? `₹${Number(t.total || 0).toLocaleString("en-IN")}`
                           : undefined
                       }
-                      elapsed={elapsed || undefined}
+                      elapsed={appearance.elapsed}
+                      metaLabel={appearance.metaLabel}
+                      idleLabel="Available"
                       disabled={isOpening}
                       onClick={() => openBilling(t)}
                       aria-label={`Table ${titleLabel}, ${stateLabel}${

@@ -111,6 +111,50 @@ function publicUser(session: LanSession) {
   };
 }
 
+function readClientOpId(req: http.IncomingMessage, body: JsonBody): string | null {
+  return (
+    normalizeText(body.clientOpId) ||
+    normalizeText(req.headers["x-client-op-id"]) ||
+    null
+  );
+}
+
+function replayClientOp(
+  clientOpId: string | null,
+  request: unknown,
+): { hit: true; result: unknown } | null {
+  if (!clientOpId) {
+    return null;
+  }
+  const existing = posService.getClientOp(clientOpId);
+  if (!existing) {
+    return null;
+  }
+  posService.assertClientOpRequest(existing, request);
+  return { hit: true, result: existing.result };
+}
+
+function rememberOrderClientOp(input: {
+  clientOpId: string | null;
+  username: string;
+  action: string;
+  entityId: string;
+  request: unknown;
+  result: unknown;
+}) {
+  if (!input.clientOpId) {
+    return;
+  }
+  posService.rememberClientOp({
+    id: input.clientOpId,
+    username: input.username,
+    action: input.action,
+    entityId: input.entityId,
+    request: input.request,
+    result: input.result,
+  });
+}
+
 export function listPrivateIPv4Addresses(): string[] {
   const nets = os.networkInterfaces();
   const addresses: string[] = [];
@@ -318,7 +362,22 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
         json(res, 400, { ok: false, error: "invalid-table" });
         return;
       }
+      const clientOpId = readClientOpId(req, body);
+      const request = { tableId };
+      const replayed = replayClientOp(clientOpId, request);
+      if (replayed) {
+        json(res, 200, replayed.result);
+        return;
+      }
       const order = posService.getOrCreateOrderForTable(tableId, session.username);
+      rememberOrderClientOp({
+        clientOpId,
+        username: session.username,
+        action: "order.open-table",
+        entityId: String(tableId),
+        request,
+        result: order,
+      });
       json(res, 200, order);
       return;
     }
@@ -327,17 +386,29 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
       const session = requireLanAuth(req, "order:add-item");
       const orderId = decodeURIComponent(url.pathname.split("/")[3]);
       const body = await readBody(req);
-      const order = posService.addItemToOrder(
-        orderId,
-        {
-          name: String(body.name || ""),
-          qty: Number(body.qty || 1),
-          rate: Number(body.rate || 0),
-          menuItemId: (body.menuItemId as string) || null,
-          categoryName: (body.categoryName as string) || null,
-        },
-        session.username,
-      );
+      const clientOpId = readClientOpId(req, body);
+      const item = {
+        name: String(body.name || ""),
+        qty: Number(body.qty || 1),
+        rate: Number(body.rate || 0),
+        menuItemId: (body.menuItemId as string) || null,
+        categoryName: (body.categoryName as string) || null,
+      };
+      const request = { orderId, ...item };
+      const replayed = replayClientOp(clientOpId, request);
+      if (replayed) {
+        json(res, 200, replayed.result);
+        return;
+      }
+      const order = posService.addItemToOrder(orderId, item, session.username);
+      rememberOrderClientOp({
+        clientOpId,
+        username: session.username,
+        action: "order.add-item",
+        entityId: orderId,
+        request,
+        result: order,
+      });
       json(res, 200, order);
       return;
     }
@@ -346,10 +417,7 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
       const session = requireLanAuth(req, "order:send-kot");
       const orderId = decodeURIComponent(url.pathname.split("/")[3]);
       const body = await readBody(req);
-      const clientOpId =
-        normalizeText(body.clientOpId) ||
-        normalizeText(req.headers["x-client-op-id"]) ||
-        null;
+      const clientOpId = readClientOpId(req, body);
       const result = await kotPrintService.sendKotForOrder(orderId, session.username, {
         clientOpId,
       });
@@ -361,10 +429,7 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
       const session = requireLanAuth(req, "order:void-item");
       const orderId = decodeURIComponent(url.pathname.split("/")[3]);
       const body = await readBody(req);
-      const clientOpId =
-        normalizeText(body.clientOpId) ||
-        normalizeText(req.headers["x-client-op-id"]) ||
-        null;
+      const clientOpId = readClientOpId(req, body);
       const result = await kotPrintService.voidKotLineAndPrint(
         orderId,
         {
@@ -383,8 +448,23 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
       const session = requireLanAuth(req, "order:add-item");
       const orderId = decodeURIComponent(url.pathname.split("/")[3]);
       const body = await readBody(req);
+      const clientOpId = readClientOpId(req, body);
       const lines = Array.isArray(body.lines) ? body.lines : [];
+      const request = { orderId, lines };
+      const replayed = replayClientOp(clientOpId, request);
+      if (replayed) {
+        json(res, 200, replayed.result);
+        return;
+      }
       const order = posService.updateOrderLines(orderId, lines as any, session.username);
+      rememberOrderClientOp({
+        clientOpId,
+        username: session.username,
+        action: "order.update-lines",
+        entityId: orderId,
+        request,
+        result: order,
+      });
       json(res, 200, order);
       return;
     }
@@ -397,9 +477,11 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
         ? 401
         : message === "forbidden" || message === "invalid-pairing-code"
           ? 403
-          : message.startsWith("kot-") || message.startsWith("order-") || message === "invalid-json"
-            ? 400
-            : 500;
+          : message === "client-op-conflict"
+            ? 409
+            : message.startsWith("kot-") || message.startsWith("order-") || message === "invalid-json"
+              ? 400
+              : 500;
     json(res, status, { ok: false, error: message });
   }
 }

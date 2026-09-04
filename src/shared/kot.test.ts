@@ -1,4 +1,4 @@
-import { kotSentLinesNeedPrint } from "./kot";
+import { kotSentLinesNeedPrint, tableKotAppearance } from "./kot";
 
 describe("KOT retry state checks", () => {
   it("skips queued KOT lines that are already marked sent", () => {
@@ -21,5 +21,73 @@ describe("KOT retry state checks", () => {
 
   it("skips queued KOT lines that were removed before retry", () => {
     expect(kotSentLinesNeedPrint({ items: [] }, [{ id: "line:1", sentQty: 2 }])).toBe(false);
+  });
+});
+
+describe("table KOT occupancy", () => {
+  it("marks a free table Available", () => {
+    expect(tableKotAppearance({ occupied: false })).toMatchObject({
+      state: "available",
+      stateLabel: "Available",
+      needsKot: false,
+    });
+  });
+
+  it("marks occupied unsent tables Send KOT", () => {
+    expect(tableKotAppearance({ occupied: true, unsentCount: 3, sentCount: 2, itemCount: 5 })).toMatchObject({
+      state: "attention",
+      stateLabel: "Send KOT",
+      needsKot: true,
+      metaLabel: "3 to send",
+    });
+  });
+
+  it("marks occupied tables with no ticket Send KOT", () => {
+    expect(tableKotAppearance({ occupied: true, unsentCount: 0, sentCount: 0, itemCount: 2 })).toMatchObject({
+      state: "attention",
+      stateLabel: "Send KOT",
+      metaLabel: "Not sent",
+    });
+  });
+
+  it("marks fully sent tables as KOT sent", () => {
+    expect(
+      tableKotAppearance({ occupied: true, unsentCount: 0, sentCount: 4, itemCount: 4, elapsed: "12m" }),
+    ).toMatchObject({
+      state: "occupied",
+      stateLabel: "KOT sent",
+      metaLabel: "4 items · 12m",
+      elapsed: "12m",
+    });
+  });
+
+  it("keeps bill-ready as Pending after KOT is sent", () => {
+    expect(
+      tableKotAppearance({
+        occupied: true,
+        unsentCount: 0,
+        sentCount: 2,
+        billPending: true,
+        itemCount: 2,
+      }),
+    ).toMatchObject({
+      state: "attention",
+      stateLabel: "Pending",
+      needsKot: false,
+    });
+  });
+
+  it("lets unsent KOT win over bill-ready", () => {
+    expect(
+      tableKotAppearance({
+        occupied: true,
+        unsentCount: 1,
+        sentCount: 2,
+        billPending: true,
+      }),
+    ).toMatchObject({
+      stateLabel: "Send KOT",
+      needsKot: true,
+    });
   });
 });

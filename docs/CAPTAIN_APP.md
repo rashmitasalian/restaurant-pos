@@ -59,13 +59,14 @@ Floor / KOTs / Me ← bottom tabs (order kept)
 
 ### Floor
 
-- Header: **Floor**, occupancy pill (`n/total`), connection status dot only
-- Sticky area chips; 2-column floor tiles
-- Available: **Tap to start** (not a dead “Ready” label)
-- Occupied: amount + items · age; age tone can escalate (saffron / danger)
-- Attention (`ready` / `held`): Pending
+- Greeting + area picker + occupancy (`n of total occupied`)
+- Status legend: **Available** · **Send KOT** · **KOT sent** (same colors as desktop)
+- Shared `TableTile` + `tableKotAppearance`: grey free, saffron needs kitchen, teal kitchen has it
+- Meta: `n to send` / `Not sent` when attention; items · age when KOT sent
+- Empty open orders stay Available (occupied only when item count > 0)
 - Skeletons while loading; empty state per area
-- Tap → `openTable` → **session (menu)**; optional Resume banner if an order is still open
+- Available tap → menu without opening an order; first add creates the order
+- Occupied tap → load existing order → menu
 
 ### Service session (menu)
 
@@ -78,7 +79,7 @@ Floor / KOTs / Me ← bottom tabs (order kept)
 
 ### Order sheet (replaces full-page ticket + separate Send KOT confirm)
 
-- Bottom sheet (~90%): New (not sent) first, Sent quieter below
+- Bottom sheet (~90%): New (not sent) first, **KOT sent** quieter below
 - 48px qty steppers; reducing below sent qty → void sheet
 - Single **Send KOT** (disabled + helper when `newCount === 0`)
 - Toast on success; no second confirm sheet
@@ -86,7 +87,8 @@ Floor / KOTs / Me ← bottom tabs (order kept)
 ### KOTs tab
 
 - New gateway API: `GET /api/kots`
-- List of open table tickets: table, status / unsent, summary, relative time
+- Filters: All · **Send KOT** · **KOT sent**
+- List of open table tickets: configured table name, `n to send` / **KOT sent**, relative time
 - Tap row → open that table’s session
 - Tab badge when any ticket has unsent lines
 - Empty: “No kitchen tickets yet”
@@ -111,7 +113,30 @@ Floor / KOTs / Me ← bottom tabs (order kept)
 | Gateway | `electron/gateway/localGateway.ts` — auth, tables, menu, orders, **kots**, events, static Captain UI |
 | Domain list | `posService.getCaptainKots()` aggregates open dine-in orders / line KOT qty |
 | Visual system | POS `--pos-*` tokens + `captain.css` (`cap-*`); Lucide via `Icon` |
-| PWA-ish | `manifest.webmanifest` + apple-touch-icon / meta (no service worker; POS is source of truth) |
+| Install / home screen | Manifest name **RestoNiti** + 192/512/maskable icons at `/captain/icons/` (iOS Add to Home Screen). **No service worker, no HTTPS, no `vite-plugin-pwa`.** LAN HTTP is not a secure context, so Android install prompts are not available. Header uses the same RestoNiti mark/wordmark as desktop POS. |
+
+### Connection and sessions
+
+- HTTP requests time out (20s; health/branding/logout 8s). SSE reconnects with backoff up to 30s.
+- Returning to the phone (`visibilitychange` / focus) refreshes tables, KOTs, and the open order from the gateway.
+- LAN sessions stay **in memory** on the POS. A POS/gateway restart invalidates tokens; Captain shows login again (401). That is intentional (Model A), not a reconnect bug.
+
+### Idempotency (`client_ops`)
+
+Captain sends a **new** `clientOpId` per gesture (`open-table`, `add-item`, `update-lines`, `send-kot`, `void-item`). Retrying the **same** id replays the stored result. Reusing an id with a **different** body is rejected (`client-op-conflict` / 409).
+
+Two `+` taps are two gestures (two ids). POS still merges the same line so qty becomes 2. Idempotency does **not** collapse two taps into one add.
+
+Printers still cannot guarantee a single physical print. A successful send-kot remembered in `client_ops` will not print again on retry; a failed print is not remembered, so retry may print.
+
+### HTTPS vs Capacitor (deferred)
+
+Do **not** add gateway TLS or Capacitor in this wave. After restaurant testing, decide:
+
+- HTTPS on the gateway (cert trust on every phone) if we need a real Android PWA + service worker, **or**
+- Keep HTTP + iOS A2HS, then wrap the same `src/captain` build in Capacitor later.
+
+Until that product decision, Captain remains LAN HTTP only.
 
 ### Login still needs three things
 
@@ -162,9 +187,11 @@ Password: `Captain1!`
 - Desktop Billing / Tables layout redesign
 - Food photos / menu image pipeline
 - Guest count, item notes, swipe gestures
-- Native store app / offline service worker
+- Native store app / offline service worker / HTTPS on the gateway
 - Billing / settle from Captain
 - Changing permissions or KOT print pipeline behavior
+- Durable LAN sessions across POS restart
+- Offline mutation queue / `orderVersion` concurrency
 
 ---
 
@@ -176,4 +203,4 @@ Password: `Captain1!`
 4. Sign in with a captain user + pairing code (or demo seed accounts above).
 5. Smoke path: Floor → open table → add items → Review → Send KOT → KOTs tab → Me.
 
-Optional: Add to Home Screen to hide browser chrome (manifest present; no offline cache).
+Optional: Add to Home Screen to hide browser chrome (manifest + icons; no offline cache, no Android install prompt on LAN HTTP).

@@ -2,13 +2,13 @@ import React from "react";
 import { LayoutGrid, ReceiptText, UserRound } from "lucide-react";
 import { Icon } from "../ui/components/ui/Icon";
 import { StatusDot } from "../ui/components/ui/StatusDot";
+import restoNitiMark from "../ui/assets/restoniti-icon.png";
+import { connectionLabel, type ConnectionState } from "./copy";
 
 export type CaptainTab = "floor" | "kots" | "me";
 
 export function CaptainShell({
-  title,
-  occupancy,
-  connected,
+  connection,
   error,
   showNav,
   hideHeader,
@@ -18,9 +18,7 @@ export function CaptainShell({
   onTabChange,
   children,
 }: {
-  title: string;
-  occupancy?: string;
-  connected: boolean;
+  connection: ConnectionState;
   error: string | null;
   showNav: boolean;
   hideHeader?: boolean;
@@ -30,19 +28,29 @@ export function CaptainShell({
   onTabChange: (tab: CaptainTab) => void;
   children: React.ReactNode;
 }) {
+  const live = connection === "live";
+  const reconnecting = connection === "reconnecting";
   return (
     <div className="cap-shell">
       {hideHeader ? null : (
         <header className="cap-top">
-          <div className="cap-top-copy">
-            <h1>{title}</h1>
-            {occupancy ? <div className="cap-occupancy">{occupancy}</div> : null}
+          <div className="cap-brand-lockup">
+            <img src={restoNitiMark} alt="" className="cap-brand-mark" width={28} height={28} />
+            <div className="cap-brand-name" aria-label="RestoNiti">
+              <span className="cap-brand-resto">Resto</span>
+              <span className="cap-brand-niti">Niti</span>
+            </div>
           </div>
-          <span className="cap-conn" title={connected ? "Connected" : "Offline"}>
+          <span
+            className={`cap-live-chip ${live ? "is-live" : reconnecting ? "is-wait" : "is-offline"}`}
+            title={connectionLabel(connection)}
+          >
             <StatusDot
-              tone={connected ? "success" : "attention"}
-              label={connected ? "Connected" : "Offline"}
+              tone={live ? "success" : reconnecting ? "attention" : "danger"}
+              label={connectionLabel(connection)}
+              decorative
             />
+            <span>{connectionLabel(connection)}</span>
           </span>
         </header>
       )}
@@ -55,7 +63,7 @@ export function CaptainShell({
       </main>
 
       {showNav ? (
-        <nav className="cap-bottom-nav" aria-label="Captain">
+        <nav className="cap-bottom-nav" aria-label="RestoNiti">
           <button
             type="button"
             className={`cap-bottom-nav-item ${activeTab === "floor" ? "active" : ""}`}

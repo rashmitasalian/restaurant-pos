@@ -1,6 +1,7 @@
 import {
   buildAreaTableName,
   FLOOR_LAYOUT_LIMITS,
+  formatTableLabel,
   inferNamingFromTables,
   normalizeTablePrefix,
   planTablesFromAreas,
@@ -86,5 +87,12 @@ describe("floorLayout", () => {
 
   it("exposes layout limits", () => {
     expect(FLOOR_LAYOUT_LIMITS.MAX_TOTAL_TABLES).toBeGreaterThanOrEqual(100);
+  });
+
+  it("formats table labels from configured names", () => {
+    expect(formatTableLabel(3, "G1")).toBe("G1");
+    expect(formatTableLabel(5, "Table 5")).toBe("Table 5");
+    expect(formatTableLabel(7, "")).toBe("Table 7");
+    expect(formatTableLabel(null)).toBe("");
   });
 });

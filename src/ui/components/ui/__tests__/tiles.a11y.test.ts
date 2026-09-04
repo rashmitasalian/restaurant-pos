@@ -45,6 +45,7 @@ describe("ui tile accessibility", () => {
       }),
     );
     expect(html).toContain('aria-label="Table 12, Occupied"');
+    expect(html).toContain("Occupied");
     expect(html).toContain('aria-hidden="true"');
     expect(html).not.toMatch(/role="img"/);
   });
