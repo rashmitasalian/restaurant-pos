@@ -1,4 +1,34 @@
-import { kotSentLinesNeedPrint, tableKotAppearance } from "./kot";
+import { isKotQueueTicket, kotSentLinesNeedPrint, tableKotAppearance } from "./kot";
+
+describe("KOT queue membership", () => {
+  it("keeps never-sent orders off the queue", () => {
+    expect(
+      isKotQueueTicket({
+        kotStatus: "pending",
+        items: [{ qty: 2, kotPrintedQty: 0 }],
+      }),
+    ).toBe(false);
+  });
+
+  it("includes fully sent and mixed tickets", () => {
+    expect(
+      isKotQueueTicket({
+        kotStatus: "sent",
+        items: [{ qty: 2, kotPrintedQty: 2 }],
+      }),
+    ).toBe(true);
+    expect(
+      isKotQueueTicket({
+        kotStatus: "pending",
+        items: [{ qty: 2, kotPrintedQty: 1 }],
+      }),
+    ).toBe(true);
+  });
+
+  it("skips empty open orders", () => {
+    expect(isKotQueueTicket({ kotStatus: "pending", items: [] })).toBe(false);
+  });
+});
 
 describe("KOT retry state checks", () => {
   it("skips queued KOT lines that are already marked sent", () => {

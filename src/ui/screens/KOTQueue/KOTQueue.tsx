@@ -11,6 +11,7 @@ import {
 } from "../../../app/db/posRepository";
 import { printKOT } from "../../../app/services/printer";
 import { AuthContext } from "../../context/AuthContext";
+import { isKotQueueTicket } from "../../../shared/kot";
 import { formatKotAge, kotAgeTone } from "../../../shared/kotAge";
 import { formatTableLabel } from "../../../shared/floorLayout";
 import { validationMessage } from "../../../shared/validation";
@@ -107,15 +108,7 @@ export default function KOTQueue() {
       const [orders, tables] = await Promise.all([getActiveOrders(), getTables()]);
       const nameById = new Map(tables.map((table) => [Number(table.id), table.name]));
       const kots: KOTItem[] = orders
-        .filter((o) => {
-          const sentItems = getPrintedItems(o);
-          const pendingItems = getPendingItems(o);
-          return (
-            o.kotStatus === "sent" ||
-            o.kotStatus === "failed" ||
-            (sentItems.length > 0 && pendingItems.length > 0)
-          );
-        })
+        .filter((o) => isKotQueueTicket(o))
         .map((o) => {
           const printedItems = getPrintedItems(o);
           const pendingItems = getPendingItems(o);

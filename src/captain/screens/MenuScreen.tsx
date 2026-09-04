@@ -4,6 +4,8 @@ import { Icon } from "../../ui/components/ui/Icon";
 import { money } from "../money";
 import { CategorySheet } from "../sheets/CategorySheet";
 
+const PINNED_NAMED_CATEGORIES = 2;
+
 function lineMatchesItem(line: any, item: any) {
   const menuId = String(item?._id || "");
   if (menuId && String(line.menuItemId || "") === menuId) {
@@ -12,6 +14,131 @@ function lineMatchesItem(line: any, item: any) {
   const name = String(item?.name || "");
   const lineName = String(line.name || "");
   return lineName === name || lineName.startsWith(`${name} (`);
+}
+
+function groupMenuItems(items: any[], categoryOrder: string[]) {
+  const groups = new Map<string, any[]>();
+  const uncategorized: any[] = [];
+  const orderIndex = new Map(categoryOrder.map((name, index) => [name, index]));
+
+  for (const item of items) {
+    const category = String(item.category || "").trim();
+    if (!category) {
+      uncategorized.push(item);
+      continue;
+    }
+    const list = groups.get(category) || [];
+    list.push(item);
+    groups.set(category, list);
+  }
+
+  const sections = [...groups.entries()]
+    .sort((a, b) => {
+      const left = orderIndex.get(a[0]) ?? Number.MAX_SAFE_INTEGER;
+      const right = orderIndex.get(b[0]) ?? Number.MAX_SAFE_INTEGER;
+      if (left !== right) {
+        return left - right;
+      }
+      return a[0].localeCompare(b[0]);
+    })
+    .map(([name, sectionItems]) => ({ name, items: sectionItems }));
+
+  if (uncategorized.length) {
+    sections.push({ name: "Other", items: uncategorized });
+  }
+  return sections;
+}
+
+function MenuItemRow({
+  item,
+  qty,
+  busy,
+  pending,
+  flashed,
+  onAddItem,
+  onChangeQty,
+  onFlash,
+  primaryLineForItem,
+}: {
+  item: any;
+  qty: number;
+  busy: boolean;
+  pending: boolean;
+  flashed: boolean;
+  onAddItem: (item: any) => void;
+  onChangeQty: (line: any, nextQty: number) => void;
+  onFlash: (id: string) => void;
+  primaryLineForItem: (item: any) => any;
+}) {
+  const hasVariants = Array.isArray(item.variants) && item.variants.length > 0;
+  return (
+    <div
+      className={`cap-menu-row ${flashed ? "cap-menu-tile-flash" : ""} ${qty > 0 ? "is-in-order" : ""}`}
+    >
+      <div className="cap-menu-row-copy">
+        <p className="cap-menu-row-name">{item.name}</p>
+        <span className="cap-menu-row-meta">
+          {money(Number(item.price || 0))}
+          {hasVariants ? ` · ${item.variants.length} options` : ""}
+        </span>
+      </div>
+      {hasVariants ? (
+        <button
+          type="button"
+          className="cap-add-btn"
+          disabled={busy && pending}
+          aria-label={`Choose ${item.name} variant`}
+          onClick={() => {
+            onFlash(item._id);
+            onAddItem(item);
+          }}
+        >
+          <Icon icon={Plus} size="md" />
+        </button>
+      ) : qty > 0 ? (
+        <div className="cap-qty cap-qty-compact">
+          <button
+            type="button"
+            disabled={busy}
+            aria-label={`Decrease ${item.name}`}
+            onClick={() => {
+              const line = primaryLineForItem(item);
+              if (line) {
+                onChangeQty(line, Number(line.qty || 0) - 1);
+              }
+            }}
+          >
+            <Icon icon={Minus} size="sm" />
+          </button>
+          <span>{qty}</span>
+          <button
+            type="button"
+            disabled={busy && pending}
+            aria-label={`Increase ${item.name}`}
+            onClick={() => {
+              onFlash(item._id);
+              onAddItem(item);
+            }}
+          >
+            <Icon icon={Plus} size="sm" />
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          className="cap-add-btn"
+          disabled={busy && pending}
+          aria-label={`Add ${item.name}`}
+          onClick={() => {
+            onFlash(item._id);
+            onAddItem(item);
+          }}
+        >
+          <Icon icon={Plus} size="md" />
+        </button>
+      )}
+    </div>
+  );
 }
 
 export function MenuScreen({
@@ -72,7 +199,16 @@ export function MenuScreen({
 
   const hasFavorites = menuItems.some((item) => item.favorite);
   const namedCategories = categories.filter(Boolean);
-  const categoryInMore = namedCategories.includes(category);
+  const pinnedLimit = hasFavorites ? 1 : PINNED_NAMED_CATEGORIES;
+  const showAllNamed = namedCategories.length <= PINNED_NAMED_CATEGORIES;
+  const pinnedCategories = showAllNamed
+    ? namedCategories
+    : namedCategories.slice(0, pinnedLimit);
+  const overflowCategories = showAllNamed ? [] : namedCategories.slice(pinnedLimit);
+  const categoryInOverflow = overflowCategories.includes(category);
+  const showGrouped = category === "all" && !query.trim();
+  const sections = showGrouped ? groupMenuItems(filtered, namedCategories) : [{ name: "", items: filtered }];
+  const showHeadings = showGrouped && sections.length > 1;
 
   const qtyForItem = (item: any) =>
     items.filter((line) => lineMatchesItem(line, item)).reduce((sum, line) => sum + Number(line.qty || 0), 0);
@@ -97,14 +233,14 @@ export function MenuScreen({
   return (
     <div className={`cap-session${itemCount > 0 ? " cap-session-docked" : ""}`}>
       <header className="cap-session-top">
-        <button type="button" className="cap-icon-btn" onClick={onBack} aria-label="Back to floor">
+        <button type="button" className="cap-icon-btn" onClick={onBack} aria-label="Back to tables">
           <Icon icon={ChevronLeft} size="lg" />
         </button>
         <div className="cap-session-title">
           <strong>{tableName}</strong>
-          <span>{itemCount ? `${itemCount} on this table` : "New order"}</span>
+          <span>{itemCount ? `${itemCount} on this table` : "Add items"}</span>
         </div>
-        <div className="cap-session-total">{itemCount ? money(orderTotal) : ""}</div>
+        {itemCount ? <div className="cap-session-total">{money(orderTotal)}</div> : null}
       </header>
 
       <div className="cap-session-tools">
@@ -122,11 +258,12 @@ export function MenuScreen({
           {hasFavorites ? (
             <button
               type="button"
-              className={`cap-chip ${category === "favorites" ? "active" : ""}`}
+              className={`cap-chip cap-chip-icon ${category === "favorites" ? "active" : ""}`}
               onClick={() => setCategory("favorites")}
+              aria-label="Favorites"
+              title="Favorites"
             >
               <Icon icon={Star} size="sm" />
-              Favorites
             </button>
           ) : null}
           <button
@@ -136,15 +273,25 @@ export function MenuScreen({
           >
             All
           </button>
-          {namedCategories.length > 0 ? (
+          {pinnedCategories.map((name) => (
+            <button
+              key={name}
+              type="button"
+              className={`cap-chip ${category === name ? "active" : ""}`}
+              onClick={() => setCategory(name)}
+            >
+              {name}
+            </button>
+          ))}
+          {overflowCategories.length > 0 ? (
             <button
               type="button"
-              className={`cap-chip ${categoryInMore ? "active" : ""}`}
+              className={`cap-chip ${categoryInOverflow ? "active" : ""}`}
               aria-haspopup="dialog"
               aria-expanded={categoryOpen}
               onClick={() => setCategoryOpen(true)}
             >
-              <span>{categoryInMore ? category : "More"}</span>
+              <span>{categoryInOverflow ? category : "More"}</span>
               <Icon icon={ChevronDown} size="sm" />
             </button>
           ) : null}
@@ -167,90 +314,33 @@ export function MenuScreen({
       ) : (
         <div className="cap-session-scroll">
           <div className="cap-menu-list">
-            {filtered.map((item) => {
-              const qty = qtyForItem(item);
-              const hasVariants = Array.isArray(item.variants) && item.variants.length > 0;
-              const pending = addingItemId === item._id;
-              return (
-                <div
-                  key={item._id}
-                  className={`cap-menu-row ${flashId === item._id ? "cap-menu-tile-flash" : ""} ${
-                    qty > 0 ? "is-in-order" : ""
-                  }`}
-                >
-                  <div className="cap-menu-row-copy">
-                    <p className="cap-menu-row-name">{item.name}</p>
-                    <span className="cap-menu-row-meta">
-                      {money(Number(item.price || 0))}
-                      {hasVariants ? ` · ${item.variants.length} options` : ""}
-                    </span>
-                  </div>
-                  {hasVariants ? (
-                    <button
-                      type="button"
-                      className="cap-add-btn"
-                      disabled={busy && pending}
-                      aria-label={`Choose ${item.name} variant`}
-                      onClick={() => {
-                        setFlashId(item._id);
-                        onAddItem(item);
-                      }}
-                    >
-                      <Icon icon={Plus} size="md" />
-                    </button>
-                  ) : qty > 0 ? (
-                    <div className="cap-qty cap-qty-compact">
-                      <button
-                        type="button"
-                        disabled={busy}
-                        aria-label={`Decrease ${item.name}`}
-                        onClick={() => {
-                          const line = primaryLineForItem(item);
-                          if (line) {
-                            onChangeQty(line, Number(line.qty || 0) - 1);
-                          }
-                        }}
-                      >
-                        <Icon icon={Minus} size="sm" />
-                      </button>
-                      <span>{qty}</span>
-                      <button
-                        type="button"
-                        disabled={busy && pending}
-                        aria-label={`Increase ${item.name}`}
-                        onClick={() => {
-                          setFlashId(item._id);
-                          onAddItem(item);
-                        }}
-                      >
-                        <Icon icon={Plus} size="sm" />
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      className="cap-add-btn"
-                      disabled={busy && pending}
-                      aria-label={`Add ${item.name}`}
-                      onClick={() => {
-                        setFlashId(item._id);
-                        onAddItem(item);
-                      }}
-                    >
-                      <Icon icon={Plus} size="md" />
-                    </button>
-                  )}
-                </div>
-              );
-            })}
+            {sections.map((section) => (
+              <section key={section.name || "all"} className="cap-menu-section">
+                {showHeadings ? <div className="cap-area-title">{section.name}</div> : null}
+                {section.items.map((item) => (
+                  <MenuItemRow
+                    key={item._id}
+                    item={item}
+                    qty={qtyForItem(item)}
+                    busy={busy}
+                    pending={addingItemId === item._id}
+                    flashed={flashId === item._id}
+                    onAddItem={onAddItem}
+                    onChangeQty={onChangeQty}
+                    onFlash={setFlashId}
+                    primaryLineForItem={primaryLineForItem}
+                  />
+                ))}
+              </section>
+            ))}
           </div>
         </div>
       )}
 
       {categoryOpen ? (
         <CategorySheet
-          categories={namedCategories}
-          selected={categoryInMore ? category : ""}
+          categories={overflowCategories}
+          selected={categoryInOverflow ? category : ""}
           onSelect={(name) => {
             setCategory(name);
             setCategoryOpen(false);

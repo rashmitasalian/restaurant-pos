@@ -453,12 +453,22 @@ body,
 }
 
 .cap-cats-pinned {
+  flex-wrap: nowrap;
   overflow: hidden;
+  gap: 6px;
 }
 
 .cap-cats-pinned .cap-chip {
   min-width: 0;
-  max-width: 46%;
+  flex: 0 1 auto;
+  padding: 6px 10px;
+}
+
+.cap-chip-icon {
+  width: 36px;
+  padding: 6px;
+  justify-content: center;
+  flex: 0 0 auto;
 }
 
 .cap-cats-pinned .cap-chip span {
@@ -634,8 +644,8 @@ body,
 .cap-session-tools {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 12px 16px 8px;
+  gap: 8px;
+  padding: 10px 16px 6px;
   background: var(--pos-bg);
   position: sticky;
   top: 0;
@@ -650,11 +660,19 @@ body,
 }
 
 .cap-session-docked .cap-session-scroll {
-  padding-bottom: 76px;
+  padding-bottom: 8px;
 }
 
 .cap-menu-list {
   padding: 0 16px 8px;
+}
+
+.cap-menu-section + .cap-menu-section {
+  margin-top: 12px;
+}
+
+.cap-menu-section .cap-area-title {
+  padding: 4px 0 2px;
 }
 
 .cap-menu-row {
@@ -846,24 +864,20 @@ body,
 }
 
 .cap-order-dock {
-  position: fixed;
-  bottom: calc(56px + env(safe-area-inset-bottom) + 12px);
-  left: 50%;
-  transform: translateX(-50%);
-  width: min(calc(480px - 32px), calc(100% - 32px));
+  flex-shrink: 0;
+  width: 100%;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 52px;
+  min-height: 48px;
   padding: 10px 16px;
   border: 0;
+  border-top: 1px solid var(--pos-teal-strong, transparent);
   background: var(--pos-teal);
   color: var(--pos-tx-inverse);
-  border-radius: var(--pos-r-md);
   font-size: 14px;
   font-weight: 600;
-  box-shadow: var(--pos-shadow-2);
-  z-index: 30;
+  z-index: 3;
 }
 
 .cap-order-dock-cta {

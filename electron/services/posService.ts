@@ -54,7 +54,7 @@ import type {
   UserDto,
   VendorDto,
 } from "../../src/shared/pos";
-import { getUnsentKotLines, pendingKotQty } from "../../src/shared/kot";
+import { getUnsentKotLines, isKotQueueTicket, kotLineCounts } from "../../src/shared/kot";
 import {
   FLOOR_LAYOUT_LIMITS,
   formatTableLabel,
@@ -3183,16 +3183,12 @@ export const posService = {
   getCaptainKots() {
     const tables = this.getTables();
     const tableById = new Map(tables.map((table) => [table.id, table]));
-    const tickets = this.getOpenOrders()
-          .filter((order) => order.tableId !== null && order.tableId !== undefined)
+    const tickets = this.getActiveOrders()
+      .filter((order) => order.tableId !== null && order.tableId !== undefined && isKotQueueTicket(order))
       .map((order) => {
         const items = order.items || [];
+        const { sentCount, unsentCount } = kotLineCounts(items);
         const sentLines = items.filter((line) => Number(line.kotPrintedQty || 0) > 0);
-        const sentCount = sentLines.reduce((sum, line) => sum + Number(line.kotPrintedQty || 0), 0);
-        const unsentCount = items.reduce((sum, line) => sum + pendingKotQty(line), 0);
-        if (sentCount === 0 && unsentCount === 0) {
-          return null;
-        }
         const table = tableById.get(Number(order.tableId));
         return {
           orderId: order._id,
@@ -3207,8 +3203,7 @@ export const posService = {
           sentCount,
           unsentCount,
         };
-      })
-      .filter((ticket): ticket is NonNullable<typeof ticket> => Boolean(ticket));
+      });
 
     tickets.sort((a, b) => (b.lastSendAt || 0) - (a.lastSendAt || 0) || a.tableName.localeCompare(b.tableName));
     return { tickets };

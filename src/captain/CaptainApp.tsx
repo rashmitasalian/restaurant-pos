@@ -573,11 +573,7 @@ export function CaptainApp() {
 
   const kotBadgeCount = kotTickets.filter((ticket) => Number(ticket.unsentCount || 0) > 0).length;
   const activeTab: CaptainTab | null =
-    screen === "login"
-      ? null
-      : screen === "menu" || screen === "floor"
-        ? "floor"
-        : screen;
+    screen === "login" || screen === "menu" ? null : screen === "floor" ? "floor" : screen;
   const tableName = formatTableLabel(selectedTable?.id, selectedTable?.name);
 
   return (

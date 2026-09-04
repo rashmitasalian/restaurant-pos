@@ -14,6 +14,30 @@ export function pendingKotQty(line: Pick<OrderLineDto, "qty" | "kotPrintedQty">)
   return Math.max(0, Number(line.qty || 0) - Number(line.kotPrintedQty || 0));
 }
 
+export function kotLineCounts(lines: Array<Pick<OrderLineDto, "qty" | "kotPrintedQty">> | null | undefined) {
+  return (lines || []).reduce(
+    (counts, line) => ({
+      sentCount: counts.sentCount + Math.max(0, Number(line.kotPrintedQty || 0)),
+      unsentCount: counts.unsentCount + pendingKotQty(line),
+    }),
+    { sentCount: 0, unsentCount: 0 },
+  );
+}
+
+/** Kitchen already has a ticket. Never-sent table orders stay on the floor. */
+export function isKotQueueTicket(order: {
+  items?: Array<Pick<OrderLineDto, "qty" | "kotPrintedQty">> | null;
+  kotStatus?: string | null;
+}) {
+  const { sentCount } = kotLineCounts(order.items);
+  return (
+    sentCount > 0 ||
+    order.kotStatus === "sent" ||
+    order.kotStatus === "printed" ||
+    order.kotStatus === "failed"
+  );
+}
+
 export type TableKotAppearance = {
   state: "available" | "occupied" | "attention";
   stateLabel: string;
