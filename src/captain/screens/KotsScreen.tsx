@@ -39,7 +39,7 @@ export function KotsScreen({
   if (loading && tickets.length === 0) {
     return (
       <div className="cap-stack">
-        <h2 className="cap-page-title">KOTs</h2>
+        <h2 className="cap-page-title">KOT Queue</h2>
         {Array.from({ length: 4 }).map((_, index) => (
           <div key={index} className="cap-skeleton-row" />
         ))}
@@ -49,7 +49,7 @@ export function KotsScreen({
 
   return (
     <div className="cap-stack">
-      <h2 className="cap-page-title">KOTs</h2>
+      <h2 className="cap-page-title">KOT Queue</h2>
       <div className="cap-cats" role="tablist" aria-label="KOT status">
         {(
           [

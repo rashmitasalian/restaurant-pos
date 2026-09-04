@@ -460,6 +460,25 @@ export function CaptainApp() {
     if (!token || !order || sendPhase === "sending") {
       return;
     }
+    const pending = (order.items || []).reduce(
+      (sum: number, line: any) =>
+        sum + Math.max(0, Number(line.qty || 0) - Number(line.kotPrintedQty || 0)),
+      0,
+    );
+    if (pending <= 0) {
+      showToast("No new KOT items to send");
+      return;
+    }
+    setShowOrderSheet(true);
+    setSendPhase("confirm");
+    setSendError(null);
+    setError(null);
+  };
+
+  const confirmSendKot = async () => {
+    if (!token || !order || sendPhase === "sending") {
+      return;
+    }
     setShowOrderSheet(true);
     setSendPhase("sending");
     setSendError(null);
@@ -508,13 +527,15 @@ export function CaptainApp() {
       );
       setOrder(result.order || (await captainApi.getOrder(token, order._id)));
       setVoidLine(null);
-      showToast("Item updated");
+      showToast("Void KOT printed and order updated");
+      void refreshKots(token);
+      void refreshTables(token);
     } catch (err: any) {
       if (isAuthRequiredError(err)) {
         void logout("pos-restart");
         return;
       }
-      setError(mutationError(err, "Couldn’t update that item."));
+      setError(mutationError(err, "Void KOT could not be printed. Order was not changed."));
     } finally {
       setBusy(false);
     }
@@ -550,7 +571,7 @@ export function CaptainApp() {
     setScreen(tab === "floor" ? "floor" : tab);
   };
 
-  const unsentCount = kotTickets.reduce((sum, ticket) => sum + Number(ticket.unsentCount || 0), 0);
+  const kotBadgeCount = kotTickets.filter((ticket) => Number(ticket.unsentCount || 0) > 0).length;
   const activeTab: CaptainTab | null =
     screen === "login"
       ? null
@@ -567,7 +588,7 @@ export function CaptainApp() {
       hideHeader={screen === "login" || screen === "menu"}
       lockBody={screen === "menu"}
       activeTab={activeTab}
-      unsentCount={unsentCount}
+      unsentCount={kotBadgeCount}
       onTabChange={onTabChange}
     >
       {screen === "login" ? (
@@ -651,6 +672,8 @@ export function CaptainApp() {
           sendError={sendError}
           onChangeQty={changeQty}
           onSendKot={sendKot}
+          onConfirmSendKot={() => void confirmSendKot()}
+          onCancelSendConfirm={() => setSendPhase("idle")}
           onAddMore={() => {
             setShowOrderSheet(false);
             setScreen("menu");

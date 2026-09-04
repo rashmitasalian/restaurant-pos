@@ -4,7 +4,7 @@ import { Icon } from "../../ui/components/ui/Icon";
 import { pendingKotQty } from "../../shared/kot";
 import { money } from "../money";
 
-export type KotSendPhase = "idle" | "sending" | "sent" | "failed";
+export type KotSendPhase = "idle" | "confirm" | "sending" | "sent" | "failed";
 
 export function OrderSheet({
   order,
@@ -13,6 +13,8 @@ export function OrderSheet({
   sendError,
   onChangeQty,
   onSendKot,
+  onConfirmSendKot,
+  onCancelSendConfirm,
   onAddMore,
   onClose,
 }: {
@@ -22,14 +24,21 @@ export function OrderSheet({
   sendError?: string | null;
   onChangeQty: (line: any, nextQty: number) => void;
   onSendKot: () => void;
+  onConfirmSendKot: () => void;
+  onCancelSendConfirm: () => void;
   onAddMore: () => void;
   onClose: () => void;
 }) {
   const items: any[] = order?.items || [];
-  const sentLines = items.filter((line) => Number(line.kotPrintedQty || 0) > 0);
-  const newLines = items.filter((line) => Number(line.kotPrintedQty || 0) === 0);
-  const newCount = items.reduce((sum, line) => sum + pendingKotQty(line), 0);
+  const pendingLines = items
+    .map((line) => ({ line, pending: pendingKotQty(line) }))
+    .filter((entry) => entry.pending > 0);
+  const sentLines = items.filter(
+    (line) => Number(line.kotPrintedQty || 0) > 0 && pendingKotQty(line) === 0,
+  );
+  const newCount = pendingLines.reduce((sum, entry) => sum + entry.pending, 0);
   const sending = sendPhase === "sending";
+  const confirming = sendPhase === "confirm";
 
   if (sendPhase === "sent") {
     return (
@@ -41,6 +50,61 @@ export function OrderSheet({
           <h3>KOT sent</h3>
           <p className="cap-meta">{tableName}</p>
           <p>Kitchen has received your order.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (confirming) {
+    return (
+      <div
+        className="cap-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="KOT preview"
+        onClick={(event) => {
+          if (event.target === event.currentTarget) {
+            onCancelSendConfirm();
+          }
+        }}
+      >
+        <div className="cap-modal-card cap-order-sheet">
+          <div className="cap-sheet-head">
+            <div>
+              <h3>KOT Preview</h3>
+              <div className="cap-meta">{tableName} · {newCount} to send</div>
+            </div>
+            <button
+              type="button"
+              className="cap-icon-btn cap-icon-btn-light"
+              onClick={onCancelSendConfirm}
+              aria-label="Close"
+            >
+              <Icon icon={X} size="lg" />
+            </button>
+          </div>
+          <div className="cap-ticket">
+            <section className="cap-ticket-group cap-ticket-new">
+              <div className="cap-ticket-label">Items to kitchen</div>
+              {pendingLines.map(({ line, pending }) => (
+                <div key={line.id} className="cap-line cap-line-new">
+                  <div className="cap-line-copy">
+                    <strong>{line.name}</strong>
+                    <div className="cap-meta">{money(Number(line.rate || 0))} each</div>
+                  </div>
+                  <strong>×{pending}</strong>
+                </div>
+              ))}
+            </section>
+          </div>
+          <div className="cap-sheet-footer">
+            <button type="button" className="cap-btn cap-btn-accent" onClick={onConfirmSendKot}>
+              Print KOT
+            </button>
+            <button type="button" className="cap-btn cap-btn-quiet" onClick={onCancelSendConfirm}>
+              Back
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -82,10 +146,10 @@ export function OrderSheet({
           </div>
         ) : (
           <div className="cap-ticket">
-            {newLines.length > 0 ? (
+            {pendingLines.length > 0 ? (
               <section className="cap-ticket-group cap-ticket-new">
                 <div className="cap-ticket-label">New — not sent</div>
-                {newLines.map((line) => (
+                {pendingLines.map(({ line }) => (
                   <TicketLine key={line.id} line={line} busy={sending} onChangeQty={onChangeQty} />
                 ))}
               </section>
@@ -113,7 +177,9 @@ export function OrderSheet({
             </div>
           ) : newCount === 0 ? (
             <p className="cap-meta">Add new items to send a KOT.</p>
-          ) : null}
+          ) : (
+            <p className="cap-meta">{newCount} item{newCount === 1 ? "" : "s"} ready for kitchen.</p>
+          )}
           <button
             type="button"
             className="cap-btn cap-btn-accent"
@@ -144,7 +210,7 @@ function TicketLine({
 }) {
   const qty = Number(line.qty || 0);
   const printed = Number(line.kotPrintedQty || 0);
-  const pending = qty - printed;
+  const pending = Math.max(0, qty - printed);
   return (
     <div className={`cap-line ${sent ? "cap-line-sent" : "cap-line-new"}`}>
       <div className="cap-line-copy">
@@ -152,7 +218,7 @@ function TicketLine({
         <div className="cap-meta">
           {qty} × {money(Number(line.rate || 0))}
           {sent ? ` · sent ${printed}` : ""}
-          {sent && pending > 0 ? ` (+${pending} new)` : ""}
+          {!sent && printed > 0 ? ` · ${printed} sent · ${pending} new` : ""}
         </div>
       </div>
       <div className="cap-qty cap-qty-compact">

@@ -80,9 +80,9 @@ Floor / KOTs / Me ← bottom tabs (order kept)
 ### Order sheet (replaces full-page ticket + separate Send KOT confirm)
 
 - Bottom sheet (~90%): New (not sent) first, **KOT sent** quieter below
-- 48px qty steppers; reducing below sent qty → void sheet
-- Single **Send KOT** (disabled + helper when `newCount === 0`)
-- Toast on success; no second confirm sheet
+- 48px qty steppers; reducing below sent qty → **Void Sent KOT** sheet (reason + **Print Void KOT**)
+- **Send KOT** opens a KOT preview, then **Print KOT** (same confirm path as desktop)
+- Toast on success; no second confirm sheet after print
 
 ### KOTs tab
 

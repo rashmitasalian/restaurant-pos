@@ -108,8 +108,11 @@ export function TablesScreen({
   return (
     <div className="cap-stack cap-floor">
       <div className="cap-floor-head">
-        <p className="cap-greet">{greetingFor(waiterName, waiterUsername)}</p>
-        <div className="cap-floor-tools">
+        <div className="cap-floor-title-row">
+          <div className="cap-floor-title-block">
+            <p className="cap-greet">{greetingFor(waiterName, waiterUsername)}</p>
+            <h2 className="cap-page-title">Tables</h2>
+          </div>
           {areas.length > 1 ? (
             <button type="button" className="cap-area-btn" onClick={() => setAreaOpen(true)}>
               <span>{areaLabel}</span>
@@ -118,22 +121,24 @@ export function TablesScreen({
           ) : (
             <span className="cap-area-static">{areas[0]?.name || "Floor"}</span>
           )}
-          <span className="cap-occupancy-quiet">
-            {occupiedCount} of {filtered.length} occupied
-          </span>
         </div>
-        <div className="cap-legend" aria-label="Table status">
-          <span>
-            <span className="cap-legend-dot is-free" />
-            Available
-          </span>
-          <span>
-            <span className="cap-legend-dot is-send" />
-            Send KOT
-          </span>
-          <span>
-            <span className="cap-legend-dot is-sent" />
-            KOT sent
+        <div className="cap-floor-toolbar">
+          <div className="cap-legend" aria-label="Table status">
+            <span>
+              <span className="cap-legend-dot is-free" />
+              Available
+            </span>
+            <span>
+              <span className="cap-legend-dot is-send" />
+              Send KOT
+            </span>
+            <span>
+              <span className="cap-legend-dot is-sent" />
+              KOT sent
+            </span>
+          </div>
+          <span className="cap-occupancy-quiet">
+            {occupiedCount}/{filtered.length} occupied
           </span>
         </div>
       </div>
@@ -171,7 +176,6 @@ export function TablesScreen({
                     amountLabel={occupied ? money(Number(table.total || 0)) : undefined}
                     elapsed={appearance.elapsed}
                     metaLabel={appearance.metaLabel}
-                    idleLabel="Available"
                     disabled={busy}
                     active={activeTableId === table.id}
                     onClick={() => onOpenTable(table)}

@@ -70,7 +70,7 @@ export function CaptainShell({
             onClick={() => onTabChange("floor")}
           >
             <Icon icon={LayoutGrid} size="lg" />
-            Floor
+            Tables
           </button>
           <button
             type="button"

@@ -293,7 +293,6 @@ export default function Tables() {
                       }
                       elapsed={appearance.elapsed}
                       metaLabel={appearance.metaLabel}
-                      idleLabel="Available"
                       disabled={isOpening}
                       onClick={() => openBilling(t)}
                       aria-label={`Table ${titleLabel}, ${stateLabel}${

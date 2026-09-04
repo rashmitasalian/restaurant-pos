@@ -11,7 +11,7 @@ export function TableTile({
   itemCount,
   amountLabel,
   elapsed,
-  idleLabel = "Ready",
+  idleLabel,
   metaLabel,
   active = false,
   variant = "rail",
@@ -55,6 +55,8 @@ export function TableTile({
       .filter(Boolean)
       .join(" · ");
   const showRailCount = isRail && itemCount !== null && itemCount !== undefined && itemCount > 0;
+  const showIdle = Boolean(isFloor && state === "available" && idleLabel);
+  const showFoot = Boolean(amountLabel || footMeta || showIdle || (isRail && seats));
 
   return (
     <button
@@ -90,11 +92,11 @@ export function TableTile({
         </>
       )}
       {!isRail && seats ? <span className="ui-table-tile-meta">{seats} seats</span> : null}
-      {isFloor || amountLabel || footMeta || (isRail && seats) ? (
+      {showFoot ? (
         <span className="ui-table-tile-foot">
           {amountLabel ? (
             <span className="ui-table-tile-amount">{amountLabel}</span>
-          ) : state === "available" && isFloor ? (
+          ) : showIdle ? (
             <span className="ui-table-tile-ready">{idleLabel}</span>
           ) : !isRail ? (
             <span className="ui-table-tile-amount-empty" aria-hidden="true" />
