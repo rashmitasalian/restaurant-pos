@@ -445,12 +445,18 @@
     border-color 120ms ease,
     transform 120ms ease;
 }
-.actionSecondary:hover {
+.actionSecondary:hover:not(:disabled) {
   background: var(--pos-surface-hover);
   border-color: var(--pos-line-strong);
 }
-.actionSecondary:active {
+.actionSecondary:active:not(:disabled) {
   transform: scale(0.97);
+}
+.actionSecondary:disabled,
+.actionTertiary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  color: var(--pos-tx-muted);
 }
 .actionTertiary {
   padding: 9px 16px;
@@ -467,7 +473,7 @@
     background 120ms ease,
     border-color 120ms ease;
 }
-.actionTertiary:hover {
+.actionTertiary:hover:not(:disabled) {
   background: var(--pos-surface-hover);
   border-color: var(--pos-line-strong);
 }

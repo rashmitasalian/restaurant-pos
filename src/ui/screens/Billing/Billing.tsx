@@ -109,7 +109,6 @@ type BillingBusyAction =
   | "delivery"
   | "markReady"
   | "assignRider"
-  | "aggregatorPrint"
   | "creatingOrder"
   | "receiptRetry"
   | "printBill";
@@ -582,7 +581,6 @@ export default function Billing() {
   const deliveryProcessing = Boolean(busyActions.delivery);
   const markReadyProcessing = Boolean(busyActions.markReady);
   const assignRiderProcessing = Boolean(busyActions.assignRider);
-  const aggregatorPrinting = Boolean(busyActions.aggregatorPrint);
   const creatingOrder = Boolean(busyActions.creatingOrder);
   const receiptRetrying = Boolean(busyActions.receiptRetry);
   const canStartPayment = canPay && !paymentProcessing && !payModalOpen;
@@ -1831,7 +1829,7 @@ export default function Billing() {
 
   // ── Quick actions (takeaway/delivery) ───────────────────────────────────
   const markReady = async () => {
-    if (!order) {
+    if (!order || !hasItems || isPaid) {
       return;
     }
     if (!beginBusyAction("markReady")) {
@@ -1849,6 +1847,9 @@ export default function Billing() {
   };
 
   const openAssignRider = () => {
+    if (!order || !hasItems || isPaid) {
+      return;
+    }
     const rider = (order?.meta as any)?.rider || {};
     setRiderName(String(rider.name || ""));
     setRiderPhone(String(rider.phone || ""));
@@ -1892,37 +1893,6 @@ export default function Billing() {
       showToast(reportClientError("billing.assign-rider", e, "Could not assign rider"), "error");
     } finally {
       endBusyAction("assignRider");
-    }
-  };
-
-  const printAggregatorReceipt = async () => {
-    if (!order) {
-      return;
-    }
-    if (!beginBusyAction("aggregatorPrint")) {
-      return;
-    }
-    try {
-      await persistDiscountIfNeeded();
-      const lines = buildReceiptLines(
-        order,
-        tableNum,
-        discountPercent || 0,
-        totals,
-        gstConfig,
-        branding,
-      );
-      await printReceipt({ lines });
-      try {
-        await markOrderBillPrinted(order._id);
-      } catch (recordError) {
-        logger.error("Bill printed but could not record it for review", recordError);
-      }
-    } catch (e) {
-      console.warn("printAggregatorReceipt failed", e);
-      showToast(reportClientError("billing.print", e, "Print failed"), "error");
-    } finally {
-      endBusyAction("aggregatorPrint");
     }
   };
 
@@ -2401,9 +2371,10 @@ export default function Billing() {
               <>
                 <button
                   onClick={markReady}
-                  disabled={markReadyProcessing}
+                  disabled={!hasItems || isPaid || markReadyProcessing}
+                  aria-disabled={!hasItems || isPaid || markReadyProcessing}
                   title="Mark order as ready"
-                  className={styles.actionTertiary}
+                  className={`${styles.actionBtn} ${styles.actionTertiary}`}
                   style={
                     order.status === "ready" ? { background: "var(--pos-success)", color: "var(--pos-surface)" } : undefined
                   }
@@ -2418,9 +2389,10 @@ export default function Billing() {
                   <>
                     <button
                       onClick={openAssignRider}
-                      disabled={!order || isPaid || assignRiderProcessing}
+                      disabled={!hasItems || isPaid || assignRiderProcessing}
+                      aria-disabled={!hasItems || isPaid || assignRiderProcessing}
                       title="Assign or update rider"
-                      className={styles.actionSecondary}
+                      className={`${styles.actionBtn} ${styles.actionSecondary}`}
                     >
                       {assignRiderProcessing
                         ? "Saving..."
@@ -2435,14 +2407,6 @@ export default function Billing() {
                       className={`${styles.actionBtn} ${styles.actionPay}`}
                     >
                       {deliveryProcessing ? "Processing..." : "Delivered"}
-                    </button>
-                    <button
-                      onClick={printAggregatorReceipt}
-                      disabled={!order || aggregatorPrinting}
-                      title="Print bill for delivery customer"
-                      className={styles.actionSecondary}
-                    >
-                      {aggregatorPrinting ? "Printing..." : "Print Bill"}
                     </button>
                   </>
                 )}

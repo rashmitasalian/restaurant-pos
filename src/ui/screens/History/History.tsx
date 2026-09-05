@@ -759,13 +759,6 @@ loadFirstPage(pageSize, search, fromTs, toTs);
                 ? `Export Selected PDF (${selected.length})`
                 : "Export PDF"}
           </Button>
-          <Button
-            onClick={openDeleteAllConfirm}
-            variant="danger"
-            disabled={deleteAllCountLoading || deletingAll}
-          >
-            {deletingAll ? "Deleting..." : "Delete All"}
-          </Button>
           </>
         }
       />
@@ -793,13 +786,6 @@ loadFirstPage(pageSize, search, fromTs, toTs);
               : selected.length > 0
                 ? `Export Selected PDF (${selected.length})`
                 : "Export PDF"}
-          </Button>
-          <Button
-            onClick={openDeleteAllConfirm}
-            variant="danger"
-            disabled={deleteAllCountLoading || deletingAll}
-          >
-            {deletingAll ? "Deleting..." : "Delete All"}
           </Button>
         </div>
       )}
@@ -990,16 +976,6 @@ loadFirstPage(pageSize, search, fromTs, toTs);
             <span style={{ fontWeight: 700, fontSize: 14, color: "var(--pos-saffron-text)" }}>
               {pageItems.length} order{pageItems.length !== 1 ? "s" : ""}
             </span>
-            {selected.length > 0 && (
-              <Button
-                size="sm"
-                variant="danger"
-                onClick={() => setConfirmSelectedOpen(true)}
-                disabled={deletingSelected || deletingAll}
-              >
-                {deletingSelected ? "Deleting..." : `Delete selected (${selected.length})`}
-              </Button>
-            )}
           </div>
           <span style={{ fontWeight: 900, fontSize: 18, color: "var(--pos-saffron-text)" }}>
             ₹{pageItems.reduce((s, o) => s + o.total, 0).toLocaleString("en-IN")}
