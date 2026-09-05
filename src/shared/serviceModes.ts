@@ -74,7 +74,7 @@ const DEFAULT_SERVICE_MODE_SEED: ReadonlyArray<ServiceMode> = [
     name: "Delivery",
     enabled: true,
     requiresTable: false,
-    requiresCustomer: true,
+    requiresCustomer: false,
     supportsOpenOrders: true,
     supportsKOT: true,
     immediateBilling: false,

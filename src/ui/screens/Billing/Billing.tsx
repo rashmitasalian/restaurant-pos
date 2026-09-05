@@ -78,6 +78,7 @@ import {
   resolveKitchenPrinterTarget,
   samePrinterTarget,
 } from "../../../shared/printerConfig";
+import { formatTableTileLabel } from "../../../shared/floorLayout";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -333,7 +334,7 @@ export default function Billing() {
   const [order, setOrder] = React.useState<any>(null);
   const [tableNum, setTableNum] = React.useState<number | null>(null);
   const [items, setItems] = React.useState<any[]>([]);
-  const [menuCategory, setMenuCategory] = React.useState("all");
+  const [menuCategory, setMenuCategory] = React.useState("favorites");
   const [categoryMoreOpen, setCategoryMoreOpen] = React.useState(false);
   const [qty, setQty] = React.useState(1);
   const [lastAddedId, setLastAddedId] = React.useState<string | null>(null);
@@ -377,6 +378,7 @@ export default function Billing() {
       string,
       Array<{
         id: number;
+        name?: string;
         status?: string;
         occupied?: boolean;
         count?: number;
@@ -475,6 +477,18 @@ export default function Billing() {
   const activeMode =
     findServiceModeById({ modes: serviceModes }, activeOrderType) ||
     findServiceModeById({ modes: getDefaultServiceModes() }, activeOrderType);
+  const activeTableLabel = React.useMemo(() => {
+    if (tableNum === null) {
+      return "";
+    }
+    for (const tables of Object.values(tablesByArea)) {
+      const match = tables.find((table) => table.id === tableNum);
+      if (match) {
+        return formatTableTileLabel(tableNum, match.name);
+      }
+    }
+    return formatTableTileLabel(tableNum);
+  }, [tableNum, tablesByArea]);
   const currentUserLabel =
     auth?.session?.displayName || auth?.session?.username || order?.createdBy || "";
   const totals = computeTotals(order, discountPercent, gstConfig);
@@ -637,6 +651,7 @@ export default function Billing() {
         string,
         Array<{
           id: number;
+          name?: string;
           status?: string;
           occupied?: boolean;
           count?: number;
@@ -657,6 +672,7 @@ export default function Billing() {
         const occupied = Boolean((table as { occupied?: boolean }).occupied) || count > 0;
         grouped[areaId].push({
           id: table.id,
+          name: table.name,
           status: table.status || "",
           occupied,
           count,
@@ -1191,7 +1207,6 @@ export default function Billing() {
   };
 
   const createDeliveryOrder = async () => {
-    const deliveryMode = findServiceModeById({ modes: serviceModes }, "delivery");
     const platform = normalizeText(newDeliveryPlatform);
     if (!platform || platform.toLowerCase() === "other") {
       showToast(validationMessage("delivery-platform-required"), "error");
@@ -1199,10 +1214,6 @@ export default function Billing() {
     }
     const customerName = normalizeText(newDeliveryName);
     const customerPhone = normalizePhone(newDeliveryPhone);
-    if (deliveryMode?.requiresCustomer && !customerName && !customerPhone) {
-      showToast("Customer name or phone is required for delivery", "error");
-      return;
-    }
     if (customerName && !isValidPersonName(customerName)) {
       showToast(validationMessage("customer-name-invalid"), "error");
       return;
@@ -2193,7 +2204,7 @@ export default function Billing() {
             <div>
               <div className={styles.headerTitle}>
                 {tableNum
-                  ? `Table ${tableNum}`
+                  ? activeTableLabel
                   : order && activeOrderType === "delivery"
                     ? `${order.meta?.platform || order.meta?.orderSource || "Delivery"}${order.meta?.code ? ` #${order.meta.code}` : ""}`
                     : order && !activeMode?.requiresTable
@@ -2447,6 +2458,7 @@ export default function Billing() {
         {confirmCancelOpen && order && (
           <ConfirmCancelModal
             tableNum={tableNum}
+            tableLabel={activeTableLabel || undefined}
             activeOrderType={activeOrderType}
             onClose={() => setConfirmCancelOpen(false)}
             onConfirm={handleConfirmCancel}
@@ -2509,9 +2521,7 @@ export default function Billing() {
             onCustomerNameChange={setNewDeliveryName}
             customerPhone={newDeliveryPhone}
             onCustomerPhoneChange={setNewDeliveryPhone}
-            requiresCustomer={Boolean(
-              findServiceModeById({ modes: serviceModes }, "delivery")?.requiresCustomer,
-            )}
+            requiresCustomer={false}
             onClose={() => {
               setNewDeliveryOpen(false);
               setNewDeliveryCode("");

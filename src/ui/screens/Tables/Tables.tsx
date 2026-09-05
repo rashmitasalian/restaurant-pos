@@ -12,6 +12,7 @@ import { SegmentedControl } from "../../components/ui/SegmentedControl";
 import { TableTile } from "../../components/ui/TableTile";
 import { formatKotAge } from "../../../shared/kotAge";
 import { tableKotAppearance } from "../../../shared/kot";
+import { formatTableTileLabel } from "../../../shared/floorLayout";
 
 type TableInfo = {
   id: number;
@@ -264,10 +265,7 @@ export default function Tables() {
                   const billPending = t.occupied && (t.status === "ready" || t.status === "held");
                   const elapsed = t.occupied && t.openedAt ? formatKotAge(t.openedAt) : "";
                   const seats = Number(t.seats) > 0 ? Number(t.seats) : null;
-                  const titleLabel =
-                    t.name && String(t.name).trim() && String(t.name).trim() !== `Table ${t.id}`
-                      ? String(t.name).trim()
-                      : String(t.id);
+                  const titleLabel = formatTableTileLabel(t.id, t.name);
                   const appearance = tableKotAppearance({
                     occupied: t.occupied,
                     unsentCount: t.unsentCount,

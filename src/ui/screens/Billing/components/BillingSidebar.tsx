@@ -9,9 +9,11 @@ import OrderRow from "./OrderRow";
 import ScrollableList from "./ScrollableList";
 import { TableTile } from "../../../components/ui/TableTile";
 import { tableKotAppearance } from "../../../../shared/kot";
+import { formatTableTileLabel } from "../../../../shared/floorLayout";
 
 interface TableInfo {
   id: number;
+  name?: string;
   status?: string;
   occupied?: boolean;
   count?: number;
@@ -120,6 +122,7 @@ export default function BillingSidebar({
                   <div className={styles.tableGridInner}>
                     {(tablesByArea[selectedAreaId] || []).map((info) => {
                       const t = info.id;
+                      const titleLabel = formatTableTileLabel(t, info.name);
                       const active = tableNum === t && activeOrderType === mode.id;
                       const occupied =
                         Boolean(info.occupied) || Number(info.count || 0) > 0;
@@ -140,7 +143,7 @@ export default function BillingSidebar({
                       return (
                         <TableTile
                           key={t}
-                          number={t}
+                          number={titleLabel}
                           state={appearance.state}
                           stateLabel={appearance.stateLabel}
                           active={active}
@@ -153,8 +156,8 @@ export default function BillingSidebar({
                           onClick={() => onLoadTable(t)}
                           aria-label={
                             occupied
-                              ? `Table ${t}, ${appearance.stateLabel}${info.seats ? `, ${info.seats} seats` : ""}, ${info.count || 0} items, ${formatCurrency(info.total || 0)}${elapsed ? `, open ${elapsed}` : ""}`
-                              : `Table ${t}, Available${info.seats ? `, ${info.seats} seats` : ""}`
+                              ? `Table ${titleLabel}, ${appearance.stateLabel}${info.seats ? `, ${info.seats} seats` : ""}, ${info.count || 0} items, ${formatCurrency(info.total || 0)}${elapsed ? `, open ${elapsed}` : ""}`
+                              : `Table ${titleLabel}, Available${info.seats ? `, ${info.seats} seats` : ""}`
                           }
                         />
                       );

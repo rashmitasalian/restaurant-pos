@@ -155,6 +155,22 @@ export function formatTableLabel(
   return trimmed || `Table ${id}`;
 }
 
+/** Compact tile label used on Tables / Billing grids (FF1, GF2) — falls back to bare id. */
+export function formatTableTileLabel(
+  tableId: number | null | undefined,
+  name?: string | null,
+): string {
+  if (tableId === null || tableId === undefined || !Number.isFinite(Number(tableId))) {
+    return "";
+  }
+  const id = Number(tableId);
+  const trimmed = String(name || "").trim();
+  if (trimmed && trimmed !== `Table ${id}`) {
+    return trimmed;
+  }
+  return String(id);
+}
+
 export const FLOOR_LAYOUT_LIMITS = {
   MAX_TOTAL_TABLES,
   MAX_AREA_TABLES,

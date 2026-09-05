@@ -2,6 +2,7 @@ import {
   buildAreaTableName,
   FLOOR_LAYOUT_LIMITS,
   formatTableLabel,
+  formatTableTileLabel,
   inferNamingFromTables,
   normalizeTablePrefix,
   planTablesFromAreas,
@@ -94,5 +95,12 @@ describe("floorLayout", () => {
     expect(formatTableLabel(5, "Table 5")).toBe("Table 5");
     expect(formatTableLabel(7, "")).toBe("Table 7");
     expect(formatTableLabel(null)).toBe("");
+  });
+
+  it("formats compact tile labels for floor grids", () => {
+    expect(formatTableTileLabel(1, "FF1")).toBe("FF1");
+    expect(formatTableTileLabel(3, "Table 3")).toBe("3");
+    expect(formatTableTileLabel(7, "")).toBe("7");
+    expect(formatTableTileLabel(null)).toBe("");
   });
 });

@@ -167,6 +167,7 @@ export function ConfirmPayModal({
 
 interface ConfirmCancelProps {
   tableNum: number | null;
+  tableLabel?: string;
   activeOrderType: string;
   onClose: () => void;
   onConfirm: (reason: string) => void;
@@ -175,6 +176,7 @@ interface ConfirmCancelProps {
 
 export function ConfirmCancelModal({
   tableNum,
+  tableLabel,
   activeOrderType,
   onClose,
   onConfirm,
@@ -184,7 +186,7 @@ export function ConfirmCancelModal({
   const [otherText, setOtherText] = React.useState("");
   const cleanReason = resolveCancelReason(preset, otherText);
   const targetLabel = tableNum
-    ? `Table ${tableNum}`
+    ? tableLabel || `Table ${tableNum}`
     : activeOrderType === "delivery"
       ? "this delivery order"
       : "this order";
