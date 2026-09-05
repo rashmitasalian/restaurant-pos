@@ -2,7 +2,11 @@
 
 ## Executive Summary
 
-RestoNiti is a professional desktop Point-of-Sale (POS) and operations platform for single-location restaurants. It operates offline with complete local data storage, enabling restaurants to run the floor (tables, billing, KOT), manage back-office work (grocery procurement, expenses, profitability), and handle people operations (staff roster, attendance, salary advances) without internet dependency. The system supports configurable service modes (dine-in, takeaway, delivery, self-service), thermal kitchen printing, permission-based staff access, comprehensive reporting, and administrative controls.
+RestoNiti is a professional desktop Point-of-Sale (POS) and operations platform for single-location restaurants. It operates offline with complete local data storage, enabling restaurants to run the floor (tables, billing, KOT), manage back-office work (grocery procurement, expenses, profitability), and handle people operations (staff roster, attendance, salary advances) without internet dependency.
+
+Alongside the desktop terminal, **Captain** is a phone-only waiter handheld served on the restaurant LAN by the POS **Local Gateway**. Captains open tables, add items, send KOTs, and void sent kitchen quantity. They do not settle bills or use Manage screens. The system supports configurable service modes (dine-in, takeaway, delivery, self-service), thermal kitchen printing, permission-based staff access, Owner Review for high-risk voids/discounts/cancellations, comprehensive reporting, and administrative controls.
+
+**Current version**: **0.5.6**
 
 ---
 
@@ -10,15 +14,18 @@ RestoNiti is a professional desktop Point-of-Sale (POS) and operations platform 
 
 ### What this application is
 
-A full-featured Electron-based desktop application designed specifically for independent restaurants. The app runs locally on a Windows, macOS, or Linux terminal with complete data autonomy through SQLite. Beyond core POS workflows, it includes a **Manage** workspace for grocery buying lists and purchases, operating expenses, menu editing, people management, reports, order history, audit logs, and system settings.
+A full-featured Electron-based desktop application designed specifically for independent restaurants. The app runs locally on a Windows, macOS, or Linux terminal with complete data autonomy through SQLite. Beyond core POS workflows, it includes a **Manage** workspace for grocery buying lists and purchases, operating expenses, menu editing, people management, reports, order history, Owner Review, audit logs, and system settings.
 
-**Target Use Case**: Single-location restaurants requiring complete operational control — floor service, kitchen printing, procurement, people ops, and financial visibility — without cloud dependency or internet requirements.
+**Captain** is a separate Vite entry (`src/captain/`) built into `dist/captain/` and served when Local Gateway is running. Staff sign in on a phone/browser on the same Wi‑Fi using a Captain account and a POS pairing code.
+
+**Target Use Case**: Single-location restaurants requiring complete operational control — floor service, kitchen printing, waiter handheld ordering, procurement, people ops, and financial visibility — without cloud dependency for day-to-day service.
 
 ### Core Architecture Philosophy
 
-- **Offline-first**: All data lives on the restaurant's own machine. No cloud sync, no internet required.
+- **Offline-first**: All data lives on the restaurant's own machine. No cloud sync required for POS operations.
 - **Secure**: Renderer (UI) is sandboxed; all sensitive operations (database, printing, auth) run in a protected Electron main process.
 - **Local authority**: SQLite database on the restaurant terminal is the single source of truth.
+- **LAN Captain**: Waiter phones talk to the same POS over Local Gateway (HTTP on the LAN). Sessions stay in memory on the POS.
 - **Thermal-print native**: Direct ESC/POS printing to kitchen and billing printers without OS print dialogs.
 - **Lazy-loaded UI**: Screen chunks load on demand with skeleton fallbacks; post-login prefetch reduces cold-start delay.
 
@@ -32,7 +39,7 @@ A full-featured Electron-based desktop application designed specifically for ind
 |---|---|---|
 | React | 18.2.0 | Component-based UI framework for responsive, interactive screens |
 | TypeScript | 5.9.3 | Type-safe JavaScript for catch errors at compile time |
-| Vite | 8.0.0 | Lightning-fast development and optimized production builds |
+| Vite | 8.0.0 | Lightning-fast development and optimized production builds; dual entries for desktop UI and Captain |
 | CSS Modules | Native | Scoped component styling without global conflicts |
 | Inter Font | 5.2.8 | Professional sans-serif typeface via @fontsource |
 | lucide-react | 1.28.x | Consistent icon set across all screens |
@@ -57,7 +64,7 @@ A full-featured Electron-based desktop application designed specifically for ind
 
 | Technology | Purpose |
 |---|---|
-| SQLite | Local relational database. Schema: users, orders, items, payments, audit logs, settings. Accessed via better-sqlite3 in Electron main process only. |
+| SQLite | Local relational database. Schema: users, orders, items, payments, audit logs, settings, grocery, expenses, `client_ops` (Captain idempotency). Accessed via better-sqlite3 in Electron main process only. |
 | Database Storage | `<Electron userData>/data/restaurant-pos.sqlite` — typically `C:\Users\<User>\AppData\Local\RestoNiti\userData\data\restaurant-pos.sqlite` on Windows |
 | WAL Journaling | Write-Ahead Logging for concurrent read/write safety |
 | Foreign Keys | Enabled for referential integrity |
@@ -72,8 +79,9 @@ A full-featured Electron-based desktop application designed specifically for ind
 | Context Isolation | `contextIsolation: true` prevents renderer from accessing Electron/Node APIs directly |
 | Scrypt | Industry-standard key derivation for password hashing (OWASP recommended) |
 | Session Tokens | Random in-memory tokens bound to renderer webContents ID, never shared across sessions |
+| Local Gateway | LAN HTTP server (default port **4747**) serving Captain UI, REST APIs, and SSE; pairing code gates login |
 
-**Security Model**: Renderer cannot read files, access database, or call printers. All persistent and system operations go through validated IPC handlers in the main process.
+**Security Model**: Renderer cannot read files, access database, or call printers. All persistent and system operations go through validated IPC handlers in the main process. Captain mutations are permission-checked on the gateway and recorded with idempotent `clientOpId`s.
 
 ### Build & Packaging
 
@@ -81,7 +89,7 @@ A full-featured Electron-based desktop application designed specifically for ind
 |---|---|---|
 | Electron Builder | 26.8.1 | Packaging for Windows NSIS installer, macOS DMG, Linux AppImage |
 | TypeScript Compiler | 5.9.3 | Compile main process from TypeScript to JavaScript |
-| Vite Build | 8.0.0 | Bundle and optimize React renderer for production |
+| Vite Build | 8.0.0 | Bundle and optimize React renderer + Captain for production |
 | Node Build Tools | MSVC/C++ | Visual Studio 2022 Build Tools required to rebuild native modules (better-sqlite3) for Electron |
 
 ### Testing & Code Quality
@@ -110,12 +118,14 @@ A full-featured Electron-based desktop application designed specifically for ind
 ### 1. AUTHENTICATION & USER MANAGEMENT
 
 #### Login System
-- **Permission-based roles**: Three desktop login roles (defined in `src/shared/permissions.ts`):
-  - **Admin**: Full access — all floor pages and every Manage section (Overview, Grocery, Expenses, Menu, People, Reports, History, Audit, Settings)
-  - **Manager**: Floor + operational Manage — tables, billing, KOT, customers, Overview, Grocery, Expenses, Menu, and People tabs (Attendance, Roster, Salary Advances); no Accounts, Reports, History, Audit, or Settings
+- **Permission-based roles** (defined in `src/shared/permissions.ts`):
+  - **Admin**: Full access — all floor pages and every Manage section (Overview, Grocery, Expenses, Menu, People, Reports, History, Review, Audit, Settings)
+  - **Manager**: Floor + operational Manage — tables, billing, KOT, customers, Overview, Grocery, Expenses, Menu, and People tabs (Attendance, Roster, Salary Advances); no Accounts, Reports, History, Review, Audit, or Settings
   - **Cashier**: Floor POS only — tables, billing, KOT queue, customers
+  - **Captain**: Phone-only waiter role — open table, add item, send KOT, void sent qty. **Blocked from desktop POS login** (`captain-phone-only`)
+- **Desktop login roles**: Admin, Manager, Cashier only (`DESKTOP_LOGIN_ROLES`)
 - **First-run setup**: When no users exist, a setup wizard creates the first admin account and displays one-time recovery codes
-- **Password security**: 
+- **Password security**:
   - Hashed with scrypt (OWASP Category A) in Electron main process
   - Never transmitted to renderer
   - Minimum requirements enforced (length, complexity)
@@ -124,20 +134,22 @@ A full-featured Electron-based desktop application designed specifically for ind
   - Each token bound to renderer webContents ID (unique per window)
   - Token stored in renderer localStorage for reuse
   - Every IPC call revalidates: token, user, role, password change status
+  - Idle auto-logout (about 30 minutes of inactivity)
   - Automatic logout on app close (session cleared)
 
 #### User Management (Admin only — Manage → People → Accounts)
 - Create, edit, deactivate users
-- Assign roles (admin / manager / cashier)
+- Assign roles (admin / manager / cashier / captain)
 - Force password changes on next login
 - Admin recovery codes for account recovery (regenerate from Settings)
 - Link staff roster records to POS login accounts
+- Captain accounts labeled for phone app access
 
 #### Permission Enforcement (IPC Level)
 Every IPC handler double-checks:
 1. Valid session token
 2. User exists and is active
-3. User has required role
+3. User has required role / capability
 4. Not in password-change state
 
 **Example**: `deleteUser()` IPC requires `admin` role; cashier calls are rejected at IPC boundary.
@@ -169,7 +181,7 @@ When table-based modes are disabled, the **Tables** nav item is hidden automatic
 - Items tracked per line (item ID, quantity, price, special notes)
 - KOT sent to kitchen in batches
 - Discount applied at order level (percentage)
-- Cash, card, UPI, or other payment at counter
+- Cash, card, UPI, voucher, online, other, or split payment at counter
 
 **Takeaway Orders**
 - Named customer (name stored in order metadata)
@@ -198,7 +210,7 @@ When table-based modes are disabled, the **Tables** nav item is hidden automatic
            └─ Review totals (item subtotal, tax, discount, final total)
                └─ Send KOT to kitchen (mark items "pending" → "sent")
                    └─ Kitchen prints and marks complete
-                       └─ Process payment (cash/card)
+                       └─ Process payment (cash/card/UPI/voucher/split/…)
                            └─ Generate invoice & receipt
                                └─ Order marked "paid"
                                    └─ Historical record for reports
@@ -209,17 +221,36 @@ When table-based modes are disabled, the **Tables** nav item is hidden automatic
 - Each order line (menu item) has:
   - Base quantity ordered
   - `kot_printed_qty`: How much sent to kitchen
-  - `kot_status`: pending/sent/printed/failed
+  - Order-level `kot_status`: pending / sent / printed / failed
 - **Partial KOT**: If cashier increases pizza qty from 2→3 after KOT sent, only the delta (1) becomes pending
 - **KOT Retry**: Failed print jobs queued; retry updates `kot_printed_qty` on success
+- **Void sent qty**: Reducing below already-printed qty requires a void reason and prints a Void KOT (desktop Billing and Captain)
 
 ---
 
-### 3. KITCHEN ORDER TICKET (KOT) PRINTING
+### 3. TABLES & FLOOR STATUS
+
+Shared mapping (`tableKotAppearance` in `src/shared/kot.ts`) drives desktop Tables, Billing sidebar, and Captain Floor:
+
+| Status | Meaning | Color cue |
+|---|---|---|
+| **Available** | No open order with items | Grey |
+| **Send KOT** | Occupied and kitchen does not yet have everything (unsent qty, or never sent) | Saffron / attention |
+| **KOT sent** | Occupied and all line qty has been printed to kitchen | Teal / occupied |
+| **Pending** | Bill-ready (`ready` / `held`) **after** KOT is fully sent — cashier pay signal | Amber (desktop billing) |
+
+Rules:
+- A table is **occupied** only when it has an open order **and** `item_count > 0`. Empty open orders look Available.
+- Unsent KOT wins over bill-ready Pending.
+- Configured table names (e.g. FF1, G1) display via `formatTableLabel`; otherwise `Table N`.
+
+---
+
+### 4. KITCHEN ORDER TICKET (KOT) PRINTING
 
 #### KOT Workflow
-1. Cashier selects items awaiting kitchen
-2. Clicks "Send to Kitchen"
+1. Cashier or Captain selects items awaiting kitchen
+2. Clicks **Send KOT** / **Print KOT** (preview confirm on both desktop and Captain)
 3. App builds ESC/POS print buffer with:
    - Restaurant name
    - Order number and type (Table #X / Takeaway / Delivery)
@@ -229,6 +260,17 @@ When table-based modes are disabled, the **Tables** nav item is hidden automatic
 4. Sends to configured kitchen printer (IP or Windows printer name)
 5. Status updated: `pending` → `sent`
 6. If print fails, queued in `print_jobs` table for retry
+
+#### KOT Queue membership (desktop + Captain)
+
+A row belongs in **KOT Queue** only when the kitchen already has a ticket:
+
+- `sentCount > 0`, **or**
+- `kotStatus` is `sent` / `printed` / `failed`
+
+**Never-sent** table tickets (items added, nothing printed) stay on **Tables / Billing / Captain Floor** as **Send KOT**. They are not “in the KOT queue” until the first successful send.
+
+Shared helper: `isKotQueueTicket()` in `src/shared/kot.ts`.
 
 #### Print Targets
 - **Network Printer (TCP/IP)**: Sends raw ESC/POS bytes to printer IP on port 9100
@@ -246,24 +288,27 @@ Print lines use structured commands (not plain text):
 
 ---
 
-### 4. BILLING & PAYMENTS
+### 5. BILLING & PAYMENTS
 
 #### Billing Screen
 - Real-time totals: item subtotal + applied discount + tax (GST if enabled)
-- Quick-add favorites (top 10 items marked as favorite)
+- Quick-add favorites and category chips (with overflow **More**)
 - Manual item search by name/category
-- Quantity adjustment per item
+- Quantity adjustment per item; variants before add when configured
 - Discount entry (percentage-based)
 - GST display (CGST/SGST if enabled)
+- Table rail uses the same Available / Send KOT / KOT sent / Pending mapping
+- Keyboard shortcuts for common cashier actions
 
 #### Payment Processing
 **Methods Supported**:
 - Cash
 - Card (store reference / txn ID)
 - UPI
+- Voucher
 - Online
 - Other
-- Partial payments (split payment across multiple methods)
+- Split payment across multiple methods
 
 **Payment Flow**:
 1. Cashier reviews order total
@@ -293,7 +338,47 @@ Print lines use structured commands (not plain text):
 
 ---
 
-### 5. GST (GOODS & SERVICES TAX) COMPLIANCE
+### 6. CAPTAIN (WAITER HANDHELD)
+
+Detail: `docs/CAPTAIN_APP.md`. Summary:
+
+| Capability | Permission |
+|---|---|
+| Open / resume table | `order:open` |
+| Add items | `order:add-item` |
+| Send KOT | `order:send-kot` |
+| Void / reduce sent qty | `order:void-item` |
+
+**Explicitly not on Captain**: pay, cancel paid orders, Manage, Customers, Reports, Settings.
+
+#### Screens
+- **Login**: Username, password, POS pairing code (stored after first success as “Paired with POS”)
+- **Tables**: Greeting, area picker, occupancy, status legend (Available / Send KOT / KOT sent), shared `TableTile`
+- **Menu session**: Search, Favorites / All / named categories / More, list rows with **+** or − qty +, Review dock
+- **Order sheet**: Unsent vs KOT sent; Send KOT preview → Print KOT; void sheet → Print Void KOT
+- **KOTs**: Same membership rule as desktop; filters All / Send KOT / KOT sent; badge counts tickets with unsent lines
+- **Me**: Profile, connection/retry, hotel/device/pairing, sign out
+
+#### Runtime
+- Served by Local Gateway at `http://<lan-ip>:4747/`
+- HTTP + SSE; refresh on phone focus / visibility
+- LAN sessions **in memory** on POS (gateway restart → re-login)
+- Idempotent `clientOpId` per gesture (`client_ops` table)
+- Manifest + icons for iOS Add to Home Screen; **no** service worker, HTTPS, or Capacitor in this wave
+
+---
+
+### 7. LOCAL GATEWAY
+
+- Auto-starts with Electron main process (default port **4747**, overridable via `POS_GATEWAY_PORT`)
+- Serves Captain static UI + REST + SSE (`electron/gateway/localGateway.ts`)
+- Desktop header **Gateway chip**: live status, client count, pairing code, Captain URL tooltip
+- Pairing code required for Captain login; can be rotated via IPC
+- Domain events (`orders-changed`, etc.) bridge desktop UI and Captain SSE
+
+---
+
+### 8. GST (GOODS & SERVICES TAX) COMPLIANCE
 
 #### GST Configuration (Admin only)
 - **Enable/disable** GST on all orders
@@ -321,7 +406,7 @@ When GST enabled, receipts include:
 
 ---
 
-### 6. CUSTOMER MANAGEMENT
+### 9. CUSTOMER MANAGEMENT
 
 #### Customer Records
 - Store customer info: name, phone, email
@@ -337,7 +422,7 @@ When GST enabled, receipts include:
 
 ---
 
-### 7. STAFF & PEOPLE MANAGEMENT
+### 10. STAFF & PEOPLE MANAGEMENT
 
 Staff roster and HR-style workflows live under **Manage → People** (permission-gated by tab).
 
@@ -368,11 +453,11 @@ Staff roster and HR-style workflows live under **Manage → People** (permission
 
 #### Accounts (Manage → People → Accounts — Admin only)
 - POS user accounts (see Authentication section)
-- Role assignment and password management
+- Role assignment including Captain phone accounts
 
 ---
 
-### 8. SETTINGS & CONFIGURATION
+### 11. SETTINGS & CONFIGURATION
 
 Settings are organized under **Manage → Settings** with four tabs:
 
@@ -414,7 +499,7 @@ Settings are organized under **Manage → Settings** with four tabs:
 
 ---
 
-### 9. REPORTS & ANALYTICS (Admin only)
+### 12. REPORTS & ANALYTICS (Admin only)
 
 Reports are available from the top nav (**Reports**) or **Manage → Reports**. Two tabs:
 
@@ -425,9 +510,9 @@ Reports are available from the top nav (**Reports**) or **Manage → Reports**. 
   - Total revenue (sum of paid order totals)
   - Subtotal, discount total, GST collected
   - Average order value
-  - Payment method breakdown (cash, UPI, card, online, other)
+  - Payment method breakdown (cash, UPI, card, voucher, online, other, split)
 - **Product sales**: Category and item breakdown with charts; sortable item table with search and pagination
-- **Export**: Print-friendly HTML export of sales summary
+- **Export**: PDF export via Electron (`exportReportPdf`)
 
 #### Profitability Report
 - Revenue vs grocery purchases (food cost proxy) for the selected period
@@ -444,7 +529,20 @@ Reports are available from the top nav (**Reports**) or **Manage → Reports**. 
 
 ---
 
-### 10. AUDIT & COMPLIANCE
+### 13. OWNER REVIEW (Admin only)
+
+**Manage → Review** (`#manage-review`) surfaces high-risk floor activity for owner/manager review:
+
+- Rules include item voids, discounts applied, and cancellations after KOT
+- Staff activity summary
+- Order timeline drawer
+- Date-range filters
+
+Permission: `manage:review` (admin).
+
+---
+
+### 14. AUDIT & COMPLIANCE
 
 #### Audit Log
 - Captures every significant action:
@@ -475,7 +573,7 @@ Reports are available from the top nav (**Reports**) or **Manage → Reports**. 
 
 ---
 
-### 11. GROCERY & PROCUREMENT (Admin / Manager)
+### 15. GROCERY & PROCUREMENT (Admin / Manager)
 
 Manage → Grocery covers back-of-house purchasing workflows.
 
@@ -505,7 +603,7 @@ Manage → Grocery covers back-of-house purchasing workflows.
 
 ---
 
-### 12. EXPENSES (Admin / Manager)
+### 16. EXPENSES (Admin / Manager)
 
 Manage → Expenses tracks operating costs outside of grocery purchases.
 
@@ -518,7 +616,7 @@ Manage → Expenses tracks operating costs outside of grocery purchases.
 
 ---
 
-### 13. BACKUP & DISASTER RECOVERY
+### 17. BACKUP & DISASTER RECOVERY
 
 #### Backup Creation (Admin only)
 - One-click backup from Settings
@@ -543,7 +641,7 @@ Manage → Expenses tracks operating costs outside of grocery purchases.
 
 ---
 
-### 14. PRODUCTION UPDATES
+### 18. PRODUCTION UPDATES
 
 #### Update Mechanism
 1. Admin visits Settings → About, clicks "Check for Updates"
@@ -566,8 +664,8 @@ setx /M POS_UPDATE_MANIFEST_URL "https://updates.example.com/restaurant-pos/mani
 
 #### Version Management
 - Semantic versioning (major.minor.patch)
-- Current: **0.4.0**
-- Installer named: `RestoNiti Setup 0.4.0.exe`
+- Current: **0.5.6**
+- Installer named: `RestoNiti Setup 0.5.6.exe`
 
 ---
 
@@ -577,7 +675,7 @@ setx /M POS_UPDATE_MANIFEST_URL "https://updates.example.com/restaurant-pos/mani
 
 | Table | Purpose | Key Fields |
 |---|---|---|
-| `users` | POS system users (admins, managers, cashiers) | id, username, password_hash (scrypt), role, active, display_name |
+| `users` | POS system users (admins, managers, cashiers, captains) | id, username, password_hash (scrypt), role, active, display_name |
 | `admin_recovery_codes` | One-time admin recovery codes | code_hash, used_at |
 | `seating_areas` | Floor sections (e.g. AC, Garden) | id, name, sort_order |
 | `tables` | Dine-in tables | id, number, area_id, seats, status |
@@ -589,7 +687,7 @@ setx /M POS_UPDATE_MANIFEST_URL "https://updates.example.com/restaurant-pos/mani
 | `attendance_records` | Daily attendance per staff | staff_id, date, status, shift_id, is_late, overtime_minutes, remarks |
 | `salary_advances` | Staff salary advances | staff_id, amount_paise, advance_date, voided_at |
 | `orders` | Customer orders | id, orderType, tableId, status, total, discount, paid_at, invoice_number |
-| `order_lines` | Items in each order | id, order_id, item_id, quantity, price, kot_printed_qty, kot_status |
+| `order_lines` | Items in each order | id, order_id, item_id, quantity, price, kot_printed_qty |
 | `payments` | Payment records (separate from orders) | id, order_id, method, amount_paise, received_at, txn_ref |
 | `settings` | Key-value config (GST, printers, service modes, etc.) | key, value_json, updatedAt |
 | `audit_logs` | Action history | id, timestamp, user_id, action, entity_type, entity_id, details_json |
@@ -597,6 +695,7 @@ setx /M POS_UPDATE_MANIFEST_URL "https://updates.example.com/restaurant-pos/mani
 | `audit_archives` | Archived audit log batches | id, archived_at, payload |
 | `print_jobs` | Failed print queue (for retry) | id, order_id, printer, status, error_msg, createdAt |
 | `backup_records` | Backup history | id, filename, size, createdAt, restoredAt |
+| `client_ops` | Captain/gateway idempotency replay store | client_op_id, result payload |
 | `grocery_items` | Procurement item catalog | id, name, category, default_unit |
 | `grocery_lists` | Buying lists | id, title, list_date, status, type |
 | `grocery_list_lines` | Lines on a buying list | list_id, grocery_item_id, qty, unit, line_status |
@@ -608,7 +707,7 @@ setx /M POS_UPDATE_MANIFEST_URL "https://updates.example.com/restaurant-pos/mani
 | `expense_categories` | Operating expense categories | id, name, is_system |
 | `expenses` | Operating expenses | category_id, amount_paise, expense_date, description, deleted_at |
 
-**Note**: All currency stored as paise (100 paise = 1 rupee) to avoid floating-point errors. Sessions are held in-memory in the Electron main process (not persisted in SQLite).
+**Note**: All currency stored as paise (100 paise = 1 rupee) to avoid floating-point errors. Desktop and LAN sessions are held in-memory in the Electron main process (not persisted in SQLite).
 
 ---
 
@@ -632,14 +731,21 @@ setx /M POS_UPDATE_MANIFEST_URL "https://updates.example.com/restaurant-pos/mani
    - Scrypt hashing (OWASP-recommended, slow iteration)
    - Session tokens tied to webContents ID
    - No password stored in renderer
-   - Logout on app exit
+   - Idle timeout + logout on app exit
+   - Captain accounts cannot log into desktop POS
 
-4. **Data Integrity**
+4. **Local Gateway**
+   - Pairing code required for Captain login
+   - Permission checks on mutating routes
+   - Idempotent `client_ops` for retry-safe gestures
+   - LAN HTTP only in this wave (no gateway TLS / service worker)
+
+5. **Data Integrity**
    - SQLite foreign keys enabled
    - Transactions for multi-step operations
    - Audit log immutable after creation
 
-5. **Update Security**
+6. **Update Security**
    - SHA256 hash verification of installers
    - HTTPS manifest fetch
    - Rollback installer cached before update
@@ -651,9 +757,10 @@ setx /M POS_UPDATE_MANIFEST_URL "https://updates.example.com/restaurant-pos/mani
 ### Application Shell
 
 After login, the app shows a persistent header with:
-- **Main navigation** (role-filtered): Tables, Billing, KOT Queue, Reports (reports-only roles), Customers, Manage
+- **Main navigation** (role-filtered): Tables, Billing, KOT Queue, Reports (admin), Customers, Manage
 - **Clock** and **user menu** (profile dialog, logout)
 - **Branding** from Settings (restaurant name shown in user menu)
+- **Gateway chip** when Local Gateway is running (pairing code, client count, Captain URL)
 
 Screens are lazy-loaded with skeleton loaders. Post-login prefetch warms common screen chunks for faster first navigation.
 
@@ -670,11 +777,11 @@ Screens are lazy-loaded with skeleton loaders. Post-login prefetch warms common 
 
 | Page | Route hash | Who | Purpose |
 |---|---|---|---|
-| **Tables** | `#tables` | Cashier+ (if table mode enabled) | Seating-area table grid; select table → opens Billing |
-| **Billing** | `#billing` | Cashier+ | Primary order screen: service mode tabs, item search, favorites, cart, discount, payment, KOT |
-| **KOT Queue** | `#kot` | Cashier+ | Pending kitchen tickets; retry failed prints |
+| **Tables** | `#tables` | Cashier+ (if table mode enabled) | Seating-area grid; Available / Send KOT / KOT sent; select → Billing |
+| **Billing** | `#billing` | Cashier+ | Primary order screen: service mode tabs, search, favorites, cart, discount, payment, KOT |
+| **KOT Queue** | `#kot` | Cashier+ | Kitchen tickets already sent/failed/mixed; print / mark done |
 | **Customers** | `#customers` | Cashier+ | Search, create, edit customers; virtualized list |
-| **Reports** | `#reports` | Admin (or reports-only role) | Sales and profitability reports |
+| **Reports** | `#reports` | Admin | Sales and profitability reports (PDF export) |
 | **Manage** | `#manage-*` | Admin / Manager | Back-office workspace (see below) |
 
 **Split view**: On Tables page, billing can open inline beside the table grid.
@@ -692,6 +799,7 @@ Opened via **Manage** nav or deep-link hashes. Sidebar groups:
 | **People** | `#manage-people-*` | Permission-gated | Attendance (Daily / History), Roster, Salary Advances, Accounts |
 | **Reports** | `#reports` | Admin | Same as top-nav Reports |
 | **History** | `#manage-history` | Admin | Paid order browser, reprint, bulk delete |
+| **Review** | `#manage-review` | Admin | Owner Review of voids, discounts, post-KOT cancellations |
 | **Audit** | `#manage-audit` | Admin | Searchable audit log viewer |
 | **Settings** | `#manage-settings` | Admin | Identity, Hardware, Operations, Retention |
 
@@ -703,15 +811,29 @@ Opened via **Manage** nav or deep-link hashes. Sidebar groups:
 
 **Command palette**: Keyboard shortcut in Manage for quick navigation between sections.
 
+### Captain Screens (phone / LAN)
+
+| Screen | Purpose |
+|---|---|
+| **Login** | Captain credentials + pairing code |
+| **Tables** | Floor grid with shared status model |
+| **Menu** | Table session: search, categories, add items, Review dock |
+| **KOTs** | Kitchen attention list (same membership as desktop) |
+| **Me** | Profile, connection, sign out |
+
 ### Role → Page Access Summary
 
-| Capability | Admin | Manager | Cashier |
-|---|:---:|:---:|:---:|
-| Tables, Billing, KOT, Customers | ✓ | ✓ | ✓ |
-| Manage → Overview, Grocery, Expenses, Menu | ✓ | ✓ | — |
-| Manage → People (Attendance, Roster, Advances) | ✓ | ✓ | — |
-| Manage → People → Accounts | ✓ | — | — |
-| Reports, History, Audit, Settings | ✓ | — | — |
+| Capability | Admin | Manager | Cashier | Captain |
+|---|:---:|:---:|:---:|:---:|
+| Desktop login | ✓ | ✓ | ✓ | — |
+| Tables, Billing, KOT, Customers | ✓ | ✓ | ✓ | — (phone Tables/Menu/KOTs only) |
+| Manage → Overview, Grocery, Expenses, Menu | ✓ | ✓ | — | — |
+| Manage → People (Attendance, Roster, Advances) | ✓ | ✓ | — | — |
+| Manage → People → Accounts | ✓ | — | — | — |
+| Reports, History, Review, Audit, Settings | ✓ | — | — | — |
+| Open table / add item / send KOT / void sent | ✓* | ✓* | ✓* | ✓ (phone) |
+
+\*Via desktop Billing/KOT flows with full cashier capabilities including pay/cancel where permitted.
 
 ---
 
@@ -723,7 +845,7 @@ npm install                 # Install dependencies
 npm run start              # Start renderer + Electron in dev mode
 npm run lint              # Check code quality
 npm test                  # Run Jest tests
-npm run build:renderer    # Build React only (Vite)
+npm run build:renderer    # Build React + Captain (Vite)
 npm run build:electron    # Build Electron main + native modules
 npm run build             # Full clean build
 npm run perf:seed         # Seed performance test database
@@ -734,34 +856,38 @@ npm run perf:all          # Seed + app + UI benchmarks
 
 ### Production Deployment
 1. **Build machine**: Windows with Node.js 22.x, Visual Studio 2022 Build Tools (C++)
-2. **Build**: `npm run build` → `release/RestoNiti Setup 0.4.0.exe`
+2. **Build**: `npm run build` → `release/RestoNiti Setup 0.5.6.exe`
 3. **Update manifest**: Publish `.exe` and manifest.json to HTTPS server
 4. **Install on restaurant machine**: Run `.exe` installer
 5. **Configure**: Set `POS_UPDATE_MANIFEST_URL` environment variable
 6. **Update**: Admin triggers from Settings; app auto-downloads and installs
+7. **Captain**: Ensure Local Gateway is running; phones on same Wi‑Fi open the gateway URL
 
 ---
 
 ## PART 8: BUSINESS VALUE & DIFFERENTIATION
 
 ### Key Strengths
-1. **Offline-first**: No internet required; restaurant controls all data
+1. **Offline-first**: No internet required for day-to-day POS; restaurant controls all data
 2. **Single-point authority**: One SQLite database; no cloud sync conflicts
 3. **Thermal print native**: Direct ESC/POS without OS dialogs
-4. **Permission-based security**: Three roles, IPC-enforced, audit trails, scrypt passwords
-5. **GST-ready**: Full tax compliance for Indian restaurants
-6. **Operations beyond POS**: Grocery procurement, expenses, profitability, attendance, salary advances
-7. **Production-ready**: Update mechanism, backup/restore, audit logs, diagnostics export
-8. **Performance tooling**: Seed and stress-test scripts (`docs/REPORT_PERFORMANCE_TESTING.md`)
+4. **Permission-based security**: Four roles (desktop three + Captain phone), IPC-enforced, audit trails, scrypt passwords
+5. **Captain handheld**: LAN waiter ordering without giving phones bill settlement
+6. **Clear floor language**: Available / Send KOT / KOT sent shared across desktop and Captain
+7. **GST-ready**: Full tax compliance for Indian restaurants
+8. **Operations beyond POS**: Grocery procurement, expenses, profitability, attendance, salary advances, Owner Review
+9. **Production-ready**: Update mechanism, backup/restore, audit logs, diagnostics export
+10. **Performance tooling**: Seed and stress-test scripts (`docs/REPORT_PERFORMANCE_TESTING.md`)
 
 ### What's NOT Included (Future)
 - Multi-branch / multi-outlet sync
 - Online ordering API or customer-facing web ordering
 - Real-time inventory depletion tied to menu sales (grocery procurement is purchase-based, not stock-tracked)
-- Waiter tablet app / captain handheld (desktop roles only today)
 - Cloud sync or remote owner dashboard
 - POS API for third-party integrations
 - Full payroll processing (attendance and advances only)
+- Captain: billing/settle, HTTPS gateway, service worker / Capacitor, offline mutation queue
+- Guest count, item notes, food photos on Captain
 
 ---
 
@@ -769,21 +895,25 @@ npm run perf:all          # Seed + app + UI benchmarks
 
 ### Immediate Readiness
 ✅ Single-location restaurant operations  
-✅ Cash, card, UPI, and online payments  
-✅ Kitchen printing  
+✅ Cash, card, UPI, voucher, online, and split payments  
+✅ Kitchen printing with partial/delta KOT and void KOT  
+✅ Captain phone waiter app over Local Gateway  
+✅ Shared table statuses and consistent KOT queue membership  
 ✅ GST invoicing  
 ✅ Grocery buying lists and purchase tracking  
 ✅ Operating expenses and profitability estimates  
 ✅ Staff roster, attendance, and salary advances  
+✅ Owner Review for high-risk order changes  
 ✅ Audit & compliance  
 
 ### Phase 2 Considerations
 - Multi-branch sync with local authority
-- Waiter tablet app and table-side ordering
 - Delivery platform API integration
 - Owner dashboard (read-only remote reports)
 - Real-time inventory / recipe costing tied to sales
 - Automated payroll from attendance data
+- Captain: HTTPS / installable PWA or Capacitor wrap after restaurant testing
+- Durable LAN sessions across POS restart (product decision)
 
 ---
 
@@ -795,6 +925,7 @@ npm run perf:all          # Seed + app + UI benchmarks
 - `docs/DEPLOYMENT_AND_UPDATE_RUNBOOK.md` — Combined deployment guide
 - `docs/PRODUCTION_READINESS.md` — Pre-launch checklist
 - `docs/ONBOARDING.md` — Developer onboarding and repo map
+- `docs/CAPTAIN_APP.md` — Captain handheld work overview and how to try it
 - `docs/REPORT_PERFORMANCE_TESTING.md` — Performance seeding and stress-test harness
 - `docs/design-system.md` — UI tokens, components, and RestoNiti 2026 design rules
 - `docs/SECURITY_PENTEST_REPORT.md` — Security assessment notes
@@ -804,6 +935,7 @@ npm run perf:all          # Seed + app + UI benchmarks
 - Update failures: Rollback to previous version from About screen
 - Database corruption: Restore from backup
 - Performance: Archive old audit logs
+- Captain login: Confirm Local Gateway chip is live, same Wi‑Fi, correct pairing code
 
 ### Contact & Support
 For deployment, updates, or custom feature requirements, refer to project maintainers.
@@ -817,49 +949,53 @@ For deployment, updates, or custom feature requirements, refer to project mainta
 **Floor (POS)**
 - Role-based login with admin, manager, and cashier access
 - Configurable service modes: dine-in, self-service, takeaway, delivery
-- Table grid with seating areas; billing with menu variants, favorites, discounts, GST
-- KOT workflow with partial/incremental printing and retry queue
-- Payments: cash, card, UPI, online, other; split payments; invoice generation
+- Table grid with Available / Send KOT / KOT sent; billing with menu variants, favorites, discounts, GST
+- KOT workflow with partial/incremental printing, void KOT, retry queue
+- KOT Queue shows only tickets kitchen already has
+- Payments: cash, card, UPI, voucher, online, other, split; invoice generation
 - Customer directory with search and order linking
+
+**Captain (phone)**
+- LAN waiter app: Tables → Menu → Review → Send KOT / Void KOT
+- KOTs tab + Me; pairing code; no pay/cancel/Manage
 
 **Back office (Manage)**
 - Grocery buying lists, purchases, vendors, and item catalog
 - Operating expenses by category
 - Menu and category editor with item variants
 - Staff roster, daily attendance, attendance history export, salary advances
-- Sales and profitability reports; paid order history with reprint
-- Audit log with full-text search; settings, backup, updates, diagnostics
+- Sales and profitability reports (PDF); paid order history with reprint
+- Owner Review; audit log with full-text search; settings, backup, updates, diagnostics
 
 **Architecture**
 - Offline-first Electron + React + SQLite (`better-sqlite3`)
 - Sandboxed renderer; all persistence and OS features via `window.pos` IPC bridge
-- Main process owns database, printing, backup, restore, auth, and updates
+- Main process owns database, printing, backup, restore, auth, updates, and Local Gateway
+- Captain served from `dist/captain/` on LAN port 4747
 
 ### Key directories
 
 | Path | Purpose |
 |---|---|
-| `electron/` | Main process: SQLite, IPC, printing, backups, services |
+| `electron/` | Main process: SQLite, IPC, printing, backups, services, gateway |
 | `electron/main.ts` | App bootstrap, windows, security, IPC wiring |
 | `electron/db/sqlite.ts` | Schema, migrations, backup logic |
 | `electron/services/posService.ts` | Core business logic |
+| `electron/gateway/localGateway.ts` | LAN HTTP/SSE + Captain static hosting |
 | `electron/ipc/posIpc.ts` | IPC handler definitions |
 | `src/ui/` | React screens, components, theme, hooks |
-| `src/ui/screens/` | Page-level screens (Billing, Manager, Attendance, Grocery, …) |
+| `src/ui/screens/` | Page-level screens (Billing, Manager, Attendance, Grocery, Review, …) |
+| `src/captain/` | Captain phone app entry, screens, sheets, styles |
 | `src/app/db/posRepository.ts` | Renderer facade over `window.pos` |
-| `src/shared/` | DTOs, permissions, GST, service modes, validation |
+| `src/shared/` | DTOs, permissions, GST, service modes, KOT helpers, validation |
 | `src/config/roles.ts` | Role labels and page mappings |
 | `docs/` | Product and operational documentation |
-| `scripts/` | Build helpers, performance harness (`perf-*.cjs`) |
+| `scripts/` | Build helpers, performance harness (`perf-*.cjs`), demo seed |
 | `release/` | Packaged installer outputs |
 
 ### Related docs
 
 - **Developers**: Start with `docs/ONBOARDING.md` and `docs/design-system.md`
+- **Captain**: See `docs/CAPTAIN_APP.md`
 - **Performance**: See `docs/REPORT_PERFORMANCE_TESTING.md`
 - **Deploy**: See `docs/FIRST_TIME_INSTALLATION_RUNBOOK.md` and `docs/PRODUCTION_UPDATE_RUNBOOK.md`
-
-
-5D07-413C-1765-EEFF-E224-DF51
-F5AD-F398-4FDC-EFFC-7258-2605
-FBAC-94DD-959E-B1D7-E923-5755
