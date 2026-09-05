@@ -1,14 +1,14 @@
 {
-  "version": "0.5.6",
-  "installerUrl": "https://github.com/rashmitasalian/restaurant-pos/releases/download/v0.5.6/RestoNiti.Setup.0.5.6.exe",
-  "sha256": "B273ECB4A2F5E136A8F75B7D521141BADFE3113007369F7B35BC2E0856A40495",
-  "rollbackInstallerUrl": "https://github.com/rashmitasalian/restaurant-pos/releases/download/v0.3.0/RestoNiti.Setup.0.3.0.exe",
-  "rollbackSha256": "053479257e87b3fd51eee1711e2d8031f8ed4f93c85517ee5f02934449ff85b1",
-  "installerSizeBytes": 112293336,
-  "rollbackInstallerSizeBytes": 109437713,
+  "version": "0.6.0",
+  "installerUrl": "https://github.com/rashmitasalian/restaurant-pos/releases/download/v0.6.0/RestoNiti.Setup.0.6.0.exe",
+  "sha256": "8A820F9010A962193A28C81855ACBA3B4AF0ED6537CB6C7F1F4BF0B0ECB935DB",
+  "rollbackInstallerUrl": "https://github.com/rashmitasalian/restaurant-pos/releases/download/v0.5.6/RestoNiti.Setup.0.5.6.exe",
+  "rollbackSha256": "B273ECB4A2F5E136A8F75B7D521141BADFE3113007369F7B35BC2E0856A40495",
+  "installerSizeBytes": 112649576,
+  "rollbackInstallerSizeBytes": 112293336,
   "notes": [
-    "Restored Expenses and Reports screen styles.",
-    "Fixed blank login screen after update.",
-    "Fixed database upgrade crash when updating from 0.4.x."
+    "Created Captain App",
+    "QR menu feature",
+    "Bug fixes and improvements"
   ]
 }
