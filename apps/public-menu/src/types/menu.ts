@@ -28,6 +28,7 @@ export interface PublicMenuItem {
   available: boolean;
   vegetarian?: boolean;
   spicy?: boolean;
+  imageUrl?: string;
   variants?: MenuVariant[];
 }
 

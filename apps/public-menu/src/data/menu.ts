@@ -1,4 +1,51 @@
-import type { RestaurantMenu } from "../types/menu";
+import type { PublicMenuItem, RestaurantMenu } from "../types/menu";
+
+/** Demo thumbnails — only verified Unsplash IDs (HEAD 200). */
+function thumb(photoId: string): string {
+  return `https://images.unsplash.com/${photoId}?auto=format&fit=crop&w=160&h=160&q=60`;
+}
+
+const DEMO_IMAGES: Record<string, string> = {
+  "paneer-tikka": thumb("photo-1631452180519-c014fe946bc7"),
+  "chicken-tikka": thumb("photo-1555939594-58d7cb561ad1"),
+  "veg-spring-rolls": thumb("photo-1529042410759-befb1204b468"),
+  "fish-amritsari": thumb("photo-1519708227418-c8fd9a32b7a2"),
+  "hara-bhara-kebab": thumb("photo-1601050690597-df0568f70950"),
+  "tomato-basil-soup": thumb("photo-1547592166-23ac45744acd"),
+  "sweet-corn-soup": thumb("photo-1540189549336-e6e99c3679fe"),
+  "chicken-clear-soup": thumb("photo-1476224203421-9ac39bcb3327"),
+  "manchow-soup": thumb("photo-1582878826629-29b7ad1cdc43"),
+  "butter-chicken": thumb("photo-1585937421612-70a008356fbe"),
+  "paneer-butter-masala": thumb("photo-1631452180519-c014fe946bc7"),
+  "dal-tadka": thumb("photo-1546833999-b9f581a1996d"),
+  "kadai-chicken": thumb("photo-1628294896516-344152572ee8"),
+  "palak-paneer": thumb("photo-1589647363585-f4a7d3877b10"),
+  "mutton-rogan-josh": thumb("photo-1574484284002-952d92456975"),
+  "garlic-naan": thumb("photo-1565557623262-b51c2513a641"),
+  "butter-naan": thumb("photo-1565557623262-b51c2513a641"),
+  "tandoori-roti": thumb("photo-1596797038530-2c107229654b"),
+  "laccha-paratha": thumb("photo-1596797038530-2c107229654b"),
+  "missi-roti": thumb("photo-1567620905732-2d1ec7ab7445"),
+  "chicken-biryani": thumb("photo-1626082927389-6cd097cdc6ec"),
+  "veg-biryani": thumb("photo-1589301760014-d929f3979dbc"),
+  "jeera-rice": thumb("photo-1516684669134-de6f7c473a2a"),
+  "steamed-basmati": thumb("photo-1516684669134-de6f7c473a2a"),
+  "egg-biryani": thumb("photo-1626074353765-517a681e40be"),
+  "gulab-jamun": thumb("photo-1666190092159-3171cf0fbb12"),
+  brownie: thumb("photo-1606313564200-e75d5e30476c"),
+  rasmalai: thumb("photo-1551024506-0bccd828d307"),
+  kulfi: thumb("photo-1488477181946-6428a0291777"),
+  "fresh-lime-soda": thumb("photo-1546173159-315724a31696"),
+  "masala-chaas": thumb("photo-1623065422902-30a2d299bbe4"),
+  "sweet-lassi": thumb("photo-1565958011703-44f9829ba187"),
+  "masala-tea": thumb("photo-1571934811356-5cc061b6821f"),
+  "filter-coffee": thumb("photo-1495474472287-4d71bcdd2085"),
+};
+
+function withThumb(item: PublicMenuItem): PublicMenuItem {
+  const imageUrl = DEMO_IMAGES[item.id];
+  return imageUrl ? { ...item, imageUrl } : item;
+}
 
 const demoMenu: RestaurantMenu = {
   restaurant: {
@@ -348,7 +395,7 @@ const demoMenu: RestaurantMenu = {
       available: true,
       vegetarian: true,
     },
-  ],
+  ].map(withThumb),
 };
 
 const emptyMenu: RestaurantMenu = {
