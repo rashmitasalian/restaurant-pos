@@ -2882,6 +2882,7 @@ export const posService = {
         `SELECT mi.*, mc.name AS category_name
          FROM menu_items mi
          LEFT JOIN menu_categories mc ON mc.id = mi.category_id
+         WHERE mi.active = 1
          ORDER BY mi.name COLLATE NOCASE ASC`,
       )
       .all() as any[];
@@ -3022,18 +3023,31 @@ export const posService = {
 
   setCategories(categories: string[], actor?: string | null) {
     return inTransaction((database) => {
-      database.prepare("UPDATE menu_categories SET active = 0, updated_at = ?").run(now());
-      const upsert = database.prepare(`
+      const ts = now();
+      database.prepare("UPDATE menu_categories SET active = 0, updated_at = ?").run(ts);
+      const findByName = database.prepare(
+        "SELECT id FROM menu_categories WHERE lower(name) = lower(?) LIMIT 1",
+      );
+      const reactivate = database.prepare(`
+        UPDATE menu_categories
+        SET name = ?, sort_order = ?, active = 1, updated_at = ?
+        WHERE id = ?
+      `);
+      const insertNew = database.prepare(`
         INSERT INTO menu_categories (id, name, sort_order, active, created_at, updated_at)
         VALUES (?, ?, ?, 1, ?, ?)
-        ON CONFLICT(id) DO UPDATE SET name = excluded.name, sort_order = excluded.sort_order,
-          active = 1, updated_at = excluded.updated_at
       `);
       categories.forEach((category, index) => {
         const name = category.trim();
-        if (name) {
-          upsert.run(slugId("cat", name), name, index + 1, now(), now());
+        if (!name) {
+          return;
         }
+        const existing = findByName.get(name) as { id?: string } | undefined;
+        if (existing?.id) {
+          reactivate.run(name, index + 1, ts, existing.id);
+          return;
+        }
+        insertNew.run(slugId("cat", name), name, index + 1, ts, ts);
       });
       this.setSetting("config:categories", { categories }, actor);
       createAuditRow(
@@ -6894,13 +6908,25 @@ function ensureCategory(database: Database.Database, category?: string | null) {
   if (!name) {
     return null;
   }
-  const id = slugId("cat", name);
+  const existing = database
+    .prepare("SELECT id FROM menu_categories WHERE lower(name) = lower(?) LIMIT 1")
+    .get(name) as { id?: string } | undefined;
   const at = now();
+  if (existing?.id) {
+    database
+      .prepare(
+        `UPDATE menu_categories
+         SET name = ?, active = 1, updated_at = ?
+         WHERE id = ?`,
+      )
+      .run(name, at, existing.id);
+    return existing.id;
+  }
+  const id = slugId("cat", name);
   database
     .prepare(
       `INSERT INTO menu_categories (id, name, sort_order, active, created_at, updated_at)
-       VALUES (?, ?, COALESCE((SELECT MAX(sort_order) + 1 FROM menu_categories), 1), 1, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET name = excluded.name, active = 1, updated_at = excluded.updated_at`,
+       VALUES (?, ?, COALESCE((SELECT MAX(sort_order) + 1 FROM menu_categories), 1), 1, ?, ?)`,
     )
     .run(id, name, at, at);
   return id;

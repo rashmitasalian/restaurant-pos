@@ -26,7 +26,7 @@ export const ENV = {
   CURRENCY_CODE: import.meta.env.VITE_CURRENCY_CODE ?? "INR",
 
   // ── Tables ──────────────────────────────────────────────────────────────────
-  /** Number of dine-in tables seeded on first run. */
+  /** Default table count used when creating tables from Settings (not auto-seeded). */
   TABLE_COUNT: Number(import.meta.env.VITE_TABLE_COUNT ?? 12),
 
   // ── Database ────────────────────────────────────────────────────────────────

@@ -322,7 +322,7 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
     return posService.getCategories();
   });
   ipcMain.handle("pos:menu:set-categories", (event, token: string | null, categories: string[]) => {
-    const user = requirePermission(event, token, "system:settings");
+    const user = requirePermission(event, token, "manage:menu");
     return posService.setCategories(categories, user.username);
   });
   ipcMain.handle("pos:menu:list-variant-options", (event, token?: string | null) => {

@@ -312,6 +312,37 @@ function MainContent({
       if (!role) return section;
       return resolveManagerSection(section, hash, role);
     });
+
+    // After login / role switch, drop any Manage section the new role cannot open
+    // (e.g. admin left Settings open, then manager logs in on the same window).
+    React.useEffect(() => {
+      const role = auth?.session?.role as Role | undefined;
+      if (!role) {
+        return;
+      }
+      setManagerSection((current) => {
+        if (canAccessManageSection(role, current)) {
+          if (current === "people") {
+            const tab = peopleTabFromHash(
+              typeof window !== "undefined" ? window.location.hash : "",
+            );
+            if (!canAccessPeopleTab(role, tab)) {
+              const fallbackTab = getDefaultPeopleTab(role);
+              if (typeof window !== "undefined") {
+                window.location.hash = PEOPLE_TAB_HASH[fallbackTab];
+              }
+            }
+          }
+          return current;
+        }
+        const next = getDefaultManageSection(role);
+        if (typeof window !== "undefined") {
+          window.location.hash = MANAGER_SECTION_HASH[next];
+        }
+        return next;
+      });
+    }, [auth?.session?.role]);
+
     const firstScreenLoggedRef = React.useRef(false);
     const [now, setNow] = React.useState(new Date());
     // show Billing inline next to Tables (single-page split view)
@@ -590,6 +621,14 @@ function MainContent({
                         window.location.hash = "#reports";
                         return;
                       }
+                      if (it.k === "manager") {
+                        const role = auth?.session?.role as Role | undefined;
+                        const next = role ? getDefaultManageSection(role) : "overview";
+                        setManagerSection(next);
+                        setPage("manager");
+                        window.location.hash = MANAGER_SECTION_HASH[next];
+                        return;
+                      }
                       setPage(it.k as Page);
                       window.location.hash = `#${it.k}`;
                     }}
@@ -694,22 +733,34 @@ function MainContent({
                   {page === "billing" && effectiveAllowedPages.includes("billing") && <Billing />}
                   {page === "kot" && effectiveAllowedPages.includes("kot") && <KOTQueue />}
                   {page === "customers" && effectiveAllowedPages.includes("customers") && <Customers />}
-                  {page === "manager" && canOpenManager(managerSection, window.location.hash) && (
-                    <Manager
-                      section={reportsOnly ? "reports" : managerSection}
-                      reportsOnly={reportsOnly}
-                      allowedManageSections={perms.allowedManageSections}
-                      allowedPeopleTabs={perms.allowedPeopleTabs}
-                      onSectionChange={(section) => {
-                        if (reportsOnly && section !== "reports") return;
-                        const role = auth?.session?.role as Role;
-                        if (!role) return;
-                        const next = resolveManagerSection(section, window.location.hash, role);
-                        setManagerSection(next);
-                        setPage("manager");
-                      }}
-                    />
-                  )}
+                  {page === "manager" && auth?.session?.role
+                    ? (() => {
+                        const role = auth.session!.role as Role;
+                        const safeSection = resolveManagerSection(
+                          reportsOnly ? "reports" : managerSection,
+                          typeof window !== "undefined" ? window.location.hash : "",
+                          role,
+                        );
+                        return (
+                          <Manager
+                            section={safeSection}
+                            reportsOnly={reportsOnly}
+                            allowedManageSections={perms.allowedManageSections}
+                            allowedPeopleTabs={perms.allowedPeopleTabs}
+                            onSectionChange={(section) => {
+                              if (reportsOnly && section !== "reports") return;
+                              const next = resolveManagerSection(
+                                section,
+                                window.location.hash,
+                                role,
+                              );
+                              setManagerSection(next);
+                              setPage("manager");
+                            }}
+                          />
+                        );
+                      })()
+                    : null}
                 </main>
               </>
             )}

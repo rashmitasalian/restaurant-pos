@@ -1655,8 +1655,10 @@ function addColumnIfMissing(
   }
 }
 
+/** First-run scaffolding only — no sample tables, menu, or demo data. */
 function seedDatabase(database: SqliteDatabase) {
   const now = Date.now();
+  // Schema expects a default seating area for tables.area_id.
   database
     .prepare(
       `INSERT INTO seating_areas (id, name, sort_order, active, created_at, updated_at)
@@ -1664,73 +1666,8 @@ function seedDatabase(database: SqliteDatabase) {
        ON CONFLICT(id) DO NOTHING`,
     )
     .run(DEFAULT_SEATING_AREA_ID, DEFAULT_SEATING_AREA_NAME, now, now);
+
   const tableCount = Number(process.env.VITE_TABLE_COUNT || process.env.TABLE_COUNT || 12);
-  const currentTables = database.prepare("SELECT COUNT(*) AS count FROM tables").get() as {
-    count: number;
-  };
-  if (!currentTables.count) {
-    const insert = database.prepare(`
-      INSERT INTO tables (id, name, seats, area_id, sort_order, active, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, 1, ?, ?)
-    `);
-    const tx = database.transaction(() => {
-      for (let i = 1; i <= tableCount; i++) {
-        insert.run(i, `Table ${i}`, 4, DEFAULT_SEATING_AREA_ID, i, now, now);
-      }
-    });
-    tx();
-  }
-
-  const categoryCount = database.prepare("SELECT COUNT(*) AS count FROM menu_categories").get() as {
-    count: number;
-  };
-  if (!categoryCount.count) {
-    const insertCategory = database.prepare(`
-      INSERT INTO menu_categories (id, name, sort_order, active, created_at, updated_at)
-      VALUES (?, ?, ?, 1, ?, ?)
-    `);
-    const categories = ["Mains", "Beverages", "Sides"];
-    categories.forEach((name, index) => {
-      insertCategory.run(slugId("cat", name), name, index + 1, now, now);
-    });
-  }
-
-  const itemCount = database.prepare("SELECT COUNT(*) AS count FROM menu_items").get() as {
-    count: number;
-  };
-  if (!itemCount.count) {
-    const insertItem = database.prepare(`
-      INSERT INTO menu_items (
-        id, sku, name, category_id, price_paise, available, favorite, tax_rate_bps, active, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, 1, ?, 1800, 1, ?, ?)
-    `);
-    const items = [
-      {
-        id: "item:burger",
-        sku: "BGR01",
-        name: "Burger",
-        price: 120,
-        category: "Mains",
-        favorite: 1,
-      },
-      { id: "item:tea", sku: "TEA01", name: "Tea", price: 20, category: "Beverages", favorite: 0 },
-      { id: "item:fries", sku: "FRY01", name: "Fries", price: 80, category: "Sides", favorite: 1 },
-      { id: "item:pizza", sku: "PZ01", name: "Pizza", price: 250, category: "Mains", favorite: 1 },
-    ];
-    items.forEach((item) => {
-      insertItem.run(
-        item.id,
-        item.sku,
-        item.name,
-        slugId("cat", item.category),
-        rupeesToPaise(item.price),
-        item.favorite,
-        now,
-        now,
-      );
-    });
-  }
-
   const insertSetting = database.prepare(`
     INSERT INTO settings (key, value_json, updated_at)
     VALUES (?, ?, ?)
@@ -1773,15 +1710,4 @@ function seedDatabase(database: SqliteDatabase) {
     }),
     now,
   );
-}
-
-function slugId(prefix: string, value: string) {
-  return `${prefix}:${value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "")}`;
-}
-
-function rupeesToPaise(value: number) {
-  return Math.round((Number(value) || 0) * 100);
 }
