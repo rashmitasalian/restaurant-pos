@@ -435,7 +435,9 @@ function runSchema(database: SqliteDatabase) {
       checksum TEXT,
       size_bytes INTEGER,
       created_by TEXT REFERENCES users(username) ON UPDATE CASCADE ON DELETE SET NULL,
-      created_at INTEGER NOT NULL
+      created_at INTEGER NOT NULL,
+      cloud_backup_id TEXT,
+      error TEXT
     );
 
     CREATE INDEX IF NOT EXISTS idx_backup_records_created ON backup_records(created_at DESC);
@@ -1545,6 +1547,15 @@ function runSchema(database: SqliteDatabase) {
           created_by
         )
       WHERE status = 'cancelled' AND cancelled_at IS NULL;
+    `);
+  });
+
+  runMigration(database, 27, "Cloud backup record metadata", () => {
+    addColumnIfMissing(database, "backup_records", "cloud_backup_id", "TEXT");
+    addColumnIfMissing(database, "backup_records", "error", "TEXT");
+    database.exec(`
+      CREATE INDEX IF NOT EXISTS idx_backup_records_destination_status
+        ON backup_records(destination, status, created_at DESC);
     `);
   });
 

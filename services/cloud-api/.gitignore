@@ -1,0 +1,7 @@
+bin/
+obj/
+local-r2/
+*.db
+*.db-shm
+*.db-wal
+appsettings.*.local.json

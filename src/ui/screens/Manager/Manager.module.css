@@ -54,6 +54,7 @@
 
 .settingsEmbed[data-settings-focus="identity"] :global([data-settings-sec]:not([data-settings-sec="identity"])),
 .settingsEmbed[data-settings-focus="hardware"] :global([data-settings-sec]:not([data-settings-sec="hardware"])),
+.settingsEmbed[data-settings-focus="backup"] :global([data-settings-sec]:not([data-settings-sec="backup"])),
 .settingsEmbed[data-settings-focus="operations"] :global([data-settings-sec]:not([data-settings-sec="operations"])),
 .settingsEmbed[data-settings-focus="retention"] :global([data-settings-sec]:not([data-settings-sec="retention"])) {
   display: none;

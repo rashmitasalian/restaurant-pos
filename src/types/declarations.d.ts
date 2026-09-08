@@ -219,6 +219,16 @@ declare global {
         createLocal: (actor?: string | null) => Promise<any>;
         restoreLocal: () => Promise<any>;
         list: () => Promise<any[]>;
+        status: () => Promise<any>;
+        create: () => Promise<any>;
+        history: () => Promise<any>;
+        restore: (backupId: string) => Promise<any>;
+        activateCloud: () => Promise<any>;
+        recoverCloud: (payload: { restaurantCode: string; recoveryKey: string }) => Promise<any>;
+        listCloud: () => Promise<any>;
+        restoreCloud: (backupId: string) => Promise<any>;
+        exportRecoveryKey: (recoveryKey: string) => Promise<any>;
+        relaunch: () => Promise<any>;
       };
       app?: {
         info: () => Promise<{

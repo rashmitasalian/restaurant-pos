@@ -79,6 +79,7 @@ const PEOPLE_RAIL: Array<{
 const SETTINGS_TABS = [
   { id: "identity", label: "Identity" },
   { id: "hardware", label: "Hardware" },
+  { id: "backup", label: "Backup" },
   { id: "operations", label: "Operations" },
   { id: "retention", label: "Retention" },
 ];

@@ -607,6 +607,49 @@ export async function listSqliteBackups(): Promise<any[]> {
   return api().backupSqlite!.list();
 }
 
+export async function getBackupStatus(): Promise<any> {
+  return api().backupSqlite!.status();
+}
+
+export async function createManagedBackup(): Promise<any> {
+  return api().backupSqlite!.create();
+}
+
+export async function getBackupHistory(): Promise<any> {
+  return api().backupSqlite!.history();
+}
+
+export async function restoreManagedBackup(backupId: string): Promise<any> {
+  return api().backupSqlite!.restore(backupId);
+}
+
+export async function activateCloudBackup(): Promise<any> {
+  return api().backupSqlite!.activateCloud();
+}
+
+export async function recoverCloudBackup(payload: {
+  restaurantCode: string;
+  recoveryKey: string;
+}): Promise<any> {
+  return api().backupSqlite!.recoverCloud(payload);
+}
+
+export async function listCloudBackups(): Promise<any> {
+  return api().backupSqlite!.listCloud();
+}
+
+export async function restoreCloudBackup(backupId: string): Promise<any> {
+  return api().backupSqlite!.restoreCloud(backupId);
+}
+
+export async function exportRecoveryKeyFile(recoveryKey: string): Promise<any> {
+  return api().backupSqlite!.exportRecoveryKey(recoveryKey);
+}
+
+export async function relaunchAfterBackupRestore(): Promise<any> {
+  return api().backupSqlite!.relaunch();
+}
+
 export async function getAppInfo(): Promise<any> {
   return api().app!.info();
 }

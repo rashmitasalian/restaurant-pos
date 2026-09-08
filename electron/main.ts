@@ -11,6 +11,8 @@ import { configureDomainEvents } from "./services/domainEvents";
 import { startLocalGateway, stopLocalGateway, getGatewayStatus, rotateGatewayPairingCode } from "./gateway/localGateway";
 import { destroyMainSession, getMainSession, refreshMainSession } from "./services/sessionManager";
 import { updateService } from "./services/updateService";
+import { bootstrapBackupManager } from "./services/backup/bootstrap";
+import { startBackupScheduler, stopBackupScheduler } from "./services/backup/scheduler";
 import { printPayload, type PrinterConfig } from "./printing/printService";
 import {
   DEFAULT_USB_PRINTER_NAME,
@@ -428,6 +430,12 @@ app.whenReady().then(async () => {
     logStartupStage("updates:startup-state:start");
     updateService.processStartupState();
     logStartupStage("updates:startup-state:done");
+    logStartupStage("backup:bootstrap:start");
+    bootstrapBackupManager((level, message, context) => writeLogToFile(level, message, context));
+    startBackupScheduler({
+      logger: (level, message, context) => writeLogToFile(level, `[backup] ${message}`, context),
+    });
+    logStartupStage("backup:bootstrap:done");
     logStartupStage("ipc:register:start");
     registerPosIpc(() => mainWindow);
     configureDomainEvents(() => mainWindow);
@@ -459,6 +467,7 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", () => {
+  stopBackupScheduler();
   destroyPdfExportWindow();
   shutdownWindowsRawPrinter();
   void stopLocalGateway();
@@ -595,7 +604,8 @@ ipcMain.handle("report:exportPdf", async (event, token: string | null, html: str
       const pdfBuffer = await pdfWin.webContents.printToPDF({
         printBackground: true,
         pageSize: "A4",
-        margins: { marginType: "custom", top: 0.4, bottom: 0.4, left: 0.4, right: 0.4 },
+        // Electron 44+: PrintToPDFMargins is inch values only (no marginType).
+        margins: { top: 0.4, bottom: 0.4, left: 0.4, right: 0.4 },
       });
 
       const timestamp = new Date().toISOString().slice(0, 10);

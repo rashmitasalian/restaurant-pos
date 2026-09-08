@@ -6870,6 +6870,82 @@ export const posService = {
   listBackups() {
     return getDb().prepare("SELECT * FROM backup_records ORDER BY created_at DESC").all();
   },
+
+  insertBackupRecord(input: {
+    id: string;
+    destination: string;
+    pathOrProvider: string;
+    status: string;
+    checksum: string | null;
+    sizeBytes: number | null;
+    actor?: string | null;
+    cloudBackupId?: string | null;
+    error?: string | null;
+  }) {
+    getDb()
+      .prepare(
+        `INSERT INTO backup_records (
+          id, destination, path_or_provider, status, checksum, size_bytes, created_by, created_at, cloud_backup_id, error
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        input.id,
+        input.destination,
+        input.pathOrProvider,
+        input.status,
+        input.checksum,
+        input.sizeBytes,
+        input.actor || null,
+        now(),
+        input.cloudBackupId || null,
+        input.error || null,
+      );
+  },
+
+  updateBackupRecord(
+    id: string,
+    patch: {
+      status?: string;
+      cloudBackupId?: string | null;
+      error?: string | null;
+      destination?: string;
+    },
+  ) {
+    const row = getDb().prepare("SELECT id FROM backup_records WHERE id = ?").get(id) as { id?: string } | undefined;
+    if (!row?.id) {
+      return false;
+    }
+    getDb()
+      .prepare(
+        `UPDATE backup_records
+         SET status = COALESCE(?, status),
+             cloud_backup_id = COALESCE(?, cloud_backup_id),
+             error = CASE WHEN ? IS NOT NULL THEN ? ELSE error END,
+             destination = COALESCE(?, destination)
+         WHERE id = ?`,
+      )
+      .run(
+        patch.status ?? null,
+        patch.cloudBackupId === undefined ? null : patch.cloudBackupId,
+        patch.error === undefined ? null : 1,
+        patch.error === undefined ? null : patch.error,
+        patch.destination ?? null,
+        id,
+      );
+    return true;
+  },
+
+  markUploadPendingBackupsCompleted(cloudBackupId?: string | null) {
+    getDb()
+      .prepare(
+        `UPDATE backup_records
+         SET status = 'completed',
+             error = NULL,
+             cloud_backup_id = COALESCE(?, cloud_backup_id)
+         WHERE destination = 'local' AND status = 'upload_pending'`,
+      )
+      .run(cloudBackupId || null);
+  },
 };
 
 function recordFailedLogin(key: string) {

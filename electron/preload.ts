@@ -265,6 +265,18 @@ contextBridge.exposeInMainWorld("pos", {
     createLocal: (_actor?: string | null) => authInvoke("pos:backup:create-local"),
     restoreLocal: () => authInvoke("pos:backup:restore-local"),
     list: () => authInvoke("pos:backup:list"),
+    status: () => authInvoke("pos:backup:status"),
+    create: () => authInvoke("pos:backup:create"),
+    history: () => authInvoke("pos:backup:history"),
+    restore: (backupId: string) => authInvoke("pos:backup:restore", backupId),
+    activateCloud: () => authInvoke("pos:backup:activate-cloud"),
+    recoverCloud: (payload: { restaurantCode: string; recoveryKey: string }) =>
+      authInvoke("pos:backup:recover-cloud", payload),
+    listCloud: () => authInvoke("pos:backup:list-cloud"),
+    restoreCloud: (backupId: string) => authInvoke("pos:backup:restore-cloud", backupId),
+    exportRecoveryKey: (recoveryKey: string) =>
+      authInvoke("pos:backup:export-recovery-key", recoveryKey),
+    relaunch: () => authInvoke("pos:backup:relaunch"),
   },
   app: {
     info: () => authInvoke("pos:app:info"),

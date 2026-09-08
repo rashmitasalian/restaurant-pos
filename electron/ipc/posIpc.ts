@@ -6,6 +6,7 @@ import {
   type IpcMainInvokeEvent,
   type OpenDialogOptions,
 } from "electron";
+import fs from "fs";
 import path from "path";
 import type { Role, UserDto } from "../../src/shared/pos";
 import type { Permission } from "../../src/shared/permissions";
@@ -13,6 +14,10 @@ import { roleHasPermission } from "../../src/shared/permissions";
 import { sanitizeIpcError } from "../../src/shared/validation";
 import { posService } from "../services/posService";
 import { updateService } from "../services/updateService";
+import { getBackupManager } from "../services/backup/backupManager";
+import { cloudBackupStore } from "../services/backup/cloudClient";
+import { localBackupStore } from "../services/backup/localStore";
+import { createTempPath, safeUnlink } from "../services/backup/paths";
 import {
   createMainSession,
   destroyMainSession,
@@ -42,6 +47,7 @@ const WRITABLE_SETTINGS = new Set([
   "config:audit",
   "config:branding",
   "config:categories",
+  "config:cloud-backup",
   "config:gst",
   "config:history",
   "config:printers",
@@ -841,7 +847,7 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
       `pos-sqlite-backup-${timestamp}.sqlite`,
     );
     const options = {
-      title: "Save SQLite Backup",
+      title: "Export SQLite Database",
       defaultPath,
       filters: [{ name: "SQLite Database", extensions: ["sqlite", "db"] }],
     };
@@ -861,7 +867,7 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
   ipcMain.handle("pos:backup:restore-local", async (event, token?: string | null) => {
     const user = requirePermission(event, token, "system:settings");
     const options: OpenDialogOptions = {
-      title: "Restore SQLite Backup",
+      title: "Restore SQLite Database File",
       filters: [{ name: "SQLite Database", extensions: ["sqlite", "db"] }],
       properties: ["openFile"],
     };
@@ -874,6 +880,140 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
     }
     return posService.restoreLocalBackup(result.filePaths[0], user.username);
   });
+
+  ipcMain.handle("pos:backup:status", (event, token?: string | null) => {
+    requirePermission(event, token, "system:settings");
+    return getBackupManager().getStatus();
+  });
+  ipcMain.handle("pos:backup:create", async (event, token?: string | null) => {
+    const user = requirePermission(event, token, "system:settings");
+    try {
+      const created = await getBackupManager().createManagedBackup(user.username);
+      if (created.cloudUploadPending) {
+        const upload = await cloudBackupStore.uploadPendingIfAny();
+        const uploaded = Boolean(upload?.ok && !upload?.skipped);
+        return {
+          ...created,
+          cloudUploadPending: !uploaded && upload?.ok !== false,
+          cloudUpload: upload,
+        };
+      }
+      return created;
+    } catch (error: any) {
+      if (String(error?.message || error) === "insufficient-disk-space") {
+        return {
+          ok: false,
+          reason: "insufficient-disk-space",
+          message: "Not enough storage space to create a backup. Please free some space and try again.",
+        };
+      }
+      throw error;
+    }
+  });
+  ipcMain.handle("pos:backup:history", (event, token?: string | null) => {
+    requirePermission(event, token, "system:settings");
+    // Clear stale upload_pending labels once cloud sync has caught up.
+    const identity = getBackupManager().getIdentity();
+    if (identity.cloudEnabled && identity.lastCloudBackupAt && !identity.pendingUploadPath) {
+      posService.markUploadPendingBackupsCompleted();
+    }
+    const records = posService.listBackups();
+    const localFiles = localBackupStore.list();
+    return {
+      records,
+      localFiles,
+    };
+  });
+  ipcMain.handle("pos:backup:restore", async (event, token: string | null, backupId: string) => {
+    const user = requirePermission(event, token, "system:settings");
+    const restored = await getBackupManager().restoreManagedBackup(backupId, user.username);
+    return restored;
+  });
+  ipcMain.handle("pos:backup:activate-cloud", async (event, token?: string | null) => {
+    const user = requirePermission(event, token, "system:settings");
+    if (user.role !== "admin") {
+      throw new Error("admin-required");
+    }
+    return cloudBackupStore.activateCloud(user.username);
+  });
+  ipcMain.handle(
+    "pos:backup:recover-cloud",
+    async (event, token: string | null, payload: { restaurantCode: string; recoveryKey: string }) => {
+      const user = requirePermission(event, token, "system:settings");
+      if (user.role !== "admin") {
+        throw new Error("admin-required");
+      }
+      return cloudBackupStore.recoverCloud(payload?.restaurantCode, payload?.recoveryKey, user.username);
+    },
+  );
+  ipcMain.handle("pos:backup:list-cloud", async (event, token?: string | null) => {
+    requirePermission(event, token, "system:settings");
+    return cloudBackupStore.listCloudBackups();
+  });
+  ipcMain.handle(
+    "pos:backup:restore-cloud",
+    async (event, token: string | null, backupId: string) => {
+      const user = requirePermission(event, token, "system:settings");
+      const target = createTempPath("cloud-download", ".rnbak");
+      try {
+        await cloudBackupStore.downloadCloudBackup(backupId, target);
+        return getBackupManager().restoreManagedBackup(target, user.username);
+      } finally {
+        safeUnlink(target);
+      }
+    },
+  );
+  ipcMain.handle("pos:backup:relaunch", (event, token?: string | null) => {
+    requirePermission(event, token, "system:settings");
+    setTimeout(() => {
+      app.relaunch();
+      app.exit(0);
+    }, 250);
+    return { ok: true };
+  });
+  ipcMain.handle(
+    "pos:backup:export-recovery-key",
+    async (event, token: string | null, recoveryKey: string) => {
+      const user = requirePermission(event, token, "system:settings");
+      if (user.role !== "admin") {
+        throw new Error("admin-required");
+      }
+      const identity = getBackupManager().getIdentity();
+      const defaultPath = path.join(
+        app.getPath("documents"),
+        `restoniti-recovery-key-${identity.restaurantCode || "backup"}.txt`,
+      );
+      const win = getMainWindow();
+      const result = win
+        ? await dialog.showSaveDialog(win, {
+            title: "Save Cloud Backup Recovery Key",
+            defaultPath,
+            filters: [{ name: "Text", extensions: ["txt"] }],
+          })
+        : await dialog.showSaveDialog({
+            title: "Save Cloud Backup Recovery Key",
+            defaultPath,
+            filters: [{ name: "Text", extensions: ["txt"] }],
+          });
+      if (result.canceled || !result.filePath) {
+        return { ok: false, reason: "cancelled" };
+      }
+      const body = [
+        "RestoNiti Cloud Backup Recovery Key",
+        "",
+        `Restaurant code: ${identity.restaurantCode || "(unknown)"}`,
+        "",
+        "Recovery key:",
+        String(recoveryKey || ""),
+        "",
+        "Keep this file offline and private.",
+        "You will need it if this computer is lost or replaced.",
+        "",
+      ].join("\n");
+      fs.writeFileSync(result.filePath, body, "utf8");
+      return { ok: true, path: result.filePath };
+    },
+  );
 
   ipcMain.handle("pos:app:info", (event, token?: string | null) => {
     const user = requireSession(event, token);

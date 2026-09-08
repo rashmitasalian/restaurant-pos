@@ -68,13 +68,7 @@ import {
   type TableNamingMode,
 } from "../../../shared/floorLayout";
 import { processRestaurantLogoFile, type ReceiptLogoRaster } from "../../utils/logoProcessing";
-import {
-  addSeatingAreaDraft,
-  computeTableAreaUpdates,
-  computeTableSeatsUpdates,
-  moveSeatingAreaByDirection,
-  reorderSeatingAreasByDrag,
-} from "./seatingAreaUtils";
+import { BackupSettingsSection } from "./BackupSettingsSection";
 
 type AreaLayoutDraft = SeatingAreaDoc & {
   tableCount: number;
@@ -2306,7 +2300,11 @@ export default function Settings({
             letterSpacing: "0.1em",
           }}
         >
-          SQLite Backup
+          SQLite File Export
+        </div>
+
+        <div style={{ fontSize: 13, color: "var(--pos-tx-sub)", marginBottom: 12 }}>
+          Export or restore a plain SQLite file. For automatic encrypted backups, use Settings → Backup.
         </div>
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
@@ -2316,7 +2314,7 @@ export default function Settings({
             disabled={backupBusy !== null}
             variant="primary"
           >
-            {backupBusy === "create" ? "Creating..." : "Create Backup"}
+            {backupBusy === "create" ? "Exporting..." : "Export Database File"}
           </Button>
           <Button
             type="button"
@@ -2324,7 +2322,7 @@ export default function Settings({
             disabled={backupBusy !== null}
             variant="secondary"
           >
-            {backupBusy === "restore" ? "Restoring..." : "Restore Backup"}
+            {backupBusy === "restore" ? "Restoring..." : "Restore From File"}
           </Button>
           <Button
             type="button"
@@ -2540,6 +2538,8 @@ export default function Settings({
       </div>
       </>
       )}
+
+      {sectionVisible("backup") && <BackupSettingsSection />}
 
       {sectionVisible("operations") && (
       <>
