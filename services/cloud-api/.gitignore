@@ -5,3 +5,7 @@ local-r2/
 *.db-shm
 *.db-wal
 appsettings.*.local.json
+# Local publish / zipdeploy artifacts (regenerate with dotnet publish)
+publish/
+publish.zip
+*.zip

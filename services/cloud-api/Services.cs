@@ -102,19 +102,24 @@ public class ObjectStorageService
     private readonly CloudOptions _options;
     private readonly IAmazonS3? _s3;
 
+    public bool UsesR2 => _s3 is not null;
+
     public ObjectStorageService(IOptions<CloudOptions> options)
     {
         _options = options.Value;
         if (!_options.UseLocalFileStorage &&
             !string.IsNullOrWhiteSpace(_options.R2AccessKeyId) &&
-            !string.IsNullOrWhiteSpace(_options.R2SecretAccessKey))
+            !string.IsNullOrWhiteSpace(_options.R2SecretAccessKey) &&
+            !string.IsNullOrWhiteSpace(_options.R2Bucket))
         {
+            var serviceUrl = string.IsNullOrWhiteSpace(_options.R2ServiceUrl)
+                ? $"https://{_options.R2AccountId}.r2.cloudflarestorage.com"
+                : _options.R2ServiceUrl.TrimEnd('/');
             var config = new AmazonS3Config
             {
-                ServiceURL = string.IsNullOrWhiteSpace(_options.R2ServiceUrl)
-                    ? $"https://{_options.R2AccountId}.r2.cloudflarestorage.com"
-                    : _options.R2ServiceUrl,
-                ForcePathStyle = true
+                ServiceURL = serviceUrl,
+                ForcePathStyle = true,
+                AuthenticationRegion = "auto",
             };
             _s3 = new AmazonS3Client(_options.R2AccessKeyId, _options.R2SecretAccessKey, config);
         }
@@ -126,47 +131,18 @@ public class ObjectStorageService
 
     public Task<string> CreatePresignedPutAsync(string backupId, string objectKey, TimeSpan expiry)
     {
-        if (_s3 is null)
-        {
-            return Task.FromResult($"/api/v1/backups/{Uri.EscapeDataString(backupId)}/content");
-        }
-
-        return CreateS3PutAsync(objectKey, expiry);
-    }
-
-    private async Task<string> CreateS3PutAsync(string objectKey, TimeSpan expiry)
-    {
-        var request = new GetPreSignedUrlRequest
-        {
-            BucketName = _options.R2Bucket,
-            Key = objectKey,
-            Verb = HttpVerb.PUT,
-            Expires = DateTime.UtcNow.Add(expiry),
-            ContentType = "application/octet-stream"
-        };
-        return await _s3!.GetPreSignedURLAsync(request);
+        // Always upload via the API (Bearer). The API writes to R2 or local disk.
+        // Avoids browser→R2 presigned PUT 401s from AWS SDK / R2 signature mismatches.
+        _ = objectKey;
+        _ = expiry;
+        return Task.FromResult($"/api/v1/backups/{Uri.EscapeDataString(backupId)}/content");
     }
 
     public Task<string> CreatePresignedGetAsync(string backupId, string objectKey, TimeSpan expiry)
     {
-        if (_s3 is null)
-        {
-            return Task.FromResult($"/api/v1/backups/{Uri.EscapeDataString(backupId)}/content");
-        }
-
-        return CreateS3GetAsync(objectKey, expiry);
-    }
-
-    private async Task<string> CreateS3GetAsync(string objectKey, TimeSpan expiry)
-    {
-        var request = new GetPreSignedUrlRequest
-        {
-            BucketName = _options.R2Bucket,
-            Key = objectKey,
-            Verb = HttpVerb.GET,
-            Expires = DateTime.UtcNow.Add(expiry)
-        };
-        return await _s3!.GetPreSignedURLAsync(request);
+        _ = objectKey;
+        _ = expiry;
+        return Task.FromResult($"/api/v1/backups/{Uri.EscapeDataString(backupId)}/content");
     }
 
     public async Task SaveAsync(string objectKey, Stream content)
@@ -186,8 +162,15 @@ public class ObjectStorageService
             Key = objectKey,
             InputStream = content,
             ContentType = "application/octet-stream",
-            AutoCloseStream = false
+            AutoCloseStream = false,
+            // Required for Cloudflare R2 (no Streaming SigV4 / default checksums).
+            DisablePayloadSigning = true,
+            DisableDefaultChecksumValidation = true,
         };
+        if (content.CanSeek)
+        {
+            put.Headers.ContentLength = content.Length - content.Position;
+        }
         await _s3.PutObjectAsync(put);
     }
 

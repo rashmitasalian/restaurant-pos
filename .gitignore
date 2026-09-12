@@ -21,3 +21,12 @@ yarn-error.log*
 .vscode/
 # Installer archives — these are large binaries (>100 MB); store on GitHub Releases, not in git
 archive/
+
+# Cloud API local publish / zipdeploy output (see services/cloud-api/.gitignore too)
+services/cloud-api/publish/
+services/cloud-api/publish.zip
+
+# Python cache from docs PDF generators
+__pycache__/
+*.pyc
+.venv/

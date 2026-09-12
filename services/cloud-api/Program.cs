@@ -17,7 +17,11 @@ builder.Services.AddDbContext<CloudDbContext>(options =>
     }
     else
     {
-        options.UseSqlServer(cs);
+        // Azure SQL serverless can be paused (error 40613); retry while it wakes.
+        options.UseSqlServer(cs, sql => sql.EnableRetryOnFailure(
+            maxRetryCount: 10,
+            maxRetryDelay: TimeSpan.FromSeconds(10),
+            errorNumbersToAdd: null));
     }
 });
 builder.Services.AddSingleton<ObjectStorageService>();
@@ -31,7 +35,8 @@ using (var scope = app.Services.CreateScope())
     db.Database.EnsureCreated();
 }
 
-app.MapGet("/health", () => Results.Ok(new { ok = true }));
+app.MapGet("/health", (ObjectStorageService storage) =>
+    Results.Ok(new { ok = true, storage = storage.UsesR2 ? "r2" : "local" }));
 
 app.MapPost("/api/v1/cloud/activate", async (
     [FromBody] ActivateRequest request,
@@ -220,10 +225,27 @@ app.MapPut("/api/v1/backups/{backupId}/content", async (
         return Results.BadRequest(new { error = "backup-too-large" });
     }
 
-    await storage.SaveAsync(backup.ObjectKey, http.Body);
-    backup.Status = BackupStatuses.Stored;
-    await db.SaveChangesAsync();
-    return Results.Ok(new { ok = true });
+    try
+    {
+        // Buffer first — R2/S3 PutObject needs a seekable stream with known length.
+        await using var buffer = new MemoryStream();
+        await http.Body.CopyToAsync(buffer);
+        if (buffer.Length > maxBytes)
+        {
+            return Results.BadRequest(new { error = "backup-too-large" });
+        }
+        buffer.Position = 0;
+        await storage.SaveAsync(backup.ObjectKey, buffer);
+        backup.Status = BackupStatuses.Stored;
+        await db.SaveChangesAsync();
+        return Results.Ok(new { ok = true });
+    }
+    catch (Exception ex)
+    {
+        return Results.Json(
+            new { error = "cloud-upload-store-failed", detail = ex.Message },
+            statusCode: StatusCodes.Status500InternalServerError);
+    }
 });
 
 app.MapGet("/api/v1/backups/{backupId}/content", async (
