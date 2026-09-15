@@ -31,7 +31,6 @@ import {
   getConfigServiceModes,
   setConfigServiceModes,
   getSeatingAreas,
-  deleteSeatingArea,
   getTables,
   setTableArea,
   setTableSeats,
@@ -69,6 +68,13 @@ import {
 } from "../../../shared/floorLayout";
 import { processRestaurantLogoFile, type ReceiptLogoRaster } from "../../utils/logoProcessing";
 import { BackupSettingsSection } from "./BackupSettingsSection";
+import {
+  addSeatingAreaDraft,
+  computeTableAreaUpdates,
+  computeTableSeatsUpdates,
+  moveSeatingAreaByDirection,
+  reorderSeatingAreasByDrag,
+} from "./seatingAreaUtils";
 
 type AreaLayoutDraft = SeatingAreaDoc & {
   tableCount: number;
@@ -1112,28 +1118,24 @@ export default function Settings({
     setDragAreaId(null);
   };
 
-  const removeSeatingArea = async (id: string) => {
-    const fallback = seatingAreas.find((area) => area.id !== id && area.active !== false);
-    if (!fallback) {
+  const removeSeatingArea = (id: string) => {
+    const target = seatingAreas.find((area) => area.id === id);
+    if (!target) {
+      return;
+    }
+    const activeRemaining = seatingAreas.filter(
+      (area) => area.id !== id && area.active !== false,
+    ).length;
+    if (target.active !== false && activeRemaining < 1) {
       setTableStatus("Keep at least one active area");
       return;
     }
-    const serverAreas = await getSeatingAreas(true).catch(() => []);
-    const known = serverAreas.some((area) => area.id === id);
-    if (!known) {
-      setSeatingAreas((current) => current.filter((area) => area.id !== id));
-      setTableStatus(null);
-      return;
-    }
-    try {
-      await deleteSeatingArea(id, fallback.id);
-      await refreshSeatingConfig();
-      setTableStatus("Area deleted");
-      window.dispatchEvent(new Event("seating-areas-changed"));
-      window.dispatchEvent(new Event("orders-changed"));
-    } catch (e: any) {
-      setTableStatus(reportClientError("settings.tables.delete", e, "Could not delete seating area"));
-    }
+    setSeatingAreas((current) =>
+      current
+        .filter((area) => area.id !== id)
+        .map((area, index) => ({ ...area, order: index + 1 })),
+    );
+    setTableStatus(null);
   };
 
   const saveAdvancedTableEdits = async () => {
@@ -2704,6 +2706,25 @@ export default function Settings({
           <Button type="button" onClick={addSeatingArea} variant="secondary">
             Add Area
           </Button>
+          {tableStatus && (
+            <div
+              style={{
+                padding: "8px 12px",
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 600,
+                alignSelf: "center",
+                background: isTableStatusSuccess(tableStatus)
+                  ? "var(--pos-success-tint)"
+                  : "var(--pos-danger-tint)",
+                color: isTableStatusSuccess(tableStatus)
+                  ? "var(--pos-success)"
+                  : "var(--pos-danger)",
+              }}
+            >
+              {tableStatus}
+            </div>
+          )}
         </div>
 
         <div style={{ display: "grid", gap: 10 }}>
@@ -2787,7 +2808,10 @@ export default function Settings({
                     variant="secondary"
                     size="sm"
                     onClick={() => removeSeatingArea(area.id)}
-                    disabled={seatingAreas.filter((entry) => entry.active !== false).length <= 1}
+                    disabled={
+                      area.active !== false &&
+                      seatingAreas.filter((entry) => entry.active !== false).length <= 1
+                    }
                   >
                     Delete
                   </Button>

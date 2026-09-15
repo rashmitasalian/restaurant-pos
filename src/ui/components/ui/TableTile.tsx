@@ -54,9 +54,12 @@ export function TableTile({
     [itemCount && itemCount > 0 ? `${itemCount} item${itemCount !== 1 ? "s" : ""}` : "", elapsed]
       .filter(Boolean)
       .join(" · ");
-  const showRailCount = isRail && itemCount !== null && itemCount !== undefined && itemCount > 0;
+  const showCount =
+    itemCount !== null && itemCount !== undefined && itemCount > 0 && state !== "available";
   const showIdle = Boolean(isFloor && state === "available" && idleLabel);
   const showFoot = Boolean(amountLabel || footMeta || showIdle || (isRail && seats));
+  const nameText = String(number ?? "").trim();
+  const nameTitle = nameText || undefined;
 
   return (
     <button
@@ -64,22 +67,34 @@ export function TableTile({
       className={`ui-table-tile ${isFloor ? "ui-table-tile-floor" : "ui-table-tile-rail"} ${stateClass} ${active ? "ui-table-tile-active" : ""} ${className}`.trim()}
       onClick={onClick}
       disabled={disabled}
+      title={nameTitle}
       aria-label={ariaLabel || `Table ${number}, ${label}`}
       aria-pressed={active || undefined}
     >
       {isFloor ? (
-        <span className="ui-table-tile-top">
-          <span className="ui-table-tile-num">{number}</span>
+        <>
+          <span className="ui-table-tile-top">
+            <span className="ui-table-tile-num" title={nameTitle}>
+              {number}
+            </span>
+            {showCount ? (
+              <span className="ui-table-tile-count" aria-hidden="true">
+                {itemCount}
+              </span>
+            ) : null}
+          </span>
           <span className="ui-table-tile-state">
             <StatusDot tone={tone} label={label} decorative />
             {label}
           </span>
-        </span>
+        </>
       ) : (
         <>
           <span className="ui-table-tile-rail-head">
-            <span className="ui-table-tile-num">{number}</span>
-            {showRailCount ? (
+            <span className="ui-table-tile-num" title={nameTitle}>
+              {number}
+            </span>
+            {showCount ? (
               <span className="ui-table-tile-count" aria-hidden="true">
                 {itemCount}
               </span>

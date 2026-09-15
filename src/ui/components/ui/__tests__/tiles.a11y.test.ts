@@ -34,17 +34,19 @@ describe("ui tile accessibility", () => {
     expect(html).toContain("[2]");
   });
 
-  it("TableTile keeps Table N prefix and does not double-label StatusDot", () => {
+  it("TableTile keeps Table N prefix, exposes title tooltip, and does not double-label StatusDot", () => {
     const html = renderToStaticMarkup(
       React.createElement(TableTile, {
-        number: 12,
+        number: "Patio A1",
         state: "occupied",
         amountLabel: "₹840",
         elapsed: "12m",
+        itemCount: 3,
         onClick: () => undefined,
       }),
     );
-    expect(html).toContain('aria-label="Table 12, Occupied"');
+    expect(html).toContain('aria-label="Table Patio A1, Occupied"');
+    expect(html).toContain('title="Patio A1"');
     expect(html).toContain("Occupied");
     expect(html).toContain('aria-hidden="true"');
     expect(html).not.toMatch(/role="img"/);
