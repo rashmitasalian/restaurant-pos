@@ -28,6 +28,8 @@ npm run build:electron:system-ca
 
 `npm run build:electron:system-ca` must produce a Windows installer under `release/`.
 
+Restaurant installs must use an Authenticode-signed installer. Unsigned NSIS/Electron EXEs are blocked or warned by Windows Security (SmartScreen “Unknown publisher”, Defender quarantine). Set `WIN_CSC_LINK` and `WIN_CSC_KEY_PASSWORD` on the build machine, then confirm with `npm run verify:win-sign`. Deliver via USB or GitHub Releases link + SHA256 — never WhatsApp/email. See `docs/FIRST_TIME_INSTALLATION_RUNBOOK.md` §1.5 (signing), §2 (delivery), and §5.1 (SmartScreen).
+
 ## Clean Machine Smoke Test
 
 On a Windows machine that is not the development machine:

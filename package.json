@@ -22,6 +22,7 @@
     "build:electron:system-ca": "cross-env NODE_OPTIONS=--use-system-ca npm run build:electron",
     "build": "rimraf dist dist-electron build && npm run build:renderer && npm run build:electron:system-ca",
     "package": "npm run build",
+    "verify:win-sign": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-windows-signature.ps1",
     "lint": "eslint --ext .ts,.tsx src/ electron/ apps/public-menu/src && node scripts/check-theme-tokens.cjs",
     "test": "jest",
     "perf:seed": "node scripts/perf-seed.cjs",
@@ -92,6 +93,7 @@
   "build": {
     "appId": "com.restaurant-pos.app",
     "productName": "RestoNiti",
+    "copyright": "Copyright © RestoNiti",
     "npmRebuild": true,
     "directories": {
       "output": "release"
@@ -111,6 +113,12 @@
     ],
     "win": {
       "icon": "build/icon.ico",
+      "publisherName": "RestoNiti",
+      "signingHashAlgorithms": [
+        "sha256"
+      ],
+      "rfc3161TimeStampServer": "http://timestamp.digicert.com",
+      "signDlls": true,
       "target": [
         "nsis"
       ]
