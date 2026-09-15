@@ -9,6 +9,89 @@ Related docs:
 
 ---
 
+## Client requirements (share with restaurant)
+
+Use this section when confirming a machine before first install. Copy the tables below into email / WhatsApp text if needed — still deliver the **installer** only via USB or GitHub Releases (§2), not as a chat attachment.
+
+### Supported operating system
+
+| Requirement | Minimum | Notes |
+| --- | --- | --- |
+| OS | **Windows 10** (64-bit) or **Windows 11** (64-bit) | Home or Pro is fine |
+| Architecture | **64-bit (x64)** | Required |
+| Windows mode | Normal desktop mode | **Windows S mode is not supported** (switch out of S mode first) |
+| Admin rights | Local admin for install | Needed for NSIS `perMachine` install and UAC |
+
+**Not supported:**
+
+- Windows 7, Windows 8, Windows 8.1
+- 32-bit (x86) Windows
+- macOS / Linux for the restaurant POS terminal in this deployment path (Windows NSIS installer only)
+
+These limits come from the Electron runtime used by RestoNiti. They are not optional packaging choices.
+
+### Minimum hardware
+
+| Component | Minimum | Recommended for busy service |
+| --- | --- | --- |
+| CPU | Dual-core **x64**, ~2.0 GHz or better | Quad-core or better |
+| RAM | **8 GB** | **16 GB** if Captain phones + reports run heavily on the same PC |
+| Storage | **SSD**, **20 GB free** after Windows is installed | **40 GB+ free** for database growth, local backups, and update cache |
+| Display | **1366 × 768** | **1920 × 1080** or higher; single dedicated POS monitor |
+| USB | 1–2 free USB ports | Needed for USB thermal printers and optional USB installer stick |
+| Network | Wired Ethernet preferred | Stable LAN/Wi‑Fi required if using **Captain** phones or LAN printers |
+
+### Disk space breakdown (approximate)
+
+| Item | Typical size |
+| --- | --- |
+| Installer download | ~110–120 MB |
+| Installed application | ~300–500 MB under Program Files |
+| SQLite database + growth | starts small; plan multi‑GB over years of orders |
+| Local backups + update cache | several hundred MB to multiple GB |
+
+Do not install on a nearly full system drive. Leave headroom for Windows updates and SQLite WAL/temp files.
+
+### Peripherals and network
+
+| Item | Requirement |
+| --- | --- |
+| Kitchen / counter printers | ESC/POS thermal printers over **USB (Windows printer name)** or **LAN TCP port 9100** |
+| Captain app (optional) | Same Wi‑Fi/LAN as the POS; POS Local Gateway default port **4747** must be reachable from phones |
+| Internet | **Not required** for day-to-day POS; needed only for first download of the installer and for optional cloud backup / in-app updates |
+| Power | Dedicated wall power; **UPS recommended** so mid-service power cuts do not corrupt the local database |
+
+### Soft recommendations for restaurants
+
+- Use a **dedicated POS PC** (not a shared family/office laptop that also runs browsers, games, or office suites all day).
+- Keep Windows clock and timezone correct (business date and reports depend on it).
+- Prefer a machine that stays on during service hours; avoid aggressive sleep while orders are open.
+- Antivirus: keep Windows Security on; do not disable Defender permanently to “make install work.”
+
+### Client-facing summary (copy/paste)
+
+```text
+RestoNiti — minimum PC requirements
+
+OS: Windows 10 or Windows 11, 64-bit only
+    (not Windows 7/8, not 32-bit, not Windows S mode)
+
+CPU: Dual-core 64-bit, 2.0 GHz or better (quad-core recommended)
+RAM: 8 GB minimum (16 GB recommended)
+Disk: SSD with at least 20 GB free (40 GB+ recommended)
+Screen: 1366x768 minimum (Full HD recommended)
+USB: ports for thermal printer / USB installer
+Network: stable LAN/Wi-Fi if using Captain phones or LAN printers
+Printers: ESC/POS USB or network (port 9100)
+Power: UPS recommended during service
+
+Internet is not required for daily billing after install.
+```
+
+Confirm these requirements with the restaurant **before** scheduling on-site install.
+
+---
+
 ## 1. Prepare The Production Build
 
 Build the installer on a Windows build machine or developer machine with the same dependency setup every time.
@@ -213,13 +296,15 @@ Signed releases should show `Status: Valid` and your publisher name.
 
 ## 3. Prepare The Restaurant Desktop
 
-1. Confirm the machine is Windows and has a stable user account for POS operation.
+Confirm the PC meets **Client requirements** above before continuing.
+
+1. Confirm Windows 10/11 **64-bit** (not S mode), with a stable user account for POS operation.
 2. Confirm the Windows user can run the POS and that an administrator can approve UAC prompts.
 3. Install printer drivers:
    - for USB printers, install the Windows printer and note the exact printer name;
    - for network printers, reserve/static-assign printer IP addresses and confirm port `9100`.
 4. Confirm the machine clock/timezone are correct.
-5. Confirm there is enough free disk space for the app, SQLite database, backups, and future update cache.
+5. Confirm free disk space matches the client requirements (at least **20 GB free** on an SSD; more is better for backups and updates).
 6. Get the installer onto the machine using **USB** or the **GitHub download + SHA256 check** from §2 — not WhatsApp/email.
 7. Prefer installing while you are present for the first restaurant, especially while builds are still unsigned.
 
@@ -402,6 +487,8 @@ Before handing the POS to the restaurant:
 Record:
 
 - installed app version;
+- PC OS version / edition / 64-bit confirmed;
+- RAM and free disk at install time;
 - installer file name and delivery method (USB / GitHub Releases URL);
 - installer SHA256;
 - whether the build was Authenticode-signed (`Valid` / `NotSigned`);
@@ -415,6 +502,7 @@ Record:
 
 ## Quick Reference — First Install Checklist
 
+0. Confirm client PC meets **Client requirements** (Windows 10/11 x64, 8 GB RAM, SSD with 20 GB free, etc.).
 1. Build on a Windows machine (`npm run build`).
 2. Record SHA256 (`Get-FileHash ... -Algorithm SHA256`).
 3. Sign if credentials are available (`WIN_CSC_LINK` / `WIN_CSC_KEY_PASSWORD`, then `npm run verify:win-sign`).

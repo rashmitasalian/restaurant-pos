@@ -4,8 +4,17 @@ Use this checklist before installing the POS in a live restaurant.
 
 For step-by-step procedures, see:
 
-- `docs/FIRST_TIME_INSTALLATION_RUNBOOK.md` for fresh desktop or restaurant desktop installation.
+- `docs/FIRST_TIME_INSTALLATION_RUNBOOK.md` for fresh desktop or restaurant desktop installation (includes **client OS/hardware requirements**).
 - `docs/PRODUCTION_UPDATE_RUNBOOK.md` for code redeploy, production update, and rollback.
+
+## Client Machine Gate
+
+Before scheduling install, confirm the restaurant PC against **Client requirements** in `docs/FIRST_TIME_INSTALLATION_RUNBOOK.md`:
+
+- Windows 10 or 11, **64-bit only** (not 7/8, not 32-bit, not S mode)
+- **8 GB RAM** minimum, SSD with **20 GB** free
+- Display at least **1366 × 768**
+- USB and/or LAN path for ESC/POS printers; stable LAN if Captain phones are used
 
 ## Build Prerequisites
 
