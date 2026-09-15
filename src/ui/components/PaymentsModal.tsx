@@ -222,24 +222,39 @@ export default function PaymentsModal({
     [],
   );
 
-  const filteredCreditCustomers = React.useMemo(() => {
+  const creditSearchMatches = React.useMemo(() => {
     const q = customerSearch.trim().toLowerCase();
-    const matched = localCustomers.filter((c) => {
+    return localCustomers.filter((c) => {
       if (!q) {
         return true;
       }
       return `${c.name} ${c.phone}`.toLowerCase().includes(q);
     });
-    matched.sort((a, b) => {
-      const aReady = isCreditReady(a) ? 0 : 1;
-      const bReady = isCreditReady(b) ? 0 : 1;
-      if (aReady !== bReady) {
-        return aReady - bReady;
-      }
-      return a.name.localeCompare(b.name);
-    });
-    return matched.slice(0, 8);
-  }, [localCustomers, customerSearch, isCreditReady]);
+  }, [localCustomers, customerSearch]);
+
+  const filteredCreditCustomers = React.useMemo(() => {
+    return creditSearchMatches
+      .filter(isCreditReady)
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .slice(0, 8);
+  }, [creditSearchMatches, isCreditReady]);
+
+  const unmatchedCreditSearch = React.useMemo(() => {
+    const q = customerSearch.trim();
+    if (!q || filteredCreditCustomers.length > 0) {
+      return null as CreditCustomerOption | null;
+    }
+    const notReady = creditSearchMatches.filter((c) => !isCreditReady(c));
+    if (notReady.length === 0) {
+      return null;
+    }
+    // Prefer exact phone / name hits so the message is specific.
+    const exact =
+      notReady.find((c) => c.phone === normalizePhone(q)) ||
+      notReady.find((c) => c.name.toLowerCase() === q.toLowerCase()) ||
+      notReady[0];
+    return exact;
+  }, [customerSearch, filteredCreditCustomers.length, creditSearchMatches, isCreditReady]);
 
   if (!open) {
     return null;
@@ -865,7 +880,11 @@ handleConfirm();
                       }}
                     >
                       {filteredCreditCustomers.map((c) => {
-                        const ready = isCreditReady(c);
+                        const creditLeft = Math.max(
+                          0,
+                          Number(c.creditLimit || 0) - Number(c.outstanding || 0),
+                        );
+                        const owed = Number(c.outstanding || 0);
                         return (
                           <button
                             key={c.id}
@@ -901,15 +920,16 @@ handleConfirm();
                                 {c.phone}
                               </span>
                             </div>
-                            <div style={{ fontSize: 12, color: "var(--pos-tx-muted)", marginTop: 2 }}>
-                              {ready
-                                ? `Credit left ₹${Math.max(
-                                    0,
-                                    Number(c.creditLimit || 0) - Number(c.outstanding || 0),
-                                  ).toFixed(0)} · owed ₹${Number(c.outstanding || 0).toFixed(0)}`
-                                : c.creditBlocked
-                                  ? "Credit blocked"
-                                  : "Needs credit limit"}
+                            <div
+                              style={{
+                                fontSize: 12,
+                                color: "var(--pos-tx-muted)",
+                                marginTop: 2,
+                                fontVariantNumeric: "tabular-nums",
+                              }}
+                            >
+                              Credit left ₹{creditLeft.toFixed(0)}
+                              {owed > 0 ? ` · owed ₹${owed.toFixed(0)}` : ""}
                             </div>
                           </button>
                         );
@@ -919,34 +939,87 @@ handleConfirm();
                           No customers yet. Add one to continue.
                         </div>
                       )}
-                      {localCustomers.length > 0 && filteredCreditCustomers.length === 0 && (
-                        <div style={{ padding: 12, fontSize: 13, color: "var(--pos-tx-sub)" }}>
-                          No match for “{customerSearch.trim()}”.{" "}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setShowNewCustomer(true);
-                              const q = customerSearch.trim();
-                              if (/^\d/.test(q)) {
-                                setNewPhone(q);
-                              } else {
-                                setNewName(q);
-                              }
-                            }}
-                            style={{
-                              background: "none",
-                              border: "none",
-                              padding: 0,
-                              color: "var(--pos-teal)",
-                              fontWeight: 700,
-                              cursor: "pointer",
-                              fontSize: 13,
-                            }}
-                          >
-                            Add as new customer
-                          </button>
-                        </div>
-                      )}
+                      {localCustomers.length > 0 &&
+                        filteredCreditCustomers.length === 0 &&
+                        !customerSearch.trim() && (
+                          <div style={{ padding: 12, fontSize: 13, color: "var(--pos-tx-sub)" }}>
+                            No credit-ready customers yet. Enable a limit on Customers
+                            {canManageCredit ? ", or create one with a limit here." : "."}
+                          </div>
+                        )}
+                      {localCustomers.length > 0 &&
+                        filteredCreditCustomers.length === 0 &&
+                        Boolean(customerSearch.trim()) &&
+                        unmatchedCreditSearch && (
+                          <div style={{ padding: 12, fontSize: 13, color: "var(--pos-tx-sub)" }}>
+                            <div style={{ fontWeight: 700, color: "var(--pos-tx)", marginBottom: 4 }}>
+                              {unmatchedCreditSearch.name}{" "}
+                              <span
+                                style={{
+                                  fontWeight: 600,
+                                  color: "var(--pos-tx-sub)",
+                                  fontVariantNumeric: "tabular-nums",
+                                }}
+                              >
+                                {unmatchedCreditSearch.phone}
+                              </span>
+                            </div>
+                            {unmatchedCreditSearch.creditBlocked
+                              ? "Credit is blocked for this customer."
+                              : canManageCredit
+                                ? "Not credit-ready yet — select to set a limit."
+                                : "Not credit-ready. Ask a manager to enable a credit limit on Customers."}
+                            {canManageCredit && !unmatchedCreditSearch.creditBlocked ? (
+                              <div style={{ marginTop: 8 }}>
+                                <Button
+                                  type="button"
+                                  variant="primary"
+                                  size="sm"
+                                  disabled={processing || savingCustomer || savingCreditSetup}
+                                  onClick={() => {
+                                    setCreditCustomerId(unmatchedCreditSearch.id);
+                                    setCustomerSearch("");
+                                    setDueDateOverridden(false);
+                                    setShowDueDateChange(false);
+                                  }}
+                                >
+                                  Select to enable
+                                </Button>
+                              </div>
+                            ) : null}
+                          </div>
+                        )}
+                      {localCustomers.length > 0 &&
+                        filteredCreditCustomers.length === 0 &&
+                        Boolean(customerSearch.trim()) &&
+                        !unmatchedCreditSearch && (
+                          <div style={{ padding: 12, fontSize: 13, color: "var(--pos-tx-sub)" }}>
+                            No match for “{customerSearch.trim()}”.{" "}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShowNewCustomer(true);
+                                const q = customerSearch.trim();
+                                if (/^\d/.test(q)) {
+                                  setNewPhone(q);
+                                } else {
+                                  setNewName(q);
+                                }
+                              }}
+                              style={{
+                                background: "none",
+                                border: "none",
+                                padding: 0,
+                                color: "var(--pos-teal)",
+                                fontWeight: 700,
+                                cursor: "pointer",
+                                fontSize: 13,
+                              }}
+                            >
+                              Add as new customer
+                            </button>
+                          </div>
+                        )}
                     </div>
                   </>
                 )}
