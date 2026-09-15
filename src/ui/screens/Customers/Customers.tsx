@@ -11,7 +11,7 @@ import { getConfigBranding } from "../../../app/db/posRepository";
 import { printReceipt } from "../../../app/services/printer";
 import { useToast } from "../../context/ToastContext";
 import { AuthContext } from "../../context/AuthContext";
-import { roleHasPermission } from "../../../shared/permissions";
+import { canManageCustomerCredit, roleHasPermission } from "../../../shared/permissions";
 import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui/Input";
 import { PageHeader } from "../../components/ui/PageHeader";
@@ -19,12 +19,13 @@ import { VirtualScrollList } from "../../components/VirtualScrollList";
 import { Drawer } from "../../components/ui/Drawer";
 import { DataTable } from "../../components/ui/DataTable";
 import { Stat } from "../../components/ui/Stat";
+import { ConfirmModal } from "../../components/ui/ConfirmModal";
 import {
   buildCreditCollectionLines,
   buildCreditStatementLines,
 } from "./creditPrintBuilders";
 
-const CUSTOMER_ROW_HEIGHT = 96;
+const CUSTOMER_ROW_HEIGHT = 112;
 const LEDGER_PAGE_SIZE = 20;
 
 interface Customer {
@@ -98,10 +99,7 @@ export default function Customers() {
   const { showToast } = useToast();
   const auth = React.useContext(AuthContext);
   const role = auth?.session?.role;
-  const canManageCredit = Boolean(
-    role &&
-      (roleHasPermission(role, "system:settings") || roleHasPermission(role, "page:manager")),
-  );
+  const canManageCredit = canManageCustomerCredit(role);
   const canReceive = Boolean(role && roleHasPermission(role, "order:pay"));
 
   const [customers, setCustomers] = React.useState<Customer[]>([]);
@@ -157,6 +155,9 @@ export default function Customers() {
   const [savingCredit, setSavingCredit] = React.useState(false);
   const [hotelName, setHotelName] = React.useState("Restaurant");
   const [printingStatement, setPrintingStatement] = React.useState(false);
+  const [voidTarget, setVoidTarget] = React.useState<LedgerEntry | null>(null);
+  const [voidReason, setVoidReason] = React.useState("");
+  const [voiding, setVoiding] = React.useState(false);
 
   React.useEffect(() => {
     loadCustomers();
@@ -444,6 +445,28 @@ export default function Customers() {
     }
   };
 
+  const confirmVoidCreditSale = async () => {
+    if (!selectedCustomer || !voidTarget || !canManageCredit) {
+      return;
+    }
+    setVoiding(true);
+    try {
+      const result = await window.pos!.customers!.voidCreditSale(voidTarget.id, {
+        reason: voidReason.trim() || null,
+      });
+      setAccount(result?.account || account);
+      setVoidTarget(null);
+      setVoidReason("");
+      showToast(`Voided ${formatMoney(Number(result?.voided?.amount || voidTarget.remaining || 0))}`);
+      await loadCustomers();
+      await loadLedgerPage(selectedCustomer.id, 0, false);
+    } catch (e: any) {
+      showToast(validationMessage(e, "Could not void credit sale"), "error");
+    } finally {
+      setVoiding(false);
+    }
+  };
+
   const filteredCustomers = React.useMemo(() => {
     const query = normalizeText(search).toLowerCase();
     return customers.filter((customer) => {
@@ -549,7 +572,7 @@ export default function Customers() {
           </div>
           {isEditing ? (
             <div
-              style={{ display: "flex", gap: 8, flexWrap: "wrap", flex: 1 }}
+              style={{ display: "flex", gap: 8, flexWrap: "wrap", flex: 1, alignItems: "flex-start" }}
               onClick={(e) => e.stopPropagation()}
             >
               <div style={{ flex: "1 1 160px" }}>
@@ -714,7 +737,7 @@ export default function Customers() {
         >
           Add New Customer
         </p>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-start" }}>
           <div style={{ flex: "1 1 180px" }}>
             <Input
               label="Customer name"
@@ -820,7 +843,7 @@ export default function Customers() {
         footer={
           selectedCustomer && account && !accountLoading ? (
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", width: "100%" }}>
-              {canReceive && account.outstanding > 0 && (
+              {canReceive && account.outstanding > 0 && !receiveOpen && (
                 <Button
                   variant="primary"
                   onClick={() => {
@@ -856,53 +879,24 @@ export default function Customers() {
                 value={formatMoney(account.overdue)}
                 sub={account.overdue > 0 ? "Past due bills" : undefined}
               />
-              <Stat label="Available" value={formatMoney(account.availableCredit)} />
+              <Stat
+                label="Credit left"
+                value={formatMoney(account.availableCredit)}
+                sub={
+                  account.creditLimit > 0
+                    ? `Limit ${formatMoney(account.creditLimit)} · for new bills`
+                    : "Set a limit under Credit terms"
+                }
+              />
             </div>
-
-            {canManageCredit && creditFeatureEnabled && (
-              <div className="pos-card pos-card-p" style={{ display: "grid", gap: 10 }}>
-                <div style={{ fontWeight: 700, fontSize: 13 }}>Credit terms</div>
-                <div style={{ fontSize: 12, color: "var(--pos-tx-sub)" }}>
-                  Limit above ₹0 enables Credit on Billing. Due days apply to new bills only —
-                  existing bills keep the date they were saved with. Leave days blank to use the
-                  restaurant default ({restaurantDefaultDays} days).
-                </div>
-                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                  <div style={{ flex: "1 1 140px" }}>
-                    <Input
-                      label="Credit limit (₹)"
-                      value={creditLimitEdit}
-                      onChange={(e) => setCreditLimitEdit(e.target.value)}
-                    />
-                  </div>
-                  <div style={{ flex: "1 1 140px" }}>
-                    <Input
-                      label="Due in days (optional)"
-                      value={creditDaysEdit}
-                      onChange={(e) => setCreditDaysEdit(e.target.value)}
-                      placeholder={`Blank = ${restaurantDefaultDays}`}
-                    />
-                  </div>
-                </div>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <Button
-                    size="sm"
-                    variant="primary"
-                    onClick={saveCreditSettings}
-                    disabled={savingCredit}
-                  >
-                    {savingCredit ? "Saving…" : "Save credit settings"}
-                  </Button>
-                  <Button size="sm" variant="secondary" onClick={toggleCreditBlocked}>
-                    {account.creditBlocked ? "Unblock credit" : "Block credit"}
-                  </Button>
-                </div>
-              </div>
-            )}
 
             {receiveOpen && (
               <div className="pos-card pos-card-p" style={{ display: "grid", gap: 10 }}>
                 <div style={{ fontWeight: 700 }}>Receive customer payment</div>
+                <div style={{ fontSize: 12, color: "var(--pos-tx-sub)" }}>
+                  Collecting against outstanding {formatMoney(account.outstanding)}. This is not the
+                  credit limit.
+                </div>
                 <Input
                   label="Amount (₹)"
                   value={receiveAmount}
@@ -958,6 +952,47 @@ export default function Customers() {
               </div>
             )}
 
+            {canManageCredit && creditFeatureEnabled && !receiveOpen && (
+              <div className="pos-card pos-card-p" style={{ display: "grid", gap: 10 }}>
+                <div style={{ fontWeight: 700, fontSize: 13 }}>Credit terms</div>
+                <div style={{ fontSize: 12, color: "var(--pos-tx-sub)" }}>
+                  Limit above ₹0 enables Credit on Billing. Due days apply to new bills only —
+                  existing bills keep the date they were saved with. Leave days blank to use the
+                  restaurant default ({restaurantDefaultDays} days).
+                </div>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  <div style={{ flex: "1 1 140px" }}>
+                    <Input
+                      label="Credit limit (₹)"
+                      value={creditLimitEdit}
+                      onChange={(e) => setCreditLimitEdit(e.target.value)}
+                    />
+                  </div>
+                  <div style={{ flex: "1 1 140px" }}>
+                    <Input
+                      label="Due in days (optional)"
+                      value={creditDaysEdit}
+                      onChange={(e) => setCreditDaysEdit(e.target.value)}
+                      placeholder={`Blank = ${restaurantDefaultDays}`}
+                    />
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    onClick={saveCreditSettings}
+                    disabled={savingCredit}
+                  >
+                    {savingCredit ? "Saving…" : "Save credit settings"}
+                  </Button>
+                  <Button size="sm" variant="secondary" onClick={toggleCreditBlocked}>
+                    {account.creditBlocked ? "Unblock credit" : "Block credit"}
+                  </Button>
+                </div>
+              </div>
+            )}
+
             <div>
               <div style={{ fontWeight: 700, marginBottom: 8 }}>Ledger</div>
               {ledgerEntries.length === 0 ? (
@@ -968,18 +1003,23 @@ export default function Customers() {
                 <>
                   <DataTable
                     dense
-                    headers={["Date", "Details", "Debit", "Credit", "Bal"]}
+                    headers={["Date", "Details", "Debit", "Credit", "Bal", ""]}
                     rows={ledgerEntries.map((entry) => {
                       const isSale = entry.entryType === "credit_sale";
                       const isPay = entry.entryType === "payment_received";
+                      const isVoid = entry.entryType === "void" || entry.entryType === "adjustment";
+                      const openRemaining =
+                        isSale && entry.remaining != null && entry.remaining > 0;
                       const detail = [
                         entry.invoiceNumber ||
-                          (isPay ? "Payment" : entry.entryType.replace("_", " ")),
+                          (isPay
+                            ? "Payment"
+                            : isVoid
+                              ? "Void"
+                              : entry.entryType.replace("_", " ")),
                         entry.description || "",
                         entry.dueDate ? `due ${entry.dueDate}` : "",
-                        isSale && entry.remaining != null && entry.remaining > 0
-                          ? `left ${formatMoney(entry.remaining)}`
-                          : "",
+                        openRemaining ? `left ${formatMoney(entry.remaining || 0)}` : "",
                       ]
                         .filter(Boolean)
                         .join(" · ");
@@ -987,8 +1027,23 @@ export default function Customers() {
                         formatEntryDate(entry.createdAt),
                         detail,
                         isSale ? formatMoney(entry.amount) : "—",
-                        isPay ? formatMoney(entry.amount) : "—",
+                        isPay || isVoid ? formatMoney(entry.amount) : "—",
                         formatMoney(entry.runningBalance),
+                        openRemaining && canManageCredit ? (
+                          <Button
+                            key={`void-${entry.id}`}
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              setVoidReason("");
+                              setVoidTarget(entry);
+                            }}
+                          >
+                            Void
+                          </Button>
+                        ) : (
+                          ""
+                        ),
                       ];
                     })}
                     empty="No account activity yet."
@@ -1012,6 +1067,37 @@ export default function Customers() {
           </div>
         )}
       </Drawer>
+
+      <ConfirmModal
+        open={Boolean(voidTarget)}
+        title="Void open credit sale?"
+        confirmLabel={voiding ? "Voiding…" : "Void remaining"}
+        variant="danger"
+        loading={voiding}
+        warning="This clears the unpaid balance on this bill. The original sale stays in History as paid credit; only the open receivable is removed."
+        onClose={() => {
+          if (!voiding) {
+            setVoidTarget(null);
+            setVoidReason("");
+          }
+        }}
+        onConfirm={confirmVoidCreditSale}
+      >
+        {voidTarget ? (
+          <div style={{ display: "grid", gap: 10 }}>
+            <div style={{ fontSize: 13, color: "var(--pos-tx-sec)" }}>
+              {voidTarget.invoiceNumber || "Credit sale"} · remaining{" "}
+              {formatMoney(Number(voidTarget.remaining || 0))}
+            </div>
+            <Input
+              label="Reason (optional)"
+              value={voidReason}
+              onChange={(e) => setVoidReason(e.target.value)}
+              placeholder="Wrong bill, customer dispute…"
+            />
+          </div>
+        ) : null}
+      </ConfirmModal>
     </div>
   );
 }

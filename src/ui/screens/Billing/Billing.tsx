@@ -52,6 +52,7 @@ import {
 } from "../../../shared/customerCredit";
 import PaymentsModal, { type PaymentConfirm } from "../../components/PaymentsModal";
 import { AuthContext } from "../../context/AuthContext";
+import { canManageCustomerCredit } from "../../../shared/permissions";
 import { useToast } from "../../context/ToastContext";
 import OrderList from "./components/OrderList";
 import PickButtons from "./components/PickButtons";
@@ -2610,6 +2611,7 @@ export default function Billing() {
         processing={paymentProcessing}
         forcePrintReceipt={requiresOnPayPrintFlow}
         creditEnabled={creditConfig.enabled}
+        canManageCredit={canManageCustomerCredit(auth?.session?.role)}
         restaurantDefaultCreditDays={creditConfig.defaultCreditDays}
         orderCustomerId={order?.customerId || null}
         customers={creditCustomers}

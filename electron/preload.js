@@ -152,6 +152,8 @@ contextBridge.exposeInMainWorld("pos", {
     openBills: (customerId) => authInvoke("pos:customers:open-bills", customerId),
     receivePayment: (customerId, payload) =>
       authInvoke("pos:customers:receive-payment", customerId, payload),
+    voidCreditSale: (creditEntryId, payload) =>
+      authInvoke("pos:customers:void-credit-sale", creditEntryId, payload),
   },
   staff: {
     list: (opts) => authInvoke("pos:staff:list", opts),

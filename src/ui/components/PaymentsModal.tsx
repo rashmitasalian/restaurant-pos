@@ -51,6 +51,7 @@ interface Props {
   processing?: boolean;
   forcePrintReceipt?: boolean;
   creditEnabled?: boolean;
+  canManageCredit?: boolean;
   restaurantDefaultCreditDays?: number;
   orderCustomerId?: string | null;
   customers?: CreditCustomerOption[];
@@ -74,6 +75,7 @@ export default function PaymentsModal({
   processing = false,
   forcePrintReceipt = false,
   creditEnabled = false,
+  canManageCredit = false,
   restaurantDefaultCreditDays = 15,
   orderCustomerId = null,
   customers = [],
@@ -330,20 +332,26 @@ export default function PaymentsModal({
       setNewError(validationMessage("customer-phone-invalid"));
       return;
     }
-    const limit = Number(newLimit || 0);
-    if (!Number.isFinite(limit) || limit <= 0) {
-      setNewError("Enter a credit limit above ₹0");
-      return;
+    if (canManageCredit) {
+      const limit = Number(newLimit || 0);
+      if (!Number.isFinite(limit) || limit <= 0) {
+        setNewError("Enter a credit limit above ₹0");
+        return;
+      }
     }
     setSavingCustomer(true);
     try {
-      const created = await window.pos!.customers!.create({
-        name,
-        phone,
-        creditEnabled: true,
-        creditLimit: limit,
-        defaultCreditDays: null,
-      });
+      const created = await window.pos!.customers!.create(
+        canManageCredit
+          ? {
+              name,
+              phone,
+              creditEnabled: true,
+              creditLimit: Number(newLimit || 0),
+              defaultCreditDays: null,
+            }
+          : { name, phone },
+      );
       const mapped = upsertLocalCustomer(created);
       setCreditCustomerId(mapped.id);
       setCustomerSearch("");
@@ -361,7 +369,7 @@ export default function PaymentsModal({
   };
 
   const enableCreditForSelected = async () => {
-    if (!creditCustomer) {
+    if (!creditCustomer || !canManageCredit) {
       return;
     }
     setCreditSetupError(null);
@@ -810,8 +818,8 @@ handleConfirm();
               <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
                 {!creditCustomer && !showNewCustomer && (
                   <>
-                    <div style={{ display: "flex", alignItems: "flex-end", gap: 8 }}>
-                      <div style={{ flex: 1 }}>
+                    <div className="ui-field-row">
+                      <div style={{ flex: 1, minWidth: 0 }}>
                         <Input
                           label="Customer"
                           value={customerSearch}
@@ -821,14 +829,18 @@ handleConfirm();
                           autoFocus
                         />
                       </div>
-                      <Button
-                        type="button"
-                        variant="accent"
-                        size="sm"
-                        disabled={processing || savingCustomer}
-                        onClick={() => {
-                          setShowNewCustomer(true);
-                          setNewError(null);
+                      <div className="ui-field-row-action">
+                        <span className="ui-label-spacer" aria-hidden>
+                          .
+                        </span>
+                        <Button
+                          type="button"
+                          variant="accent"
+                          size="sm"
+                          disabled={processing || savingCustomer}
+                          onClick={() => {
+                            setShowNewCustomer(true);
+                            setNewError(null);
                           const q = customerSearch.trim();
                           if (q) {
                             if (/^\d/.test(q)) {
@@ -841,6 +853,8 @@ handleConfirm();
                       >
                         New customer
                       </Button>
+                        <div className="ui-field-error" aria-hidden />
+                      </div>
                     </div>
                     <div
                       style={{
@@ -889,7 +903,7 @@ handleConfirm();
                             </div>
                             <div style={{ fontSize: 12, color: "var(--pos-tx-muted)", marginTop: 2 }}>
                               {ready
-                                ? `Available ₹${Math.max(
+                                ? `Credit left ₹${Math.max(
                                     0,
                                     Number(c.creditLimit || 0) - Number(c.outstanding || 0),
                                   ).toFixed(0)} · owed ₹${Number(c.outstanding || 0).toFixed(0)}`
@@ -983,19 +997,28 @@ handleConfirm();
                       inputMode="tel"
                       disabled={processing || savingCustomer}
                     />
-                    <Input
-                      label="Credit limit (₹)"
-                      type="number"
-                      min={1}
-                      step="1"
-                      value={newLimit}
-                      onChange={(e) => setNewLimit(e.target.value)}
-                      disabled={processing || savingCustomer}
-                    />
-                    <div style={{ fontSize: 12, color: "var(--pos-tx-sub)" }}>
-                      Due in {restaurantDefaultCreditDays} days (restaurant default). Applies to new
-                      bills only.
-                    </div>
+                    {canManageCredit ? (
+                      <>
+                        <Input
+                          label="Credit limit (₹)"
+                          type="number"
+                          min={1}
+                          step="1"
+                          value={newLimit}
+                          onChange={(e) => setNewLimit(e.target.value)}
+                          disabled={processing || savingCustomer}
+                        />
+                        <div style={{ fontSize: 12, color: "var(--pos-tx-sub)" }}>
+                          Due in {restaurantDefaultCreditDays} days (restaurant default). Applies to
+                          new bills only.
+                        </div>
+                      </>
+                    ) : (
+                      <div style={{ fontSize: 12, color: "var(--pos-tx-sub)" }}>
+                        Creates the customer contact only. A manager must enable credit on Customers
+                        before this bill can go on account.
+                      </div>
+                    )}
                     {newError ? (
                       <div style={{ color: "var(--pos-danger)", fontSize: 13, fontWeight: 600 }}>
                         {newError}
@@ -1064,7 +1087,7 @@ handleConfirm();
                     </div>
                     {!creditNeedsSetup && !creditCustomer.creditBlocked && (
                       <div style={{ fontSize: 13, color: "var(--pos-tx-sec)" }}>
-                        Available ₹{availableCredit.toFixed(0)} · Outstanding ₹
+                        Credit left ₹{availableCredit.toFixed(0)} · Outstanding ₹
                         {creditOutstanding.toFixed(0)}
                       </div>
                     )}
@@ -1075,33 +1098,44 @@ handleConfirm();
                     )}
                     {creditNeedsSetup && (
                       <div style={{ display: "grid", gap: 10 }}>
-                        <div style={{ fontSize: 13, color: "var(--pos-tx-sec)" }}>
-                          Set a credit limit to save this bill on account.
-                        </div>
-                        <Input
-                          label="Credit limit (₹)"
-                          type="number"
-                          min={1}
-                          step="1"
-                          value={inlineLimit}
-                          onChange={(e) => setInlineLimit(e.target.value)}
-                          disabled={processing || savingCreditSetup}
-                        />
-                        {creditSetupError ? (
-                          <div style={{ color: "var(--pos-danger)", fontSize: 13, fontWeight: 600 }}>
-                            {creditSetupError}
+                        {canManageCredit ? (
+                          <>
+                            <div style={{ fontSize: 13, color: "var(--pos-tx-sec)" }}>
+                              Set a credit limit to save this bill on account.
+                            </div>
+                            <Input
+                              label="Credit limit (₹)"
+                              type="number"
+                              min={1}
+                              step="1"
+                              value={inlineLimit}
+                              onChange={(e) => setInlineLimit(e.target.value)}
+                              disabled={processing || savingCreditSetup}
+                            />
+                            {creditSetupError ? (
+                              <div
+                                style={{ color: "var(--pos-danger)", fontSize: 13, fontWeight: 600 }}
+                              >
+                                {creditSetupError}
+                              </div>
+                            ) : null}
+                            <Button
+                              type="button"
+                              variant="primary"
+                              size="sm"
+                              loading={savingCreditSetup}
+                              disabled={processing}
+                              onClick={enableCreditForSelected}
+                            >
+                              Enable credit
+                            </Button>
+                          </>
+                        ) : (
+                          <div style={{ color: "var(--pos-danger)", fontWeight: 700, fontSize: 13 }}>
+                            Credit is not enabled for this customer. Ask a manager to enable a limit
+                            on Customers.
                           </div>
-                        ) : null}
-                        <Button
-                          type="button"
-                          variant="primary"
-                          size="sm"
-                          loading={savingCreditSetup}
-                          disabled={processing}
-                          onClick={enableCreditForSelected}
-                        >
-                          Enable credit
-                        </Button>
+                        )}
                       </div>
                     )}
                     {!creditCustomer.creditBlocked &&
@@ -1113,30 +1147,44 @@ handleConfirm();
                             Exceeds available credit (need ₹{amount.toFixed(0)}, available ₹
                             {availableCredit.toFixed(0)})
                           </div>
-                          <Input
-                            label="Raise credit limit (₹)"
-                            type="number"
-                            min={1}
-                            step="1"
-                            value={inlineLimit}
-                            onChange={(e) => setInlineLimit(e.target.value)}
-                            disabled={processing || savingCreditSetup}
-                          />
-                          {creditSetupError ? (
-                            <div style={{ color: "var(--pos-danger)", fontSize: 13, fontWeight: 600 }}>
-                              {creditSetupError}
+                          {canManageCredit ? (
+                            <>
+                              <Input
+                                label="Raise credit limit (₹)"
+                                type="number"
+                                min={1}
+                                step="1"
+                                value={inlineLimit}
+                                onChange={(e) => setInlineLimit(e.target.value)}
+                                disabled={processing || savingCreditSetup}
+                              />
+                              {creditSetupError ? (
+                                <div
+                                  style={{
+                                    color: "var(--pos-danger)",
+                                    fontSize: 13,
+                                    fontWeight: 600,
+                                  }}
+                                >
+                                  {creditSetupError}
+                                </div>
+                              ) : null}
+                              <Button
+                                type="button"
+                                variant="primary"
+                                size="sm"
+                                loading={savingCreditSetup}
+                                disabled={processing}
+                                onClick={enableCreditForSelected}
+                              >
+                                Update limit
+                              </Button>
+                            </>
+                          ) : (
+                            <div style={{ fontSize: 13, color: "var(--pos-tx-sec)" }}>
+                              Ask a manager to raise this customer&apos;s credit limit.
                             </div>
-                          ) : null}
-                          <Button
-                            type="button"
-                            variant="primary"
-                            size="sm"
-                            loading={savingCreditSetup}
-                            disabled={processing}
-                            onClick={enableCreditForSelected}
-                          >
-                            Update limit
-                          </Button>
+                          )}
                         </div>
                       )}
                   </div>

@@ -10,7 +10,7 @@ import fs from "fs";
 import path from "path";
 import type { Role, UserDto } from "../../src/shared/pos";
 import type { Permission } from "../../src/shared/permissions";
-import { roleHasPermission } from "../../src/shared/permissions";
+import { roleHasPermission, canManageCustomerCredit } from "../../src/shared/permissions";
 import { sanitizeIpcError } from "../../src/shared/validation";
 import { posService } from "../services/posService";
 import { updateService } from "../services/updateService";
@@ -484,12 +484,28 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
     return posService.listCustomers(opts as any);
   });
   ipcMain.handle("pos:customers:create", (event, token: string | null, payload) => {
-    requirePermission(event, token, "page:customers");
-    return posService.createCustomer(payload);
+    const user = requirePermission(event, token, "page:customers");
+    const wantsCreditPolicy =
+      Boolean(payload?.creditEnabled) ||
+      Boolean(payload?.creditBlocked) ||
+      Number(payload?.creditLimit || 0) > 0 ||
+      (payload?.defaultCreditDays !== undefined && payload?.defaultCreditDays !== null);
+    if (wantsCreditPolicy && !canManageCustomerCredit(user.role)) {
+      throw new Error("credit-manage-forbidden");
+    }
+    return posService.createCustomer(payload, user.username);
   });
   ipcMain.handle("pos:customers:update", (event, token: string | null, id: string, updates) => {
-    requirePermission(event, token, "page:customers");
-    return posService.updateCustomer(id, updates);
+    const user = requirePermission(event, token, "page:customers");
+    const changingCreditPolicy =
+      updates?.creditEnabled !== undefined ||
+      updates?.creditBlocked !== undefined ||
+      updates?.creditLimit !== undefined ||
+      updates?.defaultCreditDays !== undefined;
+    if (changingCreditPolicy && !canManageCustomerCredit(user.role)) {
+      throw new Error("credit-manage-forbidden");
+    }
+    return posService.updateCustomer(id, updates, user.username);
   });
   ipcMain.handle("pos:customers:delete", (event, token: string | null, id: string) => {
     requirePermission(event, token, "page:customers");
@@ -520,6 +536,16 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
     (event, token: string | null, customerId: string, payload) => {
       const user = requirePermission(event, token, "order:pay");
       return posService.receiveCustomerPayment(customerId, payload, user.username);
+    },
+  );
+  ipcMain.handle(
+    "pos:customers:void-credit-sale",
+    (event, token: string | null, creditEntryId: string, payload) => {
+      const user = requirePermission(event, token, "page:customers");
+      if (!canManageCustomerCredit(user.role)) {
+        throw new Error("credit-manage-forbidden");
+      }
+      return posService.voidCustomerCreditSale(creditEntryId, payload || {}, user.username);
     },
   );
 

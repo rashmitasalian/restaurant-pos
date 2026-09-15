@@ -63,6 +63,40 @@
   color: var(--pos-danger);
   margin-top: 4px;
   font-weight: 500;
+  /* Reserve one line so validation does not shift sibling fields/buttons. */
+  min-height: calc(var(--pos-type-11) * 1.35);
+  line-height: 1.35;
+}
+
+.ui-field-error:empty {
+  visibility: hidden;
+}
+
+/* Horizontal field + action rows: keep controls aligned when errors appear. */
+.ui-field-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.ui-field-row-action {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.ui-field-row-action > .ui-label,
+.ui-field-row-action > .ui-label-spacer {
+  display: block;
+  font-size: var(--pos-type-12);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+  min-height: calc(var(--pos-type-12) * 1.2);
+  visibility: hidden;
+  user-select: none;
 }
 
 .ui-field {

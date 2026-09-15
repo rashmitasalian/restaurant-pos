@@ -94,6 +94,20 @@ export type ReceiveCustomerPaymentInput = {
   reference?: string | null;
 };
 
+export type VoidCustomerCreditSaleInput = {
+  reason?: string | null;
+};
+
+export type VoidCustomerCreditSaleResultDto = {
+  account: CustomerAccountSummaryDto;
+  voided: {
+    entryId: string;
+    creditEntryId: string;
+    amount: number;
+    outstandingAfter: number;
+  };
+};
+
 export function normalizeCreditConfig(input?: Partial<CreditConfig> | null): CreditConfig {
   const rawDays = Number(input?.defaultCreditDays ?? DEFAULT_CREDIT_CONFIG.defaultCreditDays);
   const defaultCreditDays = Number.isFinite(rawDays)

@@ -124,6 +124,7 @@ declare global {
         ) => Promise<any>;
         openBills: (customerId: string) => Promise<any[]>;
         receivePayment: (customerId: string, payload: any) => Promise<any>;
+        voidCreditSale: (creditEntryId: string, payload?: any) => Promise<any>;
       };
       staff?: {
         list: (opts?: any) => Promise<any[]>;

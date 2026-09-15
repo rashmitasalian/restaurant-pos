@@ -40,11 +40,9 @@ export function Select({
       >
         {children}
       </select>
-      {error ? (
-        <div id={errorId} className="ui-field-error">
-          {error}
-        </div>
-      ) : null}
+      <div id={errorId} className="ui-field-error" aria-live="polite">
+        {error || null}
+      </div>
     </div>
   );
 }

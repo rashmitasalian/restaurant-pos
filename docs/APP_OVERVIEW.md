@@ -409,16 +409,40 @@ When GST enabled, receipts include:
 ### 9. CUSTOMER MANAGEMENT
 
 #### Customer Records
-- Store customer info: name, phone, email
+- Store customer info: name, phone
 - Link orders to customers
 - Useful for takeaway/delivery to recall orders
 
 #### Customer Functions
-- Create new customer during order creation
+- Create new customer during order creation or from Customers
 - Search existing customers (virtualized list for large datasets)
 - Link order to customer
-- View customer order history
 - Edit customer details from Customers page
+
+#### Customer Credit (Receivables)
+Credit lets trusted customers buy now and settle later. There is **no separate Receivables tab** — flow lives in **Billing** (Settle → Credit) and **Customers** (account drawer).
+
+**Model**
+- Order stays `paid` with payment method `credit` (not a separate unpaid state)
+- Ledger tables: `customer_account_entries` + FIFO `customer_credit_allocations`
+- Credit fields live on `customers` (limit, enabled, blocked, default days, outstanding)
+
+**Due dates**
+- Settings restaurant default → optional per-customer days → optional per-bill override
+- Stamped once on the bill; later settings changes apply to new bills only
+
+**Operations**
+- **Settle Credit** (Billing): select a credit-ready customer; managers/admins may enable or raise limits at the counter; cashiers select already-enabled customers only
+- **Hard block** when the sale would exceed available credit (no approval workflow)
+- **Customers account drawer**: outstanding / overdue / available, paged ledger, Receive Payment, thermal statement/collection print
+- **Void remaining** (manager/admin): clears unpaid balance on a mistaken credit sale; order stays paid; ledger gets a `void` entry
+- Collections still allowed if the feature is later turned off in Settings
+
+**Reports**
+- **Total Sales** includes credit sales on settle day
+- **Collected** = cash/UPI/card (+ other till methods) plus later credit receipts in range
+- **Credit Outstanding** / overdue are portfolio totals from open ledger bills
+- Profitability counts credit as sale revenue on settle day, not again when collected
 
 ---
 
@@ -481,6 +505,7 @@ Settings are organized under **Manage → Settings** with four tabs:
 - **Menu variant options**: Shared variant groups (e.g. size) for menu items
 - **Attendance shifts**: Morning / evening / night labels and standard hours
 - **Attendance holidays**: Date list for scheduled off days
+- **Customer credit**: Enable credit sales, restaurant default due days (new bills only)
 
 #### Retention
 - **Audit log retention**: Auto-prune logs older than N days (or never)
@@ -507,10 +532,12 @@ Reports are available from the top nav (**Reports**) or **Manage → Reports**. 
 - **Date range**: Business-day presets (today, yesterday, this week, this month) or custom range
 - **Metrics shown**:
   - Total orders (count)
-  - Total revenue (sum of paid order totals)
+  - Total revenue (sum of paid order totals, including credit sales)
+  - Collected (till methods + credit receipts in range)
+  - Credit outstanding / overdue (open ledger balances)
   - Subtotal, discount total, GST collected
   - Average order value
-  - Payment method breakdown (cash, UPI, card, voucher, online, other, split)
+  - Payment method breakdown (cash, UPI, card, voucher, online, other, credit, split)
 - **Product sales**: Category and item breakdown with charts; sortable item table with search and pagination
 - **Export**: PDF export via Electron (`exportReportPdf`)
 

@@ -106,6 +106,8 @@ import {
   type CustomerOpenBillDto,
   type ReceiveCustomerPaymentInput,
   type ReceiveCustomerPaymentResultDto,
+  type VoidCustomerCreditSaleInput,
+  type VoidCustomerCreditSaleResultDto,
 } from "../../src/shared/customerCredit";
 import {
   normalizeHolidayDates,
@@ -1382,6 +1384,25 @@ function refreshCustomerOutstanding(
     .run(Math.max(0, outstandingPaise), now(), customerId);
 }
 
+function sumOpenCreditRemainingPaise(database: Database.Database, customerId: string) {
+  const row = database
+    .prepare(
+      `SELECT COALESCE(SUM(remaining_paise), 0) AS remaining_paise
+       FROM customer_account_entries
+       WHERE customer_id = ?
+         AND entry_type = 'credit_sale'
+         AND remaining_paise > 0`,
+    )
+    .get(customerId) as { remaining_paise?: number } | undefined;
+  return Math.max(0, Number(row?.remaining_paise || 0));
+}
+
+function refreshCustomerOutstandingFromLedger(database: Database.Database, customerId: string) {
+  const outstandingPaise = sumOpenCreditRemainingPaise(database, customerId);
+  refreshCustomerOutstanding(database, customerId, outstandingPaise);
+  return outstandingPaise;
+}
+
 function orderHasOpenCreditBalance(database: Database.Database, orderId: string) {
   const row = database
     .prepare(
@@ -1419,7 +1440,7 @@ function createCreditSaleLedgerEntry(
     throw new Error("credit-customer-blocked");
   }
   const limitPaise = Math.max(0, Number(customer.credit_limit_paise || 0));
-  const currentOutstanding = Math.max(0, Number(customer.outstanding_paise || 0));
+  const currentOutstanding = sumOpenCreditRemainingPaise(database, opts.customerId);
   if (limitPaise <= 0 || currentOutstanding + opts.amountPaise > limitPaise) {
     throw new Error("credit-limit-exceeded");
   }
@@ -1448,14 +1469,14 @@ function createCreditSaleLedgerEntry(
       now(),
       opts.actor,
     );
-  refreshCustomerOutstanding(database, opts.customerId, nextOutstanding);
+  const reconciled = refreshCustomerOutstandingFromLedger(database, opts.customerId);
   createAuditRow(database, "customer.credit.sale", "customer", opts.customerId, opts.actor, {
     entryId,
     orderId: opts.orderId,
     amountPaise: opts.amountPaise,
     dueDate: opts.dueDate,
     invoiceNumber: opts.invoiceNumber,
-    outstandingPaise: nextOutstanding,
+    outstandingPaise: reconciled,
   });
   return entryId;
 }
@@ -1513,6 +1534,9 @@ function allocateCustomerPaymentFifo(
     });
     remainingToApply -= apply;
   }
+  if (remainingToApply > 0) {
+    throw new Error("credit-allocation-incomplete");
+  }
   return allocations;
 }
 
@@ -1532,7 +1556,7 @@ function receiveCustomerAccountPayment(
   if (!amountPaise || amountPaise <= 0) {
     throw new Error("credit-amount-invalid");
   }
-  const outstanding = Math.max(0, Number(customer.outstanding_paise || 0));
+  const outstanding = sumOpenCreditRemainingPaise(database, customerId);
   if (amountPaise > outstanding) {
     throw new Error("credit-amount-exceeds-outstanding");
   }
@@ -1543,7 +1567,7 @@ function receiveCustomerAccountPayment(
     throw new Error("credit-payment-method-invalid");
   }
 
-  const nextOutstanding = outstanding - amountPaise;
+  const provisionalOutstanding = outstanding - amountPaise;
   const entryId = `credit-entry:${randomUUID()}`;
   const reference =
     optionalGroceryText(input.reference, 80, "credit-reference-too-long") || null;
@@ -1560,7 +1584,7 @@ function receiveCustomerAccountPayment(
       entryId,
       customerId,
       amountPaise,
-      nextOutstanding,
+      provisionalOutstanding,
       `Payment received (${method.toUpperCase()})`,
       method,
       reference,
@@ -1569,7 +1593,12 @@ function receiveCustomerAccountPayment(
       actor || null,
     );
   const allocations = allocateCustomerPaymentFifo(database, entryId, customerId, amountPaise);
-  refreshCustomerOutstanding(database, customerId, nextOutstanding);
+  const nextOutstanding = refreshCustomerOutstandingFromLedger(database, customerId);
+  if (nextOutstanding !== provisionalOutstanding) {
+    database
+      .prepare("UPDATE customer_account_entries SET running_balance_paise = ? WHERE id = ?")
+      .run(nextOutstanding, entryId);
+  }
   createAuditRow(database, "customer.credit.payment", "customer", customerId, actor || null, {
     entryId,
     amountPaise,
@@ -1584,6 +1613,156 @@ function receiveCustomerAccountPayment(
     outstandingPaise: nextOutstanding,
     allocations,
   };
+}
+
+function voidCustomerCreditSaleEntry(
+  database: Database.Database,
+  creditEntryId: string,
+  input: VoidCustomerCreditSaleInput,
+  actor?: string | null,
+) {
+  const credit = database
+    .prepare(
+      `SELECT *
+       FROM customer_account_entries
+       WHERE id = ? AND entry_type = 'credit_sale'
+       LIMIT 1`,
+    )
+    .get(creditEntryId) as any;
+  if (!credit) {
+    throw new Error("credit-sale-not-found");
+  }
+  const remainingPaise = Math.max(0, Number(credit.remaining_paise || 0));
+  if (remainingPaise <= 0) {
+    throw new Error("credit-sale-already-settled");
+  }
+  const customerId = String(credit.customer_id);
+  const customer = database
+    .prepare("SELECT id FROM customers WHERE id = ? AND active = 1 LIMIT 1")
+    .get(customerId) as { id: string } | undefined;
+  if (!customer) {
+    throw new Error("customer-not-found");
+  }
+  const reason =
+    optionalGroceryText(input.reason, 500, "credit-void-reason-too-long") || null;
+
+  database
+    .prepare("UPDATE customer_account_entries SET remaining_paise = 0 WHERE id = ?")
+    .run(creditEntryId);
+
+  const nextOutstanding = sumOpenCreditRemainingPaise(database, customerId);
+  const voidEntryId = `credit-entry:${randomUUID()}`;
+  const invoiceLabel = credit.invoice_number ? ` ${credit.invoice_number}` : "";
+  database
+    .prepare(
+      `INSERT INTO customer_account_entries (
+         id, customer_id, entry_type, amount_paise, running_balance_paise,
+         order_id, invoice_number, description, due_date, remaining_paise,
+         payment_method, reference, notes, created_at, created_by
+       ) VALUES (?, ?, 'void', ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?, ?, ?)`,
+    )
+    .run(
+      voidEntryId,
+      customerId,
+      remainingPaise,
+      nextOutstanding,
+      credit.order_id || null,
+      credit.invoice_number || null,
+      `Void credit sale${invoiceLabel}`,
+      credit.invoice_number || null,
+      reason,
+      now(),
+      actor || null,
+    );
+  refreshCustomerOutstanding(database, customerId, nextOutstanding);
+
+  if (credit.order_id) {
+    const orderRow = database
+      .prepare("SELECT meta_json FROM orders WHERE id = ? LIMIT 1")
+      .get(credit.order_id) as { meta_json?: string } | undefined;
+    if (orderRow) {
+      const meta = parseJson(orderRow.meta_json, {}) as Record<string, unknown>;
+      const previousCredit = (meta.credit && typeof meta.credit === "object"
+        ? meta.credit
+        : {}) as Record<string, unknown>;
+      meta.credit = {
+        ...previousCredit,
+        voided: true,
+        voidedAt: now(),
+        voidedBy: actor || null,
+        voidedAmountPaise: remainingPaise,
+        voidEntryId,
+      };
+      database
+        .prepare("UPDATE orders SET meta_json = ?, updated_at = ? WHERE id = ?")
+        .run(stringifyJson(meta), now(), credit.order_id);
+    }
+  }
+
+  createAuditRow(database, "customer.credit.voided", "customer", customerId, actor || null, {
+    voidEntryId,
+    creditEntryId,
+    orderId: credit.order_id || null,
+    amountPaise: remainingPaise,
+    outstandingPaise: nextOutstanding,
+    reason,
+  });
+
+  return {
+    voidEntryId,
+    creditEntryId,
+    amountPaise: remainingPaise,
+    outstandingPaise: nextOutstanding,
+    customerId,
+  };
+}
+
+function relinkCreditLedgerOnOrderRestore(
+  database: Database.Database,
+  order: OrderDto,
+) {
+  const customerId = order.customerId || null;
+  if (!customerId) {
+    return;
+  }
+  const hasCreditPayment = (order.payments || []).some(
+    (payment) => String(payment?.method || "").toLowerCase() === "credit",
+  );
+  if (!hasCreditPayment) {
+    return;
+  }
+  const invoiceNumber = getOrderInvoiceNumber(order);
+  const amountPaise = rupeesToPaise(Number(order.total || 0));
+  if (invoiceNumber) {
+    const byInvoice = database
+      .prepare(
+        `UPDATE customer_account_entries
+         SET order_id = ?
+         WHERE customer_id = ?
+           AND entry_type = 'credit_sale'
+           AND order_id IS NULL
+           AND invoice_number = ?`,
+      )
+      .run(order._id, customerId, invoiceNumber);
+    if (byInvoice.changes > 0) {
+      return;
+    }
+  }
+  database
+    .prepare(
+      `UPDATE customer_account_entries
+       SET order_id = ?
+       WHERE id = (
+         SELECT id FROM customer_account_entries
+         WHERE customer_id = ?
+           AND entry_type = 'credit_sale'
+           AND order_id IS NULL
+           AND amount_paise = ?
+         ORDER BY created_at DESC, id DESC
+         LIMIT 1
+       )`,
+    )
+    .run(order._id, customerId, amountPaise);
 }
 
 function lookupActorRole(database: Database.Database, username?: string | null): Role | null {
@@ -4244,6 +4423,7 @@ export const posService = {
           );
       });
       createAuditRow(database, "order.restored", "order", order._id, actor || null, {});
+      relinkCreditLedgerOnOrderRestore(database, order);
       return this.getOrderById(order._id)!;
     });
   },
@@ -6618,16 +6798,19 @@ export const posService = {
     return rows.map((row) => customerFromRow(row, overdueByCustomer.get(row.id) || 0));
   },
 
-  createCustomer(input: {
-    name: string;
-    phone: string;
-    address?: string;
-    notes?: string;
-    creditEnabled?: boolean;
-    creditBlocked?: boolean;
-    creditLimit?: number;
-    defaultCreditDays?: number | null;
-  }) {
+  createCustomer(
+    input: {
+      name: string;
+      phone: string;
+      address?: string;
+      notes?: string;
+      creditEnabled?: boolean;
+      creditBlocked?: boolean;
+      creditLimit?: number;
+      defaultCreditDays?: number | null;
+    },
+    actor?: string | null,
+  ) {
     const name = normalizeText(input.name);
     const phone = normalizePhone(input.phone);
     if (!isValidPersonName(name)) {
@@ -6666,10 +6849,24 @@ export const posService = {
         at,
         at,
       );
+    if (
+      input.creditEnabled ||
+      input.creditBlocked ||
+      creditLimitPaise > 0 ||
+      defaultDays !== null
+    ) {
+      createAuditRow(database, "customer.credit.updated", "customer", id, actor || null, {
+        creditEnabled: Boolean(input.creditEnabled),
+        creditBlocked: Boolean(input.creditBlocked),
+        creditLimitPaise: Math.max(0, creditLimitPaise || 0),
+        defaultCreditDays: defaultDays,
+        created: true,
+      });
+    }
     return this.listCustomers().find((customer) => customer.id === id)!;
   },
 
-  updateCustomer(id: string, updates: Partial<CustomerDto>) {
+  updateCustomer(id: string, updates: Partial<CustomerDto>, actor?: string | null) {
     const current = getDb().prepare("SELECT * FROM customers WHERE id = ?").get(id) as any;
     if (!current) {
       throw new Error("customer-not-found");
@@ -6734,7 +6931,7 @@ export const posService = {
       updates.creditLimit !== undefined ||
       updates.defaultCreditDays !== undefined
     ) {
-      createAuditRow(database, "customer.credit.updated", "customer", id, null, {
+      createAuditRow(database, "customer.credit.updated", "customer", id, actor || null, {
         creditEnabled: Boolean(creditEnabled),
         creditBlocked: Boolean(creditBlocked),
         creditLimitPaise,
@@ -6749,9 +6946,12 @@ export const posService = {
     if (!current) {
       throw new Error("customer-not-found");
     }
-    if (Number(current.outstanding_paise || 0) > 0) {
+    const outstanding = sumOpenCreditRemainingPaise(getDb(), id);
+    if (outstanding > 0) {
+      refreshCustomerOutstanding(getDb(), id, outstanding);
       throw new Error("customer-has-outstanding");
     }
+    refreshCustomerOutstanding(getDb(), id, 0);
     getDb().prepare("UPDATE customers SET active = 0, updated_at = ? WHERE id = ?").run(now(), id);
     return { ok: true };
   },
@@ -6764,12 +6964,13 @@ export const posService = {
     if (!customer) {
       throw new Error("customer-not-found");
     }
+    const outstandingPaise = refreshCustomerOutstandingFromLedger(database, customerId);
     const countRow = database
       .prepare(
         `SELECT COUNT(*) AS total FROM customer_account_entries WHERE customer_id = ?`,
       )
       .get(customerId) as { total: number };
-    const outstanding = paiseToRupees(customer.outstanding_paise);
+    const outstanding = paiseToRupees(outstandingPaise);
     const overdue = paiseToRupees(sumCustomerOverduePaise(database, customerId));
     const creditLimit = paiseToRupees(customer.credit_limit_paise);
     return {
@@ -6886,6 +7087,25 @@ export const posService = {
     });
   },
 
+  voidCustomerCreditSale(
+    creditEntryId: string,
+    input: VoidCustomerCreditSaleInput = {},
+    actor?: string | null,
+  ): VoidCustomerCreditSaleResultDto {
+    return inTransaction((database) => {
+      const voided = voidCustomerCreditSaleEntry(database, creditEntryId, input || {}, actor);
+      return {
+        account: this.getCustomerAccount(voided.customerId),
+        voided: {
+          entryId: voided.voidEntryId,
+          creditEntryId: voided.creditEntryId,
+          amount: paiseToRupees(voided.amountPaise),
+          outstandingAfter: paiseToRupees(voided.outstandingPaise),
+        },
+      };
+    });
+  },
+
   getCreditCollectionsInRange(opts: { from?: number; to?: number } = {}) {
     const clauses = ["entry_type = 'payment_received'"];
     const params: unknown[] = [];
@@ -6916,8 +7136,10 @@ export const posService = {
     const database = getDb();
     const outstandingRow = database
       .prepare(
-        `SELECT COALESCE(SUM(outstanding_paise), 0) AS outstanding_paise
-         FROM customers WHERE active = 1`,
+        `SELECT COALESCE(SUM(remaining_paise), 0) AS outstanding_paise
+         FROM customer_account_entries
+         WHERE entry_type = 'credit_sale'
+           AND remaining_paise > 0`,
       )
       .get() as { outstanding_paise: number };
     const overdueRow = database

@@ -199,7 +199,7 @@ export default function AuditViewer() {
       description="Track system activities and transactions"
       width="full"
       toolbar={
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "flex-end", width: "100%" }}>
+        <div className="ui-field-row" style={{ width: "100%" }}>
           <div style={{ flex: "1 1 180px", minWidth: 160 }}>
             <Input
               label="Search"
@@ -248,18 +248,39 @@ export default function AuditViewer() {
               <option value={100}>100</option>
             </Select>
           </div>
-          <Button variant="secondary" onClick={() => void load()} loading={loading}>
-            <Icon icon={RefreshCw} size="sm" /> Refresh
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={() => downloadCSV(items)}
-            disabled={items.length === 0}
+          <div className="ui-field-row-action">
+            <span className="ui-label-spacer" aria-hidden>
+              .
+            </span>
+            <Button variant="secondary" onClick={() => void load()} loading={loading}>
+              <Icon icon={RefreshCw} size="sm" /> Refresh
+            </Button>
+            <div className="ui-field-error" aria-hidden />
+          </div>
+          <div className="ui-field-row-action">
+            <span className="ui-label-spacer" aria-hidden>
+              .
+            </span>
+            <Button
+              variant="secondary"
+              onClick={() => downloadCSV(items)}
+              disabled={items.length === 0}
+            >
+              <Icon icon={Download} size="sm" /> Export Page CSV
+            </Button>
+            <div className="ui-field-error" aria-hidden />
+          </div>
+          <span
+            className="ui-field-row-action"
+            style={{ marginLeft: "auto", fontSize: 13, color: "var(--pos-tx-muted)" }}
           >
-            <Icon icon={Download} size="sm" /> Export Page CSV
-          </Button>
-          <span style={{ marginLeft: "auto", fontSize: 13, color: "var(--pos-tx-muted)" }}>
-            {totalCount} result{totalCount !== 1 ? "s" : ""}
+            <span className="ui-label-spacer" aria-hidden>
+              .
+            </span>
+            <span>
+              {totalCount} result{totalCount !== 1 ? "s" : ""}
+            </span>
+            <div className="ui-field-error" aria-hidden />
           </span>
         </div>
       }

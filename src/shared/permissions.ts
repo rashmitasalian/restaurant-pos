@@ -102,6 +102,14 @@ export function roleHasPermission(role: Role, permission: Permission): boolean {
   return PERMISSION_SET_CACHE.get(role)?.has(permission) ?? false;
 }
 
+/** Manager/admin only: enable limits, block credit, void open credit sales. */
+export function canManageCustomerCredit(role: Role | null | undefined): boolean {
+  if (!role) {
+    return false;
+  }
+  return roleHasPermission(role, "page:manager") || roleHasPermission(role, "system:settings");
+}
+
 export function isDesktopLoginRole(role: Role): boolean {
   return (DESKTOP_LOGIN_ROLES as readonly string[]).includes(role);
 }

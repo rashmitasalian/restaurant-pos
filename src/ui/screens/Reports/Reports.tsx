@@ -100,6 +100,8 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
   const [otherAmount, setOtherAmount] = React.useState(0);
   const [creditSalesAmount, setCreditSalesAmount] = React.useState(0);
   const [creditCollectedAmount, setCreditCollectedAmount] = React.useState(0);
+  const [creditOutstandingTotal, setCreditOutstandingTotal] = React.useState(0);
+  const [creditOverdueTotal, setCreditOverdueTotal] = React.useState(0);
   const [productSales, setProductSales] = React.useState<ProductSalesReportDto>(
     EMPTY_PRODUCT_SALES_REPORT,
   );
@@ -176,6 +178,12 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
         } catch {
           creditCollections = {};
         }
+        let creditTotals = { outstanding: 0, overdue: 0 };
+        try {
+          creditTotals = (await window.pos?.reports?.creditTotals?.()) || creditTotals;
+        } catch {
+          creditTotals = { outstanding: 0, overdue: 0 };
+        }
         let productReport = EMPTY_PRODUCT_SALES_REPORT;
         try {
           productReport = await getProductSalesReport({ from: fromTs, to: toTs });
@@ -222,10 +230,14 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
         setOtherAmount(other);
         setCreditSalesAmount(creditSales);
         setCreditCollectedAmount(creditCollected);
+        setCreditOutstandingTotal(Number(creditTotals.outstanding || 0));
+        setCreditOverdueTotal(Number(creditTotals.overdue || 0));
         setProductSales(productReport);
       } catch (e) {
         console.error("Failed to load reports:", e);
         setProductSales(EMPTY_PRODUCT_SALES_REPORT);
+        setCreditOutstandingTotal(0);
+        setCreditOverdueTotal(0);
       } finally {
         setLoading(false);
       }
@@ -589,6 +601,19 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
               label="Discounts Given"
               value={loading ? "———" : formatCurrency(discountTotal)}
               sub={loading ? "Loading…" : "Total discount deducted from orders"}
+            />
+          )}
+          {(loading || creditOutstandingTotal > 0 || creditOverdueTotal > 0 || creditSalesAmount > 0) && (
+            <Stat
+              label="Credit Outstanding"
+              value={loading ? "———" : formatCurrency(creditOutstandingTotal)}
+              sub={
+                loading
+                  ? "Loading…"
+                  : creditOverdueTotal > 0
+                    ? `${formatCurrency(creditOverdueTotal)} overdue across open bills`
+                    : "Open customer credit across all dates"
+              }
             />
           )}
         </div>
