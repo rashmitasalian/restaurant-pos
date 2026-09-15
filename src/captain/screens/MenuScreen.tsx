@@ -190,9 +190,10 @@ export function MenuScreen({
       return false;
     }
     if (query.trim()) {
-      return String(item.name || "")
-        .toLowerCase()
-        .includes(query.trim().toLowerCase());
+      const q = query.trim().toLowerCase();
+      const name = String(item.name || "").toLowerCase();
+      const sku = String(item.sku || "").toLowerCase();
+      return name.includes(q) || sku.includes(q);
     }
     return true;
   });
@@ -248,10 +249,10 @@ export function MenuScreen({
           <Icon icon={Search} size="md" />
           <input
             className="cap-search"
-            placeholder="Search menu"
+            placeholder="Search name or code"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            aria-label="Search menu"
+            aria-label="Search name or code"
           />
         </label>
         <div className="cap-cats cap-cats-pinned" role="tablist" aria-label="Menu categories">
