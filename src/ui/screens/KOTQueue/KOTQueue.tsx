@@ -13,7 +13,7 @@ import { printKOT } from "../../../app/services/printer";
 import { AuthContext } from "../../context/AuthContext";
 import { isKotQueueTicket } from "../../../shared/kot";
 import { formatKotAge, kotAgeTone } from "../../../shared/kotAge";
-import { formatTableLabel } from "../../../shared/floorLayout";
+import { formatTableTileLabel } from "../../../shared/floorLayout";
 import { validationMessage } from "../../../shared/validation";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { Badge } from "../../components/ui/Badge";
@@ -57,6 +57,7 @@ function buildPreview(
   items: Array<{ name: string; qty: number }>,
   sentBy?: string,
   kotSeqNum?: number,
+  tableLabel?: string | null,
 ) {
   const meta = order.meta || {};
   return {
@@ -65,7 +66,9 @@ function buildPreview(
     platform: String(meta.platform || meta.orderSource || meta.source || ""),
     platformCode: meta.code || meta.orderCode || meta.reference || "",
     customerName: meta.parcelName || meta.customerName || "",
+    customerPhone: meta.customerPhone || "",
     tableNum: order.tableId,
+    tableLabel: tableLabel || undefined,
     items,
     sentBy,
   };
@@ -117,7 +120,7 @@ export default function KOTQueue() {
             orderId: o._id,
             table: tableId,
             tableLabel: tableId
-              ? formatTableLabel(tableId, nameById.get(tableId))
+              ? formatTableTileLabel(tableId, nameById.get(tableId))
               : "",
             status: o.kotStatus,
             order: o,
@@ -209,7 +212,7 @@ export default function KOTQueue() {
           /* fallback to timestamp */
         }
       }
-      const preview = buildPreview(k.order, itemsToPrint, currentUserLabel, kotSeqNum);
+      const preview = buildPreview(k.order, itemsToPrint, currentUserLabel, kotSeqNum, k.tableLabel);
       const lines =
         k.pendingItems.length > 0
           ? buildKotLines(preview, { ...k.order, items: itemsToPrint }, k.table || null)

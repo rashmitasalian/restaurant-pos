@@ -240,6 +240,7 @@ function buildKotPreview(
   items: any[],
   sentBy?: string,
   kotSeqNum?: number,
+  tableLabel?: string | null,
 ) {
   const meta = orderData?.meta || {};
   const platformRaw = (meta.platform || meta.orderSource || meta.source || "").toString();
@@ -253,6 +254,7 @@ function buildKotPreview(
     customerPhone: meta.customerPhone || "",
     items,
     tableNum,
+    tableLabel: tableLabel || undefined,
     sentBy,
   };
 }
@@ -1418,7 +1420,7 @@ export default function Billing() {
       console.warn("Could not fetch KOT sequence number", e);
     }
     setKotPreviewData(
-      buildKotPreview(latestOrder, tableNum, pendingItems, currentUserLabel, kotSeqNum),
+      buildKotPreview(latestOrder, tableNum, pendingItems, currentUserLabel, kotSeqNum, activeTableLabel),
     );
     setKotPreviewOpen(true);
   };
@@ -1527,6 +1529,7 @@ export default function Billing() {
         {
           orderType: activeOrderType,
           tableNum,
+          tableLabel: activeTableLabel || undefined,
           reason: cleanReason,
           items: [{ name: line.name, qty: voidQty }],
           sentBy: currentUserLabel,
@@ -1698,6 +1701,7 @@ export default function Billing() {
           pendingItems,
           currentUserLabel,
           kotSeqNum,
+          snapTableLabel,
         );
         const sentLines = pendingItems.map((it: any) => ({ id: it.id, sentQty: it.sentQty ?? it.qty }));
         const lines = buildKotLines(preview, paidOrder, snapTableNum, branding);

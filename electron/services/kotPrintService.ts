@@ -1,5 +1,6 @@
 import { buildKotLines, buildKotVoidLines } from "../../src/shared/kotTicket";
 import { getUnsentKotLines, pendingKotQty } from "../../src/shared/kot";
+import { formatTableTileLabel } from "../../src/shared/floorLayout";
 import {
   DEFAULT_USB_PRINTER_NAME,
   resolveCounterPrinterTarget,
@@ -7,6 +8,15 @@ import {
 } from "../../src/shared/printerConfig";
 import { printPayload, type PrinterConfig } from "../printing/printService";
 import { posService } from "./posService";
+
+function tableLabelForOrder(order: { tableId?: number | null }) {
+  const tableId = order.tableId != null ? Number(order.tableId) : null;
+  if (tableId === null || !Number.isFinite(tableId) || tableId <= 0) {
+    return "";
+  }
+  const table = posService.getTables().find((entry) => Number(entry.id) === tableId);
+  return formatTableTileLabel(tableId, table?.name);
+}
 
 function getPrinterConfig(): PrinterConfig {
   try {
@@ -95,21 +105,23 @@ export const kotPrintService = {
 
     const kotSeq = posService.getNextKotSeq();
     const branding = getBranding();
+    const meta = (order.meta || {}) as Record<string, unknown>;
     const preview = {
       kotId: kotSeq,
       sentBy: displayNameFor(actorUsername),
       orderType: order.orderType || (order.tableId ? "table" : "takeaway"),
       tableNum: order.tableId,
+      tableLabel: tableLabelForOrder(order),
       items: unsent.map((line) => ({
         id: line.id,
         name: line.name,
         qty: pendingKotQty(line),
         sentQty: Number(line.qty || 0),
       })),
-      platform: (order.meta as any)?.platform,
-      platformCode: (order.meta as any)?.code,
-      customerName: (order.meta as any)?.customerName,
-      customerPhone: (order.meta as any)?.customerPhone,
+      platform: String(meta.platform || meta.orderSource || meta.source || ""),
+      platformCode: String(meta.code || meta.orderCode || meta.reference || ""),
+      customerName: String(meta.parcelName || meta.customerName || ""),
+      customerPhone: String(meta.customerPhone || ""),
     };
     const lines = buildKotLines(preview, order, order.tableId, branding);
     const sentLines = preview.items.map((item) => ({
@@ -188,6 +200,7 @@ export const kotPrintService = {
       {
         orderType: order.orderType || (order.tableId ? "table" : "takeaway"),
         tableNum: order.tableId,
+        tableLabel: tableLabelForOrder(order),
         reason: input.reason,
         items: [{ name: line.name, qty: voidQty }],
         sentBy: displayNameFor(actorUsername),

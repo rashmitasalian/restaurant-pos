@@ -1,4 +1,4 @@
-import { buildEscPosBuffer } from "./escpos";
+import { buildEscPosBuffer, buildStruckTextRaster } from "./escpos";
 
 describe("ESC/POS buffer builder", () => {
   it("builds structured receipt bytes with initialize and cut commands", () => {
@@ -23,5 +23,33 @@ describe("ESC/POS buffer builder", () => {
 
     expect(bytes).toEqual(expect.arrayContaining([0x1d, 0x76, 0x30, 0x00]));
     expect(bytes).toEqual(expect.arrayContaining([0xff, 0x00]));
+  });
+
+  it("prints void KOT items as a left-aligned raster with a mid-line strike", () => {
+    const item = "  Pizza                            1";
+    const buffer = buildEscPosBuffer("kot", "", [`LEFTDHVOID:${item}`, "CUT"]);
+    const bytes = [...buffer];
+    const latin = buffer.toString("latin1");
+
+    expect(latin).not.toContain("LEFTDHVOID:");
+    expect(latin).not.toContain("Pizza");
+    expect(bytes).toEqual(expect.arrayContaining([0x1d, 0x76, 0x30, 0x00]));
+    expect(bytes).not.toContain(0x0d);
+
+    const raster = buildStruckTextRaster(item);
+    expect(raster.width).toBe(576);
+    expect(raster.height).toBe(38);
+    const widthBytes = 72;
+    const nameByte = Math.floor((2 * 12) / 8);
+    const qtyByte = Math.floor((41 * 12) / 8);
+    let nameBits = 0;
+    let qtyBits = 0;
+    for (let y = 4; y < 12; y += 1) {
+      nameBits += raster.data[y * widthBytes + nameByte];
+      qtyBits += raster.data[y * widthBytes + qtyByte];
+    }
+    expect(nameBits).toBeGreaterThan(0);
+    expect(qtyBits).toBeGreaterThan(0);
+    expect(qtyByte).toBeGreaterThan(nameByte + 8);
   });
 });

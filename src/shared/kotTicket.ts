@@ -13,7 +13,10 @@ export type KotPreviewData = {
   kotId?: string | number;
   sentBy?: string;
   orderType?: string;
+  /** Internal table id (numeric). Prefer tableLabel for printing. */
   tableNum?: number | string | null;
+  /** Display name shown on screen (F14, G1, Patio). */
+  tableLabel?: string | null;
   platform?: string;
   platformCode?: string;
   customerName?: string;
@@ -21,6 +24,21 @@ export type KotPreviewData = {
   items?: KotPreviewItem[];
   reason?: string;
 };
+
+/** What kitchen sees as "Table No" — must match on-screen table label. */
+export function resolveKotTableLabel(previewData: {
+  tableLabel?: string | null;
+  tableNum?: number | string | null;
+}): string {
+  const label = String(previewData.tableLabel || "").trim();
+  if (label) {
+    return label;
+  }
+  if (previewData.tableNum !== null && previewData.tableNum !== undefined && previewData.tableNum !== "") {
+    return String(previewData.tableNum);
+  }
+  return "-";
+}
 
 function rpad(s: string, w: number) {
   return s.length >= w ? s.slice(0, w) : s.padEnd(w);
@@ -32,6 +50,11 @@ function lpad(s: string, w: number) {
 
 function hotelNameFrom(branding?: KotTicketBranding | null) {
   return String(branding?.hotelName || "Restaurant").trim() || "Restaurant";
+}
+
+/** Void item line — ESC/POS raster strikethrough (GS v 0), not a second dash row. */
+export function buildVoidKotItemPrintLines(pad: string, name: string, qty: string): string[] {
+  return [`LEFTDHVOID:${pad}${name}${qty}`];
 }
 
 export function buildKotLines(
@@ -59,7 +82,12 @@ export function buildKotLines(
     `LEFT:${PAD}Date: ${dateStr}  Time: ${timeStr}`,
     ...(previewData.sentBy ? [`LEFT:${PAD}Sent by: ${previewData.sentBy}`] : []),
     ...(previewData.orderType === "table"
-      ? [`LEFT:${PAD}Table No: ${previewData.tableNum || tableNum || "-"}`]
+      ? [
+          `LEFT:${PAD}Table No: ${resolveKotTableLabel({
+            tableLabel: previewData.tableLabel,
+            tableNum: previewData.tableNum ?? tableNum,
+          })}`,
+        ]
       : []),
     ...(previewData.orderType === "delivery"
       ? [
@@ -106,16 +134,16 @@ export function buildKotVoidLines(
     `LEFT:${PAD}Date: ${dateStr}  Time: ${timeStr}`,
     ...(previewData.sentBy ? [`LEFT:${PAD}Voided by: ${previewData.sentBy}`] : []),
     ...(previewData.orderType === "table"
-      ? [`LEFT:${PAD}Table No: ${previewData.tableNum || "-"}`]
+      ? [`LEFT:${PAD}Table No: ${resolveKotTableLabel(previewData)}`]
       : [`LEFT:${PAD}Type: ${previewData.orderType || "Order"}`]),
     ...(previewData.reason ? [`LEFT:${PAD}Reason: ${previewData.reason}`] : []),
     "SEP",
     `LEFT:${PAD}${rpad("Cancel Item", COL_ITEM)}${lpad("Qty", COL_QTY)}`,
     "SEP",
-    ...((previewData.items || []) as KotPreviewItem[]).map((it) => {
+    ...((previewData.items || []) as KotPreviewItem[]).flatMap((it) => {
       const name = rpad(String(it.name || "").trim(), COL_ITEM);
       const qty = lpad(String(it.qty || 1), COL_QTY);
-      return `LEFTDH:${PAD}${name}${qty}`;
+      return buildVoidKotItemPrintLines(PAD, name, qty);
     }),
     "BLANK",
     "CUT",
