@@ -261,6 +261,11 @@ function runSchema(database: SqliteDatabase) {
       address TEXT,
       notes TEXT,
       active INTEGER NOT NULL DEFAULT 1,
+      credit_enabled INTEGER NOT NULL DEFAULT 0,
+      credit_blocked INTEGER NOT NULL DEFAULT 0,
+      credit_limit_paise INTEGER NOT NULL DEFAULT 0 CHECK (credit_limit_paise >= 0),
+      default_credit_days INTEGER,
+      outstanding_paise INTEGER NOT NULL DEFAULT 0 CHECK (outstanding_paise >= 0),
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     );
@@ -1559,6 +1564,16 @@ function runSchema(database: SqliteDatabase) {
     `);
   });
 
+  runMigration(database, 28, "Customer credit / receivables ledger", () => {
+    ensureCustomerCreditSchema(database);
+    if (!columnExists(database, "customers", "outstanding_paise")) {
+      throw new Error("migration-28-outstanding-paise-missing");
+    }
+    if (!tableExists(database, "customer_account_entries")) {
+      throw new Error("migration-28-customer-account-entries-missing");
+    }
+  });
+
   // Startup self-healing for pre-existing/partially migrated databases:
   // ensure area_id exists even if migration 12 was marked applied while the column was missing.
   addColumnIfMissing(database, "tables", "area_id", `TEXT NOT NULL DEFAULT '${DEFAULT_SEATING_AREA_ID}'`);
@@ -1573,6 +1588,9 @@ function runSchema(database: SqliteDatabase) {
         ON orders(status, cancelled_at DESC);
     `);
   }
+  // Self-heal customer credit even if migration 28 was skipped / partially applied,
+  // or if an older bootstrap tried to index outstanding_paise before the column existed.
+  ensureCustomerCreditSchema(database);
   database
     .prepare("UPDATE tables SET area_id = ? WHERE area_id IS NULL OR trim(area_id) = ''")
     .run(DEFAULT_SEATING_AREA_ID);
@@ -1647,6 +1665,75 @@ function columnExists(database: SqliteDatabase, tableName: string, columnName: s
   return rows.some((row) => row.name === columnName);
 }
 
+/**
+ * Idempotent customer-credit schema upgrade.
+ * Safe on fresh DBs and on client machines that already have an older customers table.
+ * Must not be referenced from the initial CREATE TABLE bootstrap indexes, or legacy DBs
+ * fail before migrations can add the columns.
+ */
+function ensureCustomerCreditSchema(database: SqliteDatabase) {
+  if (!tableExists(database, "customers")) {
+    return;
+  }
+
+  addColumnIfMissing(database, "customers", "credit_enabled", "INTEGER NOT NULL DEFAULT 0");
+  addColumnIfMissing(database, "customers", "credit_blocked", "INTEGER NOT NULL DEFAULT 0");
+  addColumnIfMissing(database, "customers", "credit_limit_paise", "INTEGER NOT NULL DEFAULT 0");
+  addColumnIfMissing(database, "customers", "default_credit_days", "INTEGER");
+  addColumnIfMissing(database, "customers", "outstanding_paise", "INTEGER NOT NULL DEFAULT 0");
+
+  if (!columnExists(database, "customers", "outstanding_paise")) {
+    throw new Error("customer-credit-outstanding-paise-missing");
+  }
+
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS idx_customers_outstanding
+      ON customers(outstanding_paise DESC) WHERE active = 1 AND outstanding_paise > 0;
+
+    CREATE TABLE IF NOT EXISTS customer_account_entries (
+      id TEXT PRIMARY KEY,
+      customer_id TEXT NOT NULL REFERENCES customers(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+      entry_type TEXT NOT NULL CHECK (
+        entry_type IN ('credit_sale', 'payment_received', 'void', 'adjustment')
+      ),
+      amount_paise INTEGER NOT NULL CHECK (amount_paise > 0),
+      running_balance_paise INTEGER NOT NULL,
+      order_id TEXT REFERENCES orders(id) ON UPDATE CASCADE ON DELETE SET NULL,
+      invoice_number TEXT,
+      description TEXT,
+      due_date TEXT,
+      remaining_paise INTEGER,
+      payment_method TEXT,
+      reference TEXT,
+      notes TEXT,
+      created_at INTEGER NOT NULL,
+      created_by TEXT REFERENCES users(username) ON UPDATE CASCADE ON DELETE SET NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_customer_account_entries_customer
+      ON customer_account_entries(customer_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_customer_account_entries_due
+      ON customer_account_entries(due_date, remaining_paise)
+      WHERE entry_type = 'credit_sale' AND remaining_paise > 0;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_customer_account_entries_order
+      ON customer_account_entries(order_id)
+      WHERE order_id IS NOT NULL AND entry_type = 'credit_sale';
+
+    CREATE TABLE IF NOT EXISTS customer_credit_allocations (
+      id TEXT PRIMARY KEY,
+      payment_entry_id TEXT NOT NULL REFERENCES customer_account_entries(id) ON DELETE CASCADE,
+      credit_entry_id TEXT NOT NULL REFERENCES customer_account_entries(id) ON DELETE CASCADE,
+      amount_paise INTEGER NOT NULL CHECK (amount_paise > 0),
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_customer_credit_allocations_payment
+      ON customer_credit_allocations(payment_entry_id);
+    CREATE INDEX IF NOT EXISTS idx_customer_credit_allocations_credit
+      ON customer_credit_allocations(credit_entry_id);
+  `);
+}
+
 function bootstrapLegacyGroceryColumns(database: SqliteDatabase) {
   if (!tableExists(database, "grocery_purchase_lines")) {
     return;
@@ -1688,9 +1775,10 @@ function seedDatabase(database: SqliteDatabase) {
   insertSetting.run("config:audit", JSON.stringify({ retentionDays: 90 }), now);
   insertSetting.run("config:history", JSON.stringify({ retentionDays: null }), now);
   insertSetting.run("config:tables", JSON.stringify({ tableCount }), now);
+  insertSetting.run("config:invoice", JSON.stringify({ prefix: "INV", fiscalYear: "", lastNumber: 0 }), now);
   insertSetting.run(
-    "config:invoice",
-    JSON.stringify({ prefix: "INV", fiscalYear: "", lastNumber: 0 }),
+    "config:credit",
+    JSON.stringify({ enabled: false, defaultCreditDays: 15 }),
     now,
   );
   insertSetting.run(

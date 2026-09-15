@@ -28,6 +28,7 @@ import {
 import { PRINT } from "../../theme/print-html";
 import { Button } from "../../components/ui/Button";
 import { PageHeader } from "../../components/ui/PageHeader";
+import { formatTableLabel } from "../../../shared/floorLayout";
 
 function normalizeModeId(value: unknown): string {
   return String(value || "")
@@ -164,12 +165,12 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
       } else if (ot === "self_service") {
         orderLabel = "Self Service";
       } else if (ot === "table") {
-        orderLabel = tableId !== null && tableId !== undefined ? `Table ${tableId}` : "Table";
+        orderLabel = formatTableLabel(tableId, d.tableName) || "Table";
       } else {
         orderLabel = ot
           ? titleizeMode(ot)
           : tableId !== null && tableId !== undefined
-            ? `Table ${tableId}`
+            ? formatTableLabel(tableId, d.tableName)
             : "Order";
       }
 
@@ -184,9 +185,20 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
               ? "Card"
               : rawMethod === "split"
                 ? "Split"
-                : rawMethod
-                  ? rawMethod.charAt(0).toUpperCase() + rawMethod.slice(1)
-                  : "–";
+                : rawMethod === "credit"
+                  ? "Credit"
+                  : rawMethod
+                    ? rawMethod.charAt(0).toUpperCase() + rawMethod.slice(1)
+                    : "–";
+
+      const creditName = String(d.meta?.credit?.customerName || "").trim();
+      const invoiceNumber = String(d.invoiceNumber || d.meta?.invoice?.number || "").trim();
+      if (rawMethod === "credit" && creditName) {
+        orderLabel = `${orderLabel} · ${creditName}`;
+      }
+      if (invoiceNumber) {
+        orderLabel = `${orderLabel} · ${invoiceNumber}`;
+      }
 
       return {
         uid: d._id || d.id || String(Math.random()),
@@ -201,7 +213,8 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
         discountTotal: Number(d.discountTotal || 0),
         items: (d.items || []).length,
         method,
-        time: d.createdAt || d.updatedAt || d.paidAt || Date.now(),
+        // Prefer settle time so credit sales show when they were saved to account
+        time: d.paidAt || d.updatedAt || d.createdAt || Date.now(),
       } as UIOrder;
     });
 
@@ -330,6 +343,15 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
   React.useEffect(() => {
     loadFirstPage(pageSize, search, fromTs, toTs);
   }, [fromTs, toTs]);
+
+  // Refresh after settle (incl. credit Save to account)
+  React.useEffect(() => {
+    const refresh = () => {
+      loadFirstPage(pageSize, search, fromTs, toTs);
+    };
+    window.addEventListener("orders-changed", refresh);
+    return () => window.removeEventListener("orders-changed", refresh);
+  }, [pageSize, search, fromTs, toTs]);
 
   // load first page on mount
   React.useEffect(() => {
@@ -549,7 +571,10 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
       const full = id ? ((await getOrderById(id)) ?? o) : o;
       const tableNum: number | null = full.tableId ?? full.table ?? null;
       const discPct: number = full.discountPercent ?? 0;
-      const lines = buildReceiptLines(full, tableNum, discPct, computeTotals(full), gstConfig, branding);
+      const tableLabel = formatTableLabel(tableNum, full.tableName);
+      const lines = buildReceiptLines(full, tableNum, discPct, computeTotals(full), gstConfig, branding, {
+        tableLabel,
+      });
       await printReceipt({ lines });
       showToast("Receipt reprinted", "success");
     } catch (e: any) {
@@ -822,7 +847,7 @@ loadFirstPage(pageSize, search, fromTs, toTs);
         </div>
         <span>#</span>
         <span>Order</span>
-        <span>Bill Created</span>
+        <span>Settled</span>
         <span style={{ textAlign: "center" }}>Items</span>
         <span style={{ textAlign: "center" }}>Method</span>
         <span style={{ textAlign: "center" }}>Actions</span>
@@ -920,7 +945,9 @@ loadFirstPage(pageSize, search, fromTs, toTs);
                         ? "var(--pos-teal-tint)"
                         : s.method === "Split"
                           ? "var(--pos-saffron-tint)"
-                          : "var(--pos-success-tint)",
+                          : s.method === "Credit"
+                            ? "var(--pos-saffron-tint)"
+                            : "var(--pos-success-tint)",
                   color:
                     s.method === "UPI"
                       ? "var(--pos-teal)"
@@ -928,7 +955,9 @@ loadFirstPage(pageSize, search, fromTs, toTs);
                         ? "var(--pos-teal-strong)"
                         : s.method === "Split"
                           ? "var(--pos-saffron-text)"
-                          : "var(--pos-success)",
+                          : s.method === "Credit"
+                            ? "var(--pos-saffron-text)"
+                            : "var(--pos-success)",
                 }}
               >
                 {s.method}
@@ -1188,7 +1217,7 @@ loadFirstPage(pageSize, search, fromTs, toTs);
                       ? `Takeaway${previewFull.meta?.customerName ? ` – ${previewFull.meta.customerName}` : ""}`
                       : previewFull.orderType === "delivery"
                         ? `${previewFull.meta?.platform || "Delivery"}${previewFull.meta?.code ? ` #${previewFull.meta.code}` : ""}`
-                        : `Table ${previewFull.tableId ?? "–"}`
+                        : formatTableLabel(previewFull.tableId, previewFull.tableName) || "Table"
                     : "Order Preview"}
                 </h3>
                 {previewFull && (
@@ -1427,7 +1456,7 @@ loadFirstPage(pageSize, search, fromTs, toTs);
                             ? "var(--pos-teal-tint)"
                             : method === "card"
                               ? "var(--pos-teal-tint)"
-                              : method === "split"
+                              : method === "split" || method === "credit"
                                 ? "var(--pos-saffron-tint)"
                                 : "var(--pos-success-tint)";
                         const fg =
@@ -1435,7 +1464,7 @@ loadFirstPage(pageSize, search, fromTs, toTs);
                             ? "var(--pos-teal)"
                             : method === "card"
                               ? "var(--pos-teal-strong)"
-                              : method === "split"
+                              : method === "split" || method === "credit"
                                 ? "var(--pos-saffron-text)"
                                 : "var(--pos-success)";
                         return (

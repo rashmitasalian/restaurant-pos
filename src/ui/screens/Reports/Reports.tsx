@@ -98,6 +98,8 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
   const [cardAmount, setCardAmount] = React.useState(0);
   const [onlineAmount, setOnlineAmount] = React.useState(0);
   const [otherAmount, setOtherAmount] = React.useState(0);
+  const [creditSalesAmount, setCreditSalesAmount] = React.useState(0);
+  const [creditCollectedAmount, setCreditCollectedAmount] = React.useState(0);
   const [productSales, setProductSales] = React.useState<ProductSalesReportDto>(
     EMPTY_PRODUCT_SALES_REPORT,
   );
@@ -165,6 +167,15 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
 
         const summary = await getSalesSummary({ from: fromTs, to: toTs });
         const breakdown = await getPaymentBreakdown({ from: fromTs, to: toTs });
+        let creditCollections: Record<string, number> = {};
+        try {
+          creditCollections = (await window.pos?.reports?.creditCollections?.({
+            from: fromTs,
+            to: toTs,
+          })) || {};
+        } catch {
+          creditCollections = {};
+        }
         let productReport = EMPTY_PRODUCT_SALES_REPORT;
         try {
           productReport = await getProductSalesReport({ from: fromTs, to: toTs });
@@ -193,6 +204,11 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
         const card = breakdown.card || 0;
         const online = breakdown.online || 0;
         const other = (breakdown.voucher || 0) + (breakdown.other || 0);
+        const creditSales = breakdown.credit || 0;
+        const creditCollected = Object.values(creditCollections).reduce(
+          (sum, value) => sum + Number(value || 0),
+          0,
+        );
 
         setSales(totalSales);
         setSubtotalSales(subtotal);
@@ -204,6 +220,8 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
         setCardAmount(card);
         setOnlineAmount(online);
         setOtherAmount(other);
+        setCreditSalesAmount(creditSales);
+        setCreditCollectedAmount(creditCollected);
         setProductSales(productReport);
       } catch (e) {
         console.error("Failed to load reports:", e);
@@ -237,6 +255,9 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
   const cardPercent = sales > 0 ? Math.round((cardAmount / sales) * 100) : 0;
   const onlinePercent = sales > 0 ? Math.round((onlineAmount / sales) * 100) : 0;
   const otherPercent = sales > 0 ? Math.round((otherAmount / sales) * 100) : 0;
+  const creditSalesPercent = sales > 0 ? Math.round((creditSalesAmount / sales) * 100) : 0;
+  const collectedAmount =
+    cashAmount + upiAmount + cardAmount + onlineAmount + otherAmount + creditCollectedAmount;
 
   const gstPaise = Math.round(gst * 100);
   const gstHalfPaise = Math.round(gstPaise / 2);
@@ -281,6 +302,13 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
       pct: otherPercent,
       color: "var(--pos-success)",
       glow: "rgba(22,163,74,0.2)",
+    },
+    {
+      label: "Credit (not collected)",
+      amount: creditSalesAmount,
+      pct: creditSalesPercent,
+      color: "var(--pos-tx-sec)",
+      glow: "rgba(100,116,139,0.2)",
     },
   ];
 
@@ -523,6 +551,17 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
             label="Total Sales"
             value={loading ? "———" : formatCurrency(sales)}
             sub={loading ? "Loading…" : `${orders} paid bills`}
+          />
+          <Stat
+            label="Collected"
+            value={loading ? "———" : formatCurrency(collectedAmount)}
+            sub={
+              loading
+                ? "Loading…"
+                : creditCollectedAmount > 0
+                  ? `Includes ${formatCurrency(creditCollectedAmount)} credit receipts`
+                  : "Cash / UPI / card in range (excludes new credit sales)"
+            }
           />
           <Stat
             label="Paid Bills"

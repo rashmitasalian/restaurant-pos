@@ -4,7 +4,15 @@ export type { Role };
 
 export type OrderType = string;
 export type OrderStatus = "open" | "held" | "ready" | "assigned" | "paid" | "cancelled";
-export type PaymentMethod = "cash" | "upi" | "card" | "voucher" | "online" | "split" | "other";
+export type PaymentMethod =
+  | "cash"
+  | "upi"
+  | "card"
+  | "voucher"
+  | "online"
+  | "split"
+  | "other"
+  | "credit";
 export type KotStatus = "pending" | "sent" | "printed" | "failed";
 export type AttendanceStatus =
   | "present"
@@ -95,6 +103,10 @@ export type PaymentDto = {
   status?: "completed" | "voided" | "refunded";
   receivedAt?: number;
   receivedBy?: string | null;
+  /** YYYY-MM-DD due date when method is credit. */
+  dueDate?: string | null;
+  /** Attach customer at pay time when the order has none (credit only). */
+  customerId?: string | null;
 };
 
 export type OrderDto = {
@@ -102,6 +114,8 @@ export type OrderDto = {
   type: "order";
   orderType: OrderType;
   tableId: number | null;
+  /** Configured floor label (F1, G1). Resolved from tables at read time. */
+  tableName?: string | null;
   customerId?: string | null;
   items: OrderLineDto[];
   status: OrderStatus;
@@ -152,6 +166,16 @@ export type CustomerDto = {
   createdAt: number | string;
   updatedAt?: number | string;
   active?: boolean;
+  creditEnabled?: boolean;
+  creditBlocked?: boolean;
+  /** Rupees. 0 means no credit allowed for this customer. */
+  creditLimit?: number;
+  /** Days; null inherits restaurant default. */
+  defaultCreditDays?: number | null;
+  /** Rupees outstanding on the customer account. */
+  outstanding?: number;
+  /** Rupees overdue (remaining on past-due credit sales). */
+  overdue?: number;
 };
 
 export type StaffDto = {

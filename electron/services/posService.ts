@@ -95,6 +95,19 @@ import {
   parsePositiveMoney,
 } from "../../src/shared/validation";
 import {
+  assertCreditConfig,
+  buildCreditSaleDescription,
+  CREDIT_CONFIG_KEY,
+  normalizeCreditConfig,
+  resolveCreditDueDate,
+  type CustomerAccountEntryDto,
+  type CustomerAccountSummaryDto,
+  type CustomerAccountEntriesPageDto,
+  type CustomerOpenBillDto,
+  type ReceiveCustomerPaymentInput,
+  type ReceiveCustomerPaymentResultDto,
+} from "../../src/shared/customerCredit";
+import {
   normalizeHolidayDates,
   normalizeWeeklyOffDays,
   serializeWeeklyOffDays,
@@ -1100,11 +1113,21 @@ function orderFromRow(database: Database.Database, row: any): OrderDto {
     .all(row.id)
     .map(paymentFromRow);
   const meta = parseJson(row.meta_json, {});
+  const tableId =
+    row.table_id === null || row.table_id === undefined ? null : Number(row.table_id);
+  let tableName: string | null = null;
+  if (tableId !== null && Number.isFinite(tableId)) {
+    const tableRow = database
+      .prepare("SELECT name FROM tables WHERE id = ? LIMIT 1")
+      .get(tableId) as { name?: string } | undefined;
+    tableName = tableRow?.name ? String(tableRow.name) : null;
+  }
   return {
     _id: row.id,
     type: "order",
     orderType: resolveServiceModeIdFromOrderLike({ orderType: row.order_type, meta }) || row.order_type,
-    tableId: row.table_id === null || row.table_id === undefined ? null : Number(row.table_id),
+    tableId,
+    tableName,
     customerId: row.customer_id || null,
     status: row.status,
     kotStatus: row.kot_status,
@@ -1130,7 +1153,8 @@ function orderFromRow(database: Database.Database, row: any): OrderDto {
 }
 
 function paidOrderTimeExpression() {
-  return "o.created_at";
+  // History / sales day should follow when the bill was settled (incl. credit).
+  return "COALESCE(o.paid_at, o.updated_at, o.created_at)";
 }
 
 function normalizePaidOrderQuery(opts: PaidOrderQueryDto = {}) {
@@ -1300,6 +1324,266 @@ function createAuditRow(
       now(),
     );
   return id;
+}
+
+function getCreditConfigFromDb(database: Database.Database = getDb()) {
+  const row = database.prepare("SELECT value_json FROM settings WHERE key = ?").get(CREDIT_CONFIG_KEY) as
+    | { value_json?: string }
+    | undefined;
+  return normalizeCreditConfig(row?.value_json ? parseJson(row.value_json, {}) : null);
+}
+
+function customerAccountEntryFromRow(row: any): CustomerAccountEntryDto {
+  return {
+    id: row.id,
+    customerId: row.customer_id,
+    entryType: row.entry_type,
+    amount: paiseToRupees(row.amount_paise),
+    runningBalance: paiseToRupees(row.running_balance_paise),
+    orderId: row.order_id || null,
+    invoiceNumber: row.invoice_number || null,
+    description: row.description || null,
+    dueDate: row.due_date || null,
+    remaining:
+      row.remaining_paise === null || row.remaining_paise === undefined
+        ? null
+        : paiseToRupees(row.remaining_paise),
+    paymentMethod: row.payment_method || null,
+    reference: row.reference || null,
+    notes: row.notes || null,
+    createdAt: Number(row.created_at || 0),
+    createdBy: row.created_by || null,
+  };
+}
+
+function sumCustomerOverduePaise(database: Database.Database, customerId: string) {
+  const businessDate = todayDateOnly();
+  const row = database
+    .prepare(
+      `SELECT COALESCE(SUM(remaining_paise), 0) AS overdue_paise
+       FROM customer_account_entries
+       WHERE customer_id = ?
+         AND entry_type = 'credit_sale'
+         AND remaining_paise > 0
+         AND due_date IS NOT NULL
+         AND due_date < ?`,
+    )
+    .get(customerId, businessDate) as { overdue_paise: number };
+  return Math.max(0, Number(row?.overdue_paise || 0));
+}
+
+function refreshCustomerOutstanding(
+  database: Database.Database,
+  customerId: string,
+  outstandingPaise: number,
+) {
+  database
+    .prepare("UPDATE customers SET outstanding_paise = ?, updated_at = ? WHERE id = ?")
+    .run(Math.max(0, outstandingPaise), now(), customerId);
+}
+
+function orderHasOpenCreditBalance(database: Database.Database, orderId: string) {
+  const row = database
+    .prepare(
+      `SELECT remaining_paise
+       FROM customer_account_entries
+       WHERE order_id = ? AND entry_type = 'credit_sale'
+       LIMIT 1`,
+    )
+    .get(orderId) as { remaining_paise?: number } | undefined;
+  return Number(row?.remaining_paise || 0) > 0;
+}
+
+function createCreditSaleLedgerEntry(
+  database: Database.Database,
+  opts: {
+    customerId: string;
+    orderId: string;
+    amountPaise: number;
+    invoiceNumber: string | null;
+    description: string;
+    dueDate: string;
+    actor: string | null;
+  },
+) {
+  const customer = database
+    .prepare("SELECT * FROM customers WHERE id = ? AND active = 1 LIMIT 1")
+    .get(opts.customerId) as any;
+  if (!customer) {
+    throw new Error("customer-not-found");
+  }
+  if (!Number(customer.credit_enabled)) {
+    throw new Error("credit-not-enabled-for-customer");
+  }
+  if (Number(customer.credit_blocked)) {
+    throw new Error("credit-customer-blocked");
+  }
+  const limitPaise = Math.max(0, Number(customer.credit_limit_paise || 0));
+  const currentOutstanding = Math.max(0, Number(customer.outstanding_paise || 0));
+  if (limitPaise <= 0 || currentOutstanding + opts.amountPaise > limitPaise) {
+    throw new Error("credit-limit-exceeded");
+  }
+
+  const entryId = `credit-entry:${randomUUID()}`;
+  const nextOutstanding = currentOutstanding + opts.amountPaise;
+  database
+    .prepare(
+      `INSERT INTO customer_account_entries (
+         id, customer_id, entry_type, amount_paise, running_balance_paise,
+         order_id, invoice_number, description, due_date, remaining_paise,
+         payment_method, reference, notes, created_at, created_by
+       ) VALUES (?, ?, 'credit_sale', ?, ?, ?, ?, ?, ?, ?, 'credit', ?, NULL, ?, ?)`,
+    )
+    .run(
+      entryId,
+      opts.customerId,
+      opts.amountPaise,
+      nextOutstanding,
+      opts.orderId,
+      opts.invoiceNumber,
+      opts.description,
+      opts.dueDate,
+      opts.amountPaise,
+      opts.invoiceNumber,
+      now(),
+      opts.actor,
+    );
+  refreshCustomerOutstanding(database, opts.customerId, nextOutstanding);
+  createAuditRow(database, "customer.credit.sale", "customer", opts.customerId, opts.actor, {
+    entryId,
+    orderId: opts.orderId,
+    amountPaise: opts.amountPaise,
+    dueDate: opts.dueDate,
+    invoiceNumber: opts.invoiceNumber,
+    outstandingPaise: nextOutstanding,
+  });
+  return entryId;
+}
+
+function allocateCustomerPaymentFifo(
+  database: Database.Database,
+  paymentEntryId: string,
+  customerId: string,
+  amountPaise: number,
+): Array<{ creditEntryId: string; invoiceNumber: string | null; amountPaise: number }> {
+  let remainingToApply = amountPaise;
+  const allocations: Array<{
+    creditEntryId: string;
+    invoiceNumber: string | null;
+    amountPaise: number;
+  }> = [];
+  const openCredits = database
+    .prepare(
+      `SELECT id, remaining_paise, invoice_number
+       FROM customer_account_entries
+       WHERE customer_id = ?
+         AND entry_type = 'credit_sale'
+         AND remaining_paise > 0
+       ORDER BY COALESCE(due_date, '9999-12-31') ASC, created_at ASC, id ASC`,
+    )
+    .all(customerId) as Array<{
+    id: string;
+    remaining_paise: number;
+    invoice_number: string | null;
+  }>;
+
+  for (const credit of openCredits) {
+    if (remainingToApply <= 0) {
+      break;
+    }
+    const creditRemaining = Math.max(0, Number(credit.remaining_paise || 0));
+    if (creditRemaining <= 0) {
+      continue;
+    }
+    const apply = Math.min(creditRemaining, remainingToApply);
+    database
+      .prepare(
+        `INSERT INTO customer_credit_allocations (
+           id, payment_entry_id, credit_entry_id, amount_paise, created_at
+         ) VALUES (?, ?, ?, ?, ?)`,
+      )
+      .run(`credit-alloc:${randomUUID()}`, paymentEntryId, credit.id, apply, now());
+    database
+      .prepare("UPDATE customer_account_entries SET remaining_paise = ? WHERE id = ?")
+      .run(creditRemaining - apply, credit.id);
+    allocations.push({
+      creditEntryId: credit.id,
+      invoiceNumber: credit.invoice_number || null,
+      amountPaise: apply,
+    });
+    remainingToApply -= apply;
+  }
+  return allocations;
+}
+
+function receiveCustomerAccountPayment(
+  database: Database.Database,
+  customerId: string,
+  input: ReceiveCustomerPaymentInput,
+  actor?: string | null,
+) {
+  const customer = database
+    .prepare("SELECT * FROM customers WHERE id = ? AND active = 1 LIMIT 1")
+    .get(customerId) as any;
+  if (!customer) {
+    throw new Error("customer-not-found");
+  }
+  const amountPaise = rupeesToPaise(input.amount);
+  if (!amountPaise || amountPaise <= 0) {
+    throw new Error("credit-amount-invalid");
+  }
+  const outstanding = Math.max(0, Number(customer.outstanding_paise || 0));
+  if (amountPaise > outstanding) {
+    throw new Error("credit-amount-exceeds-outstanding");
+  }
+  const method = String(input.method || "")
+    .trim()
+    .toLowerCase();
+  if (!["cash", "upi", "card", "other"].includes(method)) {
+    throw new Error("credit-payment-method-invalid");
+  }
+
+  const nextOutstanding = outstanding - amountPaise;
+  const entryId = `credit-entry:${randomUUID()}`;
+  const reference =
+    optionalGroceryText(input.reference, 80, "credit-reference-too-long") || null;
+  const notes = optionalGroceryText(input.notes, 500, "credit-notes-too-long") || null;
+  database
+    .prepare(
+      `INSERT INTO customer_account_entries (
+         id, customer_id, entry_type, amount_paise, running_balance_paise,
+         order_id, invoice_number, description, due_date, remaining_paise,
+         payment_method, reference, notes, created_at, created_by
+       ) VALUES (?, ?, 'payment_received', ?, ?, NULL, NULL, ?, NULL, NULL, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      entryId,
+      customerId,
+      amountPaise,
+      nextOutstanding,
+      `Payment received (${method.toUpperCase()})`,
+      method,
+      reference,
+      notes,
+      now(),
+      actor || null,
+    );
+  const allocations = allocateCustomerPaymentFifo(database, entryId, customerId, amountPaise);
+  refreshCustomerOutstanding(database, customerId, nextOutstanding);
+  createAuditRow(database, "customer.credit.payment", "customer", customerId, actor || null, {
+    entryId,
+    amountPaise,
+    method,
+    outstandingPaise: nextOutstanding,
+    reference,
+  });
+  return {
+    entryId,
+    amountPaise,
+    method,
+    outstandingPaise: nextOutstanding,
+    allocations,
+  };
 }
 
 function lookupActorRole(database: Database.Database, username?: string | null): Role | null {
@@ -1852,8 +2136,8 @@ function normalizePaymentMethod(method: unknown): PaymentDto["method"] {
   const value = String(method || "cash")
     .trim()
     .toLowerCase();
-  const allowed = new Set(["cash", "upi", "card", "voucher", "online", "split", "other"]);
-  return allowed.has(value) ? value : "other";
+  const allowed = new Set(["cash", "upi", "card", "voucher", "online", "split", "other", "credit"]);
+  return allowed.has(value) ? (value as PaymentDto["method"]) : "other";
 }
 
 function normalizeSplitBreakdown(value: unknown) {
@@ -1865,11 +2149,25 @@ function normalizeSplitBreakdown(value: unknown) {
       method: normalizePaymentMethod((entry as any)?.method),
       amountPaise: rupeesToPaise((entry as any)?.amount),
     }))
-    .filter((entry) => entry.amountPaise > 0);
+    .filter((entry) => {
+      if (entry.method === "credit") {
+        throw new Error("credit-split-not-allowed");
+      }
+      return entry.amountPaise > 0;
+    });
 }
 
 function preparePaymentForTotal(payment: PaymentDto, expectedAmountPaise: number) {
   const method = normalizePaymentMethod(payment.method);
+  if (method === "credit") {
+    return {
+      method,
+      amountPaise: expectedAmountPaise,
+      amountPaidPaise: 0,
+      changePaise: 0,
+      splitJson: null as string | null,
+    };
+  }
   const amountPaidPaise =
     payment.amountPaid === null || payment.amountPaid === undefined
       ? expectedAmountPaise
@@ -3655,10 +3953,47 @@ export const posService = {
       const safePayment =
         payment || ({ method: "cash", amount: paiseToRupees(totals.totalPaise) } as PaymentDto);
       const preparedPayment = preparePaymentForTotal(safePayment, totals.totalPaise);
+
+      let customerIdForCredit: string | null = order.customerId || null;
+      let creditDueDate: string | null = null;
+      if (preparedPayment.method === "credit") {
+        const creditConfig = getCreditConfigFromDb(database);
+        if (!creditConfig.enabled) {
+          throw new Error("credit-disabled");
+        }
+        const attachedCustomerId = resolveActiveCustomerId(
+          database,
+          safePayment.customerId || order.customerId || null,
+        );
+        if (!attachedCustomerId) {
+          throw new Error("credit-customer-required");
+        }
+        customerIdForCredit = attachedCustomerId;
+        if (!order.customerId || order.customerId !== attachedCustomerId) {
+          database
+            .prepare("UPDATE orders SET customer_id = ?, updated_at = ? WHERE id = ?")
+            .run(attachedCustomerId, now(), orderId);
+        }
+        const customerRow = database
+          .prepare("SELECT default_credit_days FROM customers WHERE id = ?")
+          .get(attachedCustomerId) as { default_credit_days?: number | null };
+        creditDueDate = resolveCreditDueDate({
+          explicitDueDate: safePayment.dueDate,
+          customerDefaultDays:
+            customerRow?.default_credit_days === null || customerRow?.default_credit_days === undefined
+              ? null
+              : Number(customerRow.default_credit_days),
+          restaurantDefaultDays: creditConfig.defaultCreditDays,
+        });
+        if (!isValidDateOnly(creditDueDate)) {
+          throw new Error("credit-due-date-invalid");
+        }
+      }
+
       const paymentId = `payment:${randomUUID()}`;
       const receivedAt = now();
       const invoice = nextInvoiceSnapshot(database, receivedAt);
-      const nextMeta = {
+      const nextMeta: Record<string, unknown> = {
         ...(order.meta || {}),
         gstSnapshot: buildGstSnapshot(gstConfig),
         invoice,
@@ -3689,6 +4024,36 @@ export const posService = {
            WHERE id = ?`,
         )
         .run(invoice.number, receivedAt, stringifyJson(nextMeta), receivedAt, orderId);
+
+      if (preparedPayment.method === "credit" && customerIdForCredit && creditDueDate) {
+        createCreditSaleLedgerEntry(database, {
+          customerId: customerIdForCredit,
+          orderId,
+          amountPaise: preparedPayment.amountPaise,
+          invoiceNumber: invoice.number,
+          description: buildCreditSaleDescription(order.items || []),
+          dueDate: creditDueDate,
+          actor: safePayment.receivedBy || order.createdBy || null,
+        });
+        const customerRowFull = database
+          .prepare("SELECT name, phone, outstanding_paise FROM customers WHERE id = ?")
+          .get(customerIdForCredit) as {
+          name?: string;
+          phone?: string;
+          outstanding_paise?: number;
+        };
+        nextMeta.credit = {
+          customerId: customerIdForCredit,
+          customerName: customerRowFull?.name || null,
+          customerPhone: customerRowFull?.phone || null,
+          dueDate: creditDueDate,
+          accountBalance: paiseToRupees(customerRowFull?.outstanding_paise),
+        };
+        database
+          .prepare(`UPDATE orders SET meta_json = ?, updated_at = ? WHERE id = ?`)
+          .run(stringifyJson(nextMeta), receivedAt, orderId);
+      }
+
       createAuditRow(
         database,
         "order.paid",
@@ -3706,6 +4071,7 @@ export const posService = {
               amount: paiseToRupees(preparedPayment.amountPaise),
               amountPaid: paiseToRupees(preparedPayment.amountPaidPaise),
               change: paiseToRupees(preparedPayment.changePaise),
+              dueDate: creditDueDate,
             },
             invoice,
             gstDetailsEnabled: gstConfig.enabled,
@@ -3783,6 +4149,9 @@ export const posService = {
         }
         if (order.status !== "paid") {
           throw new Error("cannot-delete-active-order");
+        }
+        if (orderHasOpenCreditBalance(database, id)) {
+          throw new Error("cannot-delete-order-with-credit");
         }
         database.prepare("DELETE FROM orders WHERE id = ?").run(id);
         createAuditRow(database, "order.deleted", "order", id, actor || null, {
@@ -4171,6 +4540,8 @@ export const posService = {
         ? assertGstConfig(merged as Partial<GstConfig>)
         : key === "config:attendance"
           ? assertAttendanceConfig(merged)
+          : key === CREDIT_CONFIG_KEY
+            ? assertCreditConfig(merged as any)
           : key === SERVICE_MODE_CONFIG_KEY
             ? toServiceModeConfigDoc(merged)
           : merged;
@@ -4223,7 +4594,18 @@ export const posService = {
     }
     const cutoff = now() - Number(retentionDays) * 24 * 60 * 60 * 1000;
     const rows = getDb()
-      .prepare("SELECT id FROM orders WHERE status = 'paid' AND COALESCE(paid_at, updated_at) < ?")
+      .prepare(
+        `SELECT o.id
+         FROM orders o
+         WHERE o.status = 'paid'
+           AND COALESCE(o.paid_at, o.updated_at) < ?
+           AND NOT EXISTS (
+             SELECT 1 FROM customer_account_entries e
+             WHERE e.order_id = o.id
+               AND e.entry_type = 'credit_sale'
+               AND e.remaining_paise > 0
+           )`,
+      )
       .all(cutoff) as any[];
     rows.forEach((row) => this.deleteOrder(row.id));
     return rows.length;
@@ -6192,14 +6574,60 @@ export const posService = {
     });
   },
 
-  listCustomers(): CustomerDto[] {
-    return getDb()
-      .prepare("SELECT * FROM customers WHERE active = 1 ORDER BY created_at DESC")
-      .all()
-      .map(customerFromRow);
+  listCustomers(opts: { filter?: "all" | "outstanding" | "overdue" } = {}): CustomerDto[] {
+    const filter = opts?.filter || "all";
+    const businessDate = todayDateOnly();
+    const database = getDb();
+    let sql = "SELECT * FROM customers WHERE active = 1";
+    const params: unknown[] = [];
+    if (filter === "outstanding") {
+      sql += " AND COALESCE(outstanding_paise, 0) > 0";
+    } else if (filter === "overdue") {
+      sql += ` AND id IN (
+        SELECT customer_id FROM customer_account_entries
+        WHERE entry_type = 'credit_sale'
+          AND remaining_paise > 0
+          AND due_date IS NOT NULL
+          AND due_date < ?
+      )`;
+      params.push(businessDate);
+    }
+    sql += " ORDER BY created_at DESC";
+    const rows = database.prepare(sql).all(...params) as any[];
+    const overdueByCustomer = new Map<string, number>();
+    if (rows.length) {
+      try {
+        const overdueRows = database
+          .prepare(
+            `SELECT customer_id, COALESCE(SUM(remaining_paise), 0) AS overdue_paise
+             FROM customer_account_entries
+             WHERE entry_type = 'credit_sale'
+               AND remaining_paise > 0
+               AND due_date IS NOT NULL
+               AND due_date < ?
+             GROUP BY customer_id`,
+          )
+          .all(businessDate) as Array<{ customer_id: string; overdue_paise: number }>;
+        overdueRows.forEach((row) => {
+          overdueByCustomer.set(row.customer_id, Math.max(0, Number(row.overdue_paise || 0)));
+        });
+      } catch {
+        // Ledger table may be mid-migration; list customers without overdue badges.
+      }
+    }
+    return rows.map((row) => customerFromRow(row, overdueByCustomer.get(row.id) || 0));
   },
 
-  createCustomer(input: { name: string; phone: string; address?: string; notes?: string }) {
+  createCustomer(input: {
+    name: string;
+    phone: string;
+    address?: string;
+    notes?: string;
+    creditEnabled?: boolean;
+    creditBlocked?: boolean;
+    creditLimit?: number;
+    defaultCreditDays?: number | null;
+  }) {
     const name = normalizeText(input.name);
     const phone = normalizePhone(input.phone);
     if (!isValidPersonName(name)) {
@@ -6212,12 +6640,32 @@ export const posService = {
     const at = now();
     const database = getDb();
     assertUniqueActiveCustomerPhone(database, phone);
+    const creditLimitPaise = rupeesToPaise(Number(input.creditLimit || 0));
+    const defaultDays =
+      input.defaultCreditDays === null || input.defaultCreditDays === undefined
+        ? null
+        : Math.max(0, Math.min(365, Math.round(Number(input.defaultCreditDays))));
     database
       .prepare(
-        `INSERT INTO customers (id, name, phone, address, notes, active, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, 1, ?, ?)`,
+        `INSERT INTO customers (
+           id, name, phone, address, notes, active,
+           credit_enabled, credit_blocked, credit_limit_paise, default_credit_days, outstanding_paise,
+           created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?, 0, ?, ?)`,
       )
-      .run(id, name, phone, input.address || null, input.notes || null, at, at);
+      .run(
+        id,
+        name,
+        phone,
+        input.address || null,
+        input.notes || null,
+        input.creditEnabled ? 1 : 0,
+        input.creditBlocked ? 1 : 0,
+        Math.max(0, creditLimitPaise || 0),
+        defaultDays,
+        at,
+        at,
+      );
     return this.listCustomers().find((customer) => customer.id === id)!;
   },
 
@@ -6236,9 +6684,35 @@ export const posService = {
     }
     const database = getDb();
     assertUniqueActiveCustomerPhone(database, phone, id);
+    const creditEnabled =
+      updates.creditEnabled === undefined
+        ? Number(current.credit_enabled || 0)
+        : updates.creditEnabled
+          ? 1
+          : 0;
+    const creditBlocked =
+      updates.creditBlocked === undefined
+        ? Number(current.credit_blocked || 0)
+        : updates.creditBlocked
+          ? 1
+          : 0;
+    const creditLimitPaise =
+      updates.creditLimit === undefined
+        ? Number(current.credit_limit_paise || 0)
+        : Math.max(0, rupeesToPaise(Number(updates.creditLimit || 0)));
+    let defaultCreditDays = current.default_credit_days;
+    if (updates.defaultCreditDays !== undefined) {
+      defaultCreditDays =
+        updates.defaultCreditDays === null
+          ? null
+          : Math.max(0, Math.min(365, Math.round(Number(updates.defaultCreditDays))));
+    }
     database
       .prepare(
-        `UPDATE customers SET name = ?, phone = ?, address = ?, notes = ?, active = ?, updated_at = ?
+        `UPDATE customers SET
+           name = ?, phone = ?, address = ?, notes = ?, active = ?,
+           credit_enabled = ?, credit_blocked = ?, credit_limit_paise = ?, default_credit_days = ?,
+           updated_at = ?
          WHERE id = ?`,
       )
       .run(
@@ -6247,15 +6721,219 @@ export const posService = {
         updates.address ?? current.address,
         updates.notes ?? current.notes,
         updates.active === undefined ? current.active : updates.active ? 1 : 0,
+        creditEnabled,
+        creditBlocked,
+        creditLimitPaise,
+        defaultCreditDays,
         now(),
         id,
       );
+    if (
+      updates.creditEnabled !== undefined ||
+      updates.creditBlocked !== undefined ||
+      updates.creditLimit !== undefined ||
+      updates.defaultCreditDays !== undefined
+    ) {
+      createAuditRow(database, "customer.credit.updated", "customer", id, null, {
+        creditEnabled: Boolean(creditEnabled),
+        creditBlocked: Boolean(creditBlocked),
+        creditLimitPaise,
+        defaultCreditDays,
+      });
+    }
     return this.listCustomers().find((customer) => customer.id === id) || null;
   },
 
   deleteCustomer(id: string) {
+    const current = getDb().prepare("SELECT * FROM customers WHERE id = ?").get(id) as any;
+    if (!current) {
+      throw new Error("customer-not-found");
+    }
+    if (Number(current.outstanding_paise || 0) > 0) {
+      throw new Error("customer-has-outstanding");
+    }
     getDb().prepare("UPDATE customers SET active = 0, updated_at = ? WHERE id = ?").run(now(), id);
     return { ok: true };
+  },
+
+  getCustomerAccount(customerId: string): CustomerAccountSummaryDto {
+    const database = getDb();
+    const customer = database
+      .prepare("SELECT * FROM customers WHERE id = ? AND active = 1 LIMIT 1")
+      .get(customerId) as any;
+    if (!customer) {
+      throw new Error("customer-not-found");
+    }
+    const countRow = database
+      .prepare(
+        `SELECT COUNT(*) AS total FROM customer_account_entries WHERE customer_id = ?`,
+      )
+      .get(customerId) as { total: number };
+    const outstanding = paiseToRupees(customer.outstanding_paise);
+    const overdue = paiseToRupees(sumCustomerOverduePaise(database, customerId));
+    const creditLimit = paiseToRupees(customer.credit_limit_paise);
+    return {
+      customerId,
+      outstanding,
+      overdue,
+      creditLimit,
+      availableCredit: Math.max(0, creditLimit - outstanding),
+      creditEnabled: Boolean(customer.credit_enabled),
+      creditBlocked: Boolean(customer.credit_blocked),
+      defaultCreditDays:
+        customer.default_credit_days === null || customer.default_credit_days === undefined
+          ? null
+          : Number(customer.default_credit_days),
+      entryCount: Number(countRow?.total || 0),
+      entries: [],
+    };
+  },
+
+  listCustomerAccountEntries(
+    customerId: string,
+    opts: { limit?: number; offset?: number } = {},
+  ): CustomerAccountEntriesPageDto {
+    const database = getDb();
+    const customer = database
+      .prepare("SELECT id FROM customers WHERE id = ? AND active = 1 LIMIT 1")
+      .get(customerId) as { id: string } | undefined;
+    if (!customer) {
+      throw new Error("customer-not-found");
+    }
+    const limit = Math.max(1, Math.min(100, Math.round(Number(opts.limit ?? 20))));
+    const offset = Math.max(0, Math.round(Number(opts.offset ?? 0)));
+    const countRow = database
+      .prepare(`SELECT COUNT(*) AS total FROM customer_account_entries WHERE customer_id = ?`)
+      .get(customerId) as { total: number };
+    const total = Number(countRow?.total || 0);
+    const entries = database
+      .prepare(
+        `SELECT * FROM customer_account_entries
+         WHERE customer_id = ?
+         ORDER BY created_at DESC, id DESC
+         LIMIT ? OFFSET ?`,
+      )
+      .all(customerId, limit, offset)
+      .map(customerAccountEntryFromRow);
+    return {
+      customerId,
+      entries,
+      total,
+      limit,
+      offset,
+      hasMore: offset + entries.length < total,
+    };
+  },
+
+  listCustomerOpenBills(customerId: string): CustomerOpenBillDto[] {
+    const database = getDb();
+    const customer = database
+      .prepare("SELECT id FROM customers WHERE id = ? AND active = 1 LIMIT 1")
+      .get(customerId) as { id: string } | undefined;
+    if (!customer) {
+      throw new Error("customer-not-found");
+    }
+    const rows = database
+      .prepare(
+        `SELECT id, invoice_number, description, due_date, amount_paise, remaining_paise, created_at
+         FROM customer_account_entries
+         WHERE customer_id = ?
+           AND entry_type = 'credit_sale'
+           AND remaining_paise > 0
+         ORDER BY COALESCE(due_date, '9999-12-31') ASC, created_at ASC, id ASC`,
+      )
+      .all(customerId) as Array<{
+      id: string;
+      invoice_number: string | null;
+      description: string | null;
+      due_date: string | null;
+      amount_paise: number;
+      remaining_paise: number;
+      created_at: number;
+    }>;
+    return rows.map((row) => ({
+      id: row.id,
+      invoiceNumber: row.invoice_number || null,
+      description: row.description || null,
+      dueDate: row.due_date || null,
+      amount: paiseToRupees(row.amount_paise),
+      remaining: paiseToRupees(row.remaining_paise),
+      createdAt: Number(row.created_at),
+    }));
+  },
+
+  receiveCustomerPayment(
+    customerId: string,
+    input: ReceiveCustomerPaymentInput,
+    actor?: string | null,
+  ): ReceiveCustomerPaymentResultDto {
+    return inTransaction((database) => {
+      const payment = receiveCustomerAccountPayment(database, customerId, input, actor);
+      return {
+        account: this.getCustomerAccount(customerId),
+        payment: {
+          entryId: payment.entryId,
+          amount: paiseToRupees(payment.amountPaise),
+          method: payment.method,
+          outstandingAfter: paiseToRupees(payment.outstandingPaise),
+          allocations: payment.allocations.map((row) => ({
+            creditEntryId: row.creditEntryId,
+            invoiceNumber: row.invoiceNumber,
+            amount: paiseToRupees(row.amountPaise),
+          })),
+        },
+      };
+    });
+  },
+
+  getCreditCollectionsInRange(opts: { from?: number; to?: number } = {}) {
+    const clauses = ["entry_type = 'payment_received'"];
+    const params: unknown[] = [];
+    if (opts.from !== null && opts.from !== undefined) {
+      clauses.push("created_at >= ?");
+      params.push(opts.from);
+    }
+    if (opts.to !== null && opts.to !== undefined) {
+      clauses.push("created_at < ?");
+      params.push(opts.to);
+    }
+    const rows = getDb()
+      .prepare(
+        `SELECT payment_method, SUM(amount_paise) AS amount_paise
+         FROM customer_account_entries
+         WHERE ${clauses.join(" AND ")}
+         GROUP BY payment_method`,
+      )
+      .all(...params) as Array<{ payment_method: string | null; amount_paise: number }>;
+    return rows.reduce((acc: Record<string, number>, row) => {
+      const key = String(row.payment_method || "other");
+      acc[key] = (acc[key] || 0) + paiseToRupees(row.amount_paise);
+      return acc;
+    }, {});
+  },
+
+  getCustomerCreditTotals() {
+    const database = getDb();
+    const outstandingRow = database
+      .prepare(
+        `SELECT COALESCE(SUM(outstanding_paise), 0) AS outstanding_paise
+         FROM customers WHERE active = 1`,
+      )
+      .get() as { outstanding_paise: number };
+    const overdueRow = database
+      .prepare(
+        `SELECT COALESCE(SUM(remaining_paise), 0) AS overdue_paise
+         FROM customer_account_entries
+         WHERE entry_type = 'credit_sale'
+           AND remaining_paise > 0
+           AND due_date IS NOT NULL
+           AND due_date < ?`,
+      )
+      .get(todayDateOnly()) as { overdue_paise: number };
+    return {
+      outstanding: paiseToRupees(outstandingRow?.outstanding_paise),
+      overdue: paiseToRupees(overdueRow?.overdue_paise),
+    };
   },
 
   listStaff(opts: {
@@ -7266,7 +7944,8 @@ function auditArchiveFromRow(row: any): AuditArchiveDto {
   };
 }
 
-function customerFromRow(row: any): CustomerDto {
+function customerFromRow(row: any, overduePaise = 0): CustomerDto {
+  const outstanding = paiseToRupees(row.outstanding_paise);
   return {
     id: row.id,
     name: row.name,
@@ -7274,6 +7953,15 @@ function customerFromRow(row: any): CustomerDto {
     address: row.address || undefined,
     notes: row.notes || undefined,
     active: Boolean(row.active),
+    creditEnabled: Boolean(row.credit_enabled),
+    creditBlocked: Boolean(row.credit_blocked),
+    creditLimit: paiseToRupees(row.credit_limit_paise),
+    defaultCreditDays:
+      row.default_credit_days === null || row.default_credit_days === undefined
+        ? null
+        : Number(row.default_credit_days),
+    outstanding,
+    overdue: paiseToRupees(overduePaise),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

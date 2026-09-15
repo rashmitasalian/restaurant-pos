@@ -45,6 +45,11 @@ import {
 } from "../../../shared/validation";
 import { reportClientError } from "../../../app/utils/clientError";
 import styles from "./Billing.module.css";
+import {
+  DEFAULT_CREDIT_CONFIG,
+  CREDIT_CONFIG_KEY,
+  normalizeCreditConfig,
+} from "../../../shared/customerCredit";
 import PaymentsModal, { type PaymentConfirm } from "../../components/PaymentsModal";
 import { AuthContext } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
@@ -339,7 +344,21 @@ export default function Billing() {
   const [lastAddedId, setLastAddedId] = React.useState<string | null>(null);
   const [discountPercent, setDiscountPercent] = React.useState(0);
   const [gstConfig, setGstConfig] = React.useState(() => normalizeGstConfig(DEFAULT_GST_CONFIG));
+  const [creditConfig, setCreditConfig] = React.useState(() =>
+    normalizeCreditConfig(DEFAULT_CREDIT_CONFIG),
+  );
+  const [creditCustomers, setCreditCustomers] = React.useState<any[]>([]);
   const [branding, setBranding] = React.useState<ReceiptBranding | null>(null);
+
+  const openPayModal = React.useCallback(async () => {
+    try {
+      const list = (await window.pos?.customers?.list?.({ filter: "all" })) || [];
+      setCreditCustomers(list);
+    } catch {
+      // Keep previous list if refresh fails.
+    }
+    setPayModalOpen(true);
+  }, []);
 
   // ── Sidebar state ───────────────────────────────────────────────────────
   const [tablesOpen, setTablesOpen] = React.useState(() => {
@@ -743,8 +762,26 @@ export default function Billing() {
         setBranding(null);
       }
     };
+    const loadCredit = async () => {
+      try {
+        const cfg = await window.pos?.settings?.get?.(CREDIT_CONFIG_KEY);
+        setCreditConfig(normalizeCreditConfig(cfg as any));
+      } catch {
+        setCreditConfig(DEFAULT_CREDIT_CONFIG);
+      }
+    };
+    const loadCreditCustomers = async () => {
+      try {
+        const list = (await window.pos?.customers?.list?.()) || [];
+        setCreditCustomers(list);
+      } catch {
+        setCreditCustomers([]);
+      }
+    };
     loadGst();
     loadBranding();
+    loadCredit();
+    loadCreditCustomers();
     window.addEventListener("orders-changed", loadGst);
     window.addEventListener("branding-changed", loadBranding);
     return () => {
@@ -1555,7 +1592,7 @@ export default function Billing() {
         totals,
         undefined,
         branding,
-        { preview: true },
+        { preview: true, tableLabel: activeTableLabel || undefined },
       );
       await printReceipt({ lines });
       try {
@@ -1592,6 +1629,8 @@ export default function Billing() {
             change: payment.change,
             txnRef: payment.txnRef,
             splitBreakdown: payment.splitBreakdown,
+            dueDate: payment.dueDate,
+            customerId: payment.customerId,
           });
         })();
       } catch (e: any) {
@@ -1608,6 +1647,7 @@ export default function Billing() {
 
       // Snapshot totals (state will be stale inside the async closure)
       const snapTableNum = tableNum;
+      const snapTableLabel = activeTableLabel;
       const snapDiscount = Number(paidOrder?.discountPercent ?? discountPercent);
       const snapTotals = computeTotals(paidOrder, snapDiscount, gstConfig);
       const snapMethod = payment.method;
@@ -1692,6 +1732,7 @@ export default function Billing() {
             snapTotals,
             undefined,
             branding,
+            { tableLabel: snapTableLabel || paidOrder?.tableName || undefined },
           );
           await printReceipt({ lines, printer: "counter" });
           if (sequence === "bill_then_kot") {
@@ -1778,6 +1819,7 @@ export default function Billing() {
 
       setOrder(paidOrder);
       const snapTableNum = tableNum;
+      const snapTableLabel = activeTableLabel;
       const snapDiscount = Number(paidOrder?.discountPercent ?? discountPercent);
       const snapTotals = computeTotals(paidOrder, snapDiscount, gstConfig);
       const snapAmountStr = formatCurrency(Number(paidOrder?.total || finalTotal));
@@ -1802,6 +1844,7 @@ export default function Billing() {
             snapTotals,
             undefined,
             branding,
+            { tableLabel: snapTableLabel || paidOrder?.tableName || undefined },
           );
           await printReceipt({ lines });
           finishDelivery();
@@ -1919,7 +1962,7 @@ export default function Billing() {
       if (key === "p") {
         e.preventDefault();
         if (canStartPayment) {
-          setPayModalOpen(true);
+          void openPayModal();
         }
       } else if (key === "b") {
         e.preventDefault();
@@ -1955,6 +1998,7 @@ export default function Billing() {
     canStartPayment,
     canPrintBill,
     quickFavoriteShortcuts,
+    openPayModal,
   ]);
 
   // ── Render ──────────────────────────────────────────────────────────────
@@ -2346,7 +2390,9 @@ export default function Billing() {
             )}
             {!activeMode?.externalPayment && (
               <button
-                onClick={() => setPayModalOpen(true)}
+                onClick={() => {
+                  void openPayModal();
+                }}
                 disabled={!canStartPayment}
                 aria-disabled={!canStartPayment}
                 title={`Settle bill and run payment print flow: ${paymentFlowLabel(activeMode)} (P)`}
@@ -2563,6 +2609,11 @@ export default function Billing() {
         onConfirm={handleConfirmPay}
         processing={paymentProcessing}
         forcePrintReceipt={requiresOnPayPrintFlow}
+        creditEnabled={creditConfig.enabled}
+        restaurantDefaultCreditDays={creditConfig.defaultCreditDays}
+        orderCustomerId={order?.customerId || null}
+        customers={creditCustomers}
+        onCustomersChanged={setCreditCustomers}
       />
     </>
   );

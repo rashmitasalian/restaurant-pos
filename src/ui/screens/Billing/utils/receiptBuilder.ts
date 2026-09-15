@@ -101,7 +101,7 @@ export function buildReceiptLines(
   totals: Partial<GstTotals> & { subtotal?: number; cgst?: number; sgst?: number; total: number },
   gstConfigInput?: Partial<GstConfig> | null,
   brandingInput?: ReceiptBranding | null,
-  options?: { preview?: boolean },
+  options?: { preview?: boolean; tableLabel?: string | null },
 ): string[] {
   const branding = getReceiptBranding(brandingInput);
   const gstConfig = normalizeGstConfig(
@@ -141,6 +141,8 @@ export function buildReceiptLines(
           : normalizedOrderTypeLabel
             ? normalizedOrderTypeLabel.toUpperCase()
             : "ORDER";
+  const tableLabel = String(options?.tableLabel || ord?.tableName || "").trim()
+    || (tableNum !== null && tableNum !== undefined ? `Table ${tableNum}` : "");
 
   const PAD = "  ";
   const COL_ITEM = 20;
@@ -171,7 +173,7 @@ export function buildReceiptLines(
     "SEP",
     `SUBHEADER:${orderTypeLabel}`,
     ...(options?.preview ? ["SUBHEADER:*** BILL ***"] : []),
-    ...(tableNum ? [`CENTER:Table No: ${tableNum}`] : []),
+    ...(tableLabel ? [`CENTER:Table: ${tableLabel}`] : []),
     ...(orderType === "delivery"
       ? [
           `CENTER:Platform: ${meta.platform || "Delivery"}`,
@@ -214,6 +216,44 @@ export function buildReceiptLines(
     "SEP",
     `BOLDLEFT:${PAD}${rpad("Grand Total", COL_ITEM + COL_QTY + COL_RATE)}${lpad(`Rs ${fmtAmt(grandTotal)}`, COL_AMT)}`,
     "SEP",
+    ...(() => {
+      const payments = Array.isArray(ord?.payments) ? ord.payments : [];
+      const creditPayment = payments.find(
+        (p: any) => String(p?.method || "").toLowerCase() === "credit",
+      );
+      const creditMeta = ord?.meta?.credit;
+      if (!creditPayment && !creditMeta) {
+        return [] as string[];
+      }
+      const dueDate = String(creditMeta?.dueDate || "").trim();
+      const [y, m, d] = dueDate.split("-").map(Number);
+      const dueLabel =
+        y && m && d
+          ? new Date(y, m - 1, d).toLocaleDateString("en-IN", {
+              day: "numeric",
+              month: "short",
+              year: "numeric",
+            })
+          : dueDate || null;
+      const customerName = String(
+        creditMeta?.customerName || meta.customerName || meta.parcelName || "",
+      ).trim();
+      const customerPhone = String(creditMeta?.customerPhone || meta.customerPhone || "").trim();
+      const balance =
+        creditMeta?.accountBalance === null || creditMeta?.accountBalance === undefined
+          ? null
+          : Number(creditMeta.accountBalance);
+      return [
+        `LEFTB:${PAD}Payment: ON ACCOUNT`,
+        ...(customerName ? [`LEFT:${PAD}Customer: ${customerName}`] : []),
+        ...(customerPhone ? [`LEFT:${PAD}Phone: ${customerPhone}`] : []),
+        ...(dueLabel ? [`LEFT:${PAD}This bill due: ${dueLabel}`] : []),
+        ...(balance !== null && Number.isFinite(balance)
+          ? [`LEFTB:${PAD}Account balance: Rs ${fmtAmt(balance)}`]
+          : []),
+        "SEP",
+      ];
+    })(),
     `LEFTB:${PAD}Printed by: Admin`,
     `LEFTB:${PAD}Printed On: ${printedAtStr}`,
     "BLANK",

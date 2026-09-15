@@ -6,30 +6,119 @@ import {
   normalizeText,
   validationMessage,
 } from "../../../shared/validation";
+import { CREDIT_CONFIG_KEY, normalizeCreditConfig } from "../../../shared/customerCredit";
+import { getConfigBranding } from "../../../app/db/posRepository";
+import { printReceipt } from "../../../app/services/printer";
 import { useToast } from "../../context/ToastContext";
+import { AuthContext } from "../../context/AuthContext";
+import { roleHasPermission } from "../../../shared/permissions";
 import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui/Input";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { VirtualScrollList } from "../../components/VirtualScrollList";
+import { Drawer } from "../../components/ui/Drawer";
+import { DataTable } from "../../components/ui/DataTable";
+import { Stat } from "../../components/ui/Stat";
+import {
+  buildCreditCollectionLines,
+  buildCreditStatementLines,
+} from "./creditPrintBuilders";
 
-const CUSTOMER_ROW_HEIGHT = 88;
+const CUSTOMER_ROW_HEIGHT = 96;
+const LEDGER_PAGE_SIZE = 20;
 
 interface Customer {
   id: string;
   name: string;
   phone: string;
   createdAt: string | number;
+  creditEnabled?: boolean;
+  creditBlocked?: boolean;
+  creditLimit?: number;
+  defaultCreditDays?: number | null;
+  outstanding?: number;
+  overdue?: number;
+}
+
+type CustomerFilter = "all" | "outstanding" | "overdue";
+
+type AccountSummary = {
+  outstanding: number;
+  overdue: number;
+  creditLimit: number;
+  availableCredit: number;
+  creditEnabled: boolean;
+  creditBlocked: boolean;
+  defaultCreditDays: number | null;
+  entryCount?: number;
+  entries?: Array<{
+    id: string;
+    entryType: string;
+    amount: number;
+    runningBalance: number;
+    invoiceNumber?: string | null;
+    description?: string | null;
+    dueDate?: string | null;
+    remaining?: number | null;
+    paymentMethod?: string | null;
+    createdAt: number;
+    createdBy?: string | null;
+  }>;
+};
+
+type LedgerEntry = {
+  id: string;
+  entryType: string;
+  amount: number;
+  runningBalance: number;
+  invoiceNumber?: string | null;
+  description?: string | null;
+  dueDate?: string | null;
+  remaining?: number | null;
+  paymentMethod?: string | null;
+  createdAt: number;
+};
+
+function formatMoney(value: number) {
+  return `₹${Number(value || 0).toLocaleString("en-IN", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+function formatEntryDate(ts: number) {
+  return new Date(ts).toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "2-digit",
+  });
 }
 
 export default function Customers() {
   const { showToast } = useToast();
+  const auth = React.useContext(AuthContext);
+  const role = auth?.session?.role;
+  const canManageCredit = Boolean(
+    role &&
+      (roleHasPermission(role, "system:settings") || roleHasPermission(role, "page:manager")),
+  );
+  const canReceive = Boolean(role && roleHasPermission(role, "order:pay"));
+
   const [customers, setCustomers] = React.useState<Customer[]>([]);
+  const [loadError, setLoadError] = React.useState<string | null>(null);
+  const [filter, setFilter] = React.useState<CustomerFilter>("all");
+  const [restaurantDefaultDays, setRestaurantDefaultDays] = React.useState(15);
+  const [creditFeatureEnabled, setCreditFeatureEnabled] = React.useState(false);
 
   const loadCustomers = React.useCallback(async () => {
     try {
-      setCustomers((await window.pos?.customers?.list()) || []);
-    } catch (e) {
+      // Always load the full list; filters apply in the UI so controls never disappear.
+      const list = (await window.pos?.customers?.list({ filter: "all" })) || [];
+      setCustomers(list);
+      setLoadError(null);
+    } catch (e: any) {
       setCustomers([]);
+      setLoadError(validationMessage(e, "Could not load customers"));
     }
   }, []);
 
@@ -51,9 +140,96 @@ export default function Customers() {
   const savingEditRef = React.useRef(false);
   const deletingRef = React.useRef<string | null>(null);
 
+  const [selectedCustomer, setSelectedCustomer] = React.useState<Customer | null>(null);
+  const [account, setAccount] = React.useState<AccountSummary | null>(null);
+  const [ledgerEntries, setLedgerEntries] = React.useState<LedgerEntry[]>([]);
+  const [ledgerHasMore, setLedgerHasMore] = React.useState(false);
+  const [ledgerLoadingMore, setLedgerLoadingMore] = React.useState(false);
+  const [accountLoading, setAccountLoading] = React.useState(false);
+  const [receiveOpen, setReceiveOpen] = React.useState(false);
+  const [receiveAmount, setReceiveAmount] = React.useState("");
+  const [receiveMethod, setReceiveMethod] = React.useState<"cash" | "upi" | "card" | "other">("upi");
+  const [receiveNotes, setReceiveNotes] = React.useState("");
+  const [receivePrintSlip, setReceivePrintSlip] = React.useState(true);
+  const [receiving, setReceiving] = React.useState(false);
+  const [creditLimitEdit, setCreditLimitEdit] = React.useState("");
+  const [creditDaysEdit, setCreditDaysEdit] = React.useState("");
+  const [savingCredit, setSavingCredit] = React.useState(false);
+  const [hotelName, setHotelName] = React.useState("Restaurant");
+  const [printingStatement, setPrintingStatement] = React.useState(false);
+
   React.useEffect(() => {
     loadCustomers();
   }, [loadCustomers]);
+
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const cfg = normalizeCreditConfig(await window.pos?.settings?.get?.(CREDIT_CONFIG_KEY));
+        setCreditFeatureEnabled(cfg.enabled);
+        setRestaurantDefaultDays(cfg.defaultCreditDays);
+      } catch {
+        setCreditFeatureEnabled(false);
+      }
+      try {
+        const branding = await getConfigBranding();
+        if (branding?.hotelName) {
+          setHotelName(branding.hotelName);
+        }
+      } catch {
+        // keep default
+      }
+    })();
+  }, []);
+
+  const loadLedgerPage = async (customerId: string, offset = 0, append = false) => {
+    const page = await window.pos!.customers!.accountEntries(customerId, {
+      limit: LEDGER_PAGE_SIZE,
+      offset,
+    });
+    setLedgerEntries((prev) => (append ? [...prev, ...page.entries] : page.entries));
+    setLedgerHasMore(Boolean(page.hasMore));
+    return page;
+  };
+
+  const openAccount = async (customer: Customer) => {
+    setSelectedCustomer(customer);
+    setAccountLoading(true);
+    setReceiveOpen(false);
+    setLedgerEntries([]);
+    setLedgerHasMore(false);
+    try {
+      const summary = await window.pos!.customers!.account(customer.id);
+      setAccount(summary);
+      setCreditLimitEdit(String(summary.creditLimit || 0));
+      setCreditDaysEdit(
+        summary.defaultCreditDays === null || summary.defaultCreditDays === undefined
+          ? ""
+          : String(summary.defaultCreditDays),
+      );
+      await loadLedgerPage(customer.id, 0, false);
+    } catch (e: any) {
+      showToast(validationMessage(e, "Could not load account"), "error");
+      setSelectedCustomer(null);
+      setAccount(null);
+    } finally {
+      setAccountLoading(false);
+    }
+  };
+
+  const loadMoreLedger = async () => {
+    if (!selectedCustomer || ledgerLoadingMore || !ledgerHasMore) {
+      return;
+    }
+    setLedgerLoadingMore(true);
+    try {
+      await loadLedgerPage(selectedCustomer.id, ledgerEntries.length, true);
+    } catch (e: any) {
+      showToast(validationMessage(e, "Could not load more ledger rows"), "error");
+    } finally {
+      setLedgerLoadingMore(false);
+    }
+  };
 
   const addCustomer = async () => {
     if (savingAddRef.current) {
@@ -161,6 +337,10 @@ export default function Customers() {
       if (editingId === id) {
         cancelEdit();
       }
+      if (selectedCustomer?.id === id) {
+        setSelectedCustomer(null);
+        setAccount(null);
+      }
       showToast("Customer removed", "success");
     } catch (e: any) {
       showToast(validationMessage(e, "Failed to remove customer"), "error");
@@ -170,20 +350,156 @@ export default function Customers() {
     }
   };
 
+  const saveCreditSettings = async () => {
+    if (!selectedCustomer || !canManageCredit) {
+      return;
+    }
+    const limit = Number(creditLimitEdit || 0);
+    if (!Number.isFinite(limit) || limit < 0) {
+      showToast("Enter a valid credit limit", "error");
+      return;
+    }
+    setSavingCredit(true);
+    try {
+      const daysRaw = creditDaysEdit.trim();
+      const defaultCreditDays = daysRaw === "" ? null : Math.max(0, Math.round(Number(daysRaw)));
+      if (daysRaw !== "" && !Number.isFinite(Number(daysRaw))) {
+        showToast("Enter valid default days, or leave blank", "error");
+        return;
+      }
+      const updated = await window.pos!.customers!.update(selectedCustomer.id, {
+        creditEnabled: limit > 0,
+        creditLimit: limit,
+        defaultCreditDays,
+        creditBlocked: account?.creditBlocked || false,
+      });
+      showToast(limit > 0 ? "Credit enabled for this customer" : "Credit limit cleared");
+      await loadCustomers();
+      if (updated) {
+        await openAccount(updated as Customer);
+      }
+    } catch (e: any) {
+      showToast(validationMessage(e, "Could not save credit settings"), "error");
+    } finally {
+      setSavingCredit(false);
+    }
+  };
+
+  const toggleCreditBlocked = async () => {
+    if (!selectedCustomer || !canManageCredit || !account) {
+      return;
+    }
+    try {
+      await window.pos!.customers!.update(selectedCustomer.id, {
+        creditBlocked: !account.creditBlocked,
+        creditEnabled: account.creditEnabled || account.creditLimit > 0,
+      });
+      await openAccount(selectedCustomer);
+      await loadCustomers();
+    } catch (e: any) {
+      showToast(validationMessage(e, "Could not update credit status"), "error");
+    }
+  };
+
+  const receivePayment = async () => {
+    if (!selectedCustomer || !canReceive) {
+      return;
+    }
+    setReceiving(true);
+    try {
+      const result = await window.pos!.customers!.receivePayment(selectedCustomer.id, {
+        amount: Number(receiveAmount),
+        method: receiveMethod,
+        notes: receiveNotes || null,
+      });
+      const summary = result?.account || result;
+      const paidAmount = Number(receiveAmount);
+      setAccount(summary);
+      setReceiveOpen(false);
+      setReceiveAmount("");
+      setReceiveNotes("");
+      showToast(`Payment received: ${formatMoney(paidAmount)}`);
+      await loadCustomers();
+      await loadLedgerPage(selectedCustomer.id, 0, false);
+      if (receivePrintSlip) {
+        try {
+          const lines = buildCreditCollectionLines({
+            hotelName,
+            customerName: selectedCustomer.name,
+            customerPhone: selectedCustomer.phone,
+            amount: paidAmount,
+            method: receiveMethod,
+            outstandingAfter: Number(summary?.outstanding || 0),
+            allocations: result?.payment?.allocations || [],
+          });
+          await printReceipt({ lines });
+        } catch {
+          showToast("Payment saved, but collection slip could not print", "error");
+        }
+      }
+    } catch (e: any) {
+      showToast(validationMessage(e, "Could not receive payment"), "error");
+    } finally {
+      setReceiving(false);
+    }
+  };
+
   const filteredCustomers = React.useMemo(() => {
     const query = normalizeText(search).toLowerCase();
-    if (!query) {
-      return customers;
-    }
     return customers.filter((customer) => {
-      const haystack = `${customer.name} ${customer.phone}`.toLowerCase();
-      return haystack.includes(query);
+      const outstanding = Number(customer.outstanding || 0);
+      const overdue = Number(customer.overdue || 0);
+      if (filter === "outstanding" && outstanding <= 0) {
+        return false;
+      }
+      if (filter === "overdue" && overdue <= 0) {
+        return false;
+      }
+      if (!query) {
+        return true;
+      }
+      return `${customer.name} ${customer.phone}`.toLowerCase().includes(query);
     });
-  }, [customers, search]);
+  }, [customers, search, filter]);
+
+  const printStatement = async () => {
+    if (!selectedCustomer || !account) {
+      return;
+    }
+    setPrintingStatement(true);
+    try {
+      const openBills = (await window.pos!.customers!.openBills(selectedCustomer.id)) || [];
+      const lastPayment =
+        ledgerEntries.find((entry) => entry.entryType === "payment_received") || null;
+      const lines = buildCreditStatementLines({
+        hotelName,
+        customerName: selectedCustomer.name,
+        customerPhone: selectedCustomer.phone,
+        outstanding: account.outstanding,
+        overdue: account.overdue,
+        openBills,
+        lastPayment: lastPayment
+          ? {
+              amount: lastPayment.amount,
+              method: lastPayment.paymentMethod,
+              createdAt: lastPayment.createdAt,
+            }
+          : null,
+      });
+      await printReceipt({ lines });
+      showToast("Statement sent to printer");
+    } catch (e: any) {
+      showToast(validationMessage(e, "Could not print statement"), "error");
+    } finally {
+      setPrintingStatement(false);
+    }
+  };
 
   const renderCustomerRow = (c: Customer) => {
     const isEditing = editingId === c.id;
     const isConfirmingDelete = confirmDeleteId === c.id;
+    const outstanding = Number(c.outstanding || 0);
+    const overdue = Number(c.overdue || 0);
 
     return (
       <div
@@ -197,6 +513,12 @@ export default function Customers() {
           gap: 10,
           minHeight: CUSTOMER_ROW_HEIGHT - 10,
           boxSizing: "border-box",
+          cursor: isEditing ? "default" : "pointer",
+        }}
+        onClick={() => {
+          if (!isEditing) {
+            openAccount(c);
+          }
         }}
       >
         <div
@@ -226,7 +548,10 @@ export default function Customers() {
             {c.name.charAt(0).toUpperCase()}
           </div>
           {isEditing ? (
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", flex: 1 }}>
+            <div
+              style={{ display: "flex", gap: 8, flexWrap: "wrap", flex: 1 }}
+              onClick={(e) => e.stopPropagation()}
+            >
               <div style={{ flex: "1 1 160px" }}>
                 <Input
                   label="Customer name"
@@ -273,10 +598,29 @@ export default function Customers() {
               >
                 {c.phone}
               </div>
+              {outstanding > 0 ? (
+                <div
+                  style={{
+                    marginTop: 4,
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: overdue > 0 ? "var(--pos-danger)" : "var(--pos-tx-sec)",
+                  }}
+                >
+                  {formatMoney(outstanding)} {overdue > 0 ? "overdue" : "outstanding"}
+                </div>
+              ) : c.creditEnabled ? (
+                <div style={{ marginTop: 4, fontSize: 12, color: "var(--pos-tx-muted)" }}>
+                  Credit ready · limit {formatMoney(Number(c.creditLimit || 0))}
+                </div>
+              ) : null}
             </div>
           )}
         </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div
+          style={{ display: "flex", gap: 8, flexWrap: "wrap" }}
+          onClick={(e) => e.stopPropagation()}
+        >
           {isEditing ? (
             <>
               <Button size="sm" variant="primary" onClick={() => saveCustomer(c)} disabled={savingEdit}>
@@ -288,6 +632,9 @@ export default function Customers() {
             </>
           ) : (
             <>
+              <Button size="sm" variant="secondary" onClick={() => openAccount(c)}>
+                Account
+              </Button>
               <Button
                 size="sm"
                 variant="secondary"
@@ -295,7 +642,7 @@ export default function Customers() {
                   try {
                     navigator.clipboard?.writeText(c.phone);
                     showToast("Phone copied");
-                  } catch (e) {
+                  } catch {
                     showToast("Copied");
                   }
                 }}
@@ -336,9 +683,25 @@ export default function Customers() {
     );
   };
 
+  const emptyMessage =
+    customers.length === 0
+      ? loadError || "No customers yet. Add your first customer above."
+      : filter === "outstanding"
+        ? "No customers with outstanding balance."
+        : filter === "overdue"
+          ? "No overdue customers."
+          : "No customers match your search.";
+
   return (
     <div className="pos-page pos-page-sm">
-      <PageHeader title="Customers" subtitle="Collect customer name & phone for promotions" />
+      <PageHeader
+        title="Customers"
+        subtitle={
+          creditFeatureEnabled
+            ? "Customer list, credit accounts, and collections"
+            : "Collect customer name & phone for promotions"
+        }
+      />
 
       <div className="pos-card pos-card-p" style={{ marginBottom: 24 }}>
         <p
@@ -402,25 +765,39 @@ export default function Customers() {
         </div>
       </div>
 
-      {customers.length > 0 && (
-        <div className="pos-card pos-card-p" style={{ marginBottom: 16 }}>
-          <Input
-            label="Search customers"
-            labelHidden
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search by name or phone"
-          />
-          <div style={{ marginTop: 8, fontSize: 12, color: "var(--pos-tx-sub)" }}>
-            Showing {filteredCustomers.length.toLocaleString()} of {customers.length.toLocaleString()} customers
-          </div>
+      <div className="pos-card pos-card-p" style={{ marginBottom: 16 }}>
+        <Input
+          label="Search customers"
+          labelHidden
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Search by name or phone"
+        />
+        <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+          {([
+            ["all", "All"],
+            ["outstanding", "Outstanding"],
+            ["overdue", "Overdue"],
+          ] as Array<[CustomerFilter, string]>).map(([key, label]) => (
+            <Button
+              key={key}
+              size="sm"
+              variant={filter === key ? "primary" : "secondary"}
+              onClick={() => setFilter(key)}
+            >
+              {label}
+            </Button>
+          ))}
         </div>
-      )}
+        <div style={{ marginTop: 8, fontSize: 12, color: "var(--pos-tx-sub)" }}>
+          Showing {filteredCustomers.length.toLocaleString()} of {customers.length.toLocaleString()}{" "}
+          customers
+          {loadError ? ` · ${loadError}` : ""}
+        </div>
+      </div>
 
-      {customers.length === 0 ? (
-        <div className="pos-empty">No customers yet. Add your first customer above.</div>
-      ) : filteredCustomers.length === 0 ? (
-        <div className="pos-empty">No customers match your search.</div>
+      {filteredCustomers.length === 0 ? (
+        <div className="pos-empty">{emptyMessage}</div>
       ) : (
         <VirtualScrollList
           items={filteredCustomers}
@@ -429,6 +806,212 @@ export default function Customers() {
           renderItem={(customer) => renderCustomerRow(customer)}
         />
       )}
+
+      <Drawer
+        open={Boolean(selectedCustomer)}
+        onClose={() => {
+          setSelectedCustomer(null);
+          setAccount(null);
+          setLedgerEntries([]);
+          setReceiveOpen(false);
+        }}
+        title={selectedCustomer ? selectedCustomer.name : "Account"}
+        wide
+        footer={
+          selectedCustomer && account && !accountLoading ? (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", width: "100%" }}>
+              {canReceive && account.outstanding > 0 && (
+                <Button
+                  variant="primary"
+                  onClick={() => {
+                    setReceiveAmount(String(account.outstanding));
+                    setReceivePrintSlip(true);
+                    setReceiveOpen(true);
+                  }}
+                >
+                  Receive Payment
+                </Button>
+              )}
+              <Button
+                variant="secondary"
+                onClick={printStatement}
+                disabled={printingStatement}
+                loading={printingStatement}
+              >
+                Print statement
+              </Button>
+            </div>
+          ) : undefined
+        }
+      >
+        {accountLoading || !account || !selectedCustomer ? (
+          <div style={{ padding: 8 }}>Loading account…</div>
+        ) : (
+          <div style={{ display: "grid", gap: 16 }}>
+            <div style={{ color: "var(--pos-tx-sub)", fontSize: 13 }}>{selectedCustomer.phone}</div>
+            <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+              <Stat label="Outstanding" value={formatMoney(account.outstanding)} primary />
+              <Stat
+                label="Overdue"
+                value={formatMoney(account.overdue)}
+                sub={account.overdue > 0 ? "Past due bills" : undefined}
+              />
+              <Stat label="Available" value={formatMoney(account.availableCredit)} />
+            </div>
+
+            {canManageCredit && creditFeatureEnabled && (
+              <div className="pos-card pos-card-p" style={{ display: "grid", gap: 10 }}>
+                <div style={{ fontWeight: 700, fontSize: 13 }}>Credit terms</div>
+                <div style={{ fontSize: 12, color: "var(--pos-tx-sub)" }}>
+                  Limit above ₹0 enables Credit on Billing. Due days apply to new bills only —
+                  existing bills keep the date they were saved with. Leave days blank to use the
+                  restaurant default ({restaurantDefaultDays} days).
+                </div>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  <div style={{ flex: "1 1 140px" }}>
+                    <Input
+                      label="Credit limit (₹)"
+                      value={creditLimitEdit}
+                      onChange={(e) => setCreditLimitEdit(e.target.value)}
+                    />
+                  </div>
+                  <div style={{ flex: "1 1 140px" }}>
+                    <Input
+                      label="Due in days (optional)"
+                      value={creditDaysEdit}
+                      onChange={(e) => setCreditDaysEdit(e.target.value)}
+                      placeholder={`Blank = ${restaurantDefaultDays}`}
+                    />
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    onClick={saveCreditSettings}
+                    disabled={savingCredit}
+                  >
+                    {savingCredit ? "Saving…" : "Save credit settings"}
+                  </Button>
+                  <Button size="sm" variant="secondary" onClick={toggleCreditBlocked}>
+                    {account.creditBlocked ? "Unblock credit" : "Block credit"}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {receiveOpen && (
+              <div className="pos-card pos-card-p" style={{ display: "grid", gap: 10 }}>
+                <div style={{ fontWeight: 700 }}>Receive customer payment</div>
+                <Input
+                  label="Amount (₹)"
+                  value={receiveAmount}
+                  onChange={(e) => setReceiveAmount(e.target.value)}
+                />
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {(["cash", "upi", "card", "other"] as const).map((method) => (
+                    <Button
+                      key={method}
+                      size="sm"
+                      variant={receiveMethod === method ? "primary" : "secondary"}
+                      onClick={() => setReceiveMethod(method)}
+                    >
+                      {method.toUpperCase()}
+                    </Button>
+                  ))}
+                </div>
+                <Input
+                  label="Notes"
+                  value={receiveNotes}
+                  onChange={(e) => setReceiveNotes(e.target.value)}
+                  placeholder="Optional"
+                />
+                <label
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    fontSize: 13,
+                    color: "var(--pos-tx-sec)",
+                    fontWeight: 600,
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={receivePrintSlip}
+                    onChange={(e) => setReceivePrintSlip(e.target.checked)}
+                  />
+                  Print collection slip
+                </label>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <Button variant="primary" onClick={receivePayment} disabled={receiving}>
+                    {receiving ? "Saving…" : "Receive"}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => setReceiveOpen(false)}
+                    disabled={receiving}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            <div>
+              <div style={{ fontWeight: 700, marginBottom: 8 }}>Ledger</div>
+              {ledgerEntries.length === 0 ? (
+                <div style={{ fontSize: 13, color: "var(--pos-tx-sub)" }}>
+                  No account activity yet.
+                </div>
+              ) : (
+                <>
+                  <DataTable
+                    dense
+                    headers={["Date", "Details", "Debit", "Credit", "Bal"]}
+                    rows={ledgerEntries.map((entry) => {
+                      const isSale = entry.entryType === "credit_sale";
+                      const isPay = entry.entryType === "payment_received";
+                      const detail = [
+                        entry.invoiceNumber ||
+                          (isPay ? "Payment" : entry.entryType.replace("_", " ")),
+                        entry.description || "",
+                        entry.dueDate ? `due ${entry.dueDate}` : "",
+                        isSale && entry.remaining != null && entry.remaining > 0
+                          ? `left ${formatMoney(entry.remaining)}`
+                          : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" · ");
+                      return [
+                        formatEntryDate(entry.createdAt),
+                        detail,
+                        isSale ? formatMoney(entry.amount) : "—",
+                        isPay ? formatMoney(entry.amount) : "—",
+                        formatMoney(entry.runningBalance),
+                      ];
+                    })}
+                    empty="No account activity yet."
+                  />
+                  {ledgerHasMore && (
+                    <div style={{ marginTop: 10 }}>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={loadMoreLedger}
+                        disabled={ledgerLoadingMore}
+                        loading={ledgerLoadingMore}
+                      >
+                        Load more
+                      </Button>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        )}
+      </Drawer>
     </div>
   );
 }

@@ -1,9 +1,20 @@
 import React from "react";
 import { useFocusTrap } from "../hooks/useFocusTrap";
+import { resolveCreditDueDate } from "../../shared/customerCredit";
+import {
+  isValidIndianMobile,
+  isValidPersonName,
+  normalizePhone,
+  normalizeText,
+  todayDateOnly,
+  validationMessage,
+} from "../../shared/validation";
+import { Button } from "./ui/Button";
+import { Input } from "./ui/Input";
 import styles from "./PaymentsModal.module.css";
 
 type SingleMethod = "cash" | "card" | "upi" | "voucher" | "other";
-export type PaymentMethod = SingleMethod | "split";
+export type PaymentMethod = SingleMethod | "split" | "credit";
 
 export interface PaymentConfirm {
   method: PaymentMethod;
@@ -12,7 +23,20 @@ export interface PaymentConfirm {
   txnRef?: string;
   splitBreakdown?: Array<{ method: SingleMethod; amount: number }>;
   printReceipt: boolean;
+  dueDate?: string;
+  customerId?: string | null;
 }
+
+export type CreditCustomerOption = {
+  id: string;
+  name: string;
+  phone: string;
+  outstanding?: number;
+  creditLimit?: number;
+  defaultCreditDays?: number | null;
+  creditEnabled?: boolean;
+  creditBlocked?: boolean;
+};
 
 interface SplitEntry {
   method: SingleMethod;
@@ -26,6 +50,11 @@ interface Props {
   onConfirm: (payment: PaymentConfirm) => void;
   processing?: boolean;
   forcePrintReceipt?: boolean;
+  creditEnabled?: boolean;
+  restaurantDefaultCreditDays?: number;
+  orderCustomerId?: string | null;
+  customers?: CreditCustomerOption[];
+  onCustomersChanged?: (customers: CreditCustomerOption[]) => void;
 }
 
 const SINGLE_METHODS: SingleMethod[] = ["cash", "card", "upi", "voucher", "other"];
@@ -44,6 +73,11 @@ export default function PaymentsModal({
   onConfirm,
   processing = false,
   forcePrintReceipt = false,
+  creditEnabled = false,
+  restaurantDefaultCreditDays = 15,
+  orderCustomerId = null,
+  customers = [],
+  onCustomersChanged,
 }: Props) {
   const [expanded, setExpanded] = React.useState(false);
   const [method, setMethod] = React.useState<PaymentMethod>("cash");
@@ -54,21 +88,114 @@ export default function PaymentsModal({
     { method: "cash", amount: "" },
     { method: "upi", amount: "" },
   ]);
+  const [creditCustomerId, setCreditCustomerId] = React.useState<string>("");
+  const [creditDueDate, setCreditDueDate] = React.useState<string>(todayDateOnly());
+  const [dueDateOverridden, setDueDateOverridden] = React.useState(false);
+  const [showDueDateChange, setShowDueDateChange] = React.useState(false);
+  const [customerSearch, setCustomerSearch] = React.useState("");
+  const [localCustomers, setLocalCustomers] = React.useState<CreditCustomerOption[]>(customers);
+  const [showNewCustomer, setShowNewCustomer] = React.useState(false);
+  const [newName, setNewName] = React.useState("");
+  const [newPhone, setNewPhone] = React.useState("");
+  const [newLimit, setNewLimit] = React.useState("");
+  const [newError, setNewError] = React.useState<string | null>(null);
+  const [savingCustomer, setSavingCustomer] = React.useState(false);
+  const [inlineLimit, setInlineLimit] = React.useState("");
+  const [savingCreditSetup, setSavingCreditSetup] = React.useState(false);
+  const [creditSetupError, setCreditSetupError] = React.useState<string | null>(null);
 
-  // Reset state whenever the modal is opened
+  const syncCustomers = React.useCallback(
+    (next: CreditCustomerOption[]) => {
+      setLocalCustomers(next);
+      onCustomersChanged?.(next);
+    },
+    [onCustomersChanged],
+  );
+
+  const wasOpenRef = React.useRef(false);
+
+  // Reset only when the modal opens — not when customers update mid-flow (e.g. Enable credit).
   React.useEffect(() => {
-    if (open) {
-      setExpanded(false);
-      setMethod("cash");
-      setCashReceived(String(amount));
-      setTxnRef("");
-      setShouldPrintReceipt(forcePrintReceipt);
-      setSplits([
-        { method: "cash", amount: String(amount) },
-        { method: "upi", amount: "0" },
-      ]);
+    const justOpened = open && !wasOpenRef.current;
+    wasOpenRef.current = open;
+    if (!justOpened) {
+      return;
     }
-  }, [open, amount, forcePrintReceipt]);
+    setExpanded(false);
+    setMethod("cash");
+    setCashReceived(String(amount));
+    setTxnRef("");
+    setShouldPrintReceipt(forcePrintReceipt);
+    setSplits([
+      { method: "cash", amount: String(amount) },
+      { method: "upi", amount: "0" },
+    ]);
+    setCreditCustomerId(orderCustomerId || "");
+    setCustomerSearch("");
+    setLocalCustomers(customers);
+    setShowNewCustomer(false);
+    setNewName("");
+    setNewPhone("");
+    setNewLimit(String(Math.max(Math.ceil(amount), 1000)));
+    setNewError(null);
+    setInlineLimit(String(Math.max(Math.ceil(amount), 1000)));
+    setCreditSetupError(null);
+    setDueDateOverridden(false);
+    setShowDueDateChange(false);
+    const selected = customers.find((c) => c.id === (orderCustomerId || ""));
+    setCreditDueDate(
+      resolveCreditDueDate({
+        customerDefaultDays: selected?.defaultCreditDays ?? null,
+        restaurantDefaultDays: restaurantDefaultCreditDays,
+      }),
+    );
+  }, [open, amount, forcePrintReceipt, orderCustomerId, customers, restaurantDefaultCreditDays]);
+
+  React.useEffect(() => {
+    if (!open) {
+      return;
+    }
+    setLocalCustomers(customers);
+  }, [customers, open]);
+
+  React.useEffect(() => {
+    if (method !== "credit") {
+      return;
+    }
+    const selected = localCustomers.find((c) => c.id === creditCustomerId);
+    if (!dueDateOverridden) {
+      setCreditDueDate(
+        resolveCreditDueDate({
+          customerDefaultDays: selected?.defaultCreditDays ?? null,
+          restaurantDefaultDays: restaurantDefaultCreditDays,
+        }),
+      );
+    }
+    if (selected) {
+      const selectedLimit = Number(selected.creditLimit || 0);
+      const selectedOutstanding = Number(selected.outstanding || 0);
+      const selectedAvailable = Math.max(0, selectedLimit - selectedOutstanding);
+      const needsHigherLimit =
+        selectedLimit > 0 && Boolean(selected.creditEnabled) && amount > selectedAvailable + 0.0001;
+      setInlineLimit(
+        String(
+          needsHigherLimit
+            ? Math.max(Math.ceil(selectedOutstanding + amount), selectedLimit)
+            : selectedLimit > 0
+              ? selectedLimit
+              : Math.max(Math.ceil(amount), 1000),
+        ),
+      );
+      setCreditSetupError(null);
+    }
+  }, [
+    method,
+    creditCustomerId,
+    localCustomers,
+    restaurantDefaultCreditDays,
+    amount,
+    dueDateOverridden,
+  ]);
 
   React.useEffect(() => {
     if (forcePrintReceipt) {
@@ -87,9 +214,34 @@ export default function PaymentsModal({
     }
   }, [open, expanded, method]);
 
+  const isCreditReady = React.useCallback(
+    (c: CreditCustomerOption) =>
+      Boolean(c.creditEnabled) && !c.creditBlocked && Number(c.creditLimit || 0) > 0,
+    [],
+  );
+
+  const filteredCreditCustomers = React.useMemo(() => {
+    const q = customerSearch.trim().toLowerCase();
+    const matched = localCustomers.filter((c) => {
+      if (!q) {
+        return true;
+      }
+      return `${c.name} ${c.phone}`.toLowerCase().includes(q);
+    });
+    matched.sort((a, b) => {
+      const aReady = isCreditReady(a) ? 0 : 1;
+      const bReady = isCreditReady(b) ? 0 : 1;
+      if (aReady !== bReady) {
+        return aReady - bReady;
+      }
+      return a.name.localeCompare(b.name);
+    });
+    return matched.slice(0, 8);
+  }, [localCustomers, customerSearch, isCreditReady]);
+
   if (!open) {
-return null;
-}
+    return null;
+  }
 
   // ── Derived values ─────────────────────────────────────────────────────────
   const numCash = parseFloat(cashReceived) || 0;
@@ -101,8 +253,139 @@ return null;
   const splitBalance = +(amount - splitTotal).toFixed(2);
   const splitExact = Math.abs(splitBalance) < 0.01;
 
+  const creditCustomer = localCustomers.find((c) => c.id === creditCustomerId) || null;
+  const creditOutstanding = Number(creditCustomer?.outstanding || 0);
+  const creditLimit = Number(creditCustomer?.creditLimit || 0);
+  const availableCredit = Math.max(0, creditLimit - creditOutstanding);
+  const creditNeedsSetup =
+    Boolean(creditCustomer) &&
+    !creditCustomer?.creditBlocked &&
+    (!creditCustomer?.creditEnabled || creditLimit <= 0);
+  const creditOk =
+    Boolean(creditCustomerId) &&
+    Boolean(creditCustomer?.creditEnabled) &&
+    !creditCustomer?.creditBlocked &&
+    creditLimit > 0 &&
+    amount <= availableCredit + 0.0001;
+
+  const creditTermDays =
+    creditCustomer?.defaultCreditDays === null || creditCustomer?.defaultCreditDays === undefined
+      ? restaurantDefaultCreditDays
+      : Number(creditCustomer.defaultCreditDays);
+  const creditTermSource =
+    creditCustomer?.defaultCreditDays === null || creditCustomer?.defaultCreditDays === undefined
+      ? "restaurant default"
+      : "customer terms";
+  const formatDueLabel = (dateOnly: string) => {
+    const [y, m, d] = dateOnly.split("-").map(Number);
+    if (!y || !m || !d) {
+      return dateOnly;
+    }
+    return new Date(y, m - 1, d).toLocaleDateString("en-IN", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  };
+
   const canConfirm =
-    !processing && (method === "cash" ? numCash >= amount : method === "split" ? splitExact : true);
+    !processing &&
+    !savingCustomer &&
+    !savingCreditSetup &&
+    (method === "cash"
+      ? numCash >= amount
+      : method === "split"
+        ? splitExact
+        : method === "credit"
+          ? creditOk
+          : true);
+
+  const mapCustomerOption = (row: any): CreditCustomerOption => ({
+    id: row.id,
+    name: row.name,
+    phone: row.phone,
+    outstanding: Number(row.outstanding || 0),
+    creditLimit: Number(row.creditLimit || 0),
+    defaultCreditDays: row.defaultCreditDays ?? null,
+    creditEnabled: Boolean(row.creditEnabled),
+    creditBlocked: Boolean(row.creditBlocked),
+  });
+
+  const upsertLocalCustomer = (row: any) => {
+    const mapped = mapCustomerOption(row);
+    const next = [mapped, ...localCustomers.filter((c) => c.id !== mapped.id)];
+    syncCustomers(next);
+    return mapped;
+  };
+
+  const createCustomerWithCredit = async () => {
+    setNewError(null);
+    const name = normalizeText(newName);
+    const phone = normalizePhone(newPhone);
+    if (!isValidPersonName(name)) {
+      setNewError(validationMessage("customer-name-invalid"));
+      return;
+    }
+    if (!isValidIndianMobile(phone)) {
+      setNewError(validationMessage("customer-phone-invalid"));
+      return;
+    }
+    const limit = Number(newLimit || 0);
+    if (!Number.isFinite(limit) || limit <= 0) {
+      setNewError("Enter a credit limit above ₹0");
+      return;
+    }
+    setSavingCustomer(true);
+    try {
+      const created = await window.pos!.customers!.create({
+        name,
+        phone,
+        creditEnabled: true,
+        creditLimit: limit,
+        defaultCreditDays: null,
+      });
+      const mapped = upsertLocalCustomer(created);
+      setCreditCustomerId(mapped.id);
+      setCustomerSearch("");
+      setShowNewCustomer(false);
+      setNewName("");
+      setNewPhone("");
+      setNewError(null);
+      setDueDateOverridden(false);
+      setShowDueDateChange(false);
+    } catch (e: any) {
+      setNewError(validationMessage(e, "Could not create customer"));
+    } finally {
+      setSavingCustomer(false);
+    }
+  };
+
+  const enableCreditForSelected = async () => {
+    if (!creditCustomer) {
+      return;
+    }
+    setCreditSetupError(null);
+    const limit = Number(inlineLimit || 0);
+    if (!Number.isFinite(limit) || limit <= 0) {
+      setCreditSetupError("Enter a credit limit above ₹0");
+      return;
+    }
+    setSavingCreditSetup(true);
+    try {
+      const updated = await window.pos!.customers!.update(creditCustomer.id, {
+        creditEnabled: true,
+        creditLimit: limit,
+        creditBlocked: false,
+      });
+      upsertLocalCustomer(
+        updated || { ...creditCustomer, creditEnabled: true, creditLimit: limit },
+      );
+    } catch (e: any) {
+      setCreditSetupError(validationMessage(e, "Could not enable credit"));
+    } finally {
+      setSavingCreditSetup(false);
+    }
+  };
 
   // ── Quick pay — instant confirm with exact amount ──────────────────────────
   const quickPay = (m: SingleMethod) => {
@@ -115,8 +398,8 @@ return null;
   // ── Detailed confirm ───────────────────────────────────────────────────────
   const handleConfirm = () => {
     if (!canConfirm || processing) {
-return;
-}
+      return;
+    }
     if (method === "cash") {
       onConfirm({ method, amountPaid: numCash, change, printReceipt: effectivePrintReceipt });
     } else if (method === "split") {
@@ -127,6 +410,14 @@ return;
           method: e.method,
           amount: parseFloat(e.amount) || 0,
         })),
+        printReceipt: effectivePrintReceipt,
+      });
+    } else if (method === "credit") {
+      onConfirm({
+        method: "credit",
+        amountPaid: 0,
+        customerId: creditCustomerId,
+        dueDate: creditDueDate,
         printReceipt: effectivePrintReceipt,
       });
     } else {
@@ -487,8 +778,11 @@ handleConfirm();
             {/* Method grid */}
             <label style={labelStyle}>Payment Method</label>
             <div className={styles.methodGrid}>
-              {(["cash", "card", "upi", "split", "voucher", "other"] as PaymentMethod[]).map(
-                (m) => (
+              {(
+                (creditEnabled
+                  ? ["cash", "card", "upi", "split", "voucher", "other", "credit"]
+                  : ["cash", "card", "upi", "split", "voucher", "other"]) as PaymentMethod[]
+              ).map((m) => (
                   <button
                     key={m}
                     style={{ ...methodBtn(method === m), opacity: processing ? 0.6 : 1 }}
@@ -505,11 +799,391 @@ handleConfirm();
                             ? "Split"
                             : m === "voucher"
                               ? "Voucher"
-                              : "Other"}
+                              : m === "credit"
+                                ? "Credit"
+                                : "Other"}
                   </button>
-                ),
-              )}
+                ))}
             </div>
+
+            {method === "credit" && (
+              <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
+                {!creditCustomer && !showNewCustomer && (
+                  <>
+                    <div style={{ display: "flex", alignItems: "flex-end", gap: 8 }}>
+                      <div style={{ flex: 1 }}>
+                        <Input
+                          label="Customer"
+                          value={customerSearch}
+                          onChange={(e) => setCustomerSearch(e.target.value)}
+                          placeholder="Search name or phone"
+                          disabled={processing || savingCustomer}
+                          autoFocus
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        variant="accent"
+                        size="sm"
+                        disabled={processing || savingCustomer}
+                        onClick={() => {
+                          setShowNewCustomer(true);
+                          setNewError(null);
+                          const q = customerSearch.trim();
+                          if (q) {
+                            if (/^\d/.test(q)) {
+                              setNewPhone(q);
+                            } else {
+                              setNewName(q);
+                            }
+                          }
+                        }}
+                      >
+                        New customer
+                      </Button>
+                    </div>
+                    <div
+                      style={{
+                        border: "1.5px solid var(--pos-line-strong)",
+                        borderRadius: 8,
+                        background: "var(--pos-surface)",
+                        overflow: "hidden",
+                      }}
+                    >
+                      {filteredCreditCustomers.map((c) => {
+                        const ready = isCreditReady(c);
+                        return (
+                          <button
+                            key={c.id}
+                            type="button"
+                            disabled={processing || savingCustomer || savingCreditSetup}
+                            onClick={() => {
+                              setCreditCustomerId(c.id);
+                              setCustomerSearch("");
+                              setDueDateOverridden(false);
+                              setShowDueDateChange(false);
+                            }}
+                            style={{
+                              display: "block",
+                              width: "100%",
+                              textAlign: "left",
+                              padding: "10px 12px",
+                              border: "none",
+                              borderBottom: "1px solid var(--pos-surface-sunken)",
+                              background: "transparent",
+                              cursor: processing ? "not-allowed" : "pointer",
+                            }}
+                          >
+                            <div style={{ fontWeight: 700, fontSize: 13, color: "var(--pos-tx)" }}>
+                              {c.name}
+                              <span
+                                style={{
+                                  marginLeft: 8,
+                                  fontWeight: 600,
+                                  color: "var(--pos-tx-sub)",
+                                  fontVariantNumeric: "tabular-nums",
+                                }}
+                              >
+                                {c.phone}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: 12, color: "var(--pos-tx-muted)", marginTop: 2 }}>
+                              {ready
+                                ? `Available ₹${Math.max(
+                                    0,
+                                    Number(c.creditLimit || 0) - Number(c.outstanding || 0),
+                                  ).toFixed(0)} · owed ₹${Number(c.outstanding || 0).toFixed(0)}`
+                                : c.creditBlocked
+                                  ? "Credit blocked"
+                                  : "Needs credit limit"}
+                            </div>
+                          </button>
+                        );
+                      })}
+                      {localCustomers.length === 0 && (
+                        <div style={{ padding: 12, fontSize: 13, color: "var(--pos-tx-sub)" }}>
+                          No customers yet. Add one to continue.
+                        </div>
+                      )}
+                      {localCustomers.length > 0 && filteredCreditCustomers.length === 0 && (
+                        <div style={{ padding: 12, fontSize: 13, color: "var(--pos-tx-sub)" }}>
+                          No match for “{customerSearch.trim()}”.{" "}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowNewCustomer(true);
+                              const q = customerSearch.trim();
+                              if (/^\d/.test(q)) {
+                                setNewPhone(q);
+                              } else {
+                                setNewName(q);
+                              }
+                            }}
+                            style={{
+                              background: "none",
+                              border: "none",
+                              padding: 0,
+                              color: "var(--pos-teal)",
+                              fontWeight: 700,
+                              cursor: "pointer",
+                              fontSize: 13,
+                            }}
+                          >
+                            Add as new customer
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+
+                {showNewCustomer && (
+                  <div
+                    style={{
+                      padding: 12,
+                      border: "1.5px solid var(--pos-line-strong)",
+                      borderRadius: 8,
+                      background: "var(--pos-surface-hover)",
+                      display: "grid",
+                      gap: 10,
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, fontSize: 13 }}>New customer</div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        disabled={processing || savingCustomer}
+                        onClick={() => {
+                          setShowNewCustomer(false);
+                          setNewError(null);
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                    <Input
+                      label="Name"
+                      value={newName}
+                      onChange={(e) => setNewName(e.target.value)}
+                      disabled={processing || savingCustomer}
+                      autoFocus
+                    />
+                    <Input
+                      label="Phone"
+                      value={newPhone}
+                      onChange={(e) => setNewPhone(e.target.value)}
+                      inputMode="tel"
+                      disabled={processing || savingCustomer}
+                    />
+                    <Input
+                      label="Credit limit (₹)"
+                      type="number"
+                      min={1}
+                      step="1"
+                      value={newLimit}
+                      onChange={(e) => setNewLimit(e.target.value)}
+                      disabled={processing || savingCustomer}
+                    />
+                    <div style={{ fontSize: 12, color: "var(--pos-tx-sub)" }}>
+                      Due in {restaurantDefaultCreditDays} days (restaurant default). Applies to new
+                      bills only.
+                    </div>
+                    {newError ? (
+                      <div style={{ color: "var(--pos-danger)", fontSize: 13, fontWeight: 600 }}>
+                        {newError}
+                      </div>
+                    ) : null}
+                    <Button
+                      type="button"
+                      variant="primary"
+                      size="sm"
+                      loading={savingCustomer}
+                      disabled={processing}
+                      onClick={createCustomerWithCredit}
+                    >
+                      Create & select
+                    </Button>
+                  </div>
+                )}
+
+                {creditCustomer && !showNewCustomer && (
+                  <div
+                    style={{
+                      padding: 12,
+                      borderRadius: 8,
+                      border: "1.5px solid var(--pos-line-strong)",
+                      background: "var(--pos-surface-hover)",
+                      display: "grid",
+                      gap: 8,
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        gap: 8,
+                        alignItems: "flex-start",
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: 14, color: "var(--pos-tx)" }}>
+                          {creditCustomer.name}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: 13,
+                            color: "var(--pos-tx-sub)",
+                            fontVariantNumeric: "tabular-nums",
+                          }}
+                        >
+                          {creditCustomer.phone}
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        disabled={processing}
+                        onClick={() => {
+                          setCreditCustomerId("");
+                          setCustomerSearch("");
+                          setDueDateOverridden(false);
+                          setShowDueDateChange(false);
+                        }}
+                      >
+                        Change
+                      </Button>
+                    </div>
+                    {!creditNeedsSetup && !creditCustomer.creditBlocked && (
+                      <div style={{ fontSize: 13, color: "var(--pos-tx-sec)" }}>
+                        Available ₹{availableCredit.toFixed(0)} · Outstanding ₹
+                        {creditOutstanding.toFixed(0)}
+                      </div>
+                    )}
+                    {creditCustomer.creditBlocked && (
+                      <div style={{ color: "var(--pos-danger)", fontWeight: 700, fontSize: 13 }}>
+                        Credit blocked — unblock from Customers if needed
+                      </div>
+                    )}
+                    {creditNeedsSetup && (
+                      <div style={{ display: "grid", gap: 10 }}>
+                        <div style={{ fontSize: 13, color: "var(--pos-tx-sec)" }}>
+                          Set a credit limit to save this bill on account.
+                        </div>
+                        <Input
+                          label="Credit limit (₹)"
+                          type="number"
+                          min={1}
+                          step="1"
+                          value={inlineLimit}
+                          onChange={(e) => setInlineLimit(e.target.value)}
+                          disabled={processing || savingCreditSetup}
+                        />
+                        {creditSetupError ? (
+                          <div style={{ color: "var(--pos-danger)", fontSize: 13, fontWeight: 600 }}>
+                            {creditSetupError}
+                          </div>
+                        ) : null}
+                        <Button
+                          type="button"
+                          variant="primary"
+                          size="sm"
+                          loading={savingCreditSetup}
+                          disabled={processing}
+                          onClick={enableCreditForSelected}
+                        >
+                          Enable credit
+                        </Button>
+                      </div>
+                    )}
+                    {!creditCustomer.creditBlocked &&
+                      creditCustomer.creditEnabled &&
+                      creditLimit > 0 &&
+                      amount > availableCredit && (
+                        <div style={{ display: "grid", gap: 10 }}>
+                          <div style={{ color: "var(--pos-danger)", fontWeight: 700, fontSize: 13 }}>
+                            Exceeds available credit (need ₹{amount.toFixed(0)}, available ₹
+                            {availableCredit.toFixed(0)})
+                          </div>
+                          <Input
+                            label="Raise credit limit (₹)"
+                            type="number"
+                            min={1}
+                            step="1"
+                            value={inlineLimit}
+                            onChange={(e) => setInlineLimit(e.target.value)}
+                            disabled={processing || savingCreditSetup}
+                          />
+                          {creditSetupError ? (
+                            <div style={{ color: "var(--pos-danger)", fontSize: 13, fontWeight: 600 }}>
+                              {creditSetupError}
+                            </div>
+                          ) : null}
+                          <Button
+                            type="button"
+                            variant="primary"
+                            size="sm"
+                            loading={savingCreditSetup}
+                            disabled={processing}
+                            onClick={enableCreditForSelected}
+                          >
+                            Update limit
+                          </Button>
+                        </div>
+                      )}
+                  </div>
+                )}
+
+                {creditCustomer && !showNewCustomer && (
+                  <div style={{ display: "grid", gap: 6 }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: 8,
+                        fontSize: 13,
+                        color: "var(--pos-tx-sec)",
+                      }}
+                    >
+                      <span>
+                        Due {formatDueLabel(creditDueDate)} · {creditTermDays} days (
+                        {creditTermSource})
+                      </span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        disabled={processing}
+                        onClick={() => setShowDueDateChange((v) => !v)}
+                      >
+                        {showDueDateChange ? "Hide" : "Change"}
+                      </Button>
+                    </div>
+                    {showDueDateChange && (
+                      <input
+                        type="date"
+                        style={inputStyle}
+                        value={creditDueDate}
+                        onChange={(e) => {
+                          setDueDateOverridden(true);
+                          setCreditDueDate(e.target.value);
+                        }}
+                        disabled={processing}
+                      />
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Cash */}
             {method === "cash" && (
@@ -792,7 +1466,11 @@ handleConfirm();
                 transition: "background 0.15s",
               }}
             >
-              {processing ? "Processing..." : " Settle"}
+              {processing
+                ? "Processing..."
+                : method === "credit"
+                  ? " Save to account"
+                  : " Settle"}
             </button>
 
             <button

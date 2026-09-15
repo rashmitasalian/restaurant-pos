@@ -113,10 +113,17 @@ declare global {
         restoreHistory: (orders: any[]) => Promise<any[]>;
       };
       customers?: {
-        list: () => Promise<any[]>;
+        list: (opts?: any) => Promise<any[]>;
         create: (payload: any) => Promise<any>;
         update: (id: string, updates: any) => Promise<any>;
         delete: (id: string) => Promise<any>;
+        account: (customerId: string) => Promise<any>;
+        accountEntries: (
+          customerId: string,
+          opts?: { limit?: number; offset?: number },
+        ) => Promise<any>;
+        openBills: (customerId: string) => Promise<any[]>;
+        receivePayment: (customerId: string, payload: any) => Promise<any>;
       };
       staff?: {
         list: (opts?: any) => Promise<any[]>;
@@ -141,6 +148,8 @@ declare global {
       reports?: {
         salesSummary: (opts?: any) => Promise<any>;
         paymentBreakdown: (opts?: any) => Promise<Record<string, number>>;
+        creditCollections: (opts?: any) => Promise<Record<string, number>>;
+        creditTotals: () => Promise<{ outstanding: number; overdue: number }>;
         productSales: (opts?: any) => Promise<any>;
         orderHistory: (opts?: any) => Promise<any[]>;
         foodCostSummary: (opts?: any) => Promise<any>;

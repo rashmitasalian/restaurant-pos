@@ -162,10 +162,16 @@ contextBridge.exposeInMainWorld("pos", {
     restoreHistory: (orders: any[]) => authInvoke("pos:orders:restore-history", orders),
   },
   customers: {
-    list: () => authInvoke("pos:customers:list"),
+    list: (opts?: any) => authInvoke("pos:customers:list", opts),
     create: (payload: any) => authInvoke("pos:customers:create", payload),
     update: (id: string, updates: any) => authInvoke("pos:customers:update", id, updates),
     delete: (id: string) => authInvoke("pos:customers:delete", id),
+    account: (customerId: string) => authInvoke("pos:customers:account", customerId),
+    accountEntries: (customerId: string, opts?: { limit?: number; offset?: number }) =>
+      authInvoke("pos:customers:account-entries", customerId, opts),
+    openBills: (customerId: string) => authInvoke("pos:customers:open-bills", customerId),
+    receivePayment: (customerId: string, payload: any) =>
+      authInvoke("pos:customers:receive-payment", customerId, payload),
   },
   staff: {
     list: (opts?: any) => authInvoke("pos:staff:list", opts),
@@ -190,6 +196,8 @@ contextBridge.exposeInMainWorld("pos", {
   reports: {
     salesSummary: (opts?: any) => authInvoke("pos:reports:sales-summary", opts),
     paymentBreakdown: (opts?: any) => authInvoke("pos:reports:payment-breakdown", opts),
+    creditCollections: (opts?: any) => authInvoke("pos:reports:credit-collections", opts),
+    creditTotals: () => authInvoke("pos:reports:credit-totals"),
     productSales: (opts?: any) => authInvoke("pos:reports:product-sales", opts),
     orderHistory: (opts?: any) => authInvoke("pos:reports:order-history", opts),
     foodCostSummary: (opts?: any) => authInvoke("pos:reports:food-cost-summary", opts),

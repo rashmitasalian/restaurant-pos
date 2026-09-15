@@ -184,6 +184,11 @@ export default function Settings({
   const [gstStatus, setGstStatus] = React.useState<string | null>(null);
   const [savingGst, setSavingGst] = React.useState(false);
 
+  const [creditEnabled, setCreditEnabled] = React.useState(false);
+  const [creditDefaultDays, setCreditDefaultDays] = React.useState(15);
+  const [creditStatus, setCreditStatus] = React.useState<string | null>(null);
+  const [savingCredit, setSavingCredit] = React.useState(false);
+
   // ── Tables / floor layout config ───────────────────────────────────────────
   const [seatingAreas, setSeatingAreas] = React.useState<AreaLayoutDraft[]>([]);
   const [newSeatingAreaName, setNewSeatingAreaName] = React.useState("");
@@ -312,6 +317,15 @@ export default function Settings({
         setGstStateName(gstCfg.stateName);
         setGstRate(gstCfg.gstRateBps / 100);
         setGstPriceIncludesTax(gstCfg.priceIncludesTax);
+      } catch (e) {}
+      try {
+        const creditCfg = await window.pos?.settings?.get?.("config:credit");
+        setCreditEnabled(Boolean(creditCfg?.enabled));
+        setCreditDefaultDays(
+          Number.isFinite(Number(creditCfg?.defaultCreditDays))
+            ? Math.max(0, Math.round(Number(creditCfg?.defaultCreditDays)))
+            : 15,
+        );
       } catch (e) {}
     })();
   }, [sectionVisible]);
@@ -1986,6 +2000,109 @@ export default function Settings({
               }}
             >
               {gstStatus}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div
+        className="pos-card pos-card-p"
+        style={{ marginBottom: 24 }}
+        data-settings-sec="identity"
+      >
+        <div
+          style={{
+            fontSize: 11,
+            fontWeight: 800,
+            color: "var(--pos-muted,var(--pos-tx-muted))",
+            marginBottom: 18,
+            textTransform: "uppercase",
+            letterSpacing: "0.1em",
+          }}
+        >
+          Customer Credit
+        </div>
+        <p style={{ margin: "0 0 14px", fontSize: 13, color: "var(--pos-tx-sub)" }}>
+          Allow trusted customers to pay later from Billing. Restaurant default days apply to new
+          bills only — existing bills keep the due date they were saved with. Per-customer days and
+          limits can be set on the customer account.
+        </p>
+        <label
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 14,
+            padding: "12px 14px",
+            border: "1px solid var(--pos-border,var(--pos-line))",
+            borderRadius: 10,
+            background: creditEnabled ? "var(--pos-success-tint)" : "var(--pos-surface-hover)",
+            marginBottom: 14,
+          }}
+        >
+          <span style={{ fontWeight: 700, fontSize: 14 }}>Enable customer credit</span>
+          <input
+            type="checkbox"
+            checked={creditEnabled}
+            onChange={(e) => setCreditEnabled(e.target.checked)}
+          />
+        </label>
+        <label className="pos-label">Restaurant default credit days</label>
+        <input
+          type="number"
+          min={0}
+          max={365}
+          value={creditDefaultDays}
+          onChange={(e) => setCreditDefaultDays(Number(e.target.value || 0))}
+          className="pos-input"
+          style={{ maxWidth: 160, marginBottom: 6 }}
+        />
+        <div style={{ fontSize: 12, color: "var(--pos-tx-sub)", marginBottom: 14 }}>
+          Used when a customer has no own due days. Applies to new credit bills only.
+        </div>
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <Button
+            variant="primary"
+            disabled={savingCredit}
+            onClick={async () => {
+              if (!beginAction("credit.save")) {
+                return;
+              }
+              setSavingCredit(true);
+              setCreditStatus(null);
+              try {
+                await window.pos!.settings!.set("config:credit", {
+                  enabled: creditEnabled,
+                  defaultCreditDays: creditDefaultDays,
+                });
+                setCreditStatus("Credit settings saved");
+                setTimeout(() => setCreditStatus(null), 3000);
+              } catch (e: any) {
+                setCreditStatus(
+                  reportClientError("settings.credit.save", e, "Could not save credit settings"),
+                );
+              } finally {
+                endAction("credit.save");
+                setSavingCredit(false);
+              }
+            }}
+          >
+            {savingCredit ? "Saving..." : "Save Credit Settings"}
+          </Button>
+          {creditStatus && (
+            <div
+              style={{
+                padding: "8px 12px",
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 600,
+                background: creditStatus.includes("saved")
+                  ? "var(--pos-success-tint)"
+                  : "var(--pos-danger-tint)",
+                color: creditStatus.includes("saved") ? "var(--pos-success)" : "var(--pos-danger)",
+              }}
+            >
+              {creditStatus}
             </div>
           )}
         </div>

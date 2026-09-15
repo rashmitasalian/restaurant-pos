@@ -41,6 +41,7 @@ const CASHIER_READABLE_SETTINGS = new Set([
   "config:tables",
   "config:categories",
   "config:branding",
+  "config:credit",
 ]);
 const WRITABLE_SETTINGS = new Set([
   "config:attendance",
@@ -48,6 +49,7 @@ const WRITABLE_SETTINGS = new Set([
   "config:branding",
   "config:categories",
   "config:cloud-backup",
+  "config:credit",
   "config:gst",
   "config:history",
   "config:printers",
@@ -477,9 +479,9 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
     );
   });
 
-  ipcMain.handle("pos:customers:list", (event, token?: string | null) => {
+  ipcMain.handle("pos:customers:list", (event, token?: string | null, opts?: { filter?: string }) => {
     requirePermission(event, token, "page:customers");
-    return posService.listCustomers();
+    return posService.listCustomers(opts as any);
   });
   ipcMain.handle("pos:customers:create", (event, token: string | null, payload) => {
     requirePermission(event, token, "page:customers");
@@ -493,6 +495,33 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
     requirePermission(event, token, "page:customers");
     return posService.deleteCustomer(id);
   });
+  ipcMain.handle("pos:customers:account", (event, token: string | null, customerId: string) => {
+    requirePermission(event, token, "page:customers");
+    return posService.getCustomerAccount(customerId);
+  });
+  ipcMain.handle(
+    "pos:customers:account-entries",
+    (
+      event,
+      token: string | null,
+      customerId: string,
+      opts?: { limit?: number; offset?: number },
+    ) => {
+      requirePermission(event, token, "page:customers");
+      return posService.listCustomerAccountEntries(customerId, opts || {});
+    },
+  );
+  ipcMain.handle("pos:customers:open-bills", (event, token: string | null, customerId: string) => {
+    requirePermission(event, token, "page:customers");
+    return posService.listCustomerOpenBills(customerId);
+  });
+  ipcMain.handle(
+    "pos:customers:receive-payment",
+    (event, token: string | null, customerId: string, payload) => {
+      const user = requirePermission(event, token, "order:pay");
+      return posService.receiveCustomerPayment(customerId, payload, user.username);
+    },
+  );
 
   ipcMain.handle(
     "pos:staff:list",
@@ -585,6 +614,14 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
   ipcMain.handle("pos:reports:payment-breakdown", (event, token: string | null, opts) => {
     requirePermission(event, token, "business:reports");
     return posService.getPaymentBreakdown(opts);
+  });
+  ipcMain.handle("pos:reports:credit-collections", (event, token: string | null, opts) => {
+    requirePermission(event, token, "business:reports");
+    return posService.getCreditCollectionsInRange(opts || {});
+  });
+  ipcMain.handle("pos:reports:credit-totals", (event, token: string | null) => {
+    requirePermission(event, token, "business:reports");
+    return posService.getCustomerCreditTotals();
   });
   ipcMain.handle("pos:reports:product-sales", (event, token: string | null, opts) => {
     requirePermission(event, token, "business:reports");
