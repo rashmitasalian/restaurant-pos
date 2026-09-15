@@ -1179,8 +1179,9 @@ export default function Billing() {
     }
   };
 
-  const resolveTakeawayCustomer = async () => {
-    const phone = normalizePhone(newTakeawayPhone);
+  /** Find or create a customer when a valid phone is present. Returns null if no phone. */
+  const resolveCustomerByPhone = async (enteredName: string, rawPhone: string) => {
+    const phone = normalizePhone(rawPhone);
     if (!phone) {
       return null;
     }
@@ -1189,7 +1190,7 @@ export default function Billing() {
       return undefined;
     }
 
-    const name = normalizeText(newTakeawayName) || "Walk-in";
+    const name = normalizeText(enteredName) || "Walk-in";
     const customers = (await window.pos?.customers?.list?.()) || [];
     const existing = customers.find((customer: any) => customer.phone === phone);
     if (existing) {
@@ -1220,7 +1221,7 @@ export default function Billing() {
     }
     let customer: any = null;
     try {
-      customer = await resolveTakeawayCustomer();
+      customer = await resolveCustomerByPhone(enteredName, newTakeawayPhone);
     } catch (error: any) {
       showToast(reportClientError("billing.save-customer", error, "Could not save customer"), "error");
       return;
@@ -1254,8 +1255,14 @@ export default function Billing() {
       showToast(validationMessage("customer-name-invalid"), "error");
       return;
     }
-    if (customerPhone && !isValidIndianMobile(customerPhone)) {
-      showToast(validationMessage("customer-phone-invalid"), "error");
+    let customer: any = null;
+    try {
+      customer = await resolveCustomerByPhone(customerName, customerPhone);
+    } catch (error: any) {
+      showToast(reportClientError("billing.save-customer", error, "Could not save customer"), "error");
+      return;
+    }
+    if (customer === undefined) {
       return;
     }
     const code = normalizeText(newDeliveryCode);
@@ -1263,8 +1270,9 @@ export default function Billing() {
       platform,
       code,
       orderCode: code,
-      customerName,
+      customerName: customerName || customer?.name || "",
       customerPhone,
+      customerId: customer?.id || null,
     });
     if (!created) {
       return;
