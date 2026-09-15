@@ -716,17 +716,29 @@ export default function Customers() {
           : "No customers match your search.";
 
   return (
-    <div className="pos-page pos-page-sm">
-      <PageHeader
-        title="Customers"
-        subtitle={
-          creditFeatureEnabled
-            ? "Customer list, credit accounts, and collections"
-            : "Collect customer name & phone for promotions"
-        }
-      />
+    <div
+      className="pos-page pos-page-sm"
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+        minHeight: 0,
+        overflow: "hidden",
+        boxSizing: "border-box",
+      }}
+    >
+      <div style={{ flexShrink: 0 }}>
+        <PageHeader
+          title="Customers"
+          subtitle={
+            creditFeatureEnabled
+              ? "Customer list, credit accounts, and collections"
+              : "Collect customer name & phone for promotions"
+          }
+        />
+      </div>
 
-      <div className="pos-card pos-card-p" style={{ marginBottom: 24 }}>
+      <div className="pos-card pos-card-p" style={{ marginBottom: 16, flexShrink: 0 }}>
         <p
           style={{
             margin: "0 0 14px",
@@ -738,7 +750,7 @@ export default function Customers() {
           Add New Customer
         </p>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-start" }}>
-          <div style={{ flex: "1 1 180px" }}>
+          <div style={{ flex: "1 1 180px", maxWidth: 280 }}>
             <Input
               label="Customer name"
               labelHidden
@@ -753,7 +765,7 @@ export default function Customers() {
               error={nameError}
             />
           </div>
-          <div style={{ flex: "1 1 180px" }}>
+          <div style={{ flex: "1 1 160px", maxWidth: 200 }}>
             <Input
               label="Phone"
               labelHidden
@@ -788,15 +800,35 @@ export default function Customers() {
         </div>
       </div>
 
-      <div className="pos-card pos-card-p" style={{ marginBottom: 16 }}>
-        <Input
-          label="Search customers"
-          labelHidden
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search by name or phone"
-        />
-        <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+      <div
+        className="pos-card pos-card-p"
+        style={{
+          marginBottom: 16,
+          flexShrink: 0,
+          display: "flex",
+          flexWrap: "wrap",
+          alignItems: "flex-start",
+          gap: 10,
+        }}
+      >
+        <div style={{ flex: "1 1 220px", maxWidth: 360, minWidth: 180 }}>
+          <Input
+            label="Search customers"
+            labelHidden
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search name or phone"
+          />
+        </div>
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            flexWrap: "wrap",
+            alignItems: "center",
+            paddingTop: 2,
+          }}
+        >
           {([
             ["all", "All"],
             ["outstanding", "Outstanding"],
@@ -812,9 +844,16 @@ export default function Customers() {
             </Button>
           ))}
         </div>
-        <div style={{ marginTop: 8, fontSize: 12, color: "var(--pos-tx-sub)" }}>
-          Showing {filteredCustomers.length.toLocaleString()} of {customers.length.toLocaleString()}{" "}
-          customers
+        <div
+          style={{
+            marginLeft: "auto",
+            paddingTop: 8,
+            fontSize: 12,
+            color: "var(--pos-tx-sub)",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {filteredCustomers.length.toLocaleString()} of {customers.length.toLocaleString()}
           {loadError ? ` · ${loadError}` : ""}
         </div>
       </div>
@@ -822,12 +861,15 @@ export default function Customers() {
       {filteredCustomers.length === 0 ? (
         <div className="pos-empty">{emptyMessage}</div>
       ) : (
-        <VirtualScrollList
-          items={filteredCustomers}
-          itemHeight={CUSTOMER_ROW_HEIGHT}
-          getKey={(customer) => customer.id}
-          renderItem={(customer) => renderCustomerRow(customer)}
-        />
+        <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+          <VirtualScrollList
+            items={filteredCustomers}
+            itemHeight={CUSTOMER_ROW_HEIGHT}
+            fill
+            getKey={(customer) => customer.id}
+            renderItem={(customer) => renderCustomerRow(customer)}
+          />
+        </div>
       )}
 
       <Drawer
