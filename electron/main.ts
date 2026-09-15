@@ -14,8 +14,10 @@ import { updateService } from "./services/updateService";
 import { bootstrapBackupManager } from "./services/backup/bootstrap";
 import { startBackupScheduler, stopBackupScheduler } from "./services/backup/scheduler";
 import { printPayload, type PrinterConfig } from "./printing/printService";
+import { listWindowsPrinters } from "./printing/windowsRaw";
 import {
   DEFAULT_USB_PRINTER_NAME,
+  isSelectablePosPrinter,
   resolveCounterPrinterTarget,
   resolveKitchenPrinterTarget,
 } from "../src/shared/printerConfig";
@@ -497,6 +499,41 @@ async function getPrinterConfig(): Promise<PrinterConfig> {
     };
   }
 }
+
+async function listAvailablePrinters(sender: WebContents): Promise<string[]> {
+  const names = new Set<string>();
+  try {
+    for (const printer of await listWindowsPrinters()) {
+      if (printer?.name) {
+        names.add(printer.name);
+      }
+    }
+  } catch (error) {
+    console.warn("[PRINT] Windows printer list failed:", error);
+  }
+  try {
+    const printers = await sender.getPrintersAsync();
+    for (const printer of printers || []) {
+      const name = String(printer?.name || printer?.displayName || "").trim();
+      if (name && isSelectablePosPrinter(name)) {
+        names.add(name);
+      }
+    }
+  } catch (error) {
+    console.warn("[PRINT] Electron printer list failed:", error);
+  }
+  return [...names].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+}
+
+ipcMain.handle("printer:list", async (event, token: string | null) => {
+  requireMainSession(event, token, ["admin"]);
+  try {
+    const printers = await listAvailablePrinters(event.sender);
+    return { ok: true, printers };
+  } catch (err: any) {
+    return { ok: false, printers: [], error: err?.message || String(err) };
+  }
+});
 
 // Printer IPC sends ESC/POS bytes through the supported RAW paths in printService.
 ipcMain.handle("printer:print", async (event, token: string | null, payload) => {

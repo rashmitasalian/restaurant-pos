@@ -2,6 +2,7 @@ import { execFile } from "child_process";
 import fs from "fs";
 import os from "os";
 import path from "path";
+import { isSelectablePosPrinter, type InstalledPrinterInfo } from "../../src/shared/printerConfig";
 import { printViaWindowsRawWorker } from "./windowsRawWorker";
 
 type ExecResult = {
@@ -29,25 +30,53 @@ function execFileAsync(command: string, args: string[], timeoutMs: number): Prom
   });
 }
 
-export async function listWindowsPrinters(): Promise<string[]> {
+function toPrinterInfo(entry: unknown): InstalledPrinterInfo | null {
+  if (typeof entry === "string" || typeof entry === "number") {
+    const name = String(entry).trim();
+    return name ? { name } : null;
+  }
+  if (!entry || typeof entry !== "object") {
+    return null;
+  }
+  const rec = entry as Record<string, unknown>;
+  const name = String(rec.Name || rec.name || "").trim();
+  if (!name) {
+    return null;
+  }
+  const driverName = String(rec.DriverName || rec.driverName || "").trim();
+  const portName = String(rec.PortName || rec.portName || "").trim();
+  return {
+    name,
+    driverName: driverName || undefined,
+    portName: portName || undefined,
+  };
+}
+
+export function parseWindowsPrinterListOutput(stdout: string): InstalledPrinterInfo[] {
+  const trimmed = String(stdout || "").trim();
+  if (!trimmed) {
+    return [];
+  }
+  const parsed = JSON.parse(trimmed);
+  return (Array.isArray(parsed) ? parsed : [parsed])
+    .map(toPrinterInfo)
+    .filter((printer): printer is InstalledPrinterInfo => Boolean(printer));
+}
+
+export async function listWindowsPrinters(): Promise<InstalledPrinterInfo[]> {
   if (process.platform !== "win32") {
     return [];
   }
 
   const command =
     "$ErrorActionPreference = 'Stop'; " +
-    "Get-Printer | Select-Object -ExpandProperty Name | ConvertTo-Json -Compress";
+    "Get-Printer | Select-Object Name, DriverName, PortName | ConvertTo-Json -Compress";
   const { stdout } = await execFileAsync(
     POWERSHELL,
     ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
     10000,
   );
-  const trimmed = stdout.trim();
-  if (!trimmed) {
-    return [];
-  }
-  const parsed = JSON.parse(trimmed);
-  return (Array.isArray(parsed) ? parsed : [parsed]).map((name) => String(name));
+  return parseWindowsPrinterListOutput(stdout).filter(isSelectablePosPrinter);
 }
 
 function resolveUserDataDir() {

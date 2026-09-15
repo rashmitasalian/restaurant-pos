@@ -4,6 +4,7 @@ declare global {
   interface Window {
     pos?: {
       print?: (payload: any) => Promise<any>;
+      listPrinters?: () => Promise<{ ok: boolean; printers: string[]; error?: string }>;
       testPrint?: (printer: any) => Promise<any>;
       writeLog?: (level: string, message: string, context?: any) => Promise<void>;
       exportReportPdf?: (

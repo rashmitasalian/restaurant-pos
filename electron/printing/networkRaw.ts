@@ -1,17 +1,8 @@
 import { createConnection } from "net";
+import { isIpv4PrinterTarget } from "../../src/shared/printerConfig";
 
 export function isIpv4Address(value: string) {
-  const parts = String(value || "").trim().split(".");
-  return (
-    parts.length === 4 &&
-    parts.every((part) => {
-      if (!/^\d{1,3}$/.test(part)) {
-        return false;
-      }
-      const value = Number(part);
-      return value >= 0 && value <= 255;
-    })
-  );
+  return isIpv4PrinterTarget(value);
 }
 
 export function printViaNetworkRaw(host: string, port: number, escPosBuffer: Buffer): Promise<void> {

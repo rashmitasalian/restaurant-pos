@@ -66,6 +66,14 @@ import {
   suggestPrefixFromAreaName,
   type TableNamingMode,
 } from "../../../shared/floorLayout";
+import {
+  extraPrinterOption,
+  isIpv4PrinterTarget,
+  PRINTER_SELECT_NETWORK,
+  PRINTER_SELECT_SAME_AS_COUNTER,
+  PRINTER_SELECT_SAME_AS_KITCHEN,
+  printerDropdownValue,
+} from "../../../shared/printerConfig";
 import { processRestaurantLogoFile, type ReceiptLogoRaster } from "../../utils/logoProcessing";
 import { BackupSettingsSection } from "./BackupSettingsSection";
 import {
@@ -133,6 +141,11 @@ export default function Settings({
   );
   const [kitchenIp, setKitchenIp] = React.useState("");
   const [counterIp, setCounterIp] = React.useState("");
+  const [kitchenNetworkMode, setKitchenNetworkMode] = React.useState(false);
+  const [counterNetworkMode, setCounterNetworkMode] = React.useState(false);
+  const [availablePrinters, setAvailablePrinters] = React.useState<string[]>([]);
+  const [loadingPrinters, setLoadingPrinters] = React.useState(false);
+  const [printerListError, setPrinterListError] = React.useState<string | null>(null);
   const [port, setPort] = React.useState<number>(9100);
   const [status, setStatus] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
@@ -258,6 +271,33 @@ export default function Settings({
     delete actionInFlightRef.current[key];
   }, []);
 
+  const loadInstalledPrinters = React.useCallback(async () => {
+    if (!window.pos?.listPrinters) {
+      setPrinterListError("Printer list is unavailable in this session");
+      return;
+    }
+    if (!beginAction("printers.list")) {
+      return;
+    }
+    setLoadingPrinters(true);
+    setPrinterListError(null);
+    try {
+      const result = await window.pos.listPrinters();
+      setAvailablePrinters(Array.isArray(result?.printers) ? result.printers : []);
+      if (result?.ok === false) {
+        setPrinterListError(result.error || "Could not list installed printers");
+      }
+    } catch (e: any) {
+      setAvailablePrinters([]);
+      setPrinterListError(
+        reportClientError("settings.printers.list", e, "Could not list installed printers"),
+      );
+    } finally {
+      endAction("printers.list");
+      setLoadingPrinters(false);
+    }
+  }, [beginAction, endAction]);
+
   const loadPrintQueue = React.useCallback(async () => {
     if (!beginAction("printQueue.load")) {
       return;
@@ -344,16 +384,21 @@ export default function Settings({
       try {
         const cfg = await getConfigPrinters();
         if (cfg) {
-          setKitchenIp(cfg.kitchenPrinterIp || "");
-          setCounterIp(cfg.counterPrinterIp || "");
+          const kitchen = cfg.kitchenPrinterIp || "";
+          const counter = cfg.counterPrinterIp || "";
+          setKitchenIp(kitchen);
+          setCounterIp(counter);
+          setKitchenNetworkMode(isIpv4PrinterTarget(kitchen));
+          setCounterNetworkMode(isIpv4PrinterTarget(counter));
           setPort(cfg.printerPort || 9100);
         }
       } catch (e) {}
+      await loadInstalledPrinters();
       await loadPrintQueue();
       await loadBackups();
       await loadUpdateSupport();
     })();
-  }, [sectionVisible, loadBackups, loadPrintQueue, loadUpdateSupport]);
+  }, [sectionVisible, loadBackups, loadInstalledPrinters, loadPrintQueue, loadUpdateSupport]);
 
   React.useEffect(() => {
     if (!sectionVisible("operations")) {
@@ -468,30 +513,52 @@ export default function Settings({
     })();
   }, [sectionVisible]);
 
-  const isValidIpOrHost = (s: string) => {
-    if (!s.trim()) {
-      return true;
+  const applyKitchenPrinterSelect = (value: string) => {
+    if (value === PRINTER_SELECT_SAME_AS_COUNTER || value === "") {
+      setKitchenNetworkMode(false);
+      setKitchenIp("");
+      return;
     }
-    const ipv4 = /^(\d{1,3}\.){3}\d{1,3}$/;
-    const hostname = /^[a-zA-Z0-9][a-zA-Z0-9.-]{0,253}[a-zA-Z0-9]$/;
-    if (ipv4.test(s)) {
-      return s.split(".").every((oct) => parseInt(oct, 10) <= 255);
+    if (value === PRINTER_SELECT_NETWORK) {
+      setKitchenNetworkMode(true);
+      if (!isIpv4PrinterTarget(kitchenIp)) {
+        setKitchenIp("");
+      }
+      return;
     }
-    return hostname.test(s);
+    setKitchenNetworkMode(false);
+    setKitchenIp(value);
+  };
+
+  const applyCounterPrinterSelect = (value: string) => {
+    if (value === PRINTER_SELECT_SAME_AS_KITCHEN) {
+      setCounterNetworkMode(false);
+      setCounterIp("");
+      return;
+    }
+    if (value === PRINTER_SELECT_NETWORK) {
+      setCounterNetworkMode(true);
+      if (!isIpv4PrinterTarget(counterIp)) {
+        setCounterIp("");
+      }
+      return;
+    }
+    setCounterNetworkMode(false);
+    setCounterIp(value);
   };
 
   const handleSave = async () => {
     if (!beginAction("printers.save")) {
       return;
     }
-    if (!isValidIpOrHost(kitchenIp)) {
+    if (kitchenNetworkMode && !isIpv4PrinterTarget(kitchenIp)) {
       endAction("printers.save");
-      setStatus("Invalid Kitchen Printer IP address or hostname");
+      setStatus("Enter a valid kitchen printer IPv4 address");
       return;
     }
-    if (!isValidIpOrHost(counterIp)) {
+    if (counterNetworkMode && !isIpv4PrinterTarget(counterIp)) {
       endAction("printers.save");
-      setStatus("Invalid Counter Printer IP address or hostname");
+      setStatus("Enter a valid counter printer IPv4 address");
       return;
     }
     if (port < 1 || port > 65535) {
@@ -2131,57 +2198,133 @@ export default function Settings({
             letterSpacing: "0.1em",
             display: "flex",
             alignItems: "center",
+            justifyContent: "space-between",
             gap: 8,
           }}
         >
-          <span style={{ fontSize: 15 }}></span>
-          Printer Configuration
+          <span>Printer Configuration</span>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={loadInstalledPrinters}
+            disabled={loadingPrinters}
+            style={{ padding: "6px 10px", fontSize: 12 }}
+          >
+            {loadingPrinters ? "Scanning..." : "Refresh printers"}
+          </Button>
         </div>
+
+        {printerListError ? (
+          <div
+            style={{
+              marginBottom: 16,
+              fontSize: 13,
+              color: "var(--pos-danger)",
+            }}
+          >
+            {printerListError}
+          </div>
+        ) : (
+          <p style={{ fontSize: 12, color: "var(--pos-muted)", marginTop: 0, marginBottom: 16 }}>
+            Only USB and other installed receipt printers are listed. Windows PDF, OneNote, and Fax
+            printers are hidden.
+          </p>
+        )}
 
         {/* Kitchen Printer */}
         <div style={{ marginBottom: 20 }}>
-          <label className="pos-label">Kitchen Printer IP Address</label>
+          <label className="pos-label" htmlFor="settings-kitchen-printer">
+            Kitchen Printer
+          </label>
           <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-            <input
-              type="text"
-              value={kitchenIp}
-              onChange={(e) => setKitchenIp(e.target.value)}
-              placeholder="e.g., 192.168.1.100"
+            <select
+              id="settings-kitchen-printer"
               className="pos-input"
-              style={{ fontFamily: "monospace" }}
-            />
+              value={printerDropdownValue(kitchenIp, {
+                networkMode: kitchenNetworkMode,
+                blankValue: PRINTER_SELECT_SAME_AS_COUNTER,
+              })}
+              onChange={(event) => applyKitchenPrinterSelect(event.target.value)}
+            >
+              <option value={PRINTER_SELECT_SAME_AS_COUNTER}>Same as counter</option>
+              {availablePrinters.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+              {extraPrinterOption(kitchenNetworkMode ? "" : kitchenIp, availablePrinters) ? (
+                <option value={kitchenIp}>{kitchenIp} (not detected)</option>
+              ) : null}
+              <option value={PRINTER_SELECT_NETWORK}>Network printer (enter IP)…</option>
+            </select>
             <Button
               variant="accent"
               onClick={() => doTestPrint("kitchen")}
-              title="Test configured printer or default printer"
+              title="Test the last saved kitchen printer"
               disabled={testingPrinter !== null}
             >
               {testingPrinter === "kitchen" ? "Testing..." : "Test"}
             </Button>
           </div>
+          {kitchenNetworkMode ? (
+            <input
+              type="text"
+              value={kitchenIp}
+              onChange={(event) => setKitchenIp(event.target.value)}
+              placeholder="e.g., 192.168.1.100"
+              className="pos-input"
+              style={{ marginTop: 10, fontFamily: "monospace" }}
+              aria-label="Kitchen printer IP address"
+            />
+          ) : null}
         </div>
 
         {/* Counter Printer */}
         <div style={{ marginBottom: 24 }}>
-          <label className="pos-label">Counter / Receipt Printer</label>
+          <label className="pos-label" htmlFor="settings-counter-printer">
+            Counter / Receipt Printer
+          </label>
           <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-            <input
-              type="text"
-              value={counterIp}
-              onChange={(e) => setCounterIp(e.target.value)}
-              placeholder="Leave blank to use kitchen printer"
+            <select
+              id="settings-counter-printer"
               className="pos-input"
-              style={{ fontFamily: "monospace" }}
-            />
+              value={printerDropdownValue(counterIp, {
+                networkMode: counterNetworkMode,
+                blankValue: PRINTER_SELECT_SAME_AS_KITCHEN,
+              })}
+              onChange={(event) => applyCounterPrinterSelect(event.target.value)}
+            >
+              <option value={PRINTER_SELECT_SAME_AS_KITCHEN}>Same as kitchen</option>
+              {availablePrinters.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+              {extraPrinterOption(counterNetworkMode ? "" : counterIp, availablePrinters) ? (
+                <option value={counterIp}>{counterIp} (not detected)</option>
+              ) : null}
+              <option value={PRINTER_SELECT_NETWORK}>Network printer (enter IP)…</option>
+            </select>
             <Button
               variant="accent"
               onClick={() => doTestPrint("counter")}
-              title="Test configured printer or default printer"
+              title="Test the last saved counter printer"
               disabled={testingPrinter !== null}
             >
               {testingPrinter === "counter" ? "Testing..." : "Test"}
             </Button>
           </div>
+          {counterNetworkMode ? (
+            <input
+              type="text"
+              value={counterIp}
+              onChange={(event) => setCounterIp(event.target.value)}
+              placeholder="e.g., 192.168.1.101"
+              className="pos-input"
+              style={{ marginTop: 10, fontFamily: "monospace" }}
+              aria-label="Counter printer IP address"
+            />
+          ) : null}
         </div>
 
         {/* Port */}
@@ -2195,7 +2338,7 @@ export default function Settings({
             style={{ width: 120, fontFamily: "monospace" }}
           />
           <p style={{ fontSize: 12, color: "var(--pos-muted)", marginTop: 6 }}>
-            Default: 9100 (for network printers)
+            Used only for network printers. Default: 9100
           </p>
         </div>
 
@@ -2213,15 +2356,16 @@ export default function Settings({
         >
           <div style={{ fontWeight: 700, marginBottom: 6 }}>Printer Setup</div>
           <div>
-            Network printers typically use port 9100. Check your printer&apos;s network settings or
-            administration panel to find its IP address.
+            USB printers: install them in Windows, then pick the exact queue name from the dropdown.
           </div>
           <div style={{ marginTop: 6 }}>
-            After entering the IP address, use the Test button to verify connectivity.
+            Network printers that are not installed in Windows: choose Network printer and enter the
+            IPv4 address. They typically use port 9100.
           </div>
           <div style={{ marginTop: 6 }}>
-            Single-printer setup: enter the printer only under Kitchen and leave Counter blank.
-            Self Service will print one bill and one KOT instead of duplicating the KOT.
+            Save changes, then use Test to verify the saved printer. One printer (self-service or a
+            single USB printer): set Kitchen or Counter and leave the other as Same as kitchen /
+            Same as counter. Both KOT and receipt print on that printer, once each.
           </div>
         </div>
 
@@ -2244,6 +2388,8 @@ export default function Settings({
             onClick={() => {
               setKitchenIp("");
               setCounterIp("");
+              setKitchenNetworkMode(false);
+              setCounterNetworkMode(false);
               setPort(9100);
               setStatus(null);
             }}

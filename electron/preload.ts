@@ -50,6 +50,7 @@ function buildTestPrintPayload(printer: any) {
 
 contextBridge.exposeInMainWorld("pos", {
   print: async (payload: any) => ipcRenderer.invoke("printer:print", getSessionToken(), payload),
+  listPrinters: async () => ipcRenderer.invoke("printer:list", getSessionToken()),
   // simple test-print helper
   testPrint: async (printer: any) =>
     ipcRenderer.invoke("printer:print", getSessionToken(), buildTestPrintPayload(printer)),

@@ -635,13 +635,11 @@ export class UpdateService {
       getDb().prepare("SELECT COUNT(*) AS count FROM print_jobs").get();
 
       const printers = (posService.getSetting("config:printers") as any) || {};
-      if (!String(printers.kitchenPrinterIp || "").trim()) {
-        warnings.push("Kitchen printer is not configured.");
-      }
       if (
-        !String(printers.counterPrinterIp || "").trim() &&
-        !String(printers.kitchenPrinterIp || "").trim()
+        !String(printers.kitchenPrinterIp || "").trim() &&
+        !String(printers.counterPrinterIp || "").trim()
       ) {
+        warnings.push("Kitchen printer is not configured.");
         warnings.push("Counter printer is not configured.");
       }
       const pending = posService.listPrintJobs("pending").length;
