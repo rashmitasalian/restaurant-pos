@@ -3,9 +3,7 @@ import type { AttendanceShiftConfig } from "../../../app/db/posRepository";
 
 const NON_SHIFT_IDS = new Set(["half-day", "half"]);
 
-export function sanitizeAttendanceShifts(
-  shifts: AttendanceShiftConfig[],
-): AttendanceShiftConfig[] {
+export function sanitizeAttendanceShifts(shifts: AttendanceShiftConfig[]): AttendanceShiftConfig[] {
   return shifts.filter(
     (entry) =>
       entry.id &&

@@ -24,7 +24,11 @@ import {
   OperatorBackupStatus,
 } from "./types";
 
-export type BackupLogger = (level: string, message: string, context?: Record<string, unknown>) => void;
+export type BackupLogger = (
+  level: string,
+  message: string,
+  context?: Record<string, unknown>,
+) => void;
 
 function defaultLogger(level: string, message: string, context?: Record<string, unknown>) {
   // Lazy import avoided; callers in main inject writeLogToFile
@@ -35,9 +39,9 @@ function defaultLogger(level: string, message: string, context?: Record<string, 
 
 function getSchemaVersion(): number {
   try {
-    const row = getDb()
-      .prepare("SELECT MAX(version) AS version FROM schema_migrations")
-      .get() as { version?: number } | undefined;
+    const row = getDb().prepare("SELECT MAX(version) AS version FROM schema_migrations").get() as
+      | { version?: number }
+      | undefined;
     return Number(row?.version || 0);
   } catch {
     return 0;
@@ -99,7 +103,8 @@ export class BackupManager {
   }
 
   getIdentity(): CloudIdentitySettings {
-    const stored = (this.settings.getSetting(CLOUD_SETTINGS_KEY) || {}) as Partial<CloudIdentitySettings>;
+    const stored = (this.settings.getSetting(CLOUD_SETTINGS_KEY) ||
+      {}) as Partial<CloudIdentitySettings>;
     return { ...defaultCloudIdentitySettings(), ...stored };
   }
 
@@ -161,16 +166,14 @@ export class BackupManager {
       cloudEnabled: identity.cloudEnabled,
       lastLocalBackupAt: lastLocal,
       lastCloudBackupAt: lastCloud,
-      cloudBackupCount: this.records
-        .listBackupRecords()
-        .filter((row) => {
-          const destination = String(row.destination || "");
-          const status = String(row.status || "");
-          if (destination === "cloud" || destination.startsWith("cloud")) {
-            return status === "verified" || status === "completed";
-          }
-          return Boolean(row.cloud_backup_id) && status === "completed";
-        }).length,
+      cloudBackupCount: this.records.listBackupRecords().filter((row) => {
+        const destination = String(row.destination || "");
+        const status = String(row.status || "");
+        if (destination === "cloud" || destination.startsWith("cloud")) {
+          return status === "verified" || status === "completed";
+        }
+        return Boolean(row.cloud_backup_id) && status === "completed";
+      }).length,
       localStorageBytes: localBackupStore.totalBytes(),
       automaticBackup: identity.automaticBackup !== false,
       retentionDays: identity.retentionDays,
@@ -311,7 +314,9 @@ export class BackupManager {
 
     let sourcePath = backupIdOrPath;
     if (!fs.existsSync(sourcePath)) {
-      const found = localBackupStore.get(backupIdOrPath) || localBackupStore.get(backupIdOrPath.replace(/:/g, "-"));
+      const found =
+        localBackupStore.get(backupIdOrPath) ||
+        localBackupStore.get(backupIdOrPath.replace(/:/g, "-"));
       if (!found) {
         throw new Error("backup-file-not-found");
       }

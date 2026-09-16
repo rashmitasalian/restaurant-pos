@@ -248,7 +248,10 @@ function namedItem(name?: string | null, qty?: number | null): string {
 }
 
 export function reviewWhatHappened(
-  item: Pick<ReviewItemDto, "rule" | "itemName" | "voidQty" | "discountPercent" | "previousDiscountPercent">,
+  item: Pick<
+    ReviewItemDto,
+    "rule" | "itemName" | "voidQty" | "discountPercent" | "previousDiscountPercent"
+  >,
 ): string {
   if (item.rule === "item_void") {
     return namedItem(item.itemName, item.voidQty) || "Kitchen item voided";
@@ -451,7 +454,9 @@ export function buildReviewItems(input: {
   return items.sort((a, b) => b.occurredAt - a.occurredAt || a.orderId.localeCompare(b.orderId));
 }
 
-export function summarizeReviewItems(items: ReviewItemDto[]): Pick<
+export function summarizeReviewItems(
+  items: ReviewItemDto[],
+): Pick<
   ReviewSummaryDto,
   | "needsReview"
   | "cancellationAfterKot"
@@ -508,7 +513,10 @@ function moneyText(amount: number): string {
 export function timelineItemLine(detail: unknown): string {
   const rec = detailObject(detail);
   if (Array.isArray(rec.names)) {
-    return rec.names.map((name) => String(name || "").trim()).filter(Boolean).join(", ");
+    return rec.names
+      .map((name) => String(name || "").trim())
+      .filter(Boolean)
+      .join(", ");
   }
   const nested =
     rec.item && typeof rec.item === "object" && !Array.isArray(rec.item)
@@ -516,7 +524,11 @@ export function timelineItemLine(detail: unknown): string {
       : rec;
   return namedItem(
     nested.name != null ? String(nested.name) : null,
-    nested.qty != null ? Number(nested.qty) : nested.voidQty != null ? Number(nested.voidQty) : null,
+    nested.qty != null
+      ? Number(nested.qty)
+      : nested.voidQty != null
+        ? Number(nested.voidQty)
+        : null,
   );
 }
 
@@ -529,7 +541,9 @@ function itemAddLines(detail: unknown): string[] {
   return line ? [line] : [];
 }
 
-export function timelineEventDetail(event: Pick<OrderTimelineEventDto, "action" | "detail">): string {
+export function timelineEventDetail(
+  event: Pick<OrderTimelineEventDto, "action" | "detail">,
+): string {
   const detail = detailObject(event.detail);
   if (event.action === "item.added") {
     return timelineItemLine(detail);
@@ -562,7 +576,9 @@ export function timelineEventDetail(event: Pick<OrderTimelineEventDto, "action" 
     const payment = detail.payment as Record<string, unknown>;
     return [
       payment.method,
-      payment.amount !== undefined && payment.amount !== null ? moneyText(Number(payment.amount)) : "",
+      payment.amount !== undefined && payment.amount !== null
+        ? moneyText(Number(payment.amount))
+        : "",
     ]
       .filter(Boolean)
       .join(" · ");
@@ -590,7 +606,10 @@ export function isReviewHighlightEvent(
   if (Math.abs(Number(event.timestamp || 0) - Number(item.occurredAt || 0)) <= 5000) {
     return true;
   }
-  if (item.itemName && timelineItemLine(event.detail).toLowerCase().includes(item.itemName.toLowerCase())) {
+  if (
+    item.itemName &&
+    timelineItemLine(event.detail).toLowerCase().includes(item.itemName.toLowerCase())
+  ) {
     return true;
   }
   return false;
@@ -661,7 +680,9 @@ export function reviewMilestones(
     milestones.push({ label: "KOT sent", timestamp: kotSentAt });
   }
   const billPrintedAt =
-    item.billPrintedAt || events.find((event) => event.action === "order.bill.printed")?.timestamp || null;
+    item.billPrintedAt ||
+    events.find((event) => event.action === "order.bill.printed")?.timestamp ||
+    null;
   if (billPrintedAt) {
     milestones.push({ label: "Bill printed", timestamp: billPrintedAt });
   }

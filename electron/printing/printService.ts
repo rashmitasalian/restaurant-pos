@@ -23,7 +23,9 @@ export function resolvePrinterTarget(
   type: PrintJobType,
   cfg: PrinterConfig,
 ) {
-  const key = String(requested || "").trim().toLowerCase();
+  const key = String(requested || "")
+    .trim()
+    .toLowerCase();
   if (key === "kitchen") {
     return cfg.kitchenPrinterName;
   }
@@ -31,6 +33,28 @@ export function resolvePrinterTarget(
     return cfg.counterPrinterName;
   }
   return type === "kot" ? cfg.kitchenPrinterName : cfg.counterPrinterName;
+}
+
+/** One FIFO chain per printer so concurrent KOT/receipt jobs never interleave bytes. */
+const printQueues = new Map<string, Promise<unknown>>();
+
+export function enqueuePrinterJob<T>(printerKey: string, task: () => Promise<T>): Promise<T> {
+  const key = String(printerKey || "default").trim().toLowerCase() || "default";
+  const previous = printQueues.get(key) || Promise.resolve();
+  const run = previous.catch(() => undefined).then(task);
+  printQueues.set(
+    key,
+    run.then(
+      () => undefined,
+      () => undefined,
+    ),
+  );
+  return run;
+}
+
+/** Test helper — clears in-memory printer queues between unit tests. */
+export function resetPrinterQueuesForTests() {
+  printQueues.clear();
 }
 
 export async function printPayload(
@@ -57,15 +81,18 @@ export async function printPayload(
     return { type, printerName, transport: "windows-raw" };
   };
 
-  try {
-    return await sendBuffer(escPosBuffer);
-  } catch (error) {
-    const hasReceiptLogo = type === "receipt" && lines.some((line) => line.startsWith("IMAGE_MONO:"));
-    if (!hasReceiptLogo) {
-      throw error;
+  return enqueuePrinterJob(printerName, async () => {
+    try {
+      return await sendBuffer(escPosBuffer);
+    } catch (error) {
+      const hasReceiptLogo =
+        type === "receipt" && lines.some((line) => line.startsWith("IMAGE_MONO:"));
+      if (!hasReceiptLogo) {
+        throw error;
+      }
+      const textOnlyLines = lines.filter((line) => !line.startsWith("IMAGE_MONO:"));
+      const fallbackBuffer = buildEscPosBuffer(type, text, textOnlyLines, options.hotelName || "");
+      return sendBuffer(fallbackBuffer);
     }
-    const textOnlyLines = lines.filter((line) => !line.startsWith("IMAGE_MONO:"));
-    const fallbackBuffer = buildEscPosBuffer(type, text, textOnlyLines, options.hotelName || "");
-    return sendBuffer(fallbackBuffer);
-  }
+  });
 }

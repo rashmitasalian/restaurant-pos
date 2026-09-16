@@ -50,7 +50,12 @@ interface VariantPickerModalProps {
   onSelect: (variant: { id?: string; name: string; price: number }) => void;
 }
 
-export function VariantPickerModal({ itemName, variants, onClose, onSelect }: VariantPickerModalProps) {
+export function VariantPickerModal({
+  itemName,
+  variants,
+  onClose,
+  onSelect,
+}: VariantPickerModalProps) {
   return (
     <DialogShell
       ariaLabel="Select item variant"
@@ -116,49 +121,49 @@ export function ConfirmPayModal({
 }: ConfirmPayProps) {
   return (
     <DialogShell ariaLabel="Confirm payment" className={styles.modalDialogLarge} onClose={onClose}>
-        <h3 className={styles.modalTitle}>Confirm Payment</h3>
-        <div className={styles.kotList}>
-          {(order.items || []).map((it: any, idx: number) => (
-            <div key={idx} className={styles.kotItem}>
-              <div className={styles.kotItemTitle}>{it.name}</div>
-              <div className={styles.textMuted}>
-                {it.qty} × ₹{it.rate} = <strong>₹{(it.qty || 0) * (it.rate || 0)}</strong>
-              </div>
+      <h3 className={styles.modalTitle}>Confirm Payment</h3>
+      <div className={styles.kotList}>
+        {(order.items || []).map((it: any, idx: number) => (
+          <div key={idx} className={styles.kotItem}>
+            <div className={styles.kotItemTitle}>{it.name}</div>
+            <div className={styles.textMuted}>
+              {it.qty} × ₹{it.rate} = <strong>₹{(it.qty || 0) * (it.rate || 0)}</strong>
             </div>
-          ))}
+          </div>
+        ))}
+      </div>
+      <div style={{ marginTop: 12, borderTop: "1px dashed var(--pos-line)", paddingTop: 10 }}>
+        <div className={styles.totalsRow}>
+          <span>Subtotal</span>
+          <span>{formatCurrency(subtotal)}</span>
         </div>
-        <div style={{ marginTop: 12, borderTop: "1px dashed var(--pos-line)", paddingTop: 10 }}>
-          <div className={styles.totalsRow}>
-            <span>Subtotal</span>
-            <span>{formatCurrency(subtotal)}</span>
-          </div>
-          <div className={styles.totalsRow}>
-            <span>CGST ({gstHalfPct}%)</span>
-            <span>{formatCurrency(cgst)}</span>
-          </div>
-          <div className={styles.totalsRow}>
-            <span>SGST ({gstHalfPct}%)</span>
-            <span>{formatCurrency(sgst)}</span>
-          </div>
-          {discountPercent > 0 && (
-            <div className={styles.totalsRow}>
-              <span>Discount ({discountPercent}%)</span>
-              <span>−{formatCurrency(discountAmt)}</span>
-            </div>
-          )}
-          <div className={styles.totalsRowStrong} style={{ fontSize: 18 }}>
-            <span>Grand Total</span>
-            <span>{formatCurrency(finalTotal)}</span>
-          </div>
+        <div className={styles.totalsRow}>
+          <span>CGST ({gstHalfPct}%)</span>
+          <span>{formatCurrency(cgst)}</span>
         </div>
-        <div className={styles.modalFooter}>
-          <button onClick={onClose} className={styles.btn}>
-            Cancel
-          </button>
-          <button onClick={onProceed} className={styles.btnPrimary}>
-            → Select Payment Method
-          </button>
+        <div className={styles.totalsRow}>
+          <span>SGST ({gstHalfPct}%)</span>
+          <span>{formatCurrency(sgst)}</span>
         </div>
+        {discountPercent > 0 && (
+          <div className={styles.totalsRow}>
+            <span>Discount ({discountPercent}%)</span>
+            <span>−{formatCurrency(discountAmt)}</span>
+          </div>
+        )}
+        <div className={styles.totalsRowStrong} style={{ fontSize: 18 }}>
+          <span>Grand Total</span>
+          <span>{formatCurrency(finalTotal)}</span>
+        </div>
+      </div>
+      <div className={styles.modalFooter}>
+        <button onClick={onClose} className={styles.btn}>
+          Cancel
+        </button>
+        <button onClick={onProceed} className={styles.btnPrimary}>
+          → Select Payment Method
+        </button>
+      </div>
     </DialogShell>
   );
 }
@@ -196,57 +201,57 @@ export function ConfirmCancelModal({
       className={styles.modalDialogLarge}
       onClose={processing ? undefined : onClose}
     >
-        <h3 className={styles.modalTitle}>Cancel Order?</h3>
-        <p className={styles.modalPara}>
-          This will cancel all items for <strong>{targetLabel}</strong>. The order stays in records
-          for review and is no longer active on the floor.
-        </p>
-        <label className={styles.modalLabel} style={{ marginTop: 14 }}>
-          Reason
-        </label>
-        <div className={styles.kotList} style={{ marginTop: 8 }}>
-          {CANCEL_REASON_PRESETS.map((option) => (
-            <label
-              key={option}
-              className={styles.kotItem}
-              style={{ cursor: processing ? "default" : "pointer" }}
-            >
-              <input
-                type="radio"
-                name="order-cancel-reason"
-                value={option}
-                checked={preset === option}
-                disabled={processing}
-                onChange={() => setPreset(option)}
-                style={{ marginRight: 8 }}
-              />
-              {option}
-            </label>
-          ))}
-        </div>
-        {preset === CANCEL_REASON_OTHER ? (
-          <input
-            value={otherText}
-            onChange={(event) => setOtherText(event.target.value)}
-            placeholder="Describe the reason"
-            autoFocus
-            className={styles.modalInput}
-            style={{ marginTop: 10 }}
-            disabled={processing}
-          />
-        ) : null}
-        <div className={styles.modalFooter}>
-          <button onClick={onClose} className={styles.btn} disabled={processing}>
-            No, Keep
-          </button>
-          <button
-            onClick={() => onConfirm(cleanReason)}
-            className={styles.btnDanger}
-            disabled={processing || !cleanReason}
+      <h3 className={styles.modalTitle}>Cancel Order?</h3>
+      <p className={styles.modalPara}>
+        This will cancel all items for <strong>{targetLabel}</strong>. The order stays in records
+        for review and is no longer active on the floor.
+      </p>
+      <label className={styles.modalLabel} style={{ marginTop: 14 }}>
+        Reason
+      </label>
+      <div className={styles.kotList} style={{ marginTop: 8 }}>
+        {CANCEL_REASON_PRESETS.map((option) => (
+          <label
+            key={option}
+            className={styles.kotItem}
+            style={{ cursor: processing ? "default" : "pointer" }}
           >
-            {processing ? "Cancelling..." : "Yes, Cancel"}
-          </button>
-        </div>
+            <input
+              type="radio"
+              name="order-cancel-reason"
+              value={option}
+              checked={preset === option}
+              disabled={processing}
+              onChange={() => setPreset(option)}
+              style={{ marginRight: 8 }}
+            />
+            {option}
+          </label>
+        ))}
+      </div>
+      {preset === CANCEL_REASON_OTHER ? (
+        <input
+          value={otherText}
+          onChange={(event) => setOtherText(event.target.value)}
+          placeholder="Describe the reason"
+          autoFocus
+          className={styles.modalInput}
+          style={{ marginTop: 10 }}
+          disabled={processing}
+        />
+      ) : null}
+      <div className={styles.modalFooter}>
+        <button onClick={onClose} className={styles.btn} disabled={processing}>
+          No, Keep
+        </button>
+        <button
+          onClick={() => onConfirm(cleanReason)}
+          className={styles.btnDanger}
+          disabled={processing || !cleanReason}
+        >
+          {processing ? "Cancelling..." : "Yes, Cancel"}
+        </button>
+      </div>
     </DialogShell>
   );
 }
@@ -267,32 +272,32 @@ export function KotPreviewModal({ data, onClose, onPrint, printing = false }: Ko
       className={styles.modalDialogMedium}
       onClose={printing ? undefined : onClose}
     >
-        <h3 className={styles.modalTitle}>KOT Preview</h3>
-        <div className={styles.modalGrid}>
-          <div className={styles.textMuted}>
-            <div style={{ marginBottom: 8 }}>Items</div>
-          </div>
-          <div className={styles.kotList}>
-            {data.items.map((it: any, idx: number) => (
-              <div key={idx} className={styles.kotItem}>
-                <div className={styles.kotItemTitle}>{it.name}</div>
-                <div className={styles.textMuted}>x{it.qty}</div>
-              </div>
-            ))}
-          </div>
+      <h3 className={styles.modalTitle}>KOT Preview</h3>
+      <div className={styles.modalGrid}>
+        <div className={styles.textMuted}>
+          <div style={{ marginBottom: 8 }}>Items</div>
         </div>
-        <div className={styles.modalFooter}>
-          <button onClick={onClose} className={styles.btn} disabled={printing}>
-            Close
-          </button>
-          <button
-            onClick={onPrint}
-            disabled={printing}
-            className={`${styles.actionBtn} ${styles.actionPrimary} ${styles.actionPrimaryLarge}`}
-          >
-            {printing ? "Printing..." : "Print KOT"}
-          </button>
+        <div className={styles.kotList}>
+          {data.items.map((it: any, idx: number) => (
+            <div key={idx} className={styles.kotItem}>
+              <div className={styles.kotItemTitle}>{it.name}</div>
+              <div className={styles.textMuted}>x{it.qty}</div>
+            </div>
+          ))}
         </div>
+      </div>
+      <div className={styles.modalFooter}>
+        <button onClick={onClose} className={styles.btn} disabled={printing}>
+          Close
+        </button>
+        <button
+          onClick={onPrint}
+          disabled={printing}
+          className={`${styles.actionBtn} ${styles.actionPrimary} ${styles.actionPrimaryLarge}`}
+        >
+          {printing ? "Printing..." : "Print KOT"}
+        </button>
+      </div>
     </DialogShell>
   );
 }
@@ -325,61 +330,66 @@ export function KotVoidModal({
       className={styles.modalDialogMedium}
       onClose={processing ? undefined : onClose}
     >
-        <h3 className={styles.modalTitle}>Void Sent KOT Item</h3>
-        <p className={styles.modalPara}>
-          This item has already been sent to the kitchen. A void KOT will print before the bill is updated.
-        </p>
-        <div className={styles.kotList}>
-          <div className={styles.kotItem}>
-            <div className={styles.kotItemTitle}>{itemName}</div>
-            <div className={styles.textMuted}>
-              Cancel x{voidQty}
-              {finalQty > 0 ? `, keep x${finalQty}` : ""}
-            </div>
+      <h3 className={styles.modalTitle}>Void Sent KOT Item</h3>
+      <p className={styles.modalPara}>
+        This item has already been sent to the kitchen. A void KOT will print before the bill is
+        updated.
+      </p>
+      <div className={styles.kotList}>
+        <div className={styles.kotItem}>
+          <div className={styles.kotItemTitle}>{itemName}</div>
+          <div className={styles.textMuted}>
+            Cancel x{voidQty}
+            {finalQty > 0 ? `, keep x${finalQty}` : ""}
           </div>
         </div>
-        <label className={styles.modalLabel} style={{ marginTop: 14 }}>
-          Reason
-        </label>
-        <div className={styles.kotList} style={{ marginTop: 8 }}>
-          {CANCEL_REASON_PRESETS.map((option) => (
-            <label key={option} className={styles.kotItem} style={{ cursor: processing ? "default" : "pointer" }}>
-              <input
-                type="radio"
-                name="kot-void-reason"
-                value={option}
-                checked={preset === option}
-                disabled={processing}
-                onChange={() => setPreset(option)}
-                style={{ marginRight: 8 }}
-              />
-              {option}
-            </label>
-          ))}
-        </div>
-        {preset === CANCEL_REASON_OTHER ? (
-          <input
-            value={otherText}
-            onChange={(event) => setOtherText(event.target.value)}
-            placeholder="Describe the reason"
-            autoFocus
-            className={styles.modalInput}
-            style={{ marginTop: 10 }}
-            disabled={processing}
-          />
-        ) : null}
-        <div className={styles.modalFooter}>
-          <button onClick={onClose} className={styles.btn} disabled={processing}>
-            Keep Item
-          </button>
-          <button
-            onClick={() => onConfirm(cleanReason)}
-            disabled={!cleanReason || processing}
-            className={styles.btnDanger}
+      </div>
+      <label className={styles.modalLabel} style={{ marginTop: 14 }}>
+        Reason
+      </label>
+      <div className={styles.kotList} style={{ marginTop: 8 }}>
+        {CANCEL_REASON_PRESETS.map((option) => (
+          <label
+            key={option}
+            className={styles.kotItem}
+            style={{ cursor: processing ? "default" : "pointer" }}
           >
-            {processing ? "Printing..." : "Print Void KOT"}
-          </button>
-        </div>
+            <input
+              type="radio"
+              name="kot-void-reason"
+              value={option}
+              checked={preset === option}
+              disabled={processing}
+              onChange={() => setPreset(option)}
+              style={{ marginRight: 8 }}
+            />
+            {option}
+          </label>
+        ))}
+      </div>
+      {preset === CANCEL_REASON_OTHER ? (
+        <input
+          value={otherText}
+          onChange={(event) => setOtherText(event.target.value)}
+          placeholder="Describe the reason"
+          autoFocus
+          className={styles.modalInput}
+          style={{ marginTop: 10 }}
+          disabled={processing}
+        />
+      ) : null}
+      <div className={styles.modalFooter}>
+        <button onClick={onClose} className={styles.btn} disabled={processing}>
+          Keep Item
+        </button>
+        <button
+          onClick={() => onConfirm(cleanReason)}
+          disabled={!cleanReason || processing}
+          className={styles.btnDanger}
+        >
+          {processing ? "Printing..." : "Print Void KOT"}
+        </button>
+      </div>
     </DialogShell>
   );
 }
@@ -424,81 +434,79 @@ export function NewTakeawayModal({
       className={styles.modalDialog}
       onClose={processing ? undefined : onClose}
     >
-        <div className={styles.modalHeader}>
-          <span style={{ fontSize: 28 }}></span>
-          <h3 className={styles.modalTitle}>New {title} Order</h3>
-        </div>
-        <div>
-          <label className={styles.modalLabel}>
-            Customer Name
-            {!requiresCustomer ? (
-              <span style={{ color: "var(--pos-tx-muted)", fontWeight: 400 }}> (optional)</span>
-            ) : null}
-          </label>
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => onNameChange(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                submit();
-              }
-              if (e.key === "Escape") {
-                if (!processing) {
-                  onClose();
-                }
-              }
-            }}
-            placeholder="e.g. Priya, Walk-in 1…"
-            autoFocus
-            className={styles.modalInput}
-          />
-          <p className={styles.textMuted}>
-            {requiresCustomer
-              ? "Enter a customer name or phone to start this order"
-              : "You can leave this blank for anonymous counter orders"}
-          </p>
-          <label className={styles.modalLabel} style={{ marginTop: 14 }}>
-            Customer Phone
-            {!requiresCustomer ? (
-              <span style={{ color: "var(--pos-tx-muted)", fontWeight: 400 }}> (optional)</span>
-            ) : null}
-          </label>
-          <input
-            type="tel"
-            inputMode="tel"
-            autoComplete="tel"
-            value={phone}
-            onChange={(e) => onPhoneChange(normalizePhone(e.target.value))}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                submit();
-              }
-              if (e.key === "Escape") {
-                if (!processing) {
-                  onClose();
-                }
-              }
-            }}
-            placeholder="e.g. 9876543210"
-            className={styles.modalInput}
-          />
-          {requiresCustomer ? (
-            <p className={styles.textMuted}>Name or phone is required</p>
+      <div className={styles.modalHeader}>
+        <span style={{ fontSize: 28 }}></span>
+        <h3 className={styles.modalTitle}>New {title} Order</h3>
+      </div>
+      <div>
+        <label className={styles.modalLabel}>
+          Customer Name
+          {!requiresCustomer ? (
+            <span style={{ color: "var(--pos-tx-muted)", fontWeight: 400 }}> (optional)</span>
           ) : null}
-        </div>
-        <div className={styles.modalFooter}>
-          <button onClick={onClose} className={styles.btn} disabled={processing}>
-            Cancel
-          </button>
-          <button
-            onClick={submit}
-            disabled={!canCreate || processing}
-            className={`${styles.btnPrimary} ${styles.modalShadowGreen}`}
-          >
-            Start Order →
-          </button>
-        </div>
+        </label>
+        <input
+          type="text"
+          value={name}
+          onChange={(e) => onNameChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              submit();
+            }
+            if (e.key === "Escape") {
+              if (!processing) {
+                onClose();
+              }
+            }
+          }}
+          placeholder="e.g. Priya, Walk-in 1…"
+          autoFocus
+          className={styles.modalInput}
+        />
+        <p className={styles.textMuted}>
+          {requiresCustomer
+            ? "Enter a customer name or phone to start this order"
+            : "You can leave this blank for anonymous counter orders"}
+        </p>
+        <label className={styles.modalLabel} style={{ marginTop: 14 }}>
+          Customer Phone
+          {!requiresCustomer ? (
+            <span style={{ color: "var(--pos-tx-muted)", fontWeight: 400 }}> (optional)</span>
+          ) : null}
+        </label>
+        <input
+          type="tel"
+          inputMode="tel"
+          autoComplete="tel"
+          value={phone}
+          onChange={(e) => onPhoneChange(normalizePhone(e.target.value))}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              submit();
+            }
+            if (e.key === "Escape") {
+              if (!processing) {
+                onClose();
+              }
+            }
+          }}
+          placeholder="e.g. 9876543210"
+          className={styles.modalInput}
+        />
+        {requiresCustomer ? <p className={styles.textMuted}>Name or phone is required</p> : null}
+      </div>
+      <div className={styles.modalFooter}>
+        <button onClick={onClose} className={styles.btn} disabled={processing}>
+          Cancel
+        </button>
+        <button
+          onClick={submit}
+          disabled={!canCreate || processing}
+          className={`${styles.btnPrimary} ${styles.modalShadowGreen}`}
+        >
+          Start Order →
+        </button>
+      </div>
     </DialogShell>
   );
 }
@@ -564,65 +572,39 @@ export function NewDeliveryModal({
       className={styles.modalDialogMedium}
       onClose={processing ? undefined : onClose}
     >
-        <div className={styles.modalHeader}>
-          <span style={{ fontSize: 28 }}></span>
-          <h3 className={styles.modalTitle}>New Delivery Order</h3>
-        </div>
-        <div className={styles.modalGrid}>
-          <div>
-            <label className={styles.modalLabel}>Platform</label>
-            <div className={styles.platformGroup}>
-              {(["Swiggy", "Zomato", "Other"] as const).map((p) => (
-                <button
-                  key={p}
-                  onClick={() => (p === "Other" ? handlePreset("Other") : handlePreset(p))}
-                  disabled={processing}
-                  className={`${styles.platformBtn} ${
-                    (p === "Other" ? !isPreset : platform === p)
-                      ? p === "Swiggy"
-                        ? styles.platformSwiggySelected
-                        : p === "Zomato"
-                          ? styles.platformZomatoSelected
-                          : styles.platformOtherSelected
-                      : ""
-                  }`}
-                >
-                  {p === "Swiggy" ? " " : p === "Zomato" ? " " : " "}
-                  {p}
-                </button>
-              ))}
-            </div>
-            {!isPreset && (
-              <input
-                type="text"
-                value={customName}
-                onChange={(e) => handleCustomChange(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    submit();
-                  }
-                  if (e.key === "Escape") {
-                    if (!processing) {
-                      onClose();
-                    }
-                  }
-                }}
-                placeholder="Platform name…"
-                autoFocus
-                className={styles.modalInput}
-                style={{ marginTop: 8 }}
-              />
-            )}
+      <div className={styles.modalHeader}>
+        <span style={{ fontSize: 28 }}></span>
+        <h3 className={styles.modalTitle}>New Delivery Order</h3>
+      </div>
+      <div className={styles.modalGrid}>
+        <div>
+          <label className={styles.modalLabel}>Platform</label>
+          <div className={styles.platformGroup}>
+            {(["Swiggy", "Zomato", "Other"] as const).map((p) => (
+              <button
+                key={p}
+                onClick={() => (p === "Other" ? handlePreset("Other") : handlePreset(p))}
+                disabled={processing}
+                className={`${styles.platformBtn} ${
+                  (p === "Other" ? !isPreset : platform === p)
+                    ? p === "Swiggy"
+                      ? styles.platformSwiggySelected
+                      : p === "Zomato"
+                        ? styles.platformZomatoSelected
+                        : styles.platformOtherSelected
+                    : ""
+                }`}
+              >
+                {p === "Swiggy" ? " " : p === "Zomato" ? " " : " "}
+                {p}
+              </button>
+            ))}
           </div>
-          <div>
-            <label className={styles.modalLabel}>
-              Order Code{" "}
-              <span style={{ color: "var(--pos-tx-muted)", fontWeight: 400 }}>(optional)</span>
-            </label>
+          {!isPreset && (
             <input
               type="text"
-              value={code}
-              onChange={(e) => onCodeChange(e.target.value)}
+              value={customName}
+              onChange={(e) => handleCustomChange(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   submit();
@@ -633,61 +615,87 @@ export function NewDeliveryModal({
                   }
                 }
               }}
-              placeholder="e.g. ABC123"
-              autoFocus={isPreset}
-              className={`${styles.modalInput} ${styles.monoInput}`}
-            />
-          </div>
-          <div>
-            <label className={styles.modalLabel}>
-              Customer Name
-              {!requiresCustomer ? (
-                <span style={{ color: "var(--pos-tx-muted)", fontWeight: 400 }}> (optional)</span>
-              ) : null}
-            </label>
-            <input
-              type="text"
-              value={customerName}
-              onChange={(e) => onCustomerNameChange(e.target.value)}
-              placeholder="e.g. Priya"
+              placeholder="Platform name…"
+              autoFocus
               className={styles.modalInput}
+              style={{ marginTop: 8 }}
             />
-          </div>
-          <div>
-            <label className={styles.modalLabel}>
-              Customer Phone
-              {!requiresCustomer ? (
-                <span style={{ color: "var(--pos-tx-muted)", fontWeight: 400 }}> (optional)</span>
-              ) : null}
-            </label>
-            <input
-              type="tel"
-              inputMode="tel"
-              autoComplete="tel"
-              value={customerPhone}
-              onChange={(e) => onCustomerPhoneChange(normalizePhone(e.target.value))}
-              placeholder="e.g. 9876543210"
-              className={styles.modalInput}
-            />
-            {requiresCustomer ? (
-              <p className={styles.textMuted} style={{ marginTop: 8 }}>
-                Name or phone is required to start
-              </p>
+          )}
+        </div>
+        <div>
+          <label className={styles.modalLabel}>
+            Order Code{" "}
+            <span style={{ color: "var(--pos-tx-muted)", fontWeight: 400 }}>(optional)</span>
+          </label>
+          <input
+            type="text"
+            value={code}
+            onChange={(e) => onCodeChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                submit();
+              }
+              if (e.key === "Escape") {
+                if (!processing) {
+                  onClose();
+                }
+              }
+            }}
+            placeholder="e.g. ABC123"
+            autoFocus={isPreset}
+            className={`${styles.modalInput} ${styles.monoInput}`}
+          />
+        </div>
+        <div>
+          <label className={styles.modalLabel}>
+            Customer Name
+            {!requiresCustomer ? (
+              <span style={{ color: "var(--pos-tx-muted)", fontWeight: 400 }}> (optional)</span>
             ) : null}
-          </div>
+          </label>
+          <input
+            type="text"
+            value={customerName}
+            onChange={(e) => onCustomerNameChange(e.target.value)}
+            placeholder="e.g. Priya"
+            className={styles.modalInput}
+          />
         </div>
-        <div className={styles.modalFooter}>
-          <button onClick={onClose} className={styles.btn} disabled={processing}>
-            Cancel
-          </button>
-          <button
-            onClick={submit}
-            disabled={!canCreate || processing}
-            className={`${styles.btnPrimary} ${styles.modalShadowPurple}`}
-          >
-            Start Order →
-          </button>
+        <div>
+          <label className={styles.modalLabel}>
+            Customer Phone
+            {!requiresCustomer ? (
+              <span style={{ color: "var(--pos-tx-muted)", fontWeight: 400 }}> (optional)</span>
+            ) : null}
+          </label>
+          <input
+            type="tel"
+            inputMode="tel"
+            autoComplete="tel"
+            value={customerPhone}
+            onChange={(e) => onCustomerPhoneChange(normalizePhone(e.target.value))}
+            placeholder="e.g. 9876543210"
+            className={styles.modalInput}
+          />
+          {requiresCustomer ? (
+            <p className={styles.textMuted} style={{ marginTop: 8 }}>
+              Name or phone is required to start
+            </p>
+          ) : null}
         </div>
+      </div>
+      <div className={styles.modalFooter}>
+        <button onClick={onClose} className={styles.btn} disabled={processing}>
+          Cancel
+        </button>
+        <button
+          onClick={submit}
+          disabled={!canCreate || processing}
+          className={`${styles.btnPrimary} ${styles.modalShadowPurple}`}
+        >
+          Start Order →
+        </button>
+      </div>
     </DialogShell>
   );
 }
@@ -719,40 +727,44 @@ export function AssignRiderModal({
       className={styles.modalDialog}
       onClose={processing ? undefined : onClose}
     >
-        <h3 className={styles.modalTitle}>Assign Rider</h3>
-        <div className={styles.modalGrid}>
-          <div>
-            <label className={styles.modalLabel}>Rider Name</label>
-            <input
-              type="text"
-              value={riderName}
-              onChange={(e) => onNameChange(e.target.value)}
-              placeholder="e.g. Rajan"
-              autoFocus
-              className={styles.modalInput}
-            />
-          </div>
-          <div>
-            <label className={styles.modalLabel}>Rider Phone</label>
-            <input
-              type="tel"
-              inputMode="tel"
-              autoComplete="tel"
-              value={riderPhone}
-              onChange={(e) => onPhoneChange(normalizePhone(e.target.value))}
-              placeholder="e.g. 9876543210"
-              className={styles.modalInput}
-            />
-          </div>
+      <h3 className={styles.modalTitle}>Assign Rider</h3>
+      <div className={styles.modalGrid}>
+        <div>
+          <label className={styles.modalLabel}>Rider Name</label>
+          <input
+            type="text"
+            value={riderName}
+            onChange={(e) => onNameChange(e.target.value)}
+            placeholder="e.g. Rajan"
+            autoFocus
+            className={styles.modalInput}
+          />
         </div>
-        <div className={styles.modalFooter}>
-          <button onClick={onClose} className={styles.btn} disabled={processing}>
-            Cancel
-          </button>
-          <button onClick={onConfirm} disabled={!riderName.trim() || processing} className={styles.btnPrimary}>
-            {processing ? "Saving..." : "Assign"}
-          </button>
+        <div>
+          <label className={styles.modalLabel}>Rider Phone</label>
+          <input
+            type="tel"
+            inputMode="tel"
+            autoComplete="tel"
+            value={riderPhone}
+            onChange={(e) => onPhoneChange(normalizePhone(e.target.value))}
+            placeholder="e.g. 9876543210"
+            className={styles.modalInput}
+          />
         </div>
+      </div>
+      <div className={styles.modalFooter}>
+        <button onClick={onClose} className={styles.btn} disabled={processing}>
+          Cancel
+        </button>
+        <button
+          onClick={onConfirm}
+          disabled={!riderName.trim() || processing}
+          className={styles.btnPrimary}
+        >
+          {processing ? "Saving..." : "Assign"}
+        </button>
+      </div>
     </DialogShell>
   );
 }
@@ -769,73 +781,80 @@ interface PrintFailedProps {
   processing?: boolean;
 }
 
-export function PrintFailedModal({ amount, method, onRetry, onSkip, processing = false }: PrintFailedProps) {
+export function PrintFailedModal({
+  amount,
+  method,
+  onRetry,
+  onSkip,
+  processing = false,
+}: PrintFailedProps) {
   return (
     <DialogShell
       ariaLabel="Receipt print failed"
       className={styles.modalDialog}
       style={{ maxWidth: 420 }}
     >
-        {/* Payment success banner */}
-        <div
-          style={{
-            background: "var(--pos-success-tint)",
-            border: "1.5px solid var(--pos-success-line)",
-            borderRadius: 10,
-            padding: "14px 18px",
-            marginBottom: 18,
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-          }}
-        >
-          <span style={{ fontSize: 28 }}></span>
-          <div>
-            <div style={{ fontWeight: 800, fontSize: 15, color: "var(--pos-success-text)" }}>Payment Recorded</div>
-            <div style={{ fontSize: 13, color: "var(--pos-success)", marginTop: 2 }}>
-              {amount} collected via {method}
-            </div>
+      {/* Payment success banner */}
+      <div
+        style={{
+          background: "var(--pos-success-tint)",
+          border: "1.5px solid var(--pos-success-line)",
+          borderRadius: 10,
+          padding: "14px 18px",
+          marginBottom: 18,
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+        }}
+      >
+        <span style={{ fontSize: 28 }}></span>
+        <div>
+          <div style={{ fontWeight: 800, fontSize: 15, color: "var(--pos-success-text)" }}>
+            Payment Recorded
+          </div>
+          <div style={{ fontSize: 13, color: "var(--pos-success)", marginTop: 2 }}>
+            {amount} collected via {method}
           </div>
         </div>
+      </div>
 
-        {/* Print failure notice */}
-        <div
-          style={{
-            background: "var(--pos-saffron-tint)",
-            border: "1.5px solid var(--pos-saffron-line)",
-            borderRadius: 10,
-            padding: "14px 18px",
-            marginBottom: 18,
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-          }}
-        >
-          <span style={{ fontSize: 24 }}></span>
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 14, color: "var(--pos-saffron-text)" }}>
-              Receipt could not be printed
-            </div>
-            <div style={{ fontSize: 12, color: "var(--pos-saffron-deep)", marginTop: 2 }}>
-              Check printer connection, then retry.
-            </div>
+      {/* Print failure notice */}
+      <div
+        style={{
+          background: "var(--pos-saffron-tint)",
+          border: "1.5px solid var(--pos-saffron-line)",
+          borderRadius: 10,
+          padding: "14px 18px",
+          marginBottom: 18,
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+        }}
+      >
+        <span style={{ fontSize: 24 }}></span>
+        <div>
+          <div style={{ fontWeight: 700, fontSize: 14, color: "var(--pos-saffron-text)" }}>
+            Receipt could not be printed
+          </div>
+          <div style={{ fontSize: 12, color: "var(--pos-saffron-deep)", marginTop: 2 }}>
+            Check printer connection, then retry.
           </div>
         </div>
+      </div>
 
-        <div className={styles.modalFooter}>
-          <button
-            onClick={onSkip}
-            disabled={processing}
-            className={styles.btn}
-            title="Payment is saved. Skip receipt and finish."
-          >
-            Finish (No Receipt)
-          </button>
-          <button onClick={onRetry} disabled={processing} className={styles.btnPrimary}>
-            {processing ? "Printing..." : " Retry Print"}
-          </button>
-        </div>
+      <div className={styles.modalFooter}>
+        <button
+          onClick={onSkip}
+          disabled={processing}
+          className={styles.btn}
+          title="Payment is saved. Skip receipt and finish."
+        >
+          Finish (No Receipt)
+        </button>
+        <button onClick={onRetry} disabled={processing} className={styles.btnPrimary}>
+          {processing ? "Printing..." : " Retry Print"}
+        </button>
+      </div>
     </DialogShell>
   );
 }
-

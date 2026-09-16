@@ -40,7 +40,8 @@ function aggregateCategories(summary: FoodCostSummaryDto): CategorySpend[] {
     const key = (item.category || "").trim() || "Uncategorized";
     map.set(key, (map.get(key) || 0) + Number(item.amount || 0));
   }
-  const total = Array.from(map.values()).reduce((sum, n) => sum + n, 0) || summary.grocerySpend || 1;
+  const total =
+    Array.from(map.values()).reduce((sum, n) => sum + n, 0) || summary.grocerySpend || 1;
   return Array.from(map.entries())
     .map(([category, amount]) => ({
       category,
@@ -67,7 +68,9 @@ export function InsightsView() {
       setToTs(range.to);
       return;
     }
-    if (next === "custom") return;
+    if (next === "custom") {
+      return;
+    }
     const range = getHistoryRange(next);
     setFromTs(range.from);
     setToTs(range.to);
@@ -165,15 +168,18 @@ export function InsightsView() {
             </div>
           </div>
           <p className={styles.hint}>
-            Food cost % uses grocery purchases vs net sales for the range. It is a procurement signal, not operating
-            profit. Full profitability lives under Reports.
+            Food cost % uses grocery purchases vs net sales for the range. It is a procurement
+            signal, not operating profit. Full profitability lives under Reports.
           </p>
 
           <div className={styles.stack}>
             <div className={`pos-card pos-card-p ${styles.listCard}`}>
               <div className="pos-sect-label">Spend by category</div>
               {categories.length === 0 ? (
-                <EmptyState title="No category spend" text="Record itemized purchases to see category breakdown." />
+                <EmptyState
+                  title="No category spend"
+                  text="Record itemized purchases to see category breakdown."
+                />
               ) : (
                 <DataTable
                   headers={["Category", "Amount", "% of spend"]}
@@ -215,7 +221,10 @@ export function InsightsView() {
             <div className={`pos-card pos-card-p ${styles.listCard}`}>
               <div className="pos-sect-label">Vendor spend</div>
               {summary.topVendors.length === 0 ? (
-                <EmptyState title="No vendor spend" text="Link purchases to vendors to see this breakdown." />
+                <EmptyState
+                  title="No vendor spend"
+                  text="Link purchases to vendors to see this breakdown."
+                />
               ) : (
                 <DataTable
                   headers={["Vendor", "Purchases", "Spend"]}

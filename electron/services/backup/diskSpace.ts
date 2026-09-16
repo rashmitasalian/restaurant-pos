@@ -8,7 +8,9 @@ export function getFreeSpaceBytes(targetDir: string) {
     try {
       const { freemem } = require("os") as typeof import("os");
       // Non-Windows CI: prefer fs.statfs when available (Node 18.15+/19.6+)
-      const statfs = (fs as any).statfsSync as undefined | ((p: string) => { bavail: number; bsize: number });
+      const statfs = (fs as any).statfsSync as
+        | undefined
+        | ((p: string) => { bavail: number; bsize: number });
       if (typeof statfs === "function") {
         const info = statfs(path.resolve(targetDir));
         return Number(info.bavail) * Number(info.bsize);

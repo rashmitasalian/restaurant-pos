@@ -40,7 +40,10 @@ export function serializeWeeklyOffDays(days: number[]): string {
   return JSON.stringify(normalizeWeeklyOffDays(days));
 }
 
-export function isWeeklyOffDay(weeklyOffDays: number[] | null | undefined, dateOnly: string): boolean {
+export function isWeeklyOffDay(
+  weeklyOffDays: number[] | null | undefined,
+  dateOnly: string,
+): boolean {
   if (!weeklyOffDays?.length || !isValidDateOnly(dateOnly)) {
     return false;
   }
@@ -74,6 +77,9 @@ export function weeklyOffLabel(days: number[]): string {
     return "None";
   }
   return normalized
-    .map((day) => WEEKDAY_OPTIONS.find((option) => option.value === day)?.label.slice(0, 3) || String(day))
+    .map(
+      (day) =>
+        WEEKDAY_OPTIONS.find((option) => option.value === day)?.label.slice(0, 3) || String(day),
+    )
     .join(", ");
 }

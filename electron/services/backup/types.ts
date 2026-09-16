@@ -92,7 +92,9 @@ export function defaultCloudIdentitySettings(): CloudIdentitySettings {
     restaurantCode: null,
     cloudEnabled: false,
     automaticBackup: true,
-    retentionDays: Number(process.env.POS_BACKUP_RETENTION_DAYS || DEFAULT_RETENTION_DAYS) || DEFAULT_RETENTION_DAYS,
+    retentionDays:
+      Number(process.env.POS_BACKUP_RETENTION_DAYS || DEFAULT_RETENTION_DAYS) ||
+      DEFAULT_RETENTION_DAYS,
     lastLocalBackupAt: null,
     lastCloudBackupAt: null,
     lastCloudError: null,

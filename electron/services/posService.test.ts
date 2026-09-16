@@ -398,10 +398,14 @@ describe("posService strict SQLite APIs", () => {
       estimatedGrossProfit: -100,
       foodCostPercent: 200,
       purchaseCount: 1,
-      topItems: [{ itemName: "Tomato", category: "Vegetables", amount: 200, quantity: 5, unit: "kg" }],
+      topItems: [
+        { itemName: "Tomato", category: "Vegetables", amount: 200, quantity: 5, unit: "kg" },
+      ],
       topVendors: [{ vendor: "Market A", amount: 200, purchaseCount: 1 }],
     });
-    const groceryQuery = mockDb.calls.find((call: any) => call.sql.includes("FROM grocery_purchase_lines"));
+    const groceryQuery = mockDb.calls.find((call: any) =>
+      call.sql.includes("FROM grocery_purchase_lines"),
+    );
     expect(groceryQuery!.sql).not.toContain("LIMIT");
     expect(groceryQuery!.params).toEqual([1000, 2000]);
   });
@@ -432,7 +436,9 @@ describe("posService strict SQLite APIs", () => {
     const result = posService.listGroceryPurchases({ listId: "grocery-list:today", limit: null });
 
     expect(result).toHaveLength(1);
-    const groceryQuery = mockDb.calls.find((call: any) => call.sql.includes("FROM grocery_purchase_lines"));
+    const groceryQuery = mockDb.calls.find((call: any) =>
+      call.sql.includes("FROM grocery_purchase_lines"),
+    );
     expect(groceryQuery!.sql).toContain("list_id = ?");
     expect(groceryQuery!.sql).not.toContain("LIMIT");
     expect(groceryQuery!.params).toEqual(["grocery-list:today"]);
@@ -453,7 +459,9 @@ describe("posService strict SQLite APIs", () => {
       }),
     ).toThrow("grocery-list-purchase-mode-conflict");
 
-    expect(mockDb.calls.some((call: any) => call.sql.includes("INSERT INTO grocery_purchase_lines"))).toBe(false);
+    expect(
+      mockDb.calls.some((call: any) => call.sql.includes("INSERT INTO grocery_purchase_lines")),
+    ).toBe(false);
   });
 
   it("blocks an item-wise grocery purchase when a whole-list purchase already exists", () => {
@@ -471,7 +479,9 @@ describe("posService strict SQLite APIs", () => {
       }),
     ).toThrow("grocery-list-purchase-mode-conflict");
 
-    expect(mockDb.calls.some((call: any) => call.sql.includes("INSERT INTO grocery_purchase_lines"))).toBe(false);
+    expect(
+      mockDb.calls.some((call: any) => call.sql.includes("INSERT INTO grocery_purchase_lines")),
+    ).toBe(false);
   });
 
   it("rejects zero quantity for grocery purchases instead of defaulting to one", () => {
@@ -574,9 +584,7 @@ describe("posService strict SQLite APIs", () => {
       },
     ]);
 
-    expect(() => posService.updateOrderLines("order:1", [])).toThrow(
-      "kot-sent-item-requires-void",
-    );
+    expect(() => posService.updateOrderLines("order:1", [])).toThrow("kot-sent-item-requires-void");
     expect(mockDb.calls.some((call: any) => call.sql.includes("DELETE FROM order_lines"))).toBe(
       false,
     );
@@ -731,15 +739,13 @@ describe("posService strict SQLite APIs", () => {
     expect(() => posService.cancelOrder("order:1", "rahul", "")).toThrow("cancel-reason-required");
 
     posService.cancelOrder("order:1", "rahul", "Customer changed mind");
-    const update = mockDb.calls.find((call: any) =>
-      call.sql.includes("SET status = 'cancelled'"),
-    );
+    const update = mockDb.calls.find((call: any) => call.sql.includes("SET status = 'cancelled'"));
     expect(update?.params[1]).toBe("rahul");
     expect(update?.params[2]).toBe("Customer changed mind");
     const audit = mockDb.calls.find((call: any) => call.sql.includes("INSERT INTO audit_logs"));
     expect(audit?.params[1]).toBe("order.cancelled");
     expect(String(audit?.params[5])).toContain("Customer changed mind");
-    expect(String(audit?.params[5])).toContain("\"kotSent\":true");
+    expect(String(audit?.params[5])).toContain('"kotSent":true');
   });
 
   it("rejects cancelling a paid order", () => {
@@ -830,8 +836,8 @@ describe("posService strict SQLite APIs", () => {
     posService.setOrderDiscount("order:1", 25, "rahul");
     const audit = mockDb.calls.find((call: any) => call.sql.includes("INSERT INTO audit_logs"));
     expect(audit?.params[1]).toBe("order.discount.updated");
-    expect(String(audit?.params[5])).toContain("\"previousDiscountPercent\":10");
-    expect(String(audit?.params[5])).toContain("\"discountPercent\":25");
+    expect(String(audit?.params[5])).toContain('"previousDiscountPercent":10');
+    expect(String(audit?.params[5])).toContain('"discountPercent":25');
   });
 
   it("keeps cancelled-after-KOT orders in Needs Review", () => {
@@ -957,9 +963,7 @@ describe("posService strict SQLite APIs", () => {
 
   it("does not prune order-lifecycle audit events", () => {
     posService.pruneAuditLogs();
-    const prune = mockDb.calls.find((call: any) =>
-      call.sql.includes("DELETE FROM audit_logs"),
-    );
+    const prune = mockDb.calls.find((call: any) => call.sql.includes("DELETE FROM audit_logs"));
     expect(prune).toBeDefined();
     expect(prune!.sql).toContain("action NOT IN");
     expect(prune!.params).toContain("order.cancelled");

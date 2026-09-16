@@ -294,4 +294,3 @@ contextBridge.exposeInMainWorld("pos", {
     },
   },
 });
-

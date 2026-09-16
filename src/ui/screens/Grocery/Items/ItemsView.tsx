@@ -80,7 +80,9 @@ export function ItemsView() {
   }, [load]);
 
   const filtered = items.filter((item) => {
-    if (!search.trim()) return true;
+    if (!search.trim()) {
+      return true;
+    }
     const q = search.trim().toLowerCase();
     return (
       item.name.toLowerCase().includes(q) ||
@@ -148,7 +150,9 @@ export function ItemsView() {
   };
 
   const confirmDelete = async () => {
-    if (!deleteTarget || saving) return;
+    if (!deleteTarget || saving) {
+      return;
+    }
     setSaving(true);
     try {
       if (deleteTarget.kind === "item") {
@@ -232,10 +236,20 @@ export function ItemsView() {
               ? `${formatCurrency(item.priceHint.lastUnitPrice)}/${item.priceHint.lastUnit || item.defaultUnit}`
               : "—",
             <div key={`${item.id}-actions`} className={styles.actions}>
-              <Button variant="secondary" size="sm" onClick={() => openEditItem(item)} disabled={saving}>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => openEditItem(item)}
+                disabled={saving}
+              >
                 Edit
               </Button>
-              <Button variant="danger-ghost" size="sm" onClick={() => void removeItem(item)} disabled={saving}>
+              <Button
+                variant="danger-ghost"
+                size="sm"
+                onClick={() => void removeItem(item)}
+                disabled={saving}
+              >
                 Delete
               </Button>
             </div>,
@@ -256,7 +270,8 @@ export function ItemsView() {
           </Button>
         </div>
         <p className={styles.hint} style={{ marginTop: 0, marginBottom: 12 }}>
-          Create a blank template here, or use “Save as template” from a buying list detail to capture its lines.
+          Create a blank template here, or use “Save as template” from a buying list detail to
+          capture its lines.
         </p>
         {templates.length === 0 ? (
           <EmptyState
@@ -343,14 +358,22 @@ export function ItemsView() {
             <Button variant="secondary" onClick={() => setItemModalOpen(false)}>
               Cancel
             </Button>
-            <Button variant="primary" onClick={() => void saveItem()} disabled={saving || !itemForm.name.trim()}>
+            <Button
+              variant="primary"
+              onClick={() => void saveItem()}
+              disabled={saving || !itemForm.name.trim()}
+            >
               {saving ? "Saving…" : itemForm.editingId ? "Update Item" : "Add Item"}
             </Button>
           </div>
         </div>
       </Modal>
 
-      <Modal open={templateModalOpen} title="Blank Template" onClose={() => setTemplateModalOpen(false)}>
+      <Modal
+        open={templateModalOpen}
+        title="Blank Template"
+        onClose={() => setTemplateModalOpen(false)}
+      >
         <div className="ui-form-stack">
           <Input
             label="Template name"
@@ -359,8 +382,8 @@ export function ItemsView() {
             placeholder="Daily Morning"
           />
           <p className={styles.hint}>
-            Creates an empty template. Add lines later via “Save as template” from a buying list, or start new lists
-            from this name.
+            Creates an empty template. Add lines later via “Save as template” from a buying list, or
+            start new lists from this name.
           </p>
           <div className="ui-form-actions">
             <Button variant="secondary" onClick={() => setTemplateModalOpen(false)}>

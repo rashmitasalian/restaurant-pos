@@ -71,7 +71,10 @@ describe("disaster recovery key handoff", () => {
 
     // Wrong recovery key cannot unwrap
     expect(() =>
-      unwrapBackupKey(recovery.wrappedBackupKey, normalizeRecoveryKey("AAAA-BBBB-CCCC-DDDD-EEEE-FFFF-GGGG-HHHH")),
+      unwrapBackupKey(
+        recovery.wrappedBackupKey,
+        normalizeRecoveryKey("AAAA-BBBB-CCCC-DDDD-EEEE-FFFF-GGGG-HHHH"),
+      ),
     ).toThrow();
 
     // Installation B recovers

@@ -85,7 +85,9 @@ function invoke(channel: string, ...args: any[]) {
 }
 
 function expectForbidden(channel: string, ...args: any[]) {
-  return expect(Promise.resolve().then(() => invoke(channel, ...args))).rejects.toThrow("forbidden");
+  return expect(Promise.resolve().then(() => invoke(channel, ...args))).rejects.toThrow(
+    "forbidden",
+  );
 }
 
 describe("print queue IPC access", () => {
@@ -106,11 +108,11 @@ describe("print queue IPC access", () => {
 
     await expect(
       Promise.resolve(
-        handlerFor("pos:print-queue:add")(
-          { sender: { id: 1 } },
-          "token",
-          { printerName: "Kitchen", jobType: "kot", content: "KOT" },
-        ),
+        handlerFor("pos:print-queue:add")({ sender: { id: 1 } }, "token", {
+          printerName: "Kitchen",
+          jobType: "kot",
+          content: "KOT",
+        }),
       ),
     ).resolves.toEqual({ _id: "print-job:1" });
     expect(addPrintJobMock).toHaveBeenCalledTimes(1);
@@ -258,9 +260,7 @@ describe("print queue IPC access", () => {
       Promise.resolve(invoke("pos:attendance:list", { date: "2026-08-01" })),
     ).resolves.toEqual([{ id: "attendance:1" }]);
     await expect(
-      Promise.resolve(
-        invoke("pos:attendance:upsert", { attendanceDate: "2026-08-01", rows: [] }),
-      ),
+      Promise.resolve(invoke("pos:attendance:upsert", { attendanceDate: "2026-08-01", rows: [] })),
     ).resolves.toEqual([{ id: "attendance:1" }]);
   });
 
@@ -333,9 +333,9 @@ describe("owner review IPC access", () => {
     const summary = { needsReview: 1, paidOrders: 2, cancelledOrders: 1, itemVoids: 0 };
     (posService.getReviewSummary as jest.Mock).mockReturnValue(summary);
 
-    await expect(Promise.resolve(invoke("pos:review:summary", { from: 1, to: 2 }))).resolves.toEqual(
-      summary,
-    );
+    await expect(
+      Promise.resolve(invoke("pos:review:summary", { from: 1, to: 2 })),
+    ).resolves.toEqual(summary);
   });
 
   it("blocks cashiers and managers from owner review", async () => {

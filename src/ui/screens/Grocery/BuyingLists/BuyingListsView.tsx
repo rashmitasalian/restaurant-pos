@@ -51,7 +51,9 @@ type ListCardModel = GroceryListDoc & {
 };
 
 function dayLabel(dayKey: number, todayStart: number) {
-  if (dayKey > todayStart) return `Scheduled · ${formatDayHeading(dayKey)}`;
+  if (dayKey > todayStart) {
+    return `Scheduled · ${formatDayHeading(dayKey)}`;
+  }
   return formatDayHeading(dayKey);
 }
 
@@ -73,7 +75,9 @@ function ListMoreMenu({
   const [pendingConfirm, setPendingConfirm] = React.useState<"cancel" | "delete" | null>(null);
 
   const run = async (fn: () => Promise<void>, fallback: string) => {
-    if (busy) return;
+    if (busy) {
+      return;
+    }
     setBusy(true);
     setStatus(null);
     try {
@@ -90,18 +94,24 @@ function ListMoreMenu({
   const printList = () =>
     run(async () => {
       const updated = await updateGroceryList(list.id, { recordPrint: true });
-      if (!window.pos?.print) throw new Error("Print is unavailable.");
+      if (!window.pos?.print) {
+        throw new Error("Print is unavailable.");
+      }
       const result = await window.pos.print({
         type: "receipt",
         printer: "counter",
         data: { lines: buyingListPrintLines(updated, false) },
       });
-      if (!result?.ok) throw new Error(result?.error || "print-failed");
+      if (!result?.ok) {
+        throw new Error(result?.error || "print-failed");
+      }
     }, "Could not print");
 
   const exportPdf = () =>
     run(async () => {
-      if (!window.pos?.exportReportPdf) throw new Error("PDF export is unavailable.");
+      if (!window.pos?.exportReportPdf) {
+        throw new Error("PDF export is unavailable.");
+      }
       await window.pos.exportReportPdf(buyingListHtml(list), `buying-list-${list.id.slice(-8)}`);
     }, "Could not export PDF");
 
@@ -115,7 +125,9 @@ function ListMoreMenu({
   const removeList = () => setPendingConfirm("delete");
 
   const confirmListAction = async () => {
-    if (!pendingConfirm || busy) return;
+    if (!pendingConfirm || busy) {
+      return;
+    }
     const action = pendingConfirm;
     setPendingConfirm(null);
     if (action === "cancel") {
@@ -150,10 +162,22 @@ function ListMoreMenu({
         <button type="button" role="menuitem" className={styles.moreItem} onClick={onQuickView}>
           Quick view
         </button>
-        <button type="button" role="menuitem" className={styles.moreItem} onClick={() => void printList()} disabled={busy}>
+        <button
+          type="button"
+          role="menuitem"
+          className={styles.moreItem}
+          onClick={() => void printList()}
+          disabled={busy}
+        >
           Print
         </button>
-        <button type="button" role="menuitem" className={styles.moreItem} onClick={() => void exportPdf()} disabled={busy}>
+        <button
+          type="button"
+          role="menuitem"
+          className={styles.moreItem}
+          onClick={() => void exportPdf()}
+          disabled={busy}
+        >
           Save as PDF
         </button>
         <button
@@ -169,23 +193,46 @@ function ListMoreMenu({
           Save as Template
         </button>
         {canComplete ? (
-          <button type="button" role="menuitem" className={styles.moreItem} onClick={() => void completeList()} disabled={busy}>
+          <button
+            type="button"
+            role="menuitem"
+            className={styles.moreItem}
+            onClick={() => void completeList()}
+            disabled={busy}
+          >
             Complete
           </button>
         ) : null}
         {list.status === "draft" ? (
-          <button type="button" role="menuitem" className={`${styles.moreItem} ${styles.moreDanger}`} onClick={removeList} disabled={busy}>
+          <button
+            type="button"
+            role="menuitem"
+            className={`${styles.moreItem} ${styles.moreDanger}`}
+            onClick={removeList}
+            disabled={busy}
+          >
             Delete
           </button>
         ) : list.status !== "cancelled" ? (
-          <button type="button" role="menuitem" className={`${styles.moreItem} ${styles.moreDanger}`} onClick={cancelList} disabled={busy}>
+          <button
+            type="button"
+            role="menuitem"
+            className={`${styles.moreItem} ${styles.moreDanger}`}
+            onClick={cancelList}
+            disabled={busy}
+          >
             Cancel
           </button>
         ) : null}
       </div>
       <Modal open={templateOpen} title="Save as template" onClose={() => setTemplateOpen(false)}>
         <div className="ui-form-stack">
-          <Input label="Template name" value={templateName} onChange={(e) => setTemplateName(e.target.value)} autoFocus />
+          <Input
+            label="Template name"
+            value={templateName}
+            onChange={(e) => setTemplateName(e.target.value)}
+            autoFocus
+          />
           <div className="ui-form-actions">
             <Button variant="secondary" onClick={() => setTemplateOpen(false)}>
               Cancel
@@ -244,7 +291,9 @@ export function BuyingListsView() {
 
   const applyPreset = (next: HistoryPreset) => {
     setPreset(next);
-    if (next === "custom") return;
+    if (next === "custom") {
+      return;
+    }
     const range = getHistoryRange(next);
     setFromTs(range.from);
     setToTs(range.to);
@@ -267,7 +316,9 @@ export function BuyingListsView() {
             );
       const spendByList = new Map<string, number>();
       headers.flat().forEach((header: any) => {
-        if (header.status === "voided" || !header.buyingListId) return;
+        if (header.status === "voided" || !header.buyingListId) {
+          return;
+        }
         spendByList.set(
           header.buyingListId,
           (spendByList.get(header.buyingListId) || 0) + Number(header.total || 0),
@@ -293,11 +344,17 @@ export function BuyingListsView() {
   }, [load]);
 
   React.useEffect(() => {
-    if (!menuId) return;
+    if (!menuId) {
+      return;
+    }
     const onDoc = (e: MouseEvent) => {
       const target = e.target as HTMLElement | null;
-      if (target?.closest?.(`[data-more-for="${menuId}"]`)) return;
-      if (target?.closest?.(".ui-overlay")) return;
+      if (target?.closest?.(`[data-more-for="${menuId}"]`)) {
+        return;
+      }
+      if (target?.closest?.(".ui-overlay")) {
+        return;
+      }
       setMenuId(null);
     };
     document.addEventListener("mousedown", onDoc);
@@ -319,8 +376,12 @@ export function BuyingListsView() {
   );
 
   const filtered = lists.filter((list) => {
-    if (statusFilter !== "all" && list.status !== statusFilter) return false;
-    if (!search.trim()) return true;
+    if (statusFilter !== "all" && list.status !== statusFilter) {
+      return false;
+    }
+    if (!search.trim()) {
+      return true;
+    }
     const q = search.trim().toLowerCase();
     return (
       list.title.toLowerCase().includes(q) ||
@@ -342,8 +403,12 @@ export function BuyingListsView() {
       const bN = Number(b[0]);
       const aFuture = aN > todayStart;
       const bFuture = bN > todayStart;
-      if (aFuture !== bFuture) return aFuture ? -1 : 1;
-      if (aFuture && bFuture) return aN - bN;
+      if (aFuture !== bFuture) {
+        return aFuture ? -1 : 1;
+      }
+      if (aFuture && bFuture) {
+        return aN - bN;
+      }
       return bN - aN;
     });
   }, [filtered, todayStart]);
@@ -496,7 +561,11 @@ export function BuyingListsView() {
                       </div>
                       <div className={styles.sessionActions} data-more-for={list.id}>
                         {terminal ? (
-                          <Button variant="secondary" size="sm" onClick={() => setDetailId(list.id)}>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => setDetailId(list.id)}
+                          >
                             View
                           </Button>
                         ) : (

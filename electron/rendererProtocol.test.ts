@@ -35,7 +35,9 @@ describe("rendererProtocol", () => {
 
   it("returns stylesheet MIME so Chromium will apply lazy CSS chunks", () => {
     expect(mimeTypeForRendererFile("C:\\app\\assets\\Reports.css")).toBe("text/css; charset=utf-8");
-    expect(mimeTypeForRendererFile("C:\\app\\assets\\index.js")).toBe("text/javascript; charset=utf-8");
+    expect(mimeTypeForRendererFile("C:\\app\\assets\\index.js")).toBe(
+      "text/javascript; charset=utf-8",
+    );
     expect(mimeTypeForRendererFile("C:\\app\\assets\\inter.woff2")).toBe("font/woff2");
   });
 });

@@ -64,7 +64,9 @@ describe("table KOT occupancy", () => {
   });
 
   it("marks occupied unsent tables Send KOT", () => {
-    expect(tableKotAppearance({ occupied: true, unsentCount: 3, sentCount: 2, itemCount: 5 })).toMatchObject({
+    expect(
+      tableKotAppearance({ occupied: true, unsentCount: 3, sentCount: 2, itemCount: 5 }),
+    ).toMatchObject({
       state: "attention",
       stateLabel: "Send KOT",
       needsKot: true,
@@ -73,7 +75,9 @@ describe("table KOT occupancy", () => {
   });
 
   it("marks occupied tables with no ticket Send KOT", () => {
-    expect(tableKotAppearance({ occupied: true, unsentCount: 0, sentCount: 0, itemCount: 2 })).toMatchObject({
+    expect(
+      tableKotAppearance({ occupied: true, unsentCount: 0, sentCount: 0, itemCount: 2 }),
+    ).toMatchObject({
       state: "attention",
       stateLabel: "Send KOT",
       metaLabel: "Not sent",
@@ -82,7 +86,13 @@ describe("table KOT occupancy", () => {
 
   it("marks fully sent tables as KOT sent", () => {
     expect(
-      tableKotAppearance({ occupied: true, unsentCount: 0, sentCount: 4, itemCount: 4, elapsed: "12m" }),
+      tableKotAppearance({
+        occupied: true,
+        unsentCount: 0,
+        sentCount: 4,
+        itemCount: 4,
+        elapsed: "12m",
+      }),
     ).toMatchObject({
       state: "occupied",
       stateLabel: "KOT sent",

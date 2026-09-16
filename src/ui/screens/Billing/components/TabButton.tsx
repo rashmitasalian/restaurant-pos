@@ -28,9 +28,7 @@ export default function TabButton({
     >
       {icon ? <Icon icon={icon} size="sm" /> : null}
       {label}
-      {count !== null && count > 0 && (
-        <span className={styles.tabCount}>{count}</span>
-      )}
+      {count !== null && count > 0 && <span className={styles.tabCount}>{count}</span>}
     </button>
   );
 }

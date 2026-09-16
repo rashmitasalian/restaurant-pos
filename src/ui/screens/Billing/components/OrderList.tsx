@@ -28,7 +28,10 @@ function detectSelectedVariant(line: any, menuItem: any) {
   const fromName = (byNameMatch?.[1] || "").trim().toLowerCase();
   if (fromName) {
     const exact = variants.find(
-      (variant: any) => String(variant?.name || "").trim().toLowerCase() === fromName,
+      (variant: any) =>
+        String(variant?.name || "")
+          .trim()
+          .toLowerCase() === fromName,
     );
     if (exact) {
       return exact.name;
@@ -52,7 +55,7 @@ export default function OrderList({
   onChangeVariant,
 }: Props) {
   if (!items || items.length === 0) {
-return (
+    return (
       <div
         className={styles.textMuted}
         style={{ textAlign: "center", padding: "28px 0", fontSize: 14 }}
@@ -60,7 +63,7 @@ return (
         No items yet — search above to add
       </div>
     );
-}
+  }
   return (
     <div className={styles.orderList}>
       {items.map((it) => {

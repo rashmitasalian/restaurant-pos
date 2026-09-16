@@ -18,10 +18,7 @@ import { Input } from "../../components/ui/Input";
 import { Select } from "../../components/ui/Select";
 import { Drawer } from "../../components/ui/Drawer";
 import { PortalMenu, PortalMenuItem } from "../../components/ui/PortalMenu";
-import {
-  exportSalaryAdvancesExcel,
-  type SalaryAdvanceExportMode,
-} from "./salaryAdvanceExport";
+import { exportSalaryAdvancesExcel, type SalaryAdvanceExportMode } from "./salaryAdvanceExport";
 import {
   buildEmployeeSummaries,
   buildExportFileName,
@@ -60,7 +57,9 @@ function toInputDate(ts: number): string {
 function staffIdFromHash(): string | null {
   const hash = window.location.hash || "";
   const q = hash.indexOf("?");
-  if (q === -1) return null;
+  if (q === -1) {
+    return null;
+  }
   const params = new URLSearchParams(hash.slice(q + 1));
   return params.get("staff") || params.get("staffId");
 }
@@ -189,11 +188,15 @@ export default function SalaryAdvances({
       limit: 500,
     })
       .then((rows) => {
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
         setMonthSummaryTotal(rows.reduce((sum, row) => sum + Number(row.amount || 0), 0));
       })
       .catch(() => {
-        if (!cancelled) setMonthSummaryTotal(0);
+        if (!cancelled) {
+          setMonthSummaryTotal(0);
+        }
       });
     return () => {
       cancelled = true;
@@ -255,7 +258,9 @@ export default function SalaryAdvances({
 
   const submit = async () => {
     const amount = parsePositiveMoney(form.amount);
-    if (!form.staffId || amount === null) return;
+    if (!form.staffId || amount === null) {
+      return;
+    }
     const date = new Date(form.advanceDate);
     date.setHours(12, 0, 0, 0);
     if (isNaN(date.getTime())) {
@@ -377,7 +382,13 @@ export default function SalaryAdvances({
           columns={[
             { key: "name", header: "Employee", sortable: true },
             { key: "count", header: "Advance Count", sortable: true, align: "right", nowrap: true },
-            { key: "total", header: "Total Advances", sortable: true, align: "right", nowrap: true },
+            {
+              key: "total",
+              header: "Total Advances",
+              sortable: true,
+              align: "right",
+              nowrap: true,
+            },
             { key: "salary", header: "Salary", sortable: true, align: "right", nowrap: true },
             {
               key: "after",
@@ -473,7 +484,9 @@ export default function SalaryAdvances({
           <span>
             {transactions.length} transaction{transactions.length === 1 ? "" : "s"}
           </span>
-          <span>{formatMoney(transactions.reduce((sum, row) => sum + Number(row.amount || 0), 0))}</span>
+          <span>
+            {formatMoney(transactions.reduce((sum, row) => sum + Number(row.amount || 0), 0))}
+          </span>
         </div>
       </>
     );
@@ -540,16 +553,18 @@ export default function SalaryAdvances({
               align="right"
             >
               <PortalMenuItem onClick={() => exportExcel("summary")}>Summary</PortalMenuItem>
-              <PortalMenuItem onClick={() => exportExcel("transactions")}>Transactions</PortalMenuItem>
-              <PortalMenuItem onClick={() => exportExcel("both")}>Summary + Transactions</PortalMenuItem>
+              <PortalMenuItem onClick={() => exportExcel("transactions")}>
+                Transactions
+              </PortalMenuItem>
+              <PortalMenuItem onClick={() => exportExcel("both")}>
+                Summary + Transactions
+              </PortalMenuItem>
             </PortalMenu>
           </div>
         ) : null}
       </div>
 
-      {!employeeLabel ? null : (
-        <div className={styles.scopeLine}>Filtered to {employeeLabel}</div>
-      )}
+      {!employeeLabel ? null : <div className={styles.scopeLine}>Filtered to {employeeLabel}</div>}
 
       <div className={styles.summaryStrip} aria-label="Salary advance summary">
         <span>
@@ -618,7 +633,9 @@ export default function SalaryAdvances({
           <Select
             label="Employee"
             value={form.staffId}
-            onChange={(event) => setForm((current) => ({ ...current, staffId: event.target.value }))}
+            onChange={(event) =>
+              setForm((current) => ({ ...current, staffId: event.target.value }))
+            }
           >
             {staff.map((member) => (
               <option key={member.id} value={member.id}>
@@ -632,7 +649,9 @@ export default function SalaryAdvances({
             type="date"
             max={toInputDate(Date.now())}
             value={form.advanceDate}
-            onChange={(event) => setForm((current) => ({ ...current, advanceDate: event.target.value }))}
+            onChange={(event) =>
+              setForm((current) => ({ ...current, advanceDate: event.target.value }))
+            }
           />
           <Input
             label="Amount (₹)"

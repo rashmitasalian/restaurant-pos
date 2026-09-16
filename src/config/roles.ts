@@ -10,12 +10,7 @@
  * Captain is phone-only (Local Gateway) — not a desktop login role.
  */
 
-import {
-  type Role,
-  ROLE_KEYS,
-  ROLE_PERMISSIONS,
-  permissionsToPages,
-} from "../shared/permissions";
+import { type Role, ROLE_KEYS, ROLE_PERMISSIONS, permissionsToPages } from "../shared/permissions";
 
 export type { Role };
 export { ROLE_KEYS } from "../shared/permissions";

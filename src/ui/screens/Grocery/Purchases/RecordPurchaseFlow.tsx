@@ -76,7 +76,9 @@ function draftTotal(draft: ItemDraft) {
   const qty = Number(draft.quantity) || 0;
   const unitPrice = parseMoney(draft.unitPrice);
   let total = parseMoney(draft.totalAmount);
-  if (total == null && unitPrice != null) total = +(unitPrice * qty).toFixed(2);
+  if (total == null && unitPrice != null) {
+    total = +(unitPrice * qty).toFixed(2);
+  }
   return { qty, unitPrice, total };
 }
 
@@ -107,7 +109,9 @@ export function RecordPurchaseFlow({ listId, initialMode = null, onClose, onChan
         listGroceryPurchaseHeaders({ listId, includeVoided: true, limit: 100 }),
         loadActiveVendors(),
       ]);
-      if (!doc) throw new Error("Buying list not found");
+      if (!doc) {
+        throw new Error("Buying list not found");
+      }
       const voided = new Set(
         (purchaseHeaders as any[]).filter((h) => h.status === "voided").map((h) => h.id),
       );
@@ -120,7 +124,9 @@ export function RecordPurchaseFlow({ listId, initialMode = null, onClose, onChan
         nextDrafts[line.id] = emptyDraft(line);
       }
       setDrafts(nextDrafts);
-      const pending = doc.lines.find((l) => l.lineStatus !== "purchased" && l.lineStatus !== "skipped");
+      const pending = doc.lines.find(
+        (l) => l.lineStatus !== "purchased" && l.lineStatus !== "skipped",
+      );
       setActiveLineId(pending?.id || doc.lines[0]?.id || null);
     } catch (error) {
       setStatus(validationMessage(error, "Could not load purchase workspace"));
@@ -135,7 +141,9 @@ export function RecordPurchaseFlow({ listId, initialMode = null, onClose, onChan
 
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        onClose();
+      }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
@@ -168,14 +176,18 @@ export function RecordPurchaseFlow({ listId, initialMode = null, onClose, onChan
   const updateDraft = (lineId: string, patch: Partial<ItemDraft>) => {
     setDrafts((current) => {
       const base = current[lineId];
-      if (!base) return current;
+      if (!base) {
+        return current;
+      }
       return { ...current, [lineId]: { ...base, ...patch } };
     });
   };
 
   const markReady = (lineId: string) => {
     const draft = drafts[lineId];
-    if (!draft) return;
+    if (!draft) {
+      return;
+    }
     const { qty, total } = draftTotal(draft);
     if (qty <= 0) {
       setStatus("Quantity must be greater than zero.");
@@ -188,7 +200,9 @@ export function RecordPurchaseFlow({ listId, initialMode = null, onClose, onChan
     updateDraft(lineId, { ready: true });
     setStatus(null);
     const nextPending = pendingLines.find((l) => l.id !== lineId && !drafts[l.id]?.ready);
-    if (nextPending) setActiveLineId(nextPending.id);
+    if (nextPending) {
+      setActiveLineId(nextPending.id);
+    }
   };
 
   const readyLines = pendingLines.filter((line) => drafts[line.id]?.ready);
@@ -202,7 +216,9 @@ export function RecordPurchaseFlow({ listId, initialMode = null, onClose, onChan
       setStatus("Mark at least one item ready before saving.");
       return;
     }
-    if (saving) return;
+    if (saving) {
+      return;
+    }
     setSaving(true);
     setStatus(null);
     try {
@@ -235,7 +251,9 @@ export function RecordPurchaseFlow({ listId, initialMode = null, onClose, onChan
   };
 
   const saveTotalPurchase = async () => {
-    if (!list) return;
+    if (!list) {
+      return;
+    }
     if (listTotalPurchase) {
       setStatus("Whole-list amount already recorded.");
       return;
@@ -249,7 +267,9 @@ export function RecordPurchaseFlow({ listId, initialMode = null, onClose, onChan
       setStatus("Total amount must be greater than zero.");
       return;
     }
-    if (saving) return;
+    if (saving) {
+      return;
+    }
     setSaving(true);
     setStatus(null);
     try {
@@ -282,7 +302,9 @@ export function RecordPurchaseFlow({ listId, initialMode = null, onClose, onChan
         <div className={styles.modeChooser}>
           {status && <div className={styles.status}>{status}</div>}
           <p className={styles.modeChooserLead}>
-            {list ? `${list.title} · ${formatListDate(list.listDate)}` : "Choose how to record this purchase."}
+            {list
+              ? `${list.title} · ${formatListDate(list.listDate)}`
+              : "Choose how to record this purchase."}
           </p>
           <div className={styles.modeChooserGrid}>
             <button
@@ -367,13 +389,18 @@ export function RecordPurchaseFlow({ listId, initialMode = null, onClose, onChan
               />
               <div className={styles.purchaseSummaryBar}>
                 <span>
-                  {list.lines.length} items · {formatCurrency(parseMoney(totalForm.totalAmount) || 0)}
+                  {list.lines.length} items ·{" "}
+                  {formatCurrency(parseMoney(totalForm.totalAmount) || 0)}
                 </span>
                 <div className={styles.actions}>
                   <Button variant="secondary" onClick={onClose} disabled={saving}>
                     Cancel
                   </Button>
-                  <Button variant="primary" onClick={() => void saveTotalPurchase()} loading={saving}>
+                  <Button
+                    variant="primary"
+                    onClick={() => void saveTotalPurchase()}
+                    loading={saving}
+                  >
                     Save Purchase
                   </Button>
                 </div>
@@ -389,7 +416,12 @@ export function RecordPurchaseFlow({ listId, initialMode = null, onClose, onChan
   const activeDraft = activeLine ? drafts[activeLine.id] : null;
 
   const body = (
-    <div className={styles.editorOverlay} role="dialog" aria-modal="true" aria-label="Record purchase">
+    <div
+      className={styles.editorOverlay}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Record purchase"
+    >
       <div className={`${styles.editorPane} ${styles.purchasePane}`}>
         <header className={styles.editorHeader}>
           <div>
@@ -419,7 +451,9 @@ export function RecordPurchaseFlow({ listId, initialMode = null, onClose, onChan
           <div className={styles.status}>Loading…</div>
         ) : (
           <div className={styles.purchaseZones}>
-            {status && <div className={`${styles.status} ${styles.purchaseZonesStatus}`}>{status}</div>}
+            {status && (
+              <div className={`${styles.status} ${styles.purchaseZonesStatus}`}>{status}</div>
+            )}
 
             <aside className={styles.purchaseZone} aria-label="List items">
               <h3 className={styles.zoneTitle}>List Items</h3>
@@ -587,7 +621,9 @@ export function RecordPurchaseFlow({ listId, initialMode = null, onClose, onChan
                   {readyLines.map((line) => (
                     <li key={line.id}>
                       {line.itemName} · {formatCurrency(draftTotal(drafts[line.id]!).total || 0)}
-                      {drafts[line.id]?.vendor ? ` · ${drafts[line.id]!.vendor}` : " · Not specified"}
+                      {drafts[line.id]?.vendor
+                        ? ` · ${drafts[line.id]!.vendor}`
+                        : " · Not specified"}
                     </li>
                   ))}
                 </ul>

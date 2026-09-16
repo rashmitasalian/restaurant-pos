@@ -1,8 +1,5 @@
 import React from "react";
-import {
-  BUSINESS_RANGE_PRESETS,
-  toInputDate,
-} from "../../shared/businessDateRange";
+import { BUSINESS_RANGE_PRESETS, toInputDate } from "../../shared/businessDateRange";
 import { SegmentedControl } from "./ui/SegmentedControl";
 import type { BusinessDateRangeState } from "../hooks/useBusinessDateRange";
 import styles from "./BusinessRangeControls.module.css";
@@ -84,7 +81,11 @@ export function BusinessRangeControls({ rangeState, className = "" }: BusinessRa
                 aria-label="To time"
                 onChange={(e) => setToTime(e.target.value)}
               />
-              <button type="button" className={styles.linkBtn} onClick={() => setTimeEnabled(false)}>
+              <button
+                type="button"
+                className={styles.linkBtn}
+                onClick={() => setTimeEnabled(false)}
+              >
                 Full day
               </button>
             </>

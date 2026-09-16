@@ -1,5 +1,15 @@
 import "./env";
-import { app, BrowserWindow, ipcMain, dialog, session, Menu, protocol, type IpcMainInvokeEvent, type WebContents } from "electron";
+import {
+  app,
+  BrowserWindow,
+  ipcMain,
+  dialog,
+  session,
+  Menu,
+  protocol,
+  type IpcMainInvokeEvent,
+  type WebContents,
+} from "electron";
 import path from "path";
 import http from "http";
 import https from "https";
@@ -8,7 +18,12 @@ import { registerPosIpc } from "./ipc/posIpc";
 import { closeDb, initializeDatabase } from "./db/sqlite";
 import { posService } from "./services/posService";
 import { configureDomainEvents } from "./services/domainEvents";
-import { startLocalGateway, stopLocalGateway, getGatewayStatus, rotateGatewayPairingCode } from "./gateway/localGateway";
+import {
+  startLocalGateway,
+  stopLocalGateway,
+  getGatewayStatus,
+  rotateGatewayPairingCode,
+} from "./gateway/localGateway";
 import { destroyMainSession, getMainSession, refreshMainSession } from "./services/sessionManager";
 import { updateService } from "./services/updateService";
 import { bootstrapBackupManager } from "./services/backup/bootstrap";
@@ -269,10 +284,14 @@ function bindRendererDiagnostics(contents: WebContents) {
     ) {
       return;
     }
-    writeLogToFile(lvl === "error" ? "error" : lvl === "warning" ? "warn" : "info", `[renderer-console] ${text}`, {
-      line: event.lineNumber,
-      sourceId: event.sourceId,
-    });
+    writeLogToFile(
+      lvl === "error" ? "error" : lvl === "warning" ? "warn" : "info",
+      `[renderer-console] ${text}`,
+      {
+        line: event.lineNumber,
+        sourceId: event.sourceId,
+      },
+    );
   });
   contents.on("preload-error", (_event, preloadPath, error) => {
     writeLogToFile("fatal", "preload-error", { preloadPath, error: String(error) });
@@ -381,19 +400,22 @@ async function createWindow() {
       rendererUrl,
       exists: fs.existsSync(rendererPath),
     });
-    mainWindow.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL) => {
-      writeLogToFile("fatal", "Renderer failed to load", {
-        errorCode,
-        errorDescription,
-        validatedURL,
-        rendererPath,
-        rendererUrl,
-      });
-      dialog.showErrorBox(
-        "Display Error",
-        `RestoNiti could not load its interface.\n\n${errorDescription} (${errorCode})\n${validatedURL}\n\nTry reinstalling the app or check logs in Settings.`,
-      );
-    });
+    mainWindow.webContents.on(
+      "did-fail-load",
+      (_event, errorCode, errorDescription, validatedURL) => {
+        writeLogToFile("fatal", "Renderer failed to load", {
+          errorCode,
+          errorDescription,
+          validatedURL,
+          rendererPath,
+          rendererUrl,
+        });
+        dialog.showErrorBox(
+          "Display Error",
+          `RestoNiti could not load its interface.\n\n${errorDescription} (${errorCode})\n${validatedURL}\n\nTry reinstalling the app or check logs in Settings.`,
+        );
+      },
+    );
     mainWindow.webContents.on("render-process-gone", (_event, details) => {
       writeLogToFile("fatal", "Renderer process gone", details);
     });
@@ -449,7 +471,10 @@ app.whenReady().then(async () => {
       await startLocalGateway();
       logStartupStage("gateway:ready", getGatewayStatus());
     } catch (gatewayError: any) {
-      writeLogToFile("error", `Local gateway failed to start: ${gatewayError?.stack || gatewayError}`);
+      writeLogToFile(
+        "error",
+        `Local gateway failed to start: ${gatewayError?.stack || gatewayError}`,
+      );
     }
     logStartupStage("createWindow:done");
   } catch (err: any) {
@@ -480,9 +505,13 @@ async function getPrinterConfig(): Promise<PrinterConfig> {
   try {
     const cfg = (posService.getSetting("config:printers") as any) || {};
     const kitchenFallback =
-      process.env.KITCHEN_PRINTER_USB_NAME || process.env.COUNTER_PRINTER_USB_NAME || DEFAULT_USB_PRINTER_NAME;
+      process.env.KITCHEN_PRINTER_USB_NAME ||
+      process.env.COUNTER_PRINTER_USB_NAME ||
+      DEFAULT_USB_PRINTER_NAME;
     const counterFallback =
-      process.env.COUNTER_PRINTER_USB_NAME || process.env.KITCHEN_PRINTER_USB_NAME || DEFAULT_USB_PRINTER_NAME;
+      process.env.COUNTER_PRINTER_USB_NAME ||
+      process.env.KITCHEN_PRINTER_USB_NAME ||
+      DEFAULT_USB_PRINTER_NAME;
     return {
       kitchenPrinterName: resolveKitchenPrinterTarget(cfg, kitchenFallback),
       counterPrinterName: resolveCounterPrinterTarget(cfg, counterFallback),
@@ -556,24 +585,27 @@ ipcMain.handle("printer:print", async (event, token: string | null, payload) => 
   }
 });
 // Log IPC: persist renderer logs to file
-ipcMain.handle("log:write", async (_event, _token: string | null, level: string, message: string, context?: any) => {
-  const safeLevel = LOG_LEVELS.has(String(level || "").toLowerCase())
-    ? String(level).toLowerCase()
-    : "info";
-  const safeMessage = String(message || "").slice(0, MAX_LOG_MESSAGE_CHARS);
-  let safeContext: unknown;
-  try {
-    const serialized = JSON.stringify(context);
-    safeContext =
-      serialized && serialized.length > MAX_LOG_CONTEXT_CHARS
-        ? { truncated: true, preview: serialized.slice(0, MAX_LOG_CONTEXT_CHARS) }
-        : context;
-  } catch {
-    safeContext = { unserializable: true };
-  }
-  writeLogToFile(safeLevel, safeMessage, safeContext);
-  return { ok: true };
-});
+ipcMain.handle(
+  "log:write",
+  async (_event, _token: string | null, level: string, message: string, context?: any) => {
+    const safeLevel = LOG_LEVELS.has(String(level || "").toLowerCase())
+      ? String(level).toLowerCase()
+      : "info";
+    const safeMessage = String(message || "").slice(0, MAX_LOG_MESSAGE_CHARS);
+    let safeContext: unknown;
+    try {
+      const serialized = JSON.stringify(context);
+      safeContext =
+        serialized && serialized.length > MAX_LOG_CONTEXT_CHARS
+          ? { truncated: true, preview: serialized.slice(0, MAX_LOG_CONTEXT_CHARS) }
+          : context;
+    } catch {
+      safeContext = { unserializable: true };
+    }
+    writeLogToFile(safeLevel, safeMessage, safeContext);
+    return { ok: true };
+  },
+);
 
 let pdfExportWindow: BrowserWindow | null = null;
 let pdfExportChain: Promise<unknown> = Promise.resolve();
@@ -626,57 +658,60 @@ async function loadHtmlIntoPdfWindow(pdfWin: BrowserWindow, htmlFile: string) {
 }
 
 // Report PDF export: render HTML to PDF via printToPDF and save via native save dialog
-ipcMain.handle("report:exportPdf", async (event, token: string | null, html: string, defaultFileName: string) => {
-  requireMainSession(event, token, ["admin"]);
-  const runExport = async () => {
-    let tmpFile: string | null = null;
-    try {
-      const os = require("os");
-      tmpFile = path.join(os.tmpdir(), `pos-report-${Date.now()}.html`);
-      fs.writeFileSync(tmpFile, html, "utf-8");
+ipcMain.handle(
+  "report:exportPdf",
+  async (event, token: string | null, html: string, defaultFileName: string) => {
+    requireMainSession(event, token, ["admin"]);
+    const runExport = async () => {
+      let tmpFile: string | null = null;
+      try {
+        const os = require("os");
+        tmpFile = path.join(os.tmpdir(), `pos-report-${Date.now()}.html`);
+        fs.writeFileSync(tmpFile, html, "utf-8");
 
-      const pdfWin = getPdfExportWindow();
-      await loadHtmlIntoPdfWindow(pdfWin, tmpFile);
+        const pdfWin = getPdfExportWindow();
+        await loadHtmlIntoPdfWindow(pdfWin, tmpFile);
 
-      const pdfBuffer = await pdfWin.webContents.printToPDF({
-        printBackground: true,
-        pageSize: "A4",
-        // Electron 44+: PrintToPDFMargins is inch values only (no marginType).
-        margins: { top: 0.4, bottom: 0.4, left: 0.4, right: 0.4 },
-      });
+        const pdfBuffer = await pdfWin.webContents.printToPDF({
+          printBackground: true,
+          pageSize: "A4",
+          // Electron 44+: PrintToPDFMargins is inch values only (no marginType).
+          margins: { top: 0.4, bottom: 0.4, left: 0.4, right: 0.4 },
+        });
 
-      const timestamp = new Date().toISOString().slice(0, 10);
-      const safeName = defaultFileName.replace(/[^a-z0-9\-_]/gi, "-").toLowerCase();
-      const defaultPath = path.join(app.getPath("documents"), `${safeName}-${timestamp}.pdf`);
+        const timestamp = new Date().toISOString().slice(0, 10);
+        const safeName = defaultFileName.replace(/[^a-z0-9\-_]/gi, "-").toLowerCase();
+        const defaultPath = path.join(app.getPath("documents"), `${safeName}-${timestamp}.pdf`);
 
-      const result = await dialog.showSaveDialog(mainWindow!, {
-        title: "Save PDF",
-        defaultPath,
-        filters: [{ name: "PDF Document", extensions: ["pdf"] }],
-      });
+        const result = await dialog.showSaveDialog(mainWindow!, {
+          title: "Save PDF",
+          defaultPath,
+          filters: [{ name: "PDF Document", extensions: ["pdf"] }],
+        });
 
-      if (result.canceled || !result.filePath) {
-        return { ok: false, reason: "cancelled" };
-      }
+        if (result.canceled || !result.filePath) {
+          return { ok: false, reason: "cancelled" };
+        }
 
-      fs.writeFileSync(result.filePath, pdfBuffer);
-      console.log(`[REPORT-PDF] Saved to ${result.filePath}`);
-      return { ok: true, path: result.filePath };
-    } catch (err: any) {
-      console.error("[REPORT-PDF] Failed:", err);
-      return { ok: false, error: (err && err.message) || String(err) };
-    } finally {
-      if (tmpFile) {
-        try {
-          fs.unlinkSync(tmpFile);
-        } catch (_) {
-          /* best-effort */
+        fs.writeFileSync(result.filePath, pdfBuffer);
+        console.log(`[REPORT-PDF] Saved to ${result.filePath}`);
+        return { ok: true, path: result.filePath };
+      } catch (err: any) {
+        console.error("[REPORT-PDF] Failed:", err);
+        return { ok: false, error: (err && err.message) || String(err) };
+      } finally {
+        if (tmpFile) {
+          try {
+            fs.unlinkSync(tmpFile);
+          } catch (_) {
+            /* best-effort */
+          }
         }
       }
-    }
-  };
+    };
 
-  const exportPromise = pdfExportChain.then(runExport, runExport);
-  pdfExportChain = exportPromise.catch(() => undefined);
-  return exportPromise;
-});
+    const exportPromise = pdfExportChain.then(runExport, runExport);
+    pdfExportChain = exportPromise.catch(() => undefined);
+    return exportPromise;
+  },
+);

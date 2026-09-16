@@ -48,10 +48,11 @@ function adminMutationError(message: string) {
 }
 
 function userAdminError(scope: string, err: unknown, fallback: string) {
-  const raw =
-    err instanceof Error ? err.message : typeof err === "string" ? err : "";
+  const raw = err instanceof Error ? err.message : typeof err === "string" ? err : "";
   const mapped = adminMutationError(raw);
-  if (mapped) return mapped;
+  if (mapped) {
+    return mapped;
+  }
   return reportClientError(scope, err, fallback);
 }
 
@@ -151,7 +152,9 @@ export default function UsersScreen({
             <Button
               variant="primary"
               onClick={() => setShowCreate(true)}
-              disabled={!auth?.session?.role || !roleHasPermission(auth.session.role, "people:accounts")}
+              disabled={
+                !auth?.session?.role || !roleHasPermission(auth.session.role, "people:accounts")
+              }
             >
               Add User
             </Button>
@@ -209,7 +212,12 @@ export default function UsersScreen({
               </span>
 
               <div className={styles.cardActions}>
-                <Button size="sm" variant="secondary" onClick={() => setResetTarget(user)} title="Reset password">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => setResetTarget(user)}
+                  title="Reset password"
+                >
                   Reset password
                 </Button>
 
@@ -315,15 +323,7 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
     submittingRef.current = true;
     setIsSubmitting(true);
     try {
-      await createUser(
-        uname,
-        password,
-        role,
-        display,
-        true,
-        auth.session.username,
-        adminPassword,
-      );
+      await createUser(uname, password, role, display, true, auth.session.username, adminPassword);
       onCreated();
     } catch (err: any) {
       setError(userAdminError("users.create", err, "Failed to create user. Please try again."));
@@ -414,7 +414,11 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
 
         {error && <div className={styles.formError}>{error}</div>}
 
-        <ModalActions onClose={onClose} primaryLabel={isSubmitting ? "Creating..." : "Create user"} disabled={isSubmitting} />
+        <ModalActions
+          onClose={onClose}
+          primaryLabel={isSubmitting ? "Creating..." : "Create user"}
+          disabled={isSubmitting}
+        />
       </form>
     </Modal>
   );
@@ -466,7 +470,9 @@ function ResetPasswordModal({
       setSuccess(true);
       setTimeout(onDone, 1200);
     } catch (err: any) {
-      setError(userAdminError("users.reset-password", err, "Failed to reset password. Please try again."));
+      setError(
+        userAdminError("users.reset-password", err, "Failed to reset password. Please try again."),
+      );
     } finally {
       submittingRef.current = false;
       setIsSubmitting(false);
@@ -474,7 +480,11 @@ function ResetPasswordModal({
   };
 
   return (
-    <Modal open title={`Reset password for @${user.username}`} onClose={isSubmitting ? () => undefined : onClose}>
+    <Modal
+      open
+      title={`Reset password for @${user.username}`}
+      onClose={isSubmitting ? () => undefined : onClose}
+    >
       {success ? (
         <div className={styles.formSuccess}>
           Password updated successfully. The user will need to log in with the new password.
@@ -520,7 +530,11 @@ function ResetPasswordModal({
 
           {error && <div className={styles.formError}>{error}</div>}
 
-          <ModalActions onClose={onClose} primaryLabel={isSubmitting ? "Saving..." : "Reset password"} disabled={isSubmitting} />
+          <ModalActions
+            onClose={onClose}
+            primaryLabel={isSubmitting ? "Saving..." : "Reset password"}
+            disabled={isSubmitting}
+          />
         </form>
       )}
     </Modal>
@@ -569,9 +583,15 @@ function ConfirmStatusModal({
   };
 
   return (
-    <Modal open title={`${nextActive ? "Enable" : "Disable"} @${user.username}?`} onClose={isSubmitting ? () => undefined : onClose}>
+    <Modal
+      open
+      title={`${nextActive ? "Enable" : "Disable"} @${user.username}?`}
+      onClose={isSubmitting ? () => undefined : onClose}
+    >
       <form onSubmit={handleSubmit}>
-        <p style={{ margin: "0 0 16px", color: "var(--pos-tx-sub)", fontSize: 13, lineHeight: 1.5 }}>
+        <p
+          style={{ margin: "0 0 16px", color: "var(--pos-tx-sub)", fontSize: 13, lineHeight: 1.5 }}
+        >
           This will {action} the account for {user.displayName}. Admin verification is required.
         </p>
 
@@ -592,7 +612,9 @@ function ConfirmStatusModal({
 
         <ModalActions
           onClose={onClose}
-          primaryLabel={isSubmitting ? "Saving..." : nextActive ? "Enable account" : "Disable account"}
+          primaryLabel={
+            isSubmitting ? "Saving..." : nextActive ? "Enable account" : "Disable account"
+          }
           disabled={isSubmitting}
           danger={!nextActive}
         />
@@ -634,12 +656,7 @@ function ModalActions({
       <Button type="button" size="sm" variant="secondary" onClick={onClose} disabled={disabled}>
         Cancel
       </Button>
-      <Button
-        type="submit"
-        size="sm"
-        variant={danger ? "danger" : "primary"}
-        disabled={disabled}
-      >
+      <Button type="submit" size="sm" variant={danger ? "danger" : "primary"} disabled={disabled}>
         {primaryLabel}
       </Button>
     </div>

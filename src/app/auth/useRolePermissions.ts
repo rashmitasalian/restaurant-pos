@@ -42,7 +42,9 @@ export function useRolePermissions() {
           return roleHasPermission(role, "page:manager") || isReportsOnlyRole(role);
         }
         if (section === "people") {
-          const tab = peopleTabFromHash(hash ?? (typeof window !== "undefined" ? window.location.hash : ""));
+          const tab = peopleTabFromHash(
+            hash ?? (typeof window !== "undefined" ? window.location.hash : ""),
+          );
           return canAccessPeopleTab(role, tab);
         }
         if (section === "reports" && isReportsOnlyRole(role)) {

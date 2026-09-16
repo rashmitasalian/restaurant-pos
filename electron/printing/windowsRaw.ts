@@ -81,7 +81,6 @@ export async function listWindowsPrinters(): Promise<InstalledPrinterInfo[]> {
 
 function resolveUserDataDir() {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { app } = require("electron") as typeof import("electron");
     return app.getPath("userData");
   } catch {

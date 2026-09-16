@@ -504,8 +504,12 @@ function prepareGroceryListLineInput(
 
 function normalizeGroceryListStatus(value: unknown): GroceryListStatus {
   const status = String(value || "draft");
-  if (status === "printed") return "open";
-  if (status === "purchased") return "completed";
+  if (status === "printed") {
+    return "open";
+  }
+  if (status === "purchased") {
+    return "completed";
+  }
   if (
     status === "draft" ||
     status === "open" ||
@@ -531,11 +535,17 @@ function normalizeGroceryListType(value: unknown): GroceryListType {
  * Call inside the same transaction as purchase create/void/line updates.
  */
 function recalcGroceryListStatus(database: Database.Database, listId: string | null | undefined) {
-  if (!listId) return;
+  if (!listId) {
+    return;
+  }
   const list = database.prepare("SELECT * FROM grocery_lists WHERE id = ?").get(listId) as any;
-  if (!list) return;
+  if (!list) {
+    return;
+  }
   const current = normalizeGroceryListStatus(list.status);
-  if (current === "cancelled") return;
+  if (current === "cancelled") {
+    return;
+  }
   // Draft stays draft until a purchase exists — then promote via derivation below.
   if (current === "draft") {
     const anyPurchase = database
@@ -544,13 +554,13 @@ function recalcGroceryListStatus(database: Database.Database, listId: string | n
          WHERE buying_list_id = ? AND status = 'recorded' LIMIT 1`,
       )
       .get(listId) as { id: string } | undefined;
-    if (!anyPurchase) return;
+    if (!anyPurchase) {
+      return;
+    }
   }
 
   const lines = database
-    .prepare(
-      `SELECT line_status FROM grocery_list_lines WHERE list_id = ? ORDER BY sort_order ASC`,
-    )
+    .prepare(`SELECT line_status FROM grocery_list_lines WHERE list_id = ? ORDER BY sort_order ASC`)
     .all(listId) as Array<{ line_status: string }>;
 
   const wholeListPurchase = database
@@ -584,7 +594,9 @@ function recalcGroceryListStatus(database: Database.Database, listId: string | n
     next = "open";
   }
 
-  if (next === current) return;
+  if (next === current) {
+    return;
+  }
   const at = now();
   const completedAt = next === "completed" ? list.completed_at || at : null;
   database
@@ -598,8 +610,12 @@ function recalcGroceryListStatus(database: Database.Database, listId: string | n
 }
 
 function derivePaymentStatus(totalPaise: number, amountPaidPaise: number): GroceryPaymentStatus {
-  if (amountPaidPaise <= 0) return "pending";
-  if (amountPaidPaise >= totalPaise) return "paid";
+  if (amountPaidPaise <= 0) {
+    return "pending";
+  }
+  if (amountPaidPaise >= totalPaise) {
+    return "paid";
+  }
   return "partial";
 }
 
@@ -619,13 +635,15 @@ function ensureVendorId(
   at: number,
 ): string | null {
   const name = normalizeText(vendorName);
-  if (!name) return null;
+  if (!name) {
+    return null;
+  }
   const existing = database
-    .prepare(
-      `SELECT id FROM vendors WHERE deleted_at IS NULL AND name = ? COLLATE NOCASE LIMIT 1`,
-    )
+    .prepare(`SELECT id FROM vendors WHERE deleted_at IS NULL AND name = ? COLLATE NOCASE LIMIT 1`)
     .get(name) as { id: string } | undefined;
-  if (existing) return existing.id;
+  if (existing) {
+    return existing.id;
+  }
   const id = `vendor:${randomUUID()}`;
   database
     .prepare(
@@ -978,9 +996,9 @@ function getAttendanceShiftHours(database: Database.Database, shiftId?: string |
   }
   const cfg = parseJson<any>(
     (
-      database
-        .prepare("SELECT value_json FROM settings WHERE key = ?")
-        .get("config:attendance") as { value_json?: string } | undefined
+      database.prepare("SELECT value_json FROM settings WHERE key = ?").get("config:attendance") as
+        | { value_json?: string }
+        | undefined
     )?.value_json,
     { shifts: defaultAttendanceShifts() },
   );
@@ -1115,8 +1133,7 @@ function orderFromRow(database: Database.Database, row: any): OrderDto {
     .all(row.id)
     .map(paymentFromRow);
   const meta = parseJson(row.meta_json, {});
-  const tableId =
-    row.table_id === null || row.table_id === undefined ? null : Number(row.table_id);
+  const tableId = row.table_id === null || row.table_id === undefined ? null : Number(row.table_id);
   let tableName: string | null = null;
   if (tableId !== null && Number.isFinite(tableId)) {
     const tableRow = database
@@ -1127,7 +1144,8 @@ function orderFromRow(database: Database.Database, row: any): OrderDto {
   return {
     _id: row.id,
     type: "order",
-    orderType: resolveServiceModeIdFromOrderLike({ orderType: row.order_type, meta }) || row.order_type,
+    orderType:
+      resolveServiceModeIdFromOrderLike({ orderType: row.order_type, meta }) || row.order_type,
     tableId,
     tableName,
     customerId: row.customer_id || null,
@@ -1329,9 +1347,9 @@ function createAuditRow(
 }
 
 function getCreditConfigFromDb(database: Database.Database = getDb()) {
-  const row = database.prepare("SELECT value_json FROM settings WHERE key = ?").get(CREDIT_CONFIG_KEY) as
-    | { value_json?: string }
-    | undefined;
+  const row = database
+    .prepare("SELECT value_json FROM settings WHERE key = ?")
+    .get(CREDIT_CONFIG_KEY) as { value_json?: string } | undefined;
   return normalizeCreditConfig(row?.value_json ? parseJson(row.value_json, {}) : null);
 }
 
@@ -1569,8 +1587,7 @@ function receiveCustomerAccountPayment(
 
   const provisionalOutstanding = outstanding - amountPaise;
   const entryId = `credit-entry:${randomUUID()}`;
-  const reference =
-    optionalGroceryText(input.reference, 80, "credit-reference-too-long") || null;
+  const reference = optionalGroceryText(input.reference, 80, "credit-reference-too-long") || null;
   const notes = optionalGroceryText(input.notes, 500, "credit-notes-too-long") || null;
   database
     .prepare(
@@ -1643,8 +1660,7 @@ function voidCustomerCreditSaleEntry(
   if (!customer) {
     throw new Error("customer-not-found");
   }
-  const reason =
-    optionalGroceryText(input.reason, 500, "credit-void-reason-too-long") || null;
+  const reason = optionalGroceryText(input.reason, 500, "credit-void-reason-too-long") || null;
 
   database
     .prepare("UPDATE customer_account_entries SET remaining_paise = 0 WHERE id = ?")
@@ -1682,9 +1698,9 @@ function voidCustomerCreditSaleEntry(
       .get(credit.order_id) as { meta_json?: string } | undefined;
     if (orderRow) {
       const meta = parseJson(orderRow.meta_json, {}) as Record<string, unknown>;
-      const previousCredit = (meta.credit && typeof meta.credit === "object"
-        ? meta.credit
-        : {}) as Record<string, unknown>;
+      const previousCredit = (
+        meta.credit && typeof meta.credit === "object" ? meta.credit : {}
+      ) as Record<string, unknown>;
       meta.credit = {
         ...previousCredit,
         voided: true,
@@ -1717,10 +1733,7 @@ function voidCustomerCreditSaleEntry(
   };
 }
 
-function relinkCreditLedgerOnOrderRestore(
-  database: Database.Database,
-  order: OrderDto,
-) {
+function relinkCreditLedgerOnOrderRestore(database: Database.Database, order: OrderDto) {
   const customerId = order.customerId || null;
   if (!customerId) {
     return;
@@ -1794,9 +1807,7 @@ function orderTableAuditContext(
          LEFT JOIN seating_areas sa ON sa.id = t.area_id
          WHERE t.id = ?`,
       )
-      .get(tableId) as
-      | { table_name?: string; area_id?: string; area_name?: string }
-      | undefined;
+      .get(tableId) as { table_name?: string; area_id?: string; area_name?: string } | undefined;
     if (row) {
       tableName = String(row.table_name || `Table ${tableId}`);
       areaId = String(row.area_id || "") || null;
@@ -1866,9 +1877,7 @@ function voidEventFromAudit(
     reason: detail.reason != null ? String(detail.reason) : null,
     itemName: detail.name != null ? String(detail.name) : null,
     voidQty: detail.voidQty != null ? Number(detail.voidQty) : null,
-    amount: Number.isFinite(amountPaise)
-      ? paiseToRupees(amountPaise)
-      : Number(order?.total || 0),
+    amount: Number.isFinite(amountPaise) ? paiseToRupees(amountPaise) : Number(order?.total || 0),
     tableId: order?.tableId ?? context.tableId,
     tableName: context.tableName,
     createdAt: order?.createdAt || null,
@@ -1905,9 +1914,7 @@ function discountEventFromAudit(
           ? Number(detail.previous_discount_percent)
           : null,
     discountPercent,
-    amount: Number.isFinite(amountPaise)
-      ? paiseToRupees(amountPaise)
-      : Number(order?.total || 0),
+    amount: Number.isFinite(amountPaise) ? paiseToRupees(amountPaise) : Number(order?.total || 0),
     tableId: order?.tableId ?? context.tableId,
     tableName: context.tableName,
     createdAt: order?.createdAt || null,
@@ -1915,10 +1922,7 @@ function discountEventFromAudit(
   };
 }
 
-function discountEventFromOrder(
-  database: Database.Database,
-  order: OrderDto,
-): ReviewDiscountEvent {
+function discountEventFromOrder(database: Database.Database, order: OrderDto): ReviewDiscountEvent {
   const context = orderTableAuditContext(database, order, order.createdBy);
   const occurredAt = Number(order.paidAt || order.updatedAt || order.createdAt || 0);
   return {
@@ -1945,7 +1949,9 @@ function canonicalJson(value: unknown): string {
   }
   const keys = Object.keys(value as Record<string, unknown>).sort();
   return `{${keys
-    .map((key) => `${JSON.stringify(key)}:${canonicalJson((value as Record<string, unknown>)[key])}`)
+    .map(
+      (key) => `${JSON.stringify(key)}:${canonicalJson((value as Record<string, unknown>)[key])}`,
+    )
     .join(",")}}`;
 }
 
@@ -2017,7 +2023,9 @@ function saveClientOp(
     )
     .run(
       id,
-      String(input.username || "").trim().toLowerCase(),
+      String(input.username || "")
+        .trim()
+        .toLowerCase(),
       String(input.action || "").trim(),
       input.entityId || null,
       input.result === undefined ? null : stringifyJson(input.result),
@@ -2247,6 +2255,20 @@ function assertOrderCanBeEdited(order: OrderDto | null): asserts order is OrderD
   }
   if (order.status === "paid" || order.status === "cancelled") {
     throw new Error("order-closed");
+  }
+}
+
+/** Optional optimistic concurrency for multi-captain edits. Omitted = no check (desktop). */
+function assertOrderBaseUpdatedAt(order: OrderDto, baseUpdatedAt?: number | null) {
+  if (baseUpdatedAt === null || baseUpdatedAt === undefined) {
+    return;
+  }
+  const expected = Number(baseUpdatedAt);
+  if (!Number.isFinite(expected)) {
+    return;
+  }
+  if (Number(order.updatedAt) !== expected) {
+    throw new Error("order-conflict");
   }
 }
 
@@ -2865,7 +2887,9 @@ export const posService = {
       for (let i = 1; i <= safeCount; i++) {
         insert.run(i, String(i), defaultSeats, areaId, i, at, at);
       }
-      database.prepare("UPDATE tables SET active = 0, updated_at = ? WHERE id > ?").run(at, safeCount);
+      database
+        .prepare("UPDATE tables SET active = 0, updated_at = ? WHERE id > ?")
+        .run(at, safeCount);
       if (
         Number(tableConfig?.tableCount || 0) !== safeCount ||
         Number(tableConfig?.defaultSeats || 0) !== defaultSeats
@@ -2930,7 +2954,9 @@ export const posService = {
         namingMode,
         prefix: String(entry?.prefix || ""),
         defaultSeats:
-          Number.isInteger(defaultSeats) && defaultSeats >= 1 && defaultSeats <= FLOOR_LAYOUT_LIMITS.MAX_SEATS
+          Number.isInteger(defaultSeats) &&
+          defaultSeats >= 1 &&
+          defaultSeats <= FLOOR_LAYOUT_LIMITS.MAX_SEATS
             ? defaultSeats
             : 4,
       };
@@ -3027,7 +3053,9 @@ export const posService = {
             : existingSeats.get(id) || table.seats;
         upsert.run(id, table.name, seats, table.areaId, table.sortOrder, at, at);
       });
-      database.prepare("UPDATE tables SET active = 0, updated_at = ? WHERE id > ?").run(at, nextCount);
+      database
+        .prepare("UPDATE tables SET active = 0, updated_at = ? WHERE id > ?")
+        .run(at, nextCount);
 
       const primaryArea = areaPlans.find((area) => area.active !== false);
       const defaultSeats = primaryArea?.defaultSeats || 4;
@@ -3086,7 +3114,9 @@ export const posService = {
           const id = normalizeSeatingAreaId(entry?.id, `area:${randomUUID()}`);
           const name = normalizeSeatingAreaName(entry?.name);
           const active = entry?.active !== false;
-          const order = Number.isFinite(Number(entry?.order)) ? Math.trunc(Number(entry?.order)) : index + 1;
+          const order = Number.isFinite(Number(entry?.order))
+            ? Math.trunc(Number(entry?.order))
+            : index + 1;
           return { id, name, active, order };
         })
         .filter((entry, index, list) => list.findIndex((it) => it.id === entry.id) === index);
@@ -3095,9 +3125,9 @@ export const posService = {
         throw new Error("seating-area-at-least-one-active");
       }
 
-      const existingRows = database
-        .prepare("SELECT id FROM seating_areas")
-        .all() as Array<{ id: string }>;
+      const existingRows = database.prepare("SELECT id FROM seating_areas").all() as Array<{
+        id: string;
+      }>;
       const existingIds = new Set(existingRows.map((row) => String(row.id)));
       const nextIds = new Set(normalized.map((entry) => entry.id));
 
@@ -3116,16 +3146,17 @@ export const posService = {
       });
 
       const fallbackId =
-        normalized.find((entry) => entry.active)?.id || normalizeSeatingAreaId(undefined, DEFAULT_SEATING_AREA_ID);
+        normalized.find((entry) => entry.active)?.id ||
+        normalizeSeatingAreaId(undefined, DEFAULT_SEATING_AREA_ID);
       const idsToDelete = Array.from(existingIds).filter((id) => !nextIds.has(id));
       for (const id of idsToDelete) {
         database.prepare("UPDATE tables SET area_id = ? WHERE area_id = ?").run(fallbackId, id);
         database.prepare("DELETE FROM seating_areas WHERE id = ?").run(id);
       }
 
-      const remaining = database
-        .prepare("SELECT COUNT(*) AS count FROM seating_areas")
-        .get() as { count: number };
+      const remaining = database.prepare("SELECT COUNT(*) AS count FROM seating_areas").get() as {
+        count: number;
+      };
       if (!Number(remaining?.count || 0)) {
         upsert.run(DEFAULT_SEATING_AREA_ID, DEFAULT_SEATING_AREA_NAME, 1, 1, at, at);
       }
@@ -3163,7 +3194,9 @@ export const posService = {
       if (!Number(remainingActive?.count || 0)) {
         throw new Error("seating-area-at-least-one-active");
       }
-      database.prepare("UPDATE tables SET area_id = ? WHERE area_id = ?").run(targetId, normalizedAreaId);
+      database
+        .prepare("UPDATE tables SET area_id = ? WHERE area_id = ?")
+        .run(targetId, normalizedAreaId);
       database.prepare("DELETE FROM seating_areas WHERE id = ?").run(normalizedAreaId);
       createAuditRow(database, "seating_area.deleted", "config", normalizedAreaId, actor || null, {
         reassignToAreaId: targetId,
@@ -3227,7 +3260,9 @@ export const posService = {
     if (!Number.isInteger(safeTableId) || safeTableId <= 0) {
       throw new Error("table-id-invalid");
     }
-    const safeName = String(name || "").trim().slice(0, 40);
+    const safeName = String(name || "")
+      .trim()
+      .slice(0, 40);
     if (!safeName) {
       throw new Error("table-name-invalid");
     }
@@ -3590,8 +3625,7 @@ export const posService = {
     const modeConfig = this.getSetting(SERVICE_MODE_CONFIG_KEY);
     const fallbackModeId =
       input.tableId !== null && input.tableId !== undefined ? "table" : "takeaway";
-    const serviceModeId =
-      normalizeModeId(input.serviceModeId || input.orderType) || fallbackModeId;
+    const serviceModeId = normalizeModeId(input.serviceModeId || input.orderType) || fallbackModeId;
     const orderType = resolveLegacyOrderTypeForWrite(modeConfig, serviceModeId, input.tableId);
     const id = `order:${randomUUID()}`;
     const created = inTransaction((database) => {
@@ -3675,7 +3709,9 @@ export const posService = {
     const tables = this.getTables();
     const tableById = new Map(tables.map((table) => [table.id, table]));
     const tickets = this.getActiveOrders()
-      .filter((order) => order.tableId !== null && order.tableId !== undefined && isKotQueueTicket(order))
+      .filter(
+        (order) => order.tableId !== null && order.tableId !== undefined && isKotQueueTicket(order),
+      )
       .map((order) => {
         const items = order.items || [];
         const { sentCount, unsentCount } = kotLineCounts(items);
@@ -3686,7 +3722,8 @@ export const posService = {
           tableId: Number(order.tableId),
           tableName: formatTableLabel(Number(order.tableId), table?.name),
           kotStatus: order.kotStatus || "pending",
-          lastSendAt: order.kotSent || order.kotPrinted ? Number(order.updatedAt || 0) || null : null,
+          lastSendAt:
+            order.kotSent || order.kotPrinted ? Number(order.updatedAt || 0) || null : null,
           sentSummary: sentLines
             .slice(0, 4)
             .map((line) => `${line.name} ×${Number(line.kotPrintedQty || 0)}`)
@@ -3696,7 +3733,9 @@ export const posService = {
         };
       });
 
-    tickets.sort((a, b) => (b.lastSendAt || 0) - (a.lastSendAt || 0) || a.tableName.localeCompare(b.tableName));
+    tickets.sort(
+      (a, b) => (b.lastSendAt || 0) - (a.lastSendAt || 0) || a.tableName.localeCompare(b.tableName),
+    );
     return { tickets };
   },
 
@@ -3727,10 +3766,12 @@ export const posService = {
       categoryName?: string | null;
     },
     actor?: string | null,
+    options: { baseUpdatedAt?: number | null } = {},
   ) {
     const updated = inTransaction((database) => {
       const order = this.getOrderById(orderId);
       assertOrderCanBeEdited(order);
+      assertOrderBaseUpdatedAt(order, options.baseUpdatedAt);
       const existing = order.items.find(
         (line) => line.name.toLowerCase() === item.name.toLowerCase(),
       );
@@ -3774,10 +3815,16 @@ export const posService = {
     return updated;
   },
 
-  updateOrderLines(orderId: string, lines: OrderLineDto[], actor?: string | null) {
+  updateOrderLines(
+    orderId: string,
+    lines: OrderLineDto[],
+    actor?: string | null,
+    options: { baseUpdatedAt?: number | null } = {},
+  ) {
     const updated = inTransaction((database) => {
       const order = this.getOrderById(orderId);
       assertOrderCanBeEdited(order);
+      assertOrderBaseUpdatedAt(order, options.baseUpdatedAt);
       const sanitized = sanitizeOrderLines(lines);
       assertNoSentKotReduction(order, sanitized);
       upsertOrderLines(database, orderId, sanitized);
@@ -3806,10 +3853,12 @@ export const posService = {
     orderId: string,
     input: { lineId: string; finalQty: number; reason: string },
     actor?: string | null,
+    options: { baseUpdatedAt?: number | null } = {},
   ) {
     const updated = inTransaction((database) => {
       const order = this.getOrderById(orderId);
       assertOrderCanBeEdited(order);
+      assertOrderBaseUpdatedAt(order, options.baseUpdatedAt);
       const lineId = String(input?.lineId || "").trim();
       const reason = normalizeText(input?.reason);
       const finalQty = Math.max(0, Number(input?.finalQty) || 0);
@@ -4060,8 +4109,13 @@ export const posService = {
         order.kotStatus ||
         (order.kotPrinted ? "printed" : order.kotSent ? "sent" : current.kot_status || "pending");
       const modeConfig = this.getSetting(SERVICE_MODE_CONFIG_KEY);
-      const serviceModeId = resolveServiceModeIdFromOrderLike(order) || resolveServiceModeIdFromOrderLike(current);
-      const legacyOrderType = resolveLegacyOrderTypeForWrite(modeConfig, serviceModeId, order.tableId);
+      const serviceModeId =
+        resolveServiceModeIdFromOrderLike(order) || resolveServiceModeIdFromOrderLike(current);
+      const legacyOrderType = resolveLegacyOrderTypeForWrite(
+        modeConfig,
+        serviceModeId,
+        order.tableId,
+      );
       database
         .prepare(
           `UPDATE orders
@@ -4159,7 +4213,8 @@ export const posService = {
         creditDueDate = resolveCreditDueDate({
           explicitDueDate: safePayment.dueDate,
           customerDefaultDays:
-            customerRow?.default_credit_days === null || customerRow?.default_credit_days === undefined
+            customerRow?.default_credit_days === null ||
+            customerRow?.default_credit_days === undefined
               ? null
               : Number(customerRow.default_credit_days),
           restaurantDefaultDays: creditConfig.defaultCreditDays,
@@ -4358,7 +4413,11 @@ export const posService = {
       const paidAt = getOrderPaidAt(order);
       const modeConfig = this.getSetting(SERVICE_MODE_CONFIG_KEY);
       const serviceModeId = resolveServiceModeIdFromOrderLike(order) || "takeaway";
-      const legacyOrderType = resolveLegacyOrderTypeForWrite(modeConfig, serviceModeId, order.tableId);
+      const legacyOrderType = resolveLegacyOrderTypeForWrite(
+        modeConfig,
+        serviceModeId,
+        order.tableId,
+      );
       database
         .prepare(
           `INSERT INTO orders (
@@ -4378,7 +4437,9 @@ export const posService = {
           Number(order.discountPercent || 0),
           getOrderInvoiceNumber(order),
           paidAt,
-          order.status === "cancelled" ? Number(order.cancelledAt || order.updatedAt || createdAt) : null,
+          order.status === "cancelled"
+            ? Number(order.cancelledAt || order.updatedAt || createdAt)
+            : null,
           order.status === "cancelled" ? order.cancelledBy || actor || null : null,
           order.status === "cancelled" ? order.cancellationReason || null : null,
           stringifyJson({ ...(order.meta || {}), serviceModeId }),
@@ -4588,7 +4649,9 @@ export const posService = {
       };
     }
 
-    const orderIds = Array.from(new Set(rows.map((row) => String(row.order_id || "")).filter(Boolean)));
+    const orderIds = Array.from(
+      new Set(rows.map((row) => String(row.order_id || "")).filter(Boolean)),
+    );
 
     const rowsByOrder = new Map<string, any[]>();
     rows.forEach((row) => {
@@ -4722,9 +4785,9 @@ export const posService = {
           ? assertAttendanceConfig(merged)
           : key === CREDIT_CONFIG_KEY
             ? assertCreditConfig(merged as any)
-          : key === SERVICE_MODE_CONFIG_KEY
-            ? toServiceModeConfigDoc(merged)
-          : merged;
+            : key === SERVICE_MODE_CONFIG_KEY
+              ? toServiceModeConfigDoc(merged)
+              : merged;
     const at = now();
     const database = getDb();
     database
@@ -4759,9 +4822,7 @@ export const posService = {
     const actions = ORDER_LIFECYCLE_AUDIT_ACTIONS as readonly string[];
     const placeholders = actions.map(() => "?").join(",");
     const result = getDb()
-      .prepare(
-        `DELETE FROM audit_logs WHERE timestamp < ? AND action NOT IN (${placeholders})`,
-      )
+      .prepare(`DELETE FROM audit_logs WHERE timestamp < ? AND action NOT IN (${placeholders})`)
       .run(cutoff, ...actions);
     return result.changes;
   },
@@ -4935,7 +4996,11 @@ export const posService = {
     });
     const voidEvents = voidAudits.map((audit) => {
       const orderId = String(audit.entityId || audit.orderId || "");
-      const event = voidEventFromAudit(database, audit, orderId ? this.getOrderById(orderId) : null);
+      const event = voidEventFromAudit(
+        database,
+        audit,
+        orderId ? this.getOrderById(orderId) : null,
+      );
       return {
         ...event,
         kotSentAt: kotSentAt.get(event.orderId) || null,
@@ -4950,7 +5015,9 @@ export const posService = {
       }
       const existing = discountEventsByOrder.get(orderId);
       // Prefer real discount audits over synthetic order snapshots; then newest timestamp.
-      const existingIsAudit = Boolean(existing && !String(existing.auditId).startsWith("order-discount:"));
+      const existingIsAudit = Boolean(
+        existing && !String(existing.auditId).startsWith("order-discount:"),
+      );
       const nextIsAudit = !String(event.auditId).startsWith("order-discount:");
       if (
         !existing ||
@@ -5180,7 +5247,9 @@ export const posService = {
 
   listGroceryItems(_opts: { includeInactive?: boolean } = {}): GroceryItemDto[] {
     const database = getDb();
-    const rows = database.prepare("SELECT * FROM grocery_items ORDER BY lower(name) ASC").all() as any[];
+    const rows = database
+      .prepare("SELECT * FROM grocery_items ORDER BY lower(name) ASC")
+      .all() as any[];
     const priceHints = batchGroceryPriceHints(database, rows);
     return rows.map((row: any) => groceryItemFromRow(database, row, true, priceHints.get(row.id)));
   },
@@ -5381,10 +5450,17 @@ export const posService = {
               : paiseToRupees(line.estimated_unit_price_paise),
         }));
       }
-      if ((!sourceLines || !sourceLines.length) && !linesProvided && !input.templateId && !input.sourceListId) {
+      if (
+        (!sourceLines || !sourceLines.length) &&
+        !linesProvided &&
+        !input.templateId &&
+        !input.sourceListId
+      ) {
         // Backward-compatible default: seed from reusable items when no source provided.
         sourceLines = (
-          database.prepare("SELECT * FROM grocery_items WHERE active = 1 ORDER BY lower(name) ASC").all() as any[]
+          database
+            .prepare("SELECT * FROM grocery_items WHERE active = 1 ORDER BY lower(name) ASC")
+            .all() as any[]
         ).map((item) => ({
           groceryItemId: item.id,
           itemName: item.name,
@@ -5394,7 +5470,9 @@ export const posService = {
           vendorHint: item.vendor_hint,
         }));
       }
-      if (!sourceLines) sourceLines = [];
+      if (!sourceLines) {
+        sourceLines = [];
+      }
       const lines = sourceLines.map((line, index) => prepareGroceryListLineInput(line, index));
       const initialStatus: GroceryListStatus = lines.length ? "open" : "draft";
       database
@@ -5404,7 +5482,18 @@ export const posService = {
              completed_at, print_count, last_printed_at, created_at, updated_at
            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, 0, NULL, ?, ?)`,
         )
-        .run(id, title, listDate, listType, initialStatus, notes, actor || null, actor || null, at, at);
+        .run(
+          id,
+          title,
+          listDate,
+          listType,
+          initialStatus,
+          notes,
+          actor || null,
+          actor || null,
+          at,
+          at,
+        );
       const insertLine = database.prepare(
         `INSERT INTO grocery_list_lines (
           id, list_id, grocery_item_id, item_name, category, quantity, unit, vendor_hint,
@@ -5493,8 +5582,12 @@ export const posService = {
         throw new Error("grocery-list-status-invalid");
       }
       // Legacy UI may still send printed/purchased — normalize.
-      if (updates.status === ("printed" as any)) status = "open";
-      if (updates.status === ("purchased" as any)) status = "completed";
+      if (updates.status === ("printed" as any)) {
+        status = "open";
+      }
+      if (updates.status === ("purchased" as any)) {
+        status = "completed";
+      }
 
       const at = now();
       let printCount = Number(current.print_count || 0);
@@ -5895,9 +5988,7 @@ export const posService = {
       params.push(q, q, q);
     }
     return getDb()
-      .prepare(
-        `SELECT * FROM vendors WHERE ${clauses.join(" AND ")} ORDER BY lower(name) ASC`,
-      )
+      .prepare(`SELECT * FROM vendors WHERE ${clauses.join(" AND ")} ORDER BY lower(name) ASC`)
       .all(...params)
       .map(vendorFromRow);
   },
@@ -5915,7 +6006,9 @@ export const posService = {
     actor?: string | null,
   ): VendorDto {
     const name = normalizeText(input.name);
-    if (!name) throw new Error("vendor-name-required");
+    if (!name) {
+      throw new Error("vendor-name-required");
+    }
     const at = now();
     const id = `vendor:${randomUUID()}`;
     return inTransaction((database) => {
@@ -5924,7 +6017,9 @@ export const posService = {
           `SELECT id FROM vendors WHERE deleted_at IS NULL AND name = ? COLLATE NOCASE LIMIT 1`,
         )
         .get(name);
-      if (existing) throw new Error("vendor-name-duplicate");
+      if (existing) {
+        throw new Error("vendor-name-duplicate");
+      }
       database
         .prepare(
           `INSERT INTO vendors (
@@ -5950,14 +6045,12 @@ export const posService = {
     });
   },
 
-  updateVendor(
-    id: string,
-    updates: Partial<VendorDto>,
-    actor?: string | null,
-  ): VendorDto {
+  updateVendor(id: string, updates: Partial<VendorDto>, actor?: string | null): VendorDto {
     return inTransaction((database) => {
       const current = database.prepare("SELECT * FROM vendors WHERE id = ?").get(id) as any;
-      if (!current || current.deleted_at) throw new Error("vendor-not-found");
+      if (!current || current.deleted_at) {
+        throw new Error("vendor-not-found");
+      }
       const name =
         updates.name === undefined ? current.name : normalizeText(updates.name) || current.name;
       database
@@ -6001,7 +6094,9 @@ export const posService = {
   deleteVendor(id: string, actor?: string | null) {
     return inTransaction((database) => {
       const current = database.prepare("SELECT * FROM vendors WHERE id = ?").get(id) as any;
-      if (!current || current.deleted_at) throw new Error("vendor-not-found");
+      if (!current || current.deleted_at) {
+        throw new Error("vendor-not-found");
+      }
       database
         .prepare("UPDATE vendors SET deleted_at = ?, active = 0, updated_at = ? WHERE id = ?")
         .run(now(), now(), id);
@@ -6023,7 +6118,9 @@ export const posService = {
   ): GroceryPurchaseDto[] {
     const clauses: string[] = [];
     const params: unknown[] = [];
-    if (!opts.includeVoided) clauses.push("p.status = 'recorded'");
+    if (!opts.includeVoided) {
+      clauses.push("p.status = 'recorded'");
+    }
     if (opts.from != null) {
       clauses.push("p.purchase_date >= ?");
       params.push(opts.from);
@@ -6066,9 +6163,15 @@ export const posService = {
 
   voidGroceryPurchaseHeader(id: string, actor?: string | null) {
     return inTransaction((database) => {
-      const current = database.prepare("SELECT * FROM grocery_purchases WHERE id = ?").get(id) as any;
-      if (!current) throw new Error("grocery-purchase-not-found");
-      if (current.status === "voided") return { ok: true };
+      const current = database
+        .prepare("SELECT * FROM grocery_purchases WHERE id = ?")
+        .get(id) as any;
+      if (!current) {
+        throw new Error("grocery-purchase-not-found");
+      }
+      if (current.status === "voided") {
+        return { ok: true };
+      }
       const at = now();
       database
         .prepare("UPDATE grocery_purchases SET status = 'voided', updated_at = ? WHERE id = ?")
@@ -6079,7 +6182,11 @@ export const posService = {
           .prepare(
             `SELECT grocery_item_id, item_name, category FROM grocery_purchase_lines WHERE purchase_id = ?`,
           )
-          .all(id) as Array<{ grocery_item_id: string | null; item_name: string; category: string | null }>;
+          .all(id) as Array<{
+          grocery_item_id: string | null;
+          item_name: string;
+          category: string | null;
+        }>;
         const isWholeList = purchaseLines.some(
           (line) =>
             normalizeText(line.item_name).toLowerCase() ===
@@ -6129,7 +6236,9 @@ export const posService = {
 
   listExpenseCategories(opts: { includeInactive?: boolean } = {}): ExpenseCategoryDto[] {
     const clauses = ["deleted_at IS NULL"];
-    if (!opts.includeInactive) clauses.push("active = 1");
+    if (!opts.includeInactive) {
+      clauses.push("active = 1");
+    }
     return getDb()
       .prepare(
         `SELECT * FROM expense_categories WHERE ${clauses.join(" AND ")} ORDER BY sort_order ASC, name ASC`,
@@ -6185,16 +6294,22 @@ export const posService = {
     actor?: string | null,
   ): ExpenseDto {
     const amount = parsePositiveMoney(input.amount);
-    if (amount === null) throw new Error("expense-amount-invalid");
+    if (amount === null) {
+      throw new Error("expense-amount-invalid");
+    }
     const expenseDate = Number(input.expenseDate || now());
-    if (!Number.isFinite(expenseDate) || expenseDate <= 0) throw new Error("expense-date-invalid");
+    if (!Number.isFinite(expenseDate) || expenseDate <= 0) {
+      throw new Error("expense-date-invalid");
+    }
     const id = `expense:${randomUUID()}`;
     const at = now();
     return inTransaction((database) => {
       const category = database
         .prepare("SELECT id FROM expense_categories WHERE id = ? AND deleted_at IS NULL")
         .get(input.categoryId);
-      if (!category) throw new Error("expense-category-not-found");
+      if (!category) {
+        throw new Error("expense-category-not-found");
+      }
       database
         .prepare(
           `INSERT INTO expenses (
@@ -6233,12 +6348,16 @@ export const posService = {
   updateExpense(id: string, updates: Partial<ExpenseDto>, actor?: string | null): ExpenseDto {
     return inTransaction((database) => {
       const current = database.prepare("SELECT * FROM expenses WHERE id = ?").get(id) as any;
-      if (!current || current.deleted_at) throw new Error("expense-not-found");
+      if (!current || current.deleted_at) {
+        throw new Error("expense-not-found");
+      }
       const amount =
         updates.amount === undefined
           ? paiseToRupees(current.amount_paise)
           : parsePositiveMoney(updates.amount);
-      if (amount === null) throw new Error("expense-amount-invalid");
+      if (amount === null) {
+        throw new Error("expense-amount-invalid");
+      }
       const expenseDate =
         updates.expenseDate === undefined ? current.expense_date : Number(updates.expenseDate);
       database
@@ -6286,7 +6405,9 @@ export const posService = {
   voidExpense(id: string, actor?: string | null) {
     return inTransaction((database) => {
       const current = database.prepare("SELECT * FROM expenses WHERE id = ?").get(id) as any;
-      if (!current || current.deleted_at) throw new Error("expense-not-found");
+      if (!current || current.deleted_at) {
+        throw new Error("expense-not-found");
+      }
       database
         .prepare("UPDATE expenses SET deleted_at = ?, updated_at = ? WHERE id = ?")
         .run(now(), now(), id);
@@ -6340,18 +6461,24 @@ export const posService = {
     actor?: string | null,
   ): SalaryAdvanceDto {
     const amount = parsePositiveMoney(input.amount);
-    if (amount === null) throw new Error("salary-advance-amount-invalid");
+    if (amount === null) {
+      throw new Error("salary-advance-amount-invalid");
+    }
     const advanceDate = Number(input.advanceDate || now());
     if (!Number.isFinite(advanceDate) || advanceDate <= 0) {
       throw new Error("salary-advance-date-invalid");
     }
     const staffId = normalizeText(input.staffId);
-    if (!staffId) throw new Error("salary-advance-staff-required");
+    if (!staffId) {
+      throw new Error("salary-advance-staff-required");
+    }
     const id = `salary-advance:${randomUUID()}`;
     const at = now();
     return inTransaction((database) => {
       const staff = database.prepare("SELECT id FROM staff WHERE id = ?").get(staffId);
-      if (!staff) throw new Error("salary-advance-staff-not-found");
+      if (!staff) {
+        throw new Error("salary-advance-staff-not-found");
+      }
       database
         .prepare(
           `INSERT INTO salary_advances (
@@ -6388,7 +6515,9 @@ export const posService = {
   voidSalaryAdvance(id: string, actor?: string | null) {
     return inTransaction((database) => {
       const current = database.prepare("SELECT * FROM salary_advances WHERE id = ?").get(id) as any;
-      if (!current || current.deleted_at) throw new Error("salary-advance-not-found");
+      if (!current || current.deleted_at) {
+        throw new Error("salary-advance-not-found");
+      }
       database
         .prepare("UPDATE salary_advances SET deleted_at = ?, updated_at = ? WHERE id = ?")
         .run(now(), now(), id);
@@ -6422,7 +6551,9 @@ export const posService = {
     actor?: string | null,
   ): BuyingListTemplateDto {
     const name = normalizeText(input.name);
-    if (!name) throw new Error("template-name-required");
+    if (!name) {
+      throw new Error("template-name-required");
+    }
     const id = `grocery-list-template:${randomUUID()}`;
     const at = now();
     return inTransaction((database) => {
@@ -6430,9 +6561,7 @@ export const posService = {
       if ((!lines || !lines.length) && input.sourceListId) {
         lines = (
           database
-            .prepare(
-              `SELECT * FROM grocery_list_lines WHERE list_id = ? ORDER BY sort_order ASC`,
-            )
+            .prepare(`SELECT * FROM grocery_list_lines WHERE list_id = ? ORDER BY sort_order ASC`)
             .all(input.sourceListId) as any[]
         ).map((line) => ({
           groceryItemId: line.grocery_item_id,
@@ -6464,7 +6593,9 @@ export const posService = {
       );
       lines.forEach((line, index) => {
         const itemName = normalizeText(line.itemName);
-        if (!itemName) return;
+        if (!itemName) {
+          return;
+        }
         insertLine.run(
           `grocery-list-template-line:${randomUUID()}`,
           id,
@@ -6478,9 +6609,16 @@ export const posService = {
           at,
         );
       });
-      createAuditRow(database, "grocery.template.created", "grocery-list-template", id, actor || null, {
-        name,
-      });
+      createAuditRow(
+        database,
+        "grocery.template.created",
+        "grocery-list-template",
+        id,
+        actor || null,
+        {
+          name,
+        },
+      );
       return buyingListTemplateFromRow(
         database,
         database.prepare("SELECT * FROM grocery_list_templates WHERE id = ?").get(id),
@@ -6493,13 +6631,22 @@ export const posService = {
       const current = database
         .prepare("SELECT * FROM grocery_list_templates WHERE id = ?")
         .get(id) as any;
-      if (!current || current.deleted_at) throw new Error("template-not-found");
+      if (!current || current.deleted_at) {
+        throw new Error("template-not-found");
+      }
       database
         .prepare(
           "UPDATE grocery_list_templates SET deleted_at = ?, active = 0, updated_at = ? WHERE id = ?",
         )
         .run(now(), now(), id);
-      createAuditRow(database, "grocery.template.deleted", "grocery-list-template", id, actor || null, {});
+      createAuditRow(
+        database,
+        "grocery.template.deleted",
+        "grocery-list-template",
+        id,
+        actor || null,
+        {},
+      );
       return { ok: true };
     });
   },
@@ -6966,9 +7113,7 @@ export const posService = {
     }
     const outstandingPaise = refreshCustomerOutstandingFromLedger(database, customerId);
     const countRow = database
-      .prepare(
-        `SELECT COUNT(*) AS total FROM customer_account_entries WHERE customer_id = ?`,
-      )
+      .prepare(`SELECT COUNT(*) AS total FROM customer_account_entries WHERE customer_id = ?`)
       .get(customerId) as { total: number };
     const outstanding = paiseToRupees(outstandingPaise);
     const overdue = paiseToRupees(sumCustomerOverduePaise(database, customerId));
@@ -7158,11 +7303,13 @@ export const posService = {
     };
   },
 
-  listStaff(opts: {
-    includeInactive?: boolean;
-    status?: "active" | "left" | "all";
-    includePhotos?: boolean;
-  } = {}): StaffDto[] {
+  listStaff(
+    opts: {
+      includeInactive?: boolean;
+      status?: "active" | "left" | "all";
+      includePhotos?: boolean;
+    } = {},
+  ): StaffDto[] {
     const status = opts.status ?? (opts.includeInactive ? "all" : "active");
     const includePhotos = opts.includePhotos === true;
     let where = "";
@@ -7476,7 +7623,11 @@ export const posService = {
         const checkOutTime = normalizeAttendanceTime(row.checkOutTime);
         const breakMinutes = normalizeAttendanceBreakMinutes(row.breakMinutes);
         const overtimeOverrideMinutes = normalizeAttendanceOvertimeOverride(row.overtimeMinutes);
-        const remarks = optionalLimitedText(row.remarks, STAFF_TEXT_LIMITS.notes, "staff-notes-too-long");
+        const remarks = optionalLimitedText(
+          row.remarks,
+          STAFF_TEXT_LIMITS.notes,
+          "staff-notes-too-long",
+        );
         if (status === "leave" && !remarks) {
           throw new Error("attendance-remarks-required-for-leave");
         }
@@ -7491,7 +7642,9 @@ export const posService = {
 
         const explicitId = normalizeText(row.id);
         const existingById = explicitId
-          ? (database.prepare("SELECT id FROM attendance_records WHERE id = ?").get(explicitId) as any)
+          ? (database
+              .prepare("SELECT id FROM attendance_records WHERE id = ?")
+              .get(explicitId) as any)
           : null;
         const existingByUnique = database
           .prepare(
@@ -7572,12 +7725,19 @@ export const posService = {
           created += 1;
         }
       }
-      createAuditRow(database, "attendance.bulk-update", "attendance", attendanceDate, actor || null, {
+      createAuditRow(
+        database,
+        "attendance.bulk-update",
+        "attendance",
         attendanceDate,
-        created,
-        updated,
-        total: rows.length,
-      });
+        actor || null,
+        {
+          attendanceDate,
+          created,
+          updated,
+          total: rows.length,
+        },
+      );
       return this.listAttendance({ date: attendanceDate });
     });
   },
@@ -7811,7 +7971,9 @@ export const posService = {
       destination?: string;
     },
   ) {
-    const row = getDb().prepare("SELECT id FROM backup_records WHERE id = ?").get(id) as { id?: string } | undefined;
+    const row = getDb().prepare("SELECT id FROM backup_records WHERE id = ?").get(id) as
+      | { id?: string }
+      | undefined;
     if (!row?.id) {
       return false;
     }
@@ -8208,9 +8370,10 @@ function staffFromRow(row: any): StaffDto {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     linkedUsername: row.linked_username || null,
-    linkedAccountActive: row.linked_user_active === undefined || row.linked_user_active === null
-      ? null
-      : Boolean(row.linked_user_active),
+    linkedAccountActive:
+      row.linked_user_active === undefined || row.linked_user_active === null
+        ? null
+        : Boolean(row.linked_user_active),
     weeklyOffDays: normalizeWeeklyOffDays(row.weekly_off_days),
     defaultShiftId: row.default_shift_id || "morning",
   };
@@ -8359,10 +8522,7 @@ function salaryAdvanceFromRow(row: any): SalaryAdvanceDto {
   };
 }
 
-function buyingListTemplateFromRow(
-  database: Database.Database,
-  row: any,
-): BuyingListTemplateDto {
+function buyingListTemplateFromRow(database: Database.Database, row: any): BuyingListTemplateDto {
   const lines = (
     database
       .prepare(
@@ -8437,17 +8597,12 @@ function groceryListLineFromRow(row: any): GroceryListLineDto {
     vendorHint: row.vendor_hint || null,
     sortOrder: Number(row.sort_order || 0),
     estimatedUnitPrice:
-      row.estimated_unit_price_paise == null
-        ? null
-        : paiseToRupees(row.estimated_unit_price_paise),
+      row.estimated_unit_price_paise == null ? null : paiseToRupees(row.estimated_unit_price_paise),
     estimatedTotal:
       row.estimated_total_paise == null ? null : paiseToRupees(row.estimated_total_paise),
-    purchasedQuantity:
-      row.purchased_quantity == null ? null : Number(row.purchased_quantity),
+    purchasedQuantity: row.purchased_quantity == null ? null : Number(row.purchased_quantity),
     purchasedUnitPrice:
-      row.purchased_unit_price_paise == null
-        ? null
-        : paiseToRupees(row.purchased_unit_price_paise),
+      row.purchased_unit_price_paise == null ? null : paiseToRupees(row.purchased_unit_price_paise),
     purchasedTotal:
       row.purchased_total_paise == null ? null : paiseToRupees(row.purchased_total_paise),
     lineStatus: row.line_status || "pending",
@@ -8644,7 +8799,7 @@ function groceryItemFromRow(
     active: Boolean(row.active),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-    priceHint: includePriceHint ? priceHint ?? groceryPriceHint(database, row) : undefined,
+    priceHint: includePriceHint ? (priceHint ?? groceryPriceHint(database, row)) : undefined,
   };
 }
 

@@ -1,20 +1,12 @@
 import React from "react";
-import {
-  createGroceryList,
-  type GroceryListDoc,
-} from "../../../../app/db/posRepository";
+import { createGroceryList, type GroceryListDoc } from "../../../../app/db/posRepository";
 import type { BuyingListTemplateDto, GroceryListType } from "../../../../shared/pos";
 import { validationMessage } from "../../../../shared/validation";
 import { Modal } from "../../../components/ui/Modal";
 import { Button } from "../../../components/ui/Button";
 import { Input } from "../../../components/ui/Input";
 import { Select } from "../../../components/ui/Select";
-import {
-  fromInputDate,
-  listTypeLabel,
-  suggestListName,
-  toInputDate,
-} from "../groceryUtils";
+import { fromInputDate, listTypeLabel, suggestListName, toInputDate } from "../groceryUtils";
 import styles from "../Grocery.module.css";
 
 type StartFrom = "blank" | "template" | "previous";
@@ -27,13 +19,7 @@ type Props = {
   onCreated: (list: GroceryListDoc) => void | Promise<void>;
 };
 
-export function NewBuyingListModal({
-  open,
-  templates,
-  recentLists,
-  onClose,
-  onCreated,
-}: Props) {
+export function NewBuyingListModal({ open, templates, recentLists, onClose, onCreated }: Props) {
   const [title, setTitle] = React.useState(suggestListName());
   const [listDate, setListDate] = React.useState(toInputDate(Date.now()));
   const [listType, setListType] = React.useState<GroceryListType>("regular");
@@ -44,7 +30,9 @@ export function NewBuyingListModal({
   const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      return;
+    }
     setTitle(suggestListName());
     setListDate(toInputDate(Date.now()));
     setListType("regular");
@@ -56,7 +44,9 @@ export function NewBuyingListModal({
   }, [open, templates, recentLists]);
 
   const create = async () => {
-    if (saving) return;
+    if (saving) {
+      return;
+    }
     if (startFrom === "template" && !templateId) {
       setError("Select a template to start from.");
       return;

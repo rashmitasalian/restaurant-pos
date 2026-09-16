@@ -44,11 +44,7 @@ class Logger {
   /**
    * Log error with stack trace
    */
-  error(
-    message: string,
-    error?: Error | string,
-    context?: Record<string, any>,
-  ) {
+  error(message: string, error?: Error | string, context?: Record<string, any>) {
     const stack = error instanceof Error ? error.stack : undefined;
     const errorMsg = error instanceof Error ? error.message : String(error);
     this.log("error", message, { ...context, errorMsg }, stack);
@@ -133,8 +129,8 @@ class Logger {
    */
   exportCSV(): string {
     if (this.logs.length === 0) {
-return "timestamp,level,message\n";
-}
+      return "timestamp,level,message\n";
+    }
 
     const headers = ["timestamp", "level", "message", "context"];
     const rows = this.logs.map((log) => [
@@ -163,9 +159,7 @@ return "timestamp,level,message\n";
 }
 
 // Export singleton instance
-export const logger = new Logger(
-  (globalThis as any).pos?.env?.LOG_LEVEL || "info",
-);
+export const logger = new Logger((globalThis as any).pos?.env?.LOG_LEVEL || "info");
 
 export default logger;
 export type { LogEntry };

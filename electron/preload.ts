@@ -106,8 +106,10 @@ contextBridge.exposeInMainWorld("pos", {
     list: () => authInvoke("pos:tables:list"),
     configuredCount: () => authInvoke("pos:tables:configured-count"),
     snapshot: () => authInvoke("pos:tables:snapshot"),
-    setArea: (tableId: number, areaId: string) => authInvoke("pos:tables:set-area", tableId, areaId),
-    setSeats: (tableId: number, seats: number) => authInvoke("pos:tables:set-seats", tableId, seats),
+    setArea: (tableId: number, areaId: string) =>
+      authInvoke("pos:tables:set-area", tableId, areaId),
+    setSeats: (tableId: number, seats: number) =>
+      authInvoke("pos:tables:set-seats", tableId, seats),
     setName: (tableId: number, name: string) => authInvoke("pos:tables:set-name", tableId, name),
     applyFloorLayout: (payload: any) => authInvoke("pos:tables:apply-floor-layout", payload),
   },

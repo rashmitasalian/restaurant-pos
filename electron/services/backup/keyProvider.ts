@@ -20,7 +20,6 @@ type SafeStorageLike = {
 
 function getSafeStorage(): SafeStorageLike {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const electron = require("electron") as { safeStorage?: SafeStorageLike };
     if (electron.safeStorage) {
       return electron.safeStorage;

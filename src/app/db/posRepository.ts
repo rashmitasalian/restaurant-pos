@@ -853,7 +853,9 @@ export async function deleteBuyingListTemplate(id: string) {
 
 function vendorsApi() {
   const vendors = api().vendors;
-  if (!vendors) throw new Error("pos-vendors-api-unavailable");
+  if (!vendors) {
+    throw new Error("pos-vendors-api-unavailable");
+  }
   return vendors;
 }
 
@@ -883,7 +885,9 @@ export async function deleteVendor(id: string) {
 
 function expensesApi() {
   const expenses = api().expenses;
-  if (!expenses) throw new Error("pos-expenses-api-unavailable");
+  if (!expenses) {
+    throw new Error("pos-expenses-api-unavailable");
+  }
   return expenses;
 }
 
@@ -923,7 +927,9 @@ export async function voidExpense(id: string) {
 
 function salaryAdvancesApi() {
   const salaryAdvances = api().salaryAdvances;
-  if (!salaryAdvances) throw new Error("pos-salary-advances-api-unavailable");
+  if (!salaryAdvances) {
+    throw new Error("pos-salary-advances-api-unavailable");
+  }
   return salaryAdvances;
 }
 
@@ -1174,7 +1180,9 @@ export async function getAttendanceConfig(): Promise<AttendanceConfig> {
   return {
     shifts: shifts
       .map((entry: any) => ({
-        id: String(entry?.id || "").trim().toLowerCase(),
+        id: String(entry?.id || "")
+          .trim()
+          .toLowerCase(),
         label: String(entry?.label || "").trim(),
         hours: Number(entry?.hours || 0),
       }))
@@ -1186,9 +1194,7 @@ export async function getAttendanceConfig(): Promise<AttendanceConfig> {
           entry.id !== "half" &&
           entry.hours > 0,
       ),
-    holidays: holidays
-      .map((entry: unknown) => String(entry || "").trim())
-      .filter(Boolean),
+    holidays: holidays.map((entry: unknown) => String(entry || "").trim()).filter(Boolean),
   };
 }
 
@@ -1251,7 +1257,9 @@ export async function listReviewItems(opts: ReviewRangeQuery = {}): Promise<Revi
   return reviewApi().items(opts);
 }
 
-export async function getStaffActivity(opts: ReviewRangeQuery = {}): Promise<StaffActivityRowDto[]> {
+export async function getStaffActivity(
+  opts: ReviewRangeQuery = {},
+): Promise<StaffActivityRowDto[]> {
   return reviewApi().staffActivity(opts);
 }
 

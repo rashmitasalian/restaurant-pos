@@ -10,7 +10,11 @@ type Props = {
 export function PageLoadingFallback({ variant = "page", label }: Props) {
   const statusLabel =
     label ||
-    (variant === "auth" ? "Signing you in" : variant === "manage" ? "Opening Manage" : "Loading page");
+    (variant === "auth"
+      ? "Signing you in"
+      : variant === "manage"
+        ? "Opening Manage"
+        : "Loading page");
 
   if (variant === "auth") {
     return (

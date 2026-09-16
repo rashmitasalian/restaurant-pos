@@ -41,7 +41,9 @@ export type CloudBackupListItem = {
 };
 
 function cloudApiBaseUrl() {
-  const raw = String(process.env.POS_CLOUD_API_URL || "").trim().replace(/\/$/, "");
+  const raw = String(process.env.POS_CLOUD_API_URL || "")
+    .trim()
+    .replace(/\/$/, "");
   return raw;
 }
 
@@ -184,7 +186,12 @@ export class CloudBackupClient {
   }
 
   async list(token: string) {
-    return requestJson<{ items: CloudBackupListItem[] }>("GET", "/api/v1/backups", undefined, token);
+    return requestJson<{ items: CloudBackupListItem[] }>(
+      "GET",
+      "/api/v1/backups",
+      undefined,
+      token,
+    );
   }
 
   async getDownloadUrl(token: string, backupId: string) {
@@ -258,7 +265,9 @@ export class CloudBackupStore {
       throw new Error("cloud-api-not-configured");
     }
     const recovered = await this.client.recover({
-      restaurantCode: String(restaurantCode || "").trim().toUpperCase(),
+      restaurantCode: String(restaurantCode || "")
+        .trim()
+        .toUpperCase(),
       recoveryKey,
       appVersion: app.getVersion(),
       deviceLabel: process.env.COMPUTERNAME || undefined,
@@ -297,7 +306,11 @@ export class CloudBackupStore {
     }
     const filePath = identity.pendingUploadPath;
     if (!fs.existsSync(filePath)) {
-      manager.saveIdentity({ pendingUploadPath: null, pendingUploadBackupId: null, lastCloudError: "local-file-missing" });
+      manager.saveIdentity({
+        pendingUploadPath: null,
+        pendingUploadBackupId: null,
+        lastCloudError: "local-file-missing",
+      });
       return { ok: false, reason: "local-file-missing" };
     }
 
@@ -329,7 +342,8 @@ export class CloudBackupStore {
       return { ok: true, backupId: intent.backupId };
     } catch (error: any) {
       const message = String(error?.message || error);
-      const transient = /network|fetch|timeout|503|502|429|ECONN|ENOTFOUND|cloud-upload-failed/i.test(message);
+      const transient =
+        /network|fetch|timeout|503|502|429|ECONN|ENOTFOUND|cloud-upload-failed/i.test(message);
       manager.saveIdentity({
         lastCloudError: transient ? "pending" : message.slice(0, 200),
       });
@@ -359,7 +373,9 @@ export class CloudBackupStore {
 
 export const cloudBackupStore = new CloudBackupStore();
 
-export function mergeIdentityDefaults(partial?: Partial<CloudIdentitySettings>): CloudIdentitySettings {
+export function mergeIdentityDefaults(
+  partial?: Partial<CloudIdentitySettings>,
+): CloudIdentitySettings {
   return { ...defaultCloudIdentitySettings(), ...(partial || {}) };
 }
 

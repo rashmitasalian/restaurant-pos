@@ -124,22 +124,20 @@ export default function BillingSidebar({
                       const t = info.id;
                       const titleLabel = formatTableTileLabel(t, info.name);
                       const active = tableNum === t && activeOrderType === mode.id;
-                      const occupied =
-                        Boolean(info.occupied) || Number(info.count || 0) > 0;
-                      const elapsed =
-                        occupied && info.openedAt ? formatKotAge(info.openedAt) : "";
+                      const occupied = Boolean(info.occupied) || Number(info.count || 0) > 0;
+                      const elapsed = occupied && info.openedAt ? formatKotAge(info.openedAt) : "";
                       const appearance = tableKotAppearance({
                         occupied,
                         unsentCount: info.unsentCount,
                         sentCount: info.sentCount,
-                        billPending: occupied && (info.status === "held" || info.status === "ready"),
+                        billPending:
+                          occupied && (info.status === "held" || info.status === "ready"),
                         itemCount: info.count,
                         elapsed: elapsed || undefined,
                       });
-                      const amount =
-                        occupied
-                          ? formatCurrency(info.total || 0).replace(/\.00$/, "")
-                          : undefined;
+                      const amount = occupied
+                        ? formatCurrency(info.total || 0).replace(/\.00$/, "")
+                        : undefined;
                       return (
                         <TableTile
                           key={t}
@@ -148,7 +146,7 @@ export default function BillingSidebar({
                           stateLabel={appearance.stateLabel}
                           active={active}
                           seats={info.seats}
-                          itemCount={occupied ? info.count ?? 0 : null}
+                          itemCount={occupied ? (info.count ?? 0) : null}
                           amountLabel={amount}
                           elapsed={appearance.elapsed}
                           metaLabel={appearance.metaLabel}
@@ -174,9 +172,9 @@ export default function BillingSidebar({
                   </button>
                   <ScrollableList className={styles.panelColumn}>
                     {(modeOrders[mode.id] || []).length === 0 ? (
-                        <div className={styles.emptyPanel}>
-                          No active {mode.name.toLowerCase()} orders
-                        </div>
+                      <div className={styles.emptyPanel}>
+                        No active {mode.name.toLowerCase()} orders
+                      </div>
                     ) : (
                       <div className={styles.gridList}>
                         {(modeOrders[mode.id] || []).map((o: any) => (

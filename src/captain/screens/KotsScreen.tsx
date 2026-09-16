@@ -91,7 +91,9 @@ export function KotsScreen({
               <div className="cap-kot-copy">
                 <div className="cap-kot-title">
                   <strong>{ticket.tableName}</strong>
-                  <span className={`cap-kot-status ${ticket.unsentCount > 0 ? "cap-kot-status-pending" : "cap-kot-status-sent"}`}>
+                  <span
+                    className={`cap-kot-status ${ticket.unsentCount > 0 ? "cap-kot-status-pending" : "cap-kot-status-sent"}`}
+                  >
                     {ticket.unsentCount > 0 ? `${ticket.unsentCount} to send` : "KOT sent"}
                   </span>
                 </div>

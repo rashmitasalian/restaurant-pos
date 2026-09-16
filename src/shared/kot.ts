@@ -14,7 +14,9 @@ export function pendingKotQty(line: Pick<OrderLineDto, "qty" | "kotPrintedQty">)
   return Math.max(0, Number(line.qty || 0) - Number(line.kotPrintedQty || 0));
 }
 
-export function kotLineCounts(lines: Array<Pick<OrderLineDto, "qty" | "kotPrintedQty">> | null | undefined) {
+export function kotLineCounts(
+  lines: Array<Pick<OrderLineDto, "qty" | "kotPrintedQty">> | null | undefined,
+) {
   return (lines || []).reduce(
     (counts, line) => ({
       sentCount: counts.sentCount + Math.max(0, Number(line.kotPrintedQty || 0)),
@@ -71,13 +73,26 @@ export function tableKotAppearance(input: {
     };
   }
   const items = Math.max(0, Number(input.itemCount || 0));
-  const metaLabel = [items > 0 ? `${items} item${items === 1 ? "" : "s"}` : "", input.elapsed]
-    .filter(Boolean)
-    .join(" · ") || undefined;
+  const metaLabel =
+    [items > 0 ? `${items} item${items === 1 ? "" : "s"}` : "", input.elapsed]
+      .filter(Boolean)
+      .join(" · ") || undefined;
   if (input.billPending) {
-    return { state: "attention", stateLabel: "Pending", needsKot: false, metaLabel, elapsed: input.elapsed };
+    return {
+      state: "attention",
+      stateLabel: "Pending",
+      needsKot: false,
+      metaLabel,
+      elapsed: input.elapsed,
+    };
   }
-  return { state: "occupied", stateLabel: "KOT sent", needsKot: false, metaLabel, elapsed: input.elapsed };
+  return {
+    state: "occupied",
+    stateLabel: "KOT sent",
+    needsKot: false,
+    metaLabel,
+    elapsed: input.elapsed,
+  };
 }
 
 export function kotSentLinesNeedPrint(

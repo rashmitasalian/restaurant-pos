@@ -14,22 +14,8 @@ export type PaymentMethod =
   | "other"
   | "credit";
 export type KotStatus = "pending" | "sent" | "printed" | "failed";
-export type AttendanceStatus =
-  | "present"
-  | "absent"
-  | "half-day"
-  | "leave"
-  | "holiday";
-export type GroceryUnit =
-  | "g"
-  | "kg"
-  | "ml"
-  | "L"
-  | "unit"
-  | "packet"
-  | "box"
-  | "dozen"
-  | "bunch";
+export type AttendanceStatus = "present" | "absent" | "half-day" | "leave" | "holiday";
+export type GroceryUnit = "g" | "kg" | "ml" | "L" | "unit" | "packet" | "box" | "dozen" | "bunch";
 
 export type PosSession = {
   sessionToken: string;
@@ -292,13 +278,7 @@ export type GroceryListType = "regular" | "refill" | "emergency" | "custom";
 export type GroceryListLineStatus = "pending" | "partial" | "purchased" | "skipped";
 export type GroceryPurchaseStatus = "recorded" | "voided";
 export type GroceryPaymentStatus = "pending" | "partial" | "paid";
-export type GroceryPaymentMethod =
-  | "cash"
-  | "upi"
-  | "card"
-  | "bank_transfer"
-  | "credit"
-  | "other";
+export type GroceryPaymentMethod = "cash" | "upi" | "card" | "bank_transfer" | "credit" | "other";
 
 export type GroceryItemDto = {
   _id: string;

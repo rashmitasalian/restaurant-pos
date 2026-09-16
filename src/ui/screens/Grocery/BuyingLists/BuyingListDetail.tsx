@@ -47,8 +47,12 @@ type Props = {
 };
 
 function lineStateLabel(line: GroceryListDoc["lines"][number]) {
-  if (line.lineStatus === "purchased" || line.purchasedQuantity != null) return "Purchased";
-  if (line.lineStatus === "skipped") return "Skipped";
+  if (line.lineStatus === "purchased" || line.purchasedQuantity != null) {
+    return "Purchased";
+  }
+  if (line.lineStatus === "skipped") {
+    return "Skipped";
+  }
   return "Pending";
 }
 
@@ -164,7 +168,10 @@ export function BuyingListDetail({
 
           <section>
             <h3 className={styles.dayHeading}>Financial summary</h3>
-            <div className={styles.kpiGrid} style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
+            <div
+              className={styles.kpiGrid}
+              style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}
+            >
               <div className={styles.kpi}>
                 <div className={styles.kpiLabel}>
                   {fulfilled || list.status === "completed" ? "Planned / Estimated" : "Estimated"}
@@ -212,18 +219,22 @@ export function BuyingListDetail({
                       <tr key={line.id}>
                         <td>
                           <strong>{line.itemName}</strong>
-                          {line.category ? <div className={styles.hint}>{line.category}</div> : null}
+                          {line.category ? (
+                            <div className={styles.hint}>{line.category}</div>
+                          ) : null}
                         </td>
                         <td>{lineStateLabel(line)}</td>
                         <td>
                           {line.quantity} {line.unit}
                         </td>
                         <td>
-                          {line.purchasedQuantity != null
-                            ? `${line.purchasedQuantity} ${line.unit}`
-                            : line.lineStatus === "purchased"
-                              ? <Check size={14} aria-label="Purchased" />
-                              : "—"}
+                          {line.purchasedQuantity != null ? (
+                            `${line.purchasedQuantity} ${line.unit}`
+                          ) : line.lineStatus === "purchased" ? (
+                            <Check size={14} aria-label="Purchased" />
+                          ) : (
+                            "—"
+                          )}
                         </td>
                         <td>
                           {line.estimatedTotal != null ? formatCurrency(line.estimatedTotal) : "—"}
@@ -250,7 +261,9 @@ export function BuyingListDetail({
                     <div className={styles.sessionMain}>
                       <div className={styles.sessionTitleRow}>
                         <h4 className={styles.sessionTitle}>
-                          {purchase.id.length > 12 ? purchase.id.slice(-8).toUpperCase() : purchase.id}
+                          {purchase.id.length > 12
+                            ? purchase.id.slice(-8).toUpperCase()
+                            : purchase.id}
                         </h4>
                         <Badge tone="success">Recorded</Badge>
                       </div>

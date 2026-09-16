@@ -1018,7 +1018,9 @@ function runSchema(database: SqliteDatabase) {
 
     for (const row of vendorRows) {
       const name = String(row.vendor_name || "").trim();
-      if (!name) continue;
+      if (!name) {
+        continue;
+      }
       let existing = findVendor.get(name) as { id: string } | undefined;
       if (!existing) {
         const id = `vendor:${randomUUID()}`;
@@ -1092,14 +1094,14 @@ function runSchema(database: SqliteDatabase) {
          GROUP BY list_id, COALESCE(vendor_id, '')`,
       )
       .all() as Array<{
-        list_id: string;
-        vendor_id: string | null;
-        purchase_date: number;
-        payment_method: string | null;
-        created_by: string | null;
-        total_paise: number;
-        line_ids: string;
-      }>;
+      list_id: string;
+      vendor_id: string | null;
+      purchase_date: number;
+      payment_method: string | null;
+      created_by: string | null;
+      total_paise: number;
+      line_ids: string;
+    }>;
 
     for (const group of grouped) {
       const purchaseId = `grocery-purchase-hdr:${randomUUID()}`;
@@ -1118,7 +1120,9 @@ function runSchema(database: SqliteDatabase) {
         at,
       );
       for (const lineId of String(group.line_ids || "").split(",")) {
-        if (lineId) linkLines.run(purchaseId, lineId);
+        if (lineId) {
+          linkLines.run(purchaseId, lineId);
+        }
       }
     }
 
@@ -1130,13 +1134,13 @@ function runSchema(database: SqliteDatabase) {
          WHERE purchase_id IS NULL`,
       )
       .all() as Array<{
-        id: string;
-        vendor_id: string | null;
-        purchased_at: number;
-        payment_method: string | null;
-        created_by: string | null;
-        total_paise: number;
-      }>;
+      id: string;
+      vendor_id: string | null;
+      purchased_at: number;
+      payment_method: string | null;
+      created_by: string | null;
+      total_paise: number;
+    }>;
 
     for (const orphan of orphans) {
       const purchaseId = `grocery-purchase-hdr:${randomUUID()}`;
@@ -1263,13 +1267,22 @@ function runSchema(database: SqliteDatabase) {
     `);
   });
 
-  runMigration(database, 19, "People module: staff-account link and attendance shift uniqueness", () => {
-    addColumnIfMissing(database, "users", "staff_id", "TEXT REFERENCES staff(id) ON UPDATE CASCADE ON DELETE SET NULL");
-    database.exec(`
+  runMigration(
+    database,
+    19,
+    "People module: staff-account link and attendance shift uniqueness",
+    () => {
+      addColumnIfMissing(
+        database,
+        "users",
+        "staff_id",
+        "TEXT REFERENCES staff(id) ON UPDATE CASCADE ON DELETE SET NULL",
+      );
+      database.exec(`
       CREATE INDEX IF NOT EXISTS idx_users_staff_id ON users(staff_id) WHERE staff_id IS NOT NULL;
     `);
 
-    database.exec(`
+      database.exec(`
       CREATE TABLE IF NOT EXISTS attendance_records_v19 (
         id TEXT PRIMARY KEY,
         staff_id TEXT NOT NULL REFERENCES staff(id) ON UPDATE CASCADE ON DELETE RESTRICT,
@@ -1308,15 +1321,28 @@ function runSchema(database: SqliteDatabase) {
       CREATE INDEX IF NOT EXISTS idx_attendance_date ON attendance_records(attendance_date);
       CREATE INDEX IF NOT EXISTS idx_attendance_status ON attendance_records(status);
     `);
-  });
+    },
+  );
 
-  runMigration(database, 20, "Attendance model: is_late, staff schedule, remove week-off/late status", () => {
-    addColumnIfMissing(database, "staff", "weekly_off_days", "TEXT NOT NULL DEFAULT '[]'");
-    addColumnIfMissing(database, "staff", "default_shift_id", "TEXT NOT NULL DEFAULT 'morning'");
-    database.prepare("UPDATE staff SET default_shift_id = 'morning' WHERE default_shift_id IS NULL OR trim(default_shift_id) = ''").run();
-    database.prepare("UPDATE staff SET weekly_off_days = '[]' WHERE weekly_off_days IS NULL OR trim(weekly_off_days) = ''").run();
+  runMigration(
+    database,
+    20,
+    "Attendance model: is_late, staff schedule, remove week-off/late status",
+    () => {
+      addColumnIfMissing(database, "staff", "weekly_off_days", "TEXT NOT NULL DEFAULT '[]'");
+      addColumnIfMissing(database, "staff", "default_shift_id", "TEXT NOT NULL DEFAULT 'morning'");
+      database
+        .prepare(
+          "UPDATE staff SET default_shift_id = 'morning' WHERE default_shift_id IS NULL OR trim(default_shift_id) = ''",
+        )
+        .run();
+      database
+        .prepare(
+          "UPDATE staff SET weekly_off_days = '[]' WHERE weekly_off_days IS NULL OR trim(weekly_off_days) = ''",
+        )
+        .run();
 
-    database.exec(`
+      database.exec(`
       CREATE TABLE IF NOT EXISTS attendance_records_v20 (
         id TEXT PRIMARY KEY,
         staff_id TEXT NOT NULL REFERENCES staff(id) ON UPDATE CASCADE ON DELETE RESTRICT,
@@ -1373,7 +1399,8 @@ function runSchema(database: SqliteDatabase) {
       CREATE INDEX IF NOT EXISTS idx_attendance_date ON attendance_records(attendance_date);
       CREATE INDEX IF NOT EXISTS idx_attendance_status ON attendance_records(status);
     `);
-  });
+    },
+  );
 
   runMigration(database, 21, "Add salary advances ledger", () => {
     database.exec(`
@@ -1576,7 +1603,12 @@ function runSchema(database: SqliteDatabase) {
 
   // Startup self-healing for pre-existing/partially migrated databases:
   // ensure area_id exists even if migration 12 was marked applied while the column was missing.
-  addColumnIfMissing(database, "tables", "area_id", `TEXT NOT NULL DEFAULT '${DEFAULT_SEATING_AREA_ID}'`);
+  addColumnIfMissing(
+    database,
+    "tables",
+    "area_id",
+    `TEXT NOT NULL DEFAULT '${DEFAULT_SEATING_AREA_ID}'`,
+  );
   addColumnIfMissing(database, "client_ops", "request_hash", "TEXT");
   // Self-heal cancel columns even if migration 26 was skipped / partially applied.
   addColumnIfMissing(database, "orders", "cancelled_at", "INTEGER");
@@ -1775,7 +1807,11 @@ function seedDatabase(database: SqliteDatabase) {
   insertSetting.run("config:audit", JSON.stringify({ retentionDays: 90 }), now);
   insertSetting.run("config:history", JSON.stringify({ retentionDays: null }), now);
   insertSetting.run("config:tables", JSON.stringify({ tableCount }), now);
-  insertSetting.run("config:invoice", JSON.stringify({ prefix: "INV", fiscalYear: "", lastNumber: 0 }), now);
+  insertSetting.run(
+    "config:invoice",
+    JSON.stringify({ prefix: "INV", fiscalYear: "", lastNumber: 0 }),
+    now,
+  );
   insertSetting.run(
     "config:credit",
     JSON.stringify({ enabled: false, defaultCreditDays: 15 }),

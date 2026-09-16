@@ -239,7 +239,9 @@ function toPayload(form: StaffForm, photo: PhotoDraft | null) {
 }
 
 function toggleWeeklyOffDay(days: number[], day: number) {
-  return days.includes(day) ? days.filter((entry) => entry !== day) : [...days, day].sort((a, b) => a - b);
+  return days.includes(day)
+    ? days.filter((entry) => entry !== day)
+    : [...days, day].sort((a, b) => a - b);
 }
 
 function WeeklyOffField({
@@ -260,7 +262,9 @@ function WeeklyOffField({
               type="button"
               onClick={() => onChange(toggleWeeklyOffDay(value, option.value))}
               aria-pressed={active}
-             variant={active ? "primary" : "secondary"} size="sm">
+              variant={active ? "primary" : "secondary"}
+              size="sm"
+            >
               {option.label.slice(0, 3)}
             </Button>
           );
@@ -325,7 +329,12 @@ function detailRow(label: string, value: unknown) {
 function csvCell(value: unknown) {
   const text = normalizeText(value);
   const safeText = /^[=+\-@]/.test(text) ? `'${text}` : text;
-  if (safeText.includes(",") || safeText.includes('"') || safeText.includes("\n") || safeText.includes("\r")) {
+  if (
+    safeText.includes(",") ||
+    safeText.includes('"') ||
+    safeText.includes("\n") ||
+    safeText.includes("\r")
+  ) {
     return `"${safeText.replace(/"/g, '""')}"`;
   }
   return safeText;
@@ -364,7 +373,9 @@ function buildStaffRosterPdfHtml(
   const generatedAt = new Date().toLocaleString("en-IN");
   const rows = records
     .map((member, index) => {
-      const salary = options.includeSalary ? detailRow("Monthly Salary", formatSalary(member.salary)) : "";
+      const salary = options.includeSalary
+        ? detailRow("Monthly Salary", formatSalary(member.salary))
+        : "";
       const leftStatus = member.active === false ? `<span class="status inactive">Left</span>` : "";
       return `<section class="staff-card">
         <div class="photo-col">${exportPhotoHtml(member, options.includePhotos)}</div>
@@ -599,15 +610,18 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
   const deletingRef = React.useRef<string | null>(null);
   const exportingRef = React.useRef(false);
 
-  const loadStaff = React.useCallback(async (statusOverride?: StaffStatusFilter) => {
-    try {
-      const status = statusOverride ?? statusFilter;
-      setStaff(await listStaff({ status }));
-    } catch (e) {
-      showToast(validationMessage(e, "Failed to load staff"), "error");
-      setStaff([]);
-    }
-  }, [statusFilter, showToast]);
+  const loadStaff = React.useCallback(
+    async (statusOverride?: StaffStatusFilter) => {
+      try {
+        const status = statusOverride ?? statusFilter;
+        setStaff(await listStaff({ status }));
+      } catch (e) {
+        showToast(validationMessage(e, "Failed to load staff"), "error");
+        setStaff([]);
+      }
+    },
+    [statusFilter, showToast],
+  );
 
   React.useEffect(() => {
     loadStaff();
@@ -649,7 +663,9 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
       limit: 500,
     })
       .then((rows) => {
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
         setEditAdvanceTotal(rows.reduce((sum, row) => sum + Number(row.amount || 0), 0));
         setEditAdvanceCount(rows.length);
       })
@@ -707,7 +723,9 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
   };
 
   const duplicatePhone = (phone: string, currentId?: string) =>
-    staff.some((member) => member.active !== false && member.id !== currentId && member.phone === phone);
+    staff.some(
+      (member) => member.active !== false && member.id !== currentId && member.phone === phone,
+    );
 
   const choosePhoto = async (file: File | undefined, mode: "add" | "edit") => {
     if (!file) {
@@ -862,18 +880,20 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
       setConfirmLeftId(null);
       setConfirmDeleteId(null);
       showToast(active ? "Staff member restored" : "Staff member marked Left", "success");
-      if (
-        !active &&
-        member.linkedUsername &&
-        member.linkedAccountActive !== false
-      ) {
+      if (!active && member.linkedUsername && member.linkedAccountActive !== false) {
         setLeftAccountPrompt({
           username: member.linkedUsername,
           staffName: member.name,
         });
       }
     } catch (e) {
-      showToast(validationMessage(e, active ? "Failed to restore staff member" : "Failed to mark staff member Left"), "error");
+      showToast(
+        validationMessage(
+          e,
+          active ? "Failed to restore staff member" : "Failed to mark staff member Left",
+        ),
+        "error",
+      );
     } finally {
       statusChangingRef.current = null;
       setStatusChangingId(null);
@@ -1102,7 +1122,8 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
               type="button"
               onClick={() => setExportOpen(true)}
               disabled={exportingPdf || exportingCsv}
-             variant="secondary">
+              variant="secondary"
+            >
               Export
             </Button>
           }
@@ -1150,7 +1171,8 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
             type="button"
             onClick={() => setExportOpen(true)}
             disabled={exportingPdf || exportingCsv}
-           variant="secondary">
+            variant="secondary"
+          >
             Export
           </Button>
         )}
@@ -1178,7 +1200,14 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
             className="pos-card pos-card-p"
             style={{ width: "min(520px, 100%)", boxShadow: "var(--pos-shadow-overlay)" }}
           >
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginBottom: 16 }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 12,
+                marginBottom: 16,
+              }}
+            >
               <div>
                 <h3 id="staffExportTitle" style={{ margin: 0, fontSize: 18 }}>
                   Export Staff
@@ -1191,7 +1220,9 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
                 type="button"
                 onClick={closeStaffExport}
                 disabled={exportingPdf || exportingCsv}
-               variant="secondary" size="sm">
+                variant="secondary"
+                size="sm"
+              >
                 Close
               </Button>
             </div>
@@ -1218,7 +1249,9 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
                 />
                 <span>
                   <strong>Include salary</strong>
-                  <span style={{ display: "block", color: "var(--pos-saffron-text)", marginTop: 2 }}>
+                  <span
+                    style={{ display: "block", color: "var(--pos-saffron-text)", marginTop: 2 }}
+                  >
                     Salary is sensitive and is excluded by default.
                   </span>
                 </span>
@@ -1252,21 +1285,24 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
                 type="button"
                 onClick={closeStaffExport}
                 disabled={exportingPdf || exportingCsv}
-               variant="secondary">
+                variant="secondary"
+              >
                 Cancel
               </Button>
               <Button
                 type="button"
                 onClick={exportStaffCsv}
                 disabled={exportingPdf || exportingCsv}
-               variant="secondary">
+                variant="secondary"
+              >
                 {exportingCsv ? "Exporting..." : "Export CSV"}
               </Button>
               <Button
                 type="button"
                 onClick={exportStaffPdf}
                 disabled={exportingPdf || exportingCsv}
-               variant="primary">
+                variant="primary"
+              >
                 {exportingPdf ? "Exporting..." : "Export PDF"}
               </Button>
             </div>
@@ -1364,7 +1400,15 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
               maxLength={STAFF_TEXT_LIMITS.notes}
             />
           </div>
-          <div style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 12, flexWrap: "wrap" }}>
+          <div
+            style={{
+              display: "flex",
+              gap: 12,
+              alignItems: "center",
+              marginTop: 12,
+              flexWrap: "wrap",
+            }}
+          >
             {renderPhoto(null, photo)}
             <FieldShell id="staff-photo" label="Photo">
               <input
@@ -1375,21 +1419,26 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
               />
             </FieldShell>
             {photo && (
-              <Button type="button" onClick={() => setPhoto(null)}  variant="secondary" size="sm">
+              <Button type="button" onClick={() => setPhoto(null)} variant="secondary" size="sm">
                 Remove Photo
               </Button>
             )}
           </div>
-          {formError && <div className="pos-field-error" style={{ marginTop: 12 }}>{formError}</div>}
+          {formError && (
+            <div className="pos-field-error" style={{ marginTop: 12 }}>
+              {formError}
+            </div>
+          )}
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 16 }}>
             <Button
               type="button"
               onClick={() => setShowAddModal(false)}
               disabled={saving}
-             variant="secondary">
+              variant="secondary"
+            >
               Cancel
             </Button>
-            <Button onClick={addStaff} disabled={saving}  variant="primary">
+            <Button onClick={addStaff} disabled={saving} variant="primary">
               {saving ? "Saving..." : "Save Staff"}
             </Button>
           </div>
@@ -1499,7 +1548,9 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
                     cancelEdit();
                     window.location.hash = `${PEOPLE_TAB_HASH.advances}?staff=${encodeURIComponent(editingMember.id)}`;
                   }}
-                 variant="secondary" size="sm">
+                  variant="secondary"
+                  size="sm"
+                >
                   View Advances
                 </Button>
               </div>
@@ -1520,7 +1571,9 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
             </FieldShell>
             <WeeklyOffField
               value={editForm.weeklyOffDays}
-              onChange={(weeklyOffDays) => setEditForm((current) => ({ ...current, weeklyOffDays }))}
+              onChange={(weeklyOffDays) =>
+                setEditForm((current) => ({ ...current, weeklyOffDays }))
+              }
             />
             <StaffTextArea
               id="staff-edit-address"
@@ -1539,7 +1592,15 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
               maxLength={STAFF_TEXT_LIMITS.notes}
             />
           </div>
-          <div style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 12, flexWrap: "wrap" }}>
+          <div
+            style={{
+              display: "flex",
+              gap: 12,
+              alignItems: "center",
+              marginTop: 12,
+              flexWrap: "wrap",
+            }}
+          >
             {renderPhoto(editingMember, editPhoto)}
             <FieldShell id="staff-edit-photo" label="Photo">
               <input
@@ -1556,7 +1617,9 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
                   setEditPhoto(null);
                   setEditPhotoChanged(true);
                 }}
-               variant="secondary" size="sm">
+                variant="secondary"
+                size="sm"
+              >
                 Remove Photo
               </Button>
             )}
@@ -1579,7 +1642,9 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
                 <span>@{editingMember.linkedUsername}</span>
                 <span
                   className={`pos-badge ${
-                    editingMember.linkedAccountActive !== false ? "pos-badge-green" : "pos-badge-red"
+                    editingMember.linkedAccountActive !== false
+                      ? "pos-badge-green"
+                      : "pos-badge-red"
                   }`}
                 >
                   {editingMember.linkedAccountActive !== false ? "Active" : "Disabled"}
@@ -1595,22 +1660,25 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
                       cancelEdit();
                       setCreateAccountFor(editingMember);
                     }}
-                   variant="secondary" size="sm">
+                    variant="secondary"
+                    size="sm"
+                  >
                     Create Account
                   </Button>
                 )}
               </>
             )}
           </div>
-          {editError && <div className="pos-field-error" style={{ marginTop: 12 }}>{editError}</div>}
+          {editError && (
+            <div className="pos-field-error" style={{ marginTop: 12 }}>
+              {editError}
+            </div>
+          )}
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 16 }}>
-            <Button type="button" onClick={cancelEdit} disabled={savingEdit}  variant="secondary">
+            <Button type="button" onClick={cancelEdit} disabled={savingEdit} variant="secondary">
               Cancel
             </Button>
-            <Button
-              onClick={() => saveEdit(editingMember)}
-              disabled={savingEdit}
-             variant="primary">
+            <Button onClick={() => saveEdit(editingMember)} disabled={savingEdit} variant="primary">
               {savingEdit ? "Saving..." : "Save Changes"}
             </Button>
           </div>
@@ -1649,18 +1717,14 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
                 <h3 id="staffPhotoPreviewTitle" style={{ margin: 0, fontSize: 16 }}>
                   {photoPreview.name}
                 </h3>
-                <div style={{ marginTop: 2, color: "var(--pos-tx-sub)", fontSize: 12 }}>Staff photo</div>
+                <div style={{ marginTop: 2, color: "var(--pos-tx-sub)", fontSize: 12 }}>
+                  Staff photo
+                </div>
               </div>
-              <Button
-                type="button"
-                onClick={downloadPhotoPreview}
-               variant="primary" size="sm">
+              <Button type="button" onClick={downloadPhotoPreview} variant="primary" size="sm">
                 Download
               </Button>
-              <Button
-                type="button"
-                onClick={closePhotoPreview}
-               variant="secondary" size="sm">
+              <Button type="button" onClick={closePhotoPreview} variant="secondary" size="sm">
                 Close
               </Button>
             </div>
@@ -1764,7 +1828,9 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
               <Button
                 type="button"
                 onClick={() => void openEdit(member)}
-               variant="secondary" size="sm">
+                variant="secondary"
+                size="sm"
+              >
                 Edit
               </Button>
               {isActive ? (
@@ -1774,13 +1840,17 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
                       type="button"
                       onClick={() => changeStaffStatus(member, false)}
                       disabled={isChangingStatus}
-                     variant="secondary" size="sm">
+                      variant="secondary"
+                      size="sm"
+                    >
                       {isChangingStatus ? "..." : "Confirm Left"}
                     </Button>
                     <Button
                       type="button"
                       onClick={() => setConfirmLeftId(null)}
-                     variant="secondary" size="sm">
+                      variant="secondary"
+                      size="sm"
+                    >
                       Cancel
                     </Button>
                   </>
@@ -1791,7 +1861,9 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
                       setConfirmLeftId(member.id);
                       setConfirmDeleteId(null);
                     }}
-                   variant="secondary" size="sm">
+                    variant="secondary"
+                    size="sm"
+                  >
                     Mark Left
                   </Button>
                 )
@@ -1800,7 +1872,9 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
                   type="button"
                   onClick={() => changeStaffStatus(member, true)}
                   disabled={isChangingStatus}
-                 variant="primary" size="sm">
+                  variant="primary"
+                  size="sm"
+                >
                   Restore
                 </Button>
               )}
@@ -1810,13 +1884,17 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
                     type="button"
                     onClick={() => removeStaff(member.id)}
                     disabled={deletingId === member.id}
-                   variant="danger" size="sm">
+                    variant="danger"
+                    size="sm"
+                  >
                     Confirm
                   </Button>
                   <Button
                     type="button"
                     onClick={() => setConfirmDeleteId(null)}
-                   variant="secondary" size="sm">
+                    variant="secondary"
+                    size="sm"
+                  >
                     Cancel
                   </Button>
                 </>
@@ -1827,7 +1905,9 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
                     setConfirmDeleteId(member.id);
                     setConfirmLeftId(null);
                   }}
-                 variant="danger" size="sm">
+                  variant="danger"
+                  size="sm"
+                >
                   Delete
                 </Button>
               )}
@@ -1862,12 +1942,7 @@ function LeftAccountPromptModal({
     setSubmitting(true);
     setError(null);
     try {
-      await updateUser(
-        prompt.username,
-        { active: false },
-        auth?.session?.username,
-        adminPassword,
-      );
+      await updateUser(prompt.username, { active: false }, auth?.session?.username, adminPassword);
       showToast("Account disabled", "success");
       onDone();
     } catch (e) {
@@ -1880,8 +1955,9 @@ function LeftAccountPromptModal({
   return (
     <Modal open title="Disable RestoNiti account?" onClose={submitting ? () => undefined : onClose}>
       <p style={{ margin: "0 0 12px", color: "var(--pos-tx-sub)", lineHeight: 1.5 }}>
-        {prompt.staffName} has been marked as Left. Historical records will be preserved. Their RestoNiti
-        account (@{prompt.username}) is still active. Would you like to disable the account?
+        {prompt.staffName} has been marked as Left. Historical records will be preserved. Their
+        RestoNiti account (@{prompt.username}) is still active. Would you like to disable the
+        account?
       </p>
       <label className="pos-label" htmlFor="left-account-admin-password">
         Your admin password
@@ -1897,11 +1973,19 @@ function LeftAccountPromptModal({
         style={{ marginTop: 6, marginBottom: 12 }}
       />
       {error && <div className="pos-field-error">{error}</div>}
-      <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, flexWrap: "wrap", marginTop: 12 }}>
-        <Button type="button"  onClick={onClose} disabled={submitting} variant="secondary">
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "flex-end",
+          gap: 10,
+          flexWrap: "wrap",
+          marginTop: 12,
+        }}
+      >
+        <Button type="button" onClick={onClose} disabled={submitting} variant="secondary">
           Keep Account Active
         </Button>
-        <Button type="button"  onClick={disableAccount} disabled={submitting} variant="primary">
+        <Button type="button" onClick={disableAccount} disabled={submitting} variant="primary">
           {submitting ? "Disabling..." : "Disable Account"}
         </Button>
       </div>
@@ -1974,7 +2058,11 @@ function CreateStaffAccountModal({
   };
 
   return (
-    <Modal open title={`Create account for ${member.name}`} onClose={submitting ? () => undefined : onClose}>
+    <Modal
+      open
+      title={`Create account for ${member.name}`}
+      onClose={submitting ? () => undefined : onClose}
+    >
       <form onSubmit={handleSubmit} style={{ display: "grid", gap: 12 }}>
         <StaffInput
           id="staff-account-username"
@@ -2031,10 +2119,10 @@ function CreateStaffAccountModal({
         />
         {error && <div className="pos-field-error">{error}</div>}
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
-          <Button type="button"  onClick={onClose} disabled={submitting} variant="secondary">
+          <Button type="button" onClick={onClose} disabled={submitting} variant="secondary">
             Cancel
           </Button>
-          <Button type="submit"  disabled={submitting} variant="primary">
+          <Button type="submit" disabled={submitting} variant="primary">
             {submitting ? "Creating..." : "Create Account"}
           </Button>
         </div>

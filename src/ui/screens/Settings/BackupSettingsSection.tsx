@@ -18,16 +18,26 @@ import {
 } from "../../../app/db/posRepository";
 
 function formatWhen(value: number | string | null | undefined) {
-  if (!value) return "Never";
+  if (!value) {
+    return "Never";
+  }
   const ms = typeof value === "number" ? value : Date.parse(String(value));
-  if (!Number.isFinite(ms)) return "Unknown";
+  if (!Number.isFinite(ms)) {
+    return "Unknown";
+  }
   return new Date(ms).toLocaleString();
 }
 
 function formatBytes(bytes: number) {
-  if (!bytes || bytes <= 0) return "0 B";
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (!bytes || bytes <= 0) {
+    return "0 B";
+  }
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
@@ -146,7 +156,9 @@ export function BackupSettingsSection() {
   };
 
   const runRestore = async () => {
-    if (!confirm) return;
+    if (!confirm) {
+      return;
+    }
     const current = confirm;
     setConfirm(null);
     setBusy("restore");
@@ -160,7 +172,9 @@ export function BackupSettingsSection() {
       setMessage("Restore completed. Restarting…");
       await relaunchAfterBackupRestore();
     } catch (e: any) {
-      setMessage(reportClientError("settings.backup.restore-managed", e, "Could not restore backup"));
+      setMessage(
+        reportClientError("settings.backup.restore-managed", e, "Could not restore backup"),
+      );
       setBusy(null);
     }
   };
@@ -185,7 +199,15 @@ export function BackupSettingsSection() {
           {status?.message || "Loading backup status…"}
         </div>
 
-        <div style={{ display: "grid", gap: 8, fontSize: 13, color: "var(--pos-tx-sub)", marginBottom: 16 }}>
+        <div
+          style={{
+            display: "grid",
+            gap: 8,
+            fontSize: 13,
+            color: "var(--pos-tx-sub)",
+            marginBottom: 16,
+          }}
+        >
           <div>Last cloud backup: {formatWhen(status?.lastCloudBackupAt)}</div>
           <div>Last local backup: {formatWhen(status?.lastLocalBackupAt)}</div>
           <div>Cloud backups: {status?.cloudEnabled ? cloudItems.length : 0} available</div>
@@ -196,13 +218,28 @@ export function BackupSettingsSection() {
         </div>
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-          <Button type="button" variant="primary" disabled={busy !== null} onClick={() => void onBackupNow()}>
+          <Button
+            type="button"
+            variant="primary"
+            disabled={busy !== null}
+            onClick={() => void onBackupNow()}
+          >
             {busy === "create" ? "Creating…" : "Backup Now"}
           </Button>
-          <Button type="button" variant="secondary" disabled={busy !== null} onClick={() => setShowHistory((v) => !v)}>
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={busy !== null}
+            onClick={() => setShowHistory((v) => !v)}
+          >
             {showHistory ? "Hide Backup History" : "View Backup History"}
           </Button>
-          <Button type="button" variant="secondary" disabled={busy !== null} onClick={() => void refresh()}>
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={busy !== null}
+            onClick={() => void refresh()}
+          >
             Refresh
           </Button>
         </div>
@@ -215,12 +252,12 @@ export function BackupSettingsSection() {
               borderRadius: 8,
               fontSize: 13,
               fontWeight: 600,
-              background:
-                /fail|could not|error|not enough/i.test(message)
-                  ? "var(--pos-danger-tint)"
-                  : "var(--pos-success-tint)",
-              color:
-                /fail|could not|error|not enough/i.test(message) ? "var(--pos-danger)" : "var(--pos-success)",
+              background: /fail|could not|error|not enough/i.test(message)
+                ? "var(--pos-danger-tint)"
+                : "var(--pos-success-tint)",
+              color: /fail|could not|error|not enough/i.test(message)
+                ? "var(--pos-danger)"
+                : "var(--pos-success)",
             }}
           >
             {message}
@@ -229,7 +266,11 @@ export function BackupSettingsSection() {
       </div>
 
       {!status?.cloudEnabled ? (
-        <div className="pos-card pos-card-p" style={{ marginBottom: 24 }} data-settings-sec="backup">
+        <div
+          className="pos-card pos-card-p"
+          style={{ marginBottom: 24 }}
+          data-settings-sec="backup"
+        >
           <div
             style={{
               fontSize: 11,
@@ -243,21 +284,32 @@ export function BackupSettingsSection() {
             Cloud Backup
           </div>
           <p style={{ fontSize: 13, color: "var(--pos-tx-sub)", marginTop: 0 }}>
-            Protect your restaurant data with automatic encrypted cloud backups when an internet connection is
-            available.
+            Protect your restaurant data with automatic encrypted cloud backups when an internet
+            connection is available.
           </p>
           {isAdmin ? (
-            <Button type="button" variant="primary" disabled={busy !== null} onClick={() => void onEnableCloud()}>
+            <Button
+              type="button"
+              variant="primary"
+              disabled={busy !== null}
+              onClick={() => void onEnableCloud()}
+            >
               {busy === "activate" ? "Enabling…" : "Enable Cloud Backup"}
             </Button>
           ) : (
-            <div style={{ fontSize: 13, color: "var(--pos-tx-muted)" }}>Ask an admin to enable cloud backup.</div>
+            <div style={{ fontSize: 13, color: "var(--pos-tx-muted)" }}>
+              Ask an admin to enable cloud backup.
+            </div>
           )}
         </div>
       ) : null}
 
       {isAdmin && !status?.cloudEnabled ? (
-        <div className="pos-card pos-card-p" style={{ marginBottom: 24 }} data-settings-sec="backup">
+        <div
+          className="pos-card pos-card-p"
+          style={{ marginBottom: 24 }}
+          data-settings-sec="backup"
+        >
           <div
             style={{
               fontSize: 11,
@@ -286,7 +338,12 @@ export function BackupSettingsSection() {
               onChange={(e) => setRecoveryKeyInput(e.target.value)}
               placeholder="XXXX-XXXX-…"
             />
-            <Button type="button" variant="secondary" disabled={busy !== null} onClick={() => void onRecoverCloud()}>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={busy !== null}
+              onClick={() => void onRecoverCloud()}
+            >
               {busy === "recover" ? "Recovering…" : "Recover Restaurant"}
             </Button>
           </div>
@@ -294,7 +351,11 @@ export function BackupSettingsSection() {
       ) : null}
 
       {showHistory ? (
-        <div className="pos-card pos-card-p" style={{ marginBottom: 24 }} data-settings-sec="backup">
+        <div
+          className="pos-card pos-card-p"
+          style={{ marginBottom: 24 }}
+          data-settings-sec="backup"
+        >
           <div
             style={{
               fontSize: 11,
@@ -309,7 +370,9 @@ export function BackupSettingsSection() {
           </div>
           <div style={{ display: "grid", gap: 8 }}>
             {history.length === 0 && cloudItems.length === 0 ? (
-              <div style={{ fontSize: 13, color: "var(--pos-tx-muted)" }}>No backup records yet.</div>
+              <div style={{ fontSize: 13, color: "var(--pos-tx-muted)" }}>
+                No backup records yet.
+              </div>
             ) : null}
             {history.slice(0, 30).map((row) => (
               <div
@@ -326,11 +389,14 @@ export function BackupSettingsSection() {
                 <div>
                   <div style={{ fontWeight: 600 }}>
                     {String(row.destination || "").startsWith("cloud") ? "Cloud" : "Local"} backup
-                    {row.status === "failed" || row.status === "upload_pending" ? ` (${row.status})` : ""}
+                    {row.status === "failed" || row.status === "upload_pending"
+                      ? ` (${row.status})`
+                      : ""}
                   </div>
                   <div style={{ color: "var(--pos-tx-muted)" }}>{formatWhen(row.created_at)}</div>
                 </div>
-                {row.destination === "local" && String(row.path_or_provider || "").endsWith(".rnbak") ? (
+                {row.destination === "local" &&
+                String(row.path_or_provider || "").endsWith(".rnbak") ? (
                   <Button
                     type="button"
                     variant="secondary"
@@ -392,7 +458,9 @@ export function BackupSettingsSection() {
         onCancel={() => setRecoveryKey(null)}
         onConfirm={() => setRecoveryKey(null)}
       >
-        <p>Save this somewhere safe. You will need it if this computer is lost, damaged, or replaced.</p>
+        <p>
+          Save this somewhere safe. You will need it if this computer is lost, damaged, or replaced.
+        </p>
         {status?.restaurantCode ? <p>Restaurant code: {status.restaurantCode}</p> : null}
         <pre className="ui-confirm-details" style={{ whiteSpace: "pre-wrap" }}>
           {recoveryKey}
@@ -425,7 +493,10 @@ export function BackupSettingsSection() {
           This will replace the current restaurant database with the selected backup
           {confirm ? ` from ${confirm.label}` : ""}.
         </p>
-        <p>A safety backup of your current data will be created first. The app will restart after restore.</p>
+        <p>
+          A safety backup of your current data will be created first. The app will restart after
+          restore.
+        </p>
       </ConfirmModal>
     </>
   );

@@ -25,8 +25,8 @@ export const ToastContext = React.createContext<ToastContextType | null>(null);
 export function useToast(): ToastContextType {
   const ctx = React.useContext(ToastContext);
   if (!ctx) {
-throw new Error("useToast must be used inside <ToastProvider>");
-}
+    throw new Error("useToast must be used inside <ToastProvider>");
+  }
   return ctx;
 }
 

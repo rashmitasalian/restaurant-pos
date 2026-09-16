@@ -41,7 +41,12 @@ function fitSize(width: number, height: number, maxWidth: number, maxHeight: num
   };
 }
 
-function drawContained(image: HTMLImageElement, width: number, height: number, background?: string) {
+function drawContained(
+  image: HTMLImageElement,
+  width: number,
+  height: number,
+  background?: string,
+) {
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;

@@ -39,7 +39,9 @@ describe("shared validation", () => {
   it("hides sqlite and ipc internals from the ui", () => {
     const ipcError =
       "Error invoking remote method 'pos:grocery:purchase-headers:list': SqliteError: ambiguous column name: status";
-    expect(validationMessage(ipcError, "Could not load purchases")).toBe("Could not load purchases");
+    expect(validationMessage(ipcError, "Could not load purchases")).toBe(
+      "Could not load purchases",
+    );
     expect(isTechnicalErrorMessage(normalizeClientErrorMessage(ipcError))).toBe(true);
   });
 

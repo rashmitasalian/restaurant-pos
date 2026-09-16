@@ -1,4 +1,12 @@
-import { createCipheriv, createDecipheriv, createHmac, hkdfSync, randomBytes, scryptSync, timingSafeEqual } from "crypto";
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHmac,
+  hkdfSync,
+  randomBytes,
+  scryptSync,
+  timingSafeEqual,
+} from "crypto";
 import { createCredentialHash, verifyCredential } from "../credentials";
 import { generateBackupKey } from "./encryption";
 
@@ -47,8 +55,12 @@ export function normalizeRecoveryKey(input: string) {
     .toUpperCase()
     .replace(/[^0-9A-Z]/g, "")
     .replace(/[ILO]/g, (ch) => {
-      if (ch === "I" || ch === "L") return "1";
-      if (ch === "O") return "0";
+      if (ch === "I" || ch === "L") {
+        return "1";
+      }
+      if (ch === "O") {
+        return "0";
+      }
       return ch;
     });
 }
@@ -59,7 +71,13 @@ export function generateRecoveryKeyBytes(byteLength = 16) {
 
 function deriveWrapKey(recoveryKeyNormalized: string) {
   return Buffer.from(
-    hkdfSync("sha256", Buffer.from(recoveryKeyNormalized, "utf8"), Buffer.from("restoniti-backup-v1"), "backup-key-wrap", 32),
+    hkdfSync(
+      "sha256",
+      Buffer.from(recoveryKeyNormalized, "utf8"),
+      Buffer.from("restoniti-backup-v1"),
+      "backup-key-wrap",
+      32,
+    ),
   );
 }
 

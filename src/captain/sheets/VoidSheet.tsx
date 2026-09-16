@@ -1,8 +1,5 @@
 import React from "react";
-import {
-  CANCEL_REASON_OTHER,
-  CANCEL_REASON_PRESETS,
-} from "../../shared/cancelReasons";
+import { CANCEL_REASON_OTHER, CANCEL_REASON_PRESETS } from "../../shared/cancelReasons";
 
 export function VoidSheet({
   lineName,

@@ -43,7 +43,7 @@ module.exports = [
       ],
       "prefer-const": "warn",
       "no-var": "error",
-      eqeqeq: ["error", "always"],
+      eqeqeq: ["error", "always", { null: "ignore" }],
       curly: "error",
       "brace-style": ["error", "1tbs"],
       "comma-dangle": ["error", "always-multiline"],

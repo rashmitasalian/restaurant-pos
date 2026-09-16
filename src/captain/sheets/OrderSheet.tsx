@@ -72,7 +72,9 @@ export function OrderSheet({
           <div className="cap-sheet-head">
             <div>
               <h3>KOT Preview</h3>
-              <div className="cap-meta">{tableName} · {newCount} to send</div>
+              <div className="cap-meta">
+                {tableName} · {newCount} to send
+              </div>
             </div>
             <button
               type="button"
@@ -158,7 +160,13 @@ export function OrderSheet({
               <section className="cap-ticket-group">
                 <div className="cap-ticket-label">KOT sent</div>
                 {sentLines.map((line) => (
-                  <TicketLine key={line.id} line={line} sent busy={sending} onChangeQty={onChangeQty} />
+                  <TicketLine
+                    key={line.id}
+                    line={line}
+                    sent
+                    busy={sending}
+                    onChangeQty={onChangeQty}
+                  />
                 ))}
               </section>
             ) : null}
@@ -178,7 +186,9 @@ export function OrderSheet({
           ) : newCount === 0 ? (
             <p className="cap-meta">Add new items to send a KOT.</p>
           ) : (
-            <p className="cap-meta">{newCount} item{newCount === 1 ? "" : "s"} ready for kitchen.</p>
+            <p className="cap-meta">
+              {newCount} item{newCount === 1 ? "" : "s"} ready for kitchen.
+            </p>
           )}
           <button
             type="button"
@@ -188,7 +198,12 @@ export function OrderSheet({
           >
             {sending ? "Sending…" : sendPhase === "failed" ? "Try again" : "Send KOT"}
           </button>
-          <button type="button" className="cap-btn cap-btn-quiet" disabled={sending} onClick={onAddMore}>
+          <button
+            type="button"
+            className="cap-btn cap-btn-quiet"
+            disabled={sending}
+            onClick={onAddMore}
+          >
             Add more items
           </button>
         </div>

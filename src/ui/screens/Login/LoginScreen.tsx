@@ -104,9 +104,7 @@ export default function LoginScreen() {
                 <span className={authStyles.brandResto}>Resto</span>
                 <span className={authStyles.brandNiti}>Niti</span>
               </div>
-              <p className={authStyles.brandTagline}>
-                Built for the restaurant floor.
-              </p>
+              <p className={authStyles.brandTagline}>Built for the restaurant floor.</p>
               <ul className={authStyles.brandCapabilities}>
                 <li>Billing</li>
                 <li>KOT &amp; printing</li>
@@ -135,7 +133,9 @@ export default function LoginScreen() {
                 <img src={branding.logoDataUrl} alt="" className={authStyles.hotelLogo} />
               ) : null}
               <div style={{ minWidth: 0 }}>
-                {restaurantName ? <div className={authStyles.hotelName}>{restaurantName}</div> : null}
+                {restaurantName ? (
+                  <div className={authStyles.hotelName}>{restaurantName}</div>
+                ) : null}
                 <div className={authStyles.hotelMeta}>Restaurant staff access</div>
               </div>
             </div>
@@ -177,7 +177,11 @@ export default function LoginScreen() {
                 tabIndex={-1}
                 className={authStyles.passwordToggle}
               >
-                {showPassword ? <EyeOff size={18} strokeWidth={2} /> : <Eye size={18} strokeWidth={2} />}
+                {showPassword ? (
+                  <EyeOff size={18} strokeWidth={2} />
+                ) : (
+                  <Eye size={18} strokeWidth={2} />
+                )}
               </button>
             </div>
           </label>
@@ -306,17 +310,24 @@ function RecoveryModal({
         onClick={(event) => event.stopPropagation()}
         className={authStyles.overlayCard}
       >
-        <h3 id="recoveryDialogTitle" style={{ margin: "0 0 8px", fontSize: 17, color: "var(--pos-tx)" }}>
+        <h3
+          id="recoveryDialogTitle"
+          style={{ margin: "0 0 8px", fontSize: 17, color: "var(--pos-tx)" }}
+        >
           Recover admin access
         </h3>
-        <p style={{ margin: "0 0 18px", fontSize: 13, lineHeight: 1.5, color: "var(--pos-tx-sub)" }}>
-          Recovery works only for the single last active admin account and requires an unused one-time
-          recovery code.
+        <p
+          style={{ margin: "0 0 18px", fontSize: 13, lineHeight: 1.5, color: "var(--pos-tx-sub)" }}
+        >
+          Recovery works only for the single last active admin account and requires an unused
+          one-time recovery code.
         </p>
 
         {success ? (
           <>
-            <Message tone="success">Password changed. You can sign in with the new password.</Message>
+            <Message tone="success">
+              Password changed. You can sign in with the new password.
+            </Message>
             <div className={authStyles.overlayActions}>
               <Button type="button" size="sm" variant="secondary" onClick={onClose}>
                 Back to sign in
@@ -390,7 +401,13 @@ function RecoveryModal({
             ) : null}
 
             <div className={authStyles.overlayActions}>
-              <Button type="button" size="sm" variant="secondary" onClick={onClose} disabled={isSubmitting}>
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                onClick={onClose}
+                disabled={isSubmitting}
+              >
                 Cancel
               </Button>
               <Button

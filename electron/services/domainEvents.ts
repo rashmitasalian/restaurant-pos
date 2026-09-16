@@ -47,10 +47,9 @@ export function publishDomainEvent(
   return event;
 }
 
+/** One wake per mutation. Desktop maps this to floor + activity; Captain SSE must not get a 3× stampede. */
 export function publishOrdersChanged(payload?: Record<string, unknown>) {
   publishDomainEvent("orders-changed", payload);
-  publishDomainEvent("activity-changed", payload);
-  publishDomainEvent("tables-changed", payload);
 }
 
 export function onDomainEvent(listener: DomainEventListener) {

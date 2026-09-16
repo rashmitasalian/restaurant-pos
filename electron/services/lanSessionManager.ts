@@ -15,7 +15,10 @@ export type LanSession = {
 const sessions = new Map<string, LanSession>();
 
 export function createLanSession(
-  user: Pick<{ username: string; role: Role; displayName?: string }, "username" | "role" | "displayName">,
+  user: Pick<
+    { username: string; role: Role; displayName?: string },
+    "username" | "role" | "displayName"
+  >,
   deviceId?: string | null,
 ) {
   const token = randomBytes(32).toString("base64url");

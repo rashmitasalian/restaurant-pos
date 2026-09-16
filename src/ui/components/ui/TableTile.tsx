@@ -36,8 +36,7 @@ export function TableTile({
   disabled?: boolean;
   "aria-label"?: string;
 }) {
-  const tone =
-    state === "attention" ? "attention" : state === "occupied" ? "occupied" : "neutral";
+  const tone = state === "attention" ? "attention" : state === "occupied" ? "occupied" : "neutral";
   const label =
     stateLabel ||
     (state === "attention" ? "Pending" : state === "occupied" ? "Occupied" : "Available");

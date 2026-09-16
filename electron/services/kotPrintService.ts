@@ -79,7 +79,7 @@ export const kotPrintService = {
   async sendKotForOrder(
     orderId: string,
     actorUsername: string,
-    options: { clientOpId?: string | null } = {},
+    options: { clientOpId?: string | null; baseUpdatedAt?: number | null } = {},
   ) {
     const clientOpId = String(options.clientOpId || "").trim();
     if (clientOpId) {
@@ -97,6 +97,11 @@ export const kotPrintService = {
     const order = posService.getOrderById(orderId);
     if (!order) {
       throw new Error("order-not-found");
+    }
+    if (options.baseUpdatedAt != null && Number.isFinite(Number(options.baseUpdatedAt))) {
+      if (Number(order.updatedAt) !== Number(options.baseUpdatedAt)) {
+        throw new Error("order-conflict");
+      }
     }
     const unsent = getUnsentKotLines(order.items || []);
     if (!unsent.length) {
@@ -160,7 +165,7 @@ export const kotPrintService = {
     orderId: string,
     input: { lineId: string; finalQty: number; reason: string },
     actorUsername: string,
-    options: { clientOpId?: string | null } = {},
+    options: { clientOpId?: string | null; baseUpdatedAt?: number | null } = {},
   ) {
     const clientOpId = String(options.clientOpId || "").trim();
     if (clientOpId) {
@@ -183,6 +188,11 @@ export const kotPrintService = {
     const order = posService.getOrderById(orderId);
     if (!order) {
       throw new Error("order-not-found");
+    }
+    if (options.baseUpdatedAt != null && Number.isFinite(Number(options.baseUpdatedAt))) {
+      if (Number(order.updatedAt) !== Number(options.baseUpdatedAt)) {
+        throw new Error("order-conflict");
+      }
     }
     const line = order.items.find((candidate) => candidate.id === input.lineId);
     if (!line) {
@@ -209,6 +219,8 @@ export const kotPrintService = {
     );
 
     await printKitchenLines(lines);
+    // Version already checked above; skip re-check after await so a concurrent
+    // edit during print I/O cannot leave a printed void without a DB update.
     const updated = posService.voidKotLine(orderId, input, actorUsername);
     const result = { ok: true as const, order: updated, voidQty };
     if (clientOpId) {

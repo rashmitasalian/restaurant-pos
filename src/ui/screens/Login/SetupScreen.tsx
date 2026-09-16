@@ -94,7 +94,9 @@ export default function SetupScreen({ onComplete }: { onComplete: () => void }) 
                 </>
               )}
             </div>
-            <div style={{ fontSize: 13, color: "var(--pos-tx-sub)", marginTop: 2 }}>First-time setup</div>
+            <div style={{ fontSize: 13, color: "var(--pos-tx-sub)", marginTop: 2 }}>
+              First-time setup
+            </div>
           </div>
         </div>
 
@@ -107,7 +109,14 @@ export default function SetupScreen({ onComplete }: { onComplete: () => void }) 
           />
         ) : (
           <form onSubmit={handleSubmit}>
-            <p style={{ fontSize: 13, color: "var(--pos-tx-sub)", margin: "12px 0 24px", lineHeight: 1.5 }}>
+            <p
+              style={{
+                fontSize: 13,
+                color: "var(--pos-tx-sub)",
+                margin: "12px 0 24px",
+                lineHeight: 1.5,
+              }}
+            >
               No accounts exist yet. Create the owner administrator account. The next step will show{" "}
               {RECOVERY_CODE_COUNT} one-time recovery codes for offline password recovery.
             </p>
@@ -167,13 +176,22 @@ export default function SetupScreen({ onComplete }: { onComplete: () => void }) 
                 disabled={isSubmitting}
               />
               {confirmPassword && password !== confirmPassword && (
-                <span style={{ fontSize: 12, color: "var(--pos-danger)", marginTop: 4, display: "block" }}>
+                <span
+                  style={{
+                    fontSize: 12,
+                    color: "var(--pos-danger)",
+                    marginTop: 4,
+                    display: "block",
+                  }}
+                >
                   Passwords do not match
                 </span>
               )}
             </label>
 
-            {error && <div className={`${authStyles.message} ${authStyles.messageError}`}>{error}</div>}
+            {error && (
+              <div className={`${authStyles.message} ${authStyles.messageError}`}>{error}</div>
+            )}
 
             <button
               type="submit"
@@ -202,7 +220,9 @@ function RecoveryCodesStep({
 }) {
   return (
     <div>
-      <p style={{ fontSize: 13, color: "var(--pos-tx-sub)", margin: "12px 0 18px", lineHeight: 1.5 }}>
+      <p
+        style={{ fontSize: 13, color: "var(--pos-tx-sub)", margin: "12px 0 18px", lineHeight: 1.5 }}
+      >
         Save these {RECOVERY_CODE_COUNT} recovery codes now. They are shown only once and each code
         can be used one time to recover the last active admin account.
       </p>

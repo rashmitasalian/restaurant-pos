@@ -105,9 +105,10 @@ export function planTablesFromAreas(areas: AreaTablePlan[]): {
   return { tables, total: tables.length };
 }
 
-export function inferNamingFromTables(
-  names: string[],
-): { namingMode: TableNamingMode; prefix: string } {
+export function inferNamingFromTables(names: string[]): {
+  namingMode: TableNamingMode;
+  prefix: string;
+} {
   const cleaned = (names || []).map((name) => String(name || "").trim()).filter(Boolean);
   if (!cleaned.length) {
     return { namingMode: "number", prefix: "" };
@@ -143,10 +144,7 @@ export function suggestPrefixFromAreaName(name: string) {
 }
 
 /** Display label for a table — prefers configured name (G1, Patio), else Table N. */
-export function formatTableLabel(
-  tableId: number | null | undefined,
-  name?: string | null,
-): string {
+export function formatTableLabel(tableId: number | null | undefined, name?: string | null): string {
   if (tableId === null || tableId === undefined || !Number.isFinite(Number(tableId))) {
     return "";
   }

@@ -32,6 +32,7 @@
     "perf": "npm run perf:seed && npm run perf:app",
     "perf:all": "npm run perf:seed && npm run perf:app && npm run perf:ui",
     "demo:seed": "node scripts/client-demo-seed.cjs",
+    "captain:load": "node scripts/captain-load-test.cjs",
     "audit": "npm audit --audit-level=low",
     "audit:json": "npm audit --json > audit.json",
     "audit:fix": "npm audit fix"

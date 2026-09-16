@@ -15,11 +15,7 @@ export const DEFAULT_CREDIT_CONFIG: CreditConfig = {
 
 export type CustomerCreditTermPreset = "today" | 7 | 15 | 30 | "custom";
 
-export type CustomerAccountEntryType =
-  | "credit_sale"
-  | "payment_received"
-  | "void"
-  | "adjustment";
+export type CustomerAccountEntryType = "credit_sale" | "payment_received" | "void" | "adjustment";
 
 export type CustomerAccountEntryDto = {
   id: string;
@@ -160,15 +156,22 @@ export function resolveCreditDueDate(opts: {
   return addDaysToDateOnly(saleDate, days);
 }
 
-export function isCreditOverdue(dueDate: string | null | undefined, remainingPaise: number, businessDateOnly?: string) {
+export function isCreditOverdue(
+  dueDate: string | null | undefined,
+  remainingPaise: number,
+  businessDateOnly?: string,
+) {
   if (!dueDate || !isValidDateOnly(dueDate) || remainingPaise <= 0) {
     return false;
   }
-  const today = businessDateOnly && isValidDateOnly(businessDateOnly) ? businessDateOnly : todayDateOnly();
+  const today =
+    businessDateOnly && isValidDateOnly(businessDateOnly) ? businessDateOnly : todayDateOnly();
   return dueDate < today;
 }
 
-export function buildCreditSaleDescription(items: Array<{ name?: string; qty?: number }> | null | undefined) {
+export function buildCreditSaleDescription(
+  items: Array<{ name?: string; qty?: number }> | null | undefined,
+) {
   const lines = (items || [])
     .map((item) => {
       const name = String(item?.name || "").trim();

@@ -19,8 +19,16 @@ import {
 import { onDomainEvent, publishDomainEvent, type DomainEvent } from "../services/domainEvents";
 
 export const GATEWAY_DEFAULT_PORT = Number(process.env.POS_GATEWAY_PORT || 4747);
+const SSE_HEARTBEAT_MS = 20_000;
+/** Only these domain events are pushed to Captain phones (avoids 3× stampede). */
+const SSE_BROADCAST_TYPES = new Set(["orders-changed", "gateway-status"]);
 
 type JsonBody = Record<string, unknown>;
+
+type SseClient = {
+  res: http.ServerResponse;
+  token: string;
+};
 
 type GatewayState = {
   server: http.Server | null;
@@ -28,7 +36,8 @@ type GatewayState = {
   pairingCode: string;
   startedAt: number | null;
   unsubscribeEvents: (() => void) | null;
-  sseClients: Set<http.ServerResponse>;
+  sseClients: Set<SseClient>;
+  heartbeatTimer: NodeJS.Timeout | null;
 };
 
 const state: GatewayState = {
@@ -38,6 +47,7 @@ const state: GatewayState = {
   startedAt: null,
   unsubscribeEvents: null,
   sseClients: new Set(),
+  heartbeatTimer: null,
 };
 
 function json(res: http.ServerResponse, status: number, body: unknown) {
@@ -112,11 +122,7 @@ function publicUser(session: LanSession) {
 }
 
 function readClientOpId(req: http.IncomingMessage, body: JsonBody): string | null {
-  return (
-    normalizeText(body.clientOpId) ||
-    normalizeText(req.headers["x-client-op-id"]) ||
-    null
-  );
+  return normalizeText(body.clientOpId) || normalizeText(req.headers["x-client-op-id"]) || null;
 }
 
 function replayClientOp(
@@ -177,21 +183,44 @@ function captainDistRoot() {
     path.join(__dirname, "..", "..", "dist"),
     path.join(process.cwd(), "dist"),
   ];
-  return candidates.find((candidate) => fs.existsSync(path.join(candidate, "captain", "index.html"))) || null;
+  return (
+    candidates.find((candidate) => fs.existsSync(path.join(candidate, "captain", "index.html"))) ||
+    null
+  );
 }
 
 function contentTypeFor(filePath: string) {
   const ext = path.extname(filePath).toLowerCase();
-  if (ext === ".html") return "text/html; charset=utf-8";
-  if (ext === ".js") return "text/javascript; charset=utf-8";
-  if (ext === ".css") return "text/css; charset=utf-8";
-  if (ext === ".svg") return "image/svg+xml";
-  if (ext === ".png") return "image/png";
-  if (ext === ".jpg" || ext === ".jpeg") return "image/jpeg";
-  if (ext === ".woff2") return "font/woff2";
-  if (ext === ".woff") return "font/woff";
-  if (ext === ".json") return "application/json; charset=utf-8";
-  if (ext === ".webmanifest") return "application/manifest+json; charset=utf-8";
+  if (ext === ".html") {
+    return "text/html; charset=utf-8";
+  }
+  if (ext === ".js") {
+    return "text/javascript; charset=utf-8";
+  }
+  if (ext === ".css") {
+    return "text/css; charset=utf-8";
+  }
+  if (ext === ".svg") {
+    return "image/svg+xml";
+  }
+  if (ext === ".png") {
+    return "image/png";
+  }
+  if (ext === ".jpg" || ext === ".jpeg") {
+    return "image/jpeg";
+  }
+  if (ext === ".woff2") {
+    return "font/woff2";
+  }
+  if (ext === ".woff") {
+    return "font/woff";
+  }
+  if (ext === ".json") {
+    return "application/json; charset=utf-8";
+  }
+  if (ext === ".webmanifest") {
+    return "application/manifest+json; charset=utf-8";
+  }
   return "application/octet-stream";
 }
 
@@ -230,14 +259,75 @@ function serveCaptainStatic(req: http.IncomingMessage, res: http.ServerResponse,
 }
 
 function broadcastSse(event: DomainEvent) {
+  if (!SSE_BROADCAST_TYPES.has(event.type)) {
+    return;
+  }
   const data = `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`;
   for (const client of state.sseClients) {
     try {
-      client.write(data);
+      client.res.write(data);
     } catch {
       state.sseClients.delete(client);
     }
   }
+}
+
+function touchSseSessions() {
+  for (const client of state.sseClients) {
+    if (!getLanSession(client.token)) {
+      try {
+        client.res.end();
+      } catch {
+        // ignore
+      }
+      state.sseClients.delete(client);
+    }
+  }
+}
+
+function writeSseHeartbeats() {
+  touchSseSessions();
+  for (const client of state.sseClients) {
+    try {
+      client.res.write(": ping\n\n");
+    } catch {
+      state.sseClients.delete(client);
+    }
+  }
+}
+
+function startSseHeartbeat() {
+  if (state.heartbeatTimer) {
+    return;
+  }
+  state.heartbeatTimer = setInterval(() => {
+    writeSseHeartbeats();
+  }, SSE_HEARTBEAT_MS);
+  // Unref so heartbeat alone does not keep the process alive in tests.
+  state.heartbeatTimer.unref?.();
+}
+
+function stopSseHeartbeat() {
+  if (state.heartbeatTimer) {
+    clearInterval(state.heartbeatTimer);
+    state.heartbeatTimer = null;
+  }
+}
+
+function readBaseUpdatedAt(body: JsonBody) {
+  if (body.baseUpdatedAt === null || body.baseUpdatedAt === undefined || body.baseUpdatedAt === "") {
+    return null;
+  }
+  const value = Number(body.baseUpdatedAt);
+  return Number.isFinite(value) ? value : null;
+}
+
+function timedJson(res: http.ServerResponse, status: number, body: unknown, label: string, started: number) {
+  const ms = Date.now() - started;
+  if (ms >= 50) {
+    console.info(`[gateway] ${label} ${ms}ms`);
+  }
+  json(res, status, body);
 }
 
 async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, url: URL) {
@@ -288,7 +378,10 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
         json(res, 403, { ok: false, error: "forbidden" });
         return;
       }
-      const session = createLanSession(result.user, String(body.deviceId || req.headers["x-device-id"] || ""));
+      const session = createLanSession(
+        result.user,
+        String(body.deviceId || req.headers["x-device-id"] || ""),
+      );
       json(res, 200, {
         ok: true,
         sessionToken: session.token,
@@ -314,22 +407,25 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
         "Access-Control-Allow-Origin": "*",
       });
       res.write(`event: connected\ndata: ${JSON.stringify({ username: session.username })}\n\n`);
-      state.sseClients.add(res);
+      const client: SseClient = { res, token: session.token };
+      state.sseClients.add(client);
       req.on("close", () => {
-        state.sseClients.delete(res);
+        state.sseClients.delete(client);
       });
       return;
     }
 
     if (method === "GET" && url.pathname === "/api/tables") {
       requireLanAuth(req, "order:open");
-      json(res, 200, posService.getTablesSnapshot());
+      const started = Date.now();
+      timedJson(res, 200, posService.getTablesSnapshot(), "GET /api/tables", started);
       return;
     }
 
     if (method === "GET" && url.pathname === "/api/kots") {
       requireLanAuth(req, "order:open");
-      json(res, 200, posService.getCaptainKots());
+      const started = Date.now();
+      timedJson(res, 200, posService.getCaptainKots(), "GET /api/kots", started);
       return;
     }
 
@@ -387,6 +483,7 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
       const orderId = decodeURIComponent(url.pathname.split("/")[3]);
       const body = await readBody(req);
       const clientOpId = readClientOpId(req, body);
+      const baseUpdatedAt = readBaseUpdatedAt(body);
       const item = {
         name: String(body.name || ""),
         qty: Number(body.qty || 1),
@@ -394,13 +491,13 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
         menuItemId: (body.menuItemId as string) || null,
         categoryName: (body.categoryName as string) || null,
       };
-      const request = { orderId, ...item };
+      const request = { orderId, ...item, baseUpdatedAt };
       const replayed = replayClientOp(clientOpId, request);
       if (replayed) {
         json(res, 200, replayed.result);
         return;
       }
-      const order = posService.addItemToOrder(orderId, item, session.username);
+      const order = posService.addItemToOrder(orderId, item, session.username, { baseUpdatedAt });
       rememberOrderClientOp({
         clientOpId,
         username: session.username,
@@ -418,8 +515,10 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
       const orderId = decodeURIComponent(url.pathname.split("/")[3]);
       const body = await readBody(req);
       const clientOpId = readClientOpId(req, body);
+      const baseUpdatedAt = readBaseUpdatedAt(body);
       const result = await kotPrintService.sendKotForOrder(orderId, session.username, {
         clientOpId,
+        baseUpdatedAt,
       });
       json(res, 200, result);
       return;
@@ -430,6 +529,7 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
       const orderId = decodeURIComponent(url.pathname.split("/")[3]);
       const body = await readBody(req);
       const clientOpId = readClientOpId(req, body);
+      const baseUpdatedAt = readBaseUpdatedAt(body);
       const result = await kotPrintService.voidKotLineAndPrint(
         orderId,
         {
@@ -438,7 +538,7 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
           reason: String(body.reason || ""),
         },
         session.username,
-        { clientOpId },
+        { clientOpId, baseUpdatedAt },
       );
       json(res, 200, result);
       return;
@@ -449,14 +549,17 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
       const orderId = decodeURIComponent(url.pathname.split("/")[3]);
       const body = await readBody(req);
       const clientOpId = readClientOpId(req, body);
+      const baseUpdatedAt = readBaseUpdatedAt(body);
       const lines = Array.isArray(body.lines) ? body.lines : [];
-      const request = { orderId, lines };
+      const request = { orderId, lines, baseUpdatedAt };
       const replayed = replayClientOp(clientOpId, request);
       if (replayed) {
         json(res, 200, replayed.result);
         return;
       }
-      const order = posService.updateOrderLines(orderId, lines as any, session.username);
+      const order = posService.updateOrderLines(orderId, lines as any, session.username, {
+        baseUpdatedAt,
+      });
       rememberOrderClientOp({
         clientOpId,
         username: session.username,
@@ -477,9 +580,11 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
         ? 401
         : message === "forbidden" || message === "invalid-pairing-code"
           ? 403
-          : message === "client-op-conflict"
+          : message === "client-op-conflict" || message === "order-conflict"
             ? 409
-            : message.startsWith("kot-") || message.startsWith("order-") || message === "invalid-json"
+            : message.startsWith("kot-") ||
+                message.startsWith("order-") ||
+                message === "invalid-json"
               ? 400
               : 500;
     json(res, status, { ok: false, error: message });
@@ -528,6 +633,7 @@ export async function startLocalGateway(port = GATEWAY_DEFAULT_PORT) {
       state.server = server;
       state.startedAt = Date.now();
       state.unsubscribeEvents = onDomainEvent((event: DomainEvent) => broadcastSse(event));
+      startSseHeartbeat();
       publishDomainEvent("gateway-status", getGatewayStatus());
       resolve();
     });
@@ -543,9 +649,10 @@ export async function stopLocalGateway() {
   state.server = null;
   state.unsubscribeEvents?.();
   state.unsubscribeEvents = null;
+  stopSseHeartbeat();
   for (const client of state.sseClients) {
     try {
-      client.end();
+      client.res.end();
     } catch {
       // ignore
     }

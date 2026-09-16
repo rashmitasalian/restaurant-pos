@@ -156,13 +156,11 @@ class WindowsRawPrintWorker {
   private readyPromise: Promise<void> | null = null;
   private readyResolve: (() => void) | null = null;
   private readyReject: ((error: Error) => void) | null = null;
-  private pendingResponse:
-    | {
-        resolve: () => void;
-        reject: (error: Error) => void;
-        timer: NodeJS.Timeout;
-      }
-    | null = null;
+  private pendingResponse: {
+    resolve: () => void;
+    reject: (error: Error) => void;
+    timer: NodeJS.Timeout;
+  } | null = null;
   private jobChain: Promise<void> = Promise.resolve();
 
   constructor(private readonly userDataDir: string) {}

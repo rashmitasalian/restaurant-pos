@@ -93,7 +93,11 @@ export class LocalBackupStore {
     }
     return fs
       .readdirSync(safety)
-      .filter((name) => name.toLowerCase().endsWith(".sqlite") || name.toLowerCase().endsWith(BACKUP_FILE_EXTENSION))
+      .filter(
+        (name) =>
+          name.toLowerCase().endsWith(".sqlite") ||
+          name.toLowerCase().endsWith(BACKUP_FILE_EXTENSION),
+      )
       .map((name) => path.join(safety, name));
   }
 }

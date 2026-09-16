@@ -16,15 +16,21 @@ export class BackupScheduler {
   private running = false;
   private retryAttempt = 0;
   private readonly intervalMs: number;
-  private readonly logger: (level: string, message: string, context?: Record<string, unknown>) => void;
+  private readonly logger: (
+    level: string,
+    message: string,
+    context?: Record<string, unknown>,
+  ) => void;
 
   constructor(options?: BackupSchedulerOptions) {
     this.intervalMs = options?.intervalMs || 60 * 60 * 1000; // hourly tick; daily gate inside
-    this.logger = options?.logger || ((level, message, context) => {
-      if (level === "error") {
-        console.error(`[backup-scheduler] ${message}`, context || {});
-      }
-    });
+    this.logger =
+      options?.logger ||
+      ((level, message, context) => {
+        if (level === "error") {
+          console.error(`[backup-scheduler] ${message}`, context || {});
+        }
+      });
   }
 
   start() {
@@ -75,7 +81,10 @@ export class BackupScheduler {
         }
       }
     } catch (error: any) {
-      this.logger("error", "scheduler tick failed", { error: String(error?.message || error), reason });
+      this.logger("error", "scheduler tick failed", {
+        error: String(error?.message || error),
+        reason,
+      });
     } finally {
       this.running = false;
     }

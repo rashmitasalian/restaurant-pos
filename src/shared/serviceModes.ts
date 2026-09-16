@@ -144,7 +144,9 @@ function normalizePaymentPrintSequence(
   value: unknown,
   fallback: ServiceMode["paymentPrintSequence"],
 ): ServiceMode["paymentPrintSequence"] {
-  const key = String(value || "").trim().toLowerCase();
+  const key = String(value || "")
+    .trim()
+    .toLowerCase();
   if (key === "bill_only" || key === "bill_then_kot" || key === "kot_then_bill") {
     return key;
   }
@@ -175,10 +177,7 @@ function normalizeMode(raw: unknown, fallback?: ServiceMode): ServiceMode | null
       source.immediateBilling,
       fallback?.immediateBilling ?? false,
     ),
-    externalPayment: normalizeBoolean(
-      source.externalPayment,
-      fallback?.externalPayment ?? false,
-    ),
+    externalPayment: normalizeBoolean(source.externalPayment, fallback?.externalPayment ?? false),
     allowMergeOrders: normalizeBoolean(
       source.allowMergeOrders,
       fallback?.allowMergeOrders ?? false,
@@ -186,7 +185,8 @@ function normalizeMode(raw: unknown, fallback?: ServiceMode): ServiceMode | null
     color: normalizeColor(source.color, fallback?.color || "#6b7280"),
     icon: normalizeIcon(source.icon, fallback?.icon || "circle"),
     displayOrder:
-      BUILTIN_DISPLAY_ORDER[id] || normalizeInteger(source.displayOrder, fallback?.displayOrder ?? 100),
+      BUILTIN_DISPLAY_ORDER[id] ||
+      normalizeInteger(source.displayOrder, fallback?.displayOrder ?? 100),
     paymentPrintSequence: normalizePaymentPrintSequence(
       source.paymentPrintSequence,
       fallback?.paymentPrintSequence || "bill_only",

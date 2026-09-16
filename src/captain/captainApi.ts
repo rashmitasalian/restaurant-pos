@@ -136,7 +136,9 @@ export const captainApi = {
     return result;
   },
   logout: (token: string) =>
-    request("/api/auth/logout", { method: "POST", token, timeoutMs: 8000 }).finally(clearStoredSession),
+    request("/api/auth/logout", { method: "POST", token, timeoutMs: 8000 }).finally(
+      clearStoredSession,
+    ),
   tables: (token: string) => request<any>("/api/tables", { token }),
   kots: (token: string) =>
     request<{
@@ -164,7 +166,14 @@ export const captainApi = {
   addItem: (
     token: string,
     orderId: string,
-    item: { name: string; qty: number; rate: number; menuItemId?: string; categoryName?: string },
+    item: {
+      name: string;
+      qty: number;
+      rate: number;
+      menuItemId?: string;
+      categoryName?: string;
+      baseUpdatedAt?: number | null;
+    },
     clientOpId: string,
   ) =>
     request<any>(`/api/orders/${encodeURIComponent(orderId)}/items`, {
@@ -173,24 +182,35 @@ export const captainApi = {
       clientOpId,
       body: { ...item, clientOpId },
     }),
-  updateLines: (token: string, orderId: string, lines: any[], clientOpId: string) =>
+  updateLines: (
+    token: string,
+    orderId: string,
+    lines: any[],
+    clientOpId: string,
+    baseUpdatedAt?: number | null,
+  ) =>
     request<any>(`/api/orders/${encodeURIComponent(orderId)}/lines`, {
       method: "PUT",
       token,
       clientOpId,
-      body: { lines, clientOpId },
+      body: { lines, clientOpId, baseUpdatedAt },
     }),
-  sendKot: (token: string, orderId: string, clientOpId: string) =>
+  sendKot: (token: string, orderId: string, clientOpId: string, baseUpdatedAt?: number | null) =>
     request<any>(`/api/orders/${encodeURIComponent(orderId)}/send-kot`, {
       method: "POST",
       token,
       clientOpId,
-      body: { clientOpId },
+      body: { clientOpId, baseUpdatedAt },
     }),
   voidItem: (
     token: string,
     orderId: string,
-    payload: { lineId: string; finalQty: number; reason: string },
+    payload: {
+      lineId: string;
+      finalQty: number;
+      reason: string;
+      baseUpdatedAt?: number | null;
+    },
     clientOpId: string,
   ) =>
     request<any>(`/api/orders/${encodeURIComponent(orderId)}/void-item`, {
@@ -230,9 +250,7 @@ export const captainApi = {
           const chunks = buffer.split("\n\n");
           buffer = chunks.pop() || "";
           for (const chunk of chunks) {
-            const dataLine = chunk
-              .split("\n")
-              .find((line) => line.startsWith("data:"));
+            const dataLine = chunk.split("\n").find((line) => line.startsWith("data:"));
             if (!dataLine) {
               continue;
             }

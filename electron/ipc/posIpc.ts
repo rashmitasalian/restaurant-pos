@@ -66,9 +66,7 @@ function canReadSetting(role: Role, key: string): boolean {
     return true;
   }
   if (key === "config:attendance") {
-    return (
-      roleHasPermission(role, "people:attendance") || roleHasPermission(role, "people:roster")
-    );
+    return roleHasPermission(role, "people:attendance") || roleHasPermission(role, "people:roster");
   }
   return false;
 }
@@ -269,26 +267,38 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
     requireSession(event, token);
     return posService.getTablesSnapshot();
   });
-  ipcMain.handle("pos:tables:set-area", (event, token: string | null, tableId: number, areaId: string) => {
-    const user = requirePermission(event, token, "system:settings");
-    return posService.setTableArea(tableId, areaId, user.username);
-  });
-  ipcMain.handle("pos:tables:set-seats", (event, token: string | null, tableId: number, seats: number) => {
-    const user = requirePermission(event, token, "system:settings");
-    return posService.setTableSeats(tableId, seats, user.username);
-  });
-  ipcMain.handle("pos:tables:set-name", (event, token: string | null, tableId: number, name: string) => {
-    const user = requirePermission(event, token, "system:settings");
-    return posService.setTableName(tableId, name, user.username);
-  });
+  ipcMain.handle(
+    "pos:tables:set-area",
+    (event, token: string | null, tableId: number, areaId: string) => {
+      const user = requirePermission(event, token, "system:settings");
+      return posService.setTableArea(tableId, areaId, user.username);
+    },
+  );
+  ipcMain.handle(
+    "pos:tables:set-seats",
+    (event, token: string | null, tableId: number, seats: number) => {
+      const user = requirePermission(event, token, "system:settings");
+      return posService.setTableSeats(tableId, seats, user.username);
+    },
+  );
+  ipcMain.handle(
+    "pos:tables:set-name",
+    (event, token: string | null, tableId: number, name: string) => {
+      const user = requirePermission(event, token, "system:settings");
+      return posService.setTableName(tableId, name, user.username);
+    },
+  );
   ipcMain.handle("pos:tables:apply-floor-layout", (event, token: string | null, payload: any) => {
     const user = requirePermission(event, token, "system:settings");
     return posService.applyFloorLayout(payload || {}, user.username);
   });
-  ipcMain.handle("pos:seating-areas:list", (event, token?: string | null, includeDisabled?: boolean) => {
-    requireSession(event, token);
-    return posService.getSeatingAreas(Boolean(includeDisabled));
-  });
+  ipcMain.handle(
+    "pos:seating-areas:list",
+    (event, token?: string | null, includeDisabled?: boolean) => {
+      requireSession(event, token);
+      return posService.getSeatingAreas(Boolean(includeDisabled));
+    },
+  );
   ipcMain.handle("pos:seating-areas:save", (event, token: string | null, payload) => {
     const user = requirePermission(event, token, "system:settings");
     return posService.setSeatingAreas(payload, user.username);
@@ -464,10 +474,13 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
       receivedBy: user.username,
     });
   });
-  ipcMain.handle("pos:orders:cancel", (event, token: string | null, orderId: string, reason: string) => {
-    const user = requirePermission(event, token, "order:cancel");
-    return posService.cancelOrder(orderId, user.username, reason);
-  });
+  ipcMain.handle(
+    "pos:orders:cancel",
+    (event, token: string | null, orderId: string, reason: string) => {
+      const user = requirePermission(event, token, "order:cancel");
+      return posService.cancelOrder(orderId, user.username, reason);
+    },
+  );
   ipcMain.handle("pos:orders:delete-history", (event, token: string | null, orderIds: string[]) => {
     const user = requirePermission(event, token, "business:history");
     return posService.deleteClosedOrders(orderIds, user.username);
@@ -479,10 +492,13 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
     );
   });
 
-  ipcMain.handle("pos:customers:list", (event, token?: string | null, opts?: { filter?: string }) => {
-    requirePermission(event, token, "page:customers");
-    return posService.listCustomers(opts as any);
-  });
+  ipcMain.handle(
+    "pos:customers:list",
+    (event, token?: string | null, opts?: { filter?: string }) => {
+      requirePermission(event, token, "page:customers");
+      return posService.listCustomers(opts as any);
+    },
+  );
   ipcMain.handle("pos:customers:create", (event, token: string | null, payload) => {
     const user = requirePermission(event, token, "page:customers");
     const wantsCreditPolicy =
@@ -551,7 +567,11 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
 
   ipcMain.handle(
     "pos:staff:list",
-    (event, token?: string | null, opts?: { includeInactive?: boolean; status?: string; includePhotos?: boolean }) => {
+    (
+      event,
+      token?: string | null,
+      opts?: { includeInactive?: boolean; status?: string; includePhotos?: boolean },
+    ) => {
       requirePermission(event, token, "people:roster");
       return posService.listStaff(opts as any);
     },
@@ -585,10 +605,13 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
     const user = requirePermission(event, token, "people:attendance");
     return posService.upsertAttendanceRows(input || {}, user.username);
   });
-  ipcMain.handle("pos:attendance:copy", (event, token: string | null, fromDate: string, toDate: string) => {
-    const user = requirePermission(event, token, "people:attendance");
-    return posService.copyAttendance(fromDate, toDate, user.username);
-  });
+  ipcMain.handle(
+    "pos:attendance:copy",
+    (event, token: string | null, fromDate: string, toDate: string) => {
+      const user = requirePermission(event, token, "people:attendance");
+      return posService.copyAttendance(fromDate, toDate, user.username);
+    },
+  );
   ipcMain.handle("pos:attendance:delete", (event, token: string | null, id: string) => {
     const user = requirePermission(event, token, "people:attendance");
     return posService.deleteAttendance(id, user.username);
@@ -967,7 +990,8 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
         return {
           ok: false,
           reason: "insufficient-disk-space",
-          message: "Not enough storage space to create a backup. Please free some space and try again.",
+          message:
+            "Not enough storage space to create a backup. Please free some space and try again.",
         };
       }
       throw error;
@@ -1001,12 +1025,20 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
   });
   ipcMain.handle(
     "pos:backup:recover-cloud",
-    async (event, token: string | null, payload: { restaurantCode: string; recoveryKey: string }) => {
+    async (
+      event,
+      token: string | null,
+      payload: { restaurantCode: string; recoveryKey: string },
+    ) => {
       const user = requirePermission(event, token, "system:settings");
       if (user.role !== "admin") {
         throw new Error("admin-required");
       }
-      return cloudBackupStore.recoverCloud(payload?.restaurantCode, payload?.recoveryKey, user.username);
+      return cloudBackupStore.recoverCloud(
+        payload?.restaurantCode,
+        payload?.recoveryKey,
+        user.username,
+      );
     },
   );
   ipcMain.handle("pos:backup:list-cloud", async (event, token?: string | null) => {

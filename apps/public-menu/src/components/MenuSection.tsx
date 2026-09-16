@@ -12,7 +12,11 @@ export function MenuSection({ category, items }: MenuSectionProps) {
   }
 
   return (
-    <section className="pm-section" id={`category-${category.id}`} aria-labelledby={`heading-${category.id}`}>
+    <section
+      className="pm-section"
+      id={`category-${category.id}`}
+      aria-labelledby={`heading-${category.id}`}
+    >
       <h2 className="pm-section-title" id={`heading-${category.id}`}>
         {category.name}
       </h2>

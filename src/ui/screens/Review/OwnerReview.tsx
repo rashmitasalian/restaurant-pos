@@ -1,10 +1,6 @@
 import React from "react";
 import { ChevronDown, ChevronRight, ChevronUp, RefreshCw } from "lucide-react";
-import {
-  getOrderTimeline,
-  getStaffActivity,
-  listReviewItems,
-} from "../../../app/db/posRepository";
+import { getOrderTimeline, getStaffActivity, listReviewItems } from "../../../app/db/posRepository";
 import { useBusinessDateRange } from "../../hooks/useBusinessDateRange";
 import { BusinessRangeControls } from "../../components/BusinessRangeControls";
 import { ManageShell } from "../Manager/ManageShell";
@@ -125,7 +121,9 @@ export default function OwnerReview({ onOpenHistory }: { onOpenHistory?: () => v
   }, [items, ruleFilter, actorFilter]);
 
   const selectedStaffName = actorFilter ? actorDisplayName(actorFilter, staff) : null;
-  const selectedStaffIndex = staff.findIndex((row) => actorKey(row.username) === actorKey(actorFilter));
+  const selectedStaffIndex = staff.findIndex(
+    (row) => actorKey(row.username) === actorKey(actorFilter),
+  );
   const queueTime = (ts: number) => (range.preset === "today" ? formatClock(ts) : formatWhen(ts));
 
   const openItem = async (item: ReviewItemDto) => {
@@ -261,7 +259,11 @@ export default function OwnerReview({ onOpenHistory }: { onOpenHistory?: () => v
           <ul className={styles.queue}>
             {visibleItems.map((item) => (
               <li key={item.id}>
-                <button type="button" className={styles.queueItem} onClick={() => void openItem(item)}>
+                <button
+                  type="button"
+                  className={styles.queueItem}
+                  onClick={() => void openItem(item)}
+                >
                   <div className={styles.queueTop}>
                     <span className={styles.queueRule}>{item.label}</span>
                     <span className={styles.queueTime}>{queueTime(item.occurredAt)}</span>
@@ -403,7 +405,9 @@ export default function OwnerReview({ onOpenHistory }: { onOpenHistory?: () => v
                     <li key={line.id}>
                       <span>{line.name}</span>
                       <span className={styles.itemQty}>{line.qty}</span>
-                      <span className={styles.itemAmt}>{formatMoney(Number(line.rate || 0) * Number(line.qty || 0))}</span>
+                      <span className={styles.itemAmt}>
+                        {formatMoney(Number(line.rate || 0) * Number(line.qty || 0))}
+                      </span>
                     </li>
                   ))}
                 </ul>

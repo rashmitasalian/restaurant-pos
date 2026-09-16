@@ -25,7 +25,9 @@ export default function PickButtons({ serviceModes, onSelectMode }: PickButtonsP
           }`}
         >
           <Icon
-            icon={mode.requiresTable ? UtensilsCrossed : mode.id === "delivery" ? Bike : ShoppingBag}
+            icon={
+              mode.requiresTable ? UtensilsCrossed : mode.id === "delivery" ? Bike : ShoppingBag
+            }
             size="sm"
           />
           {mode.name}

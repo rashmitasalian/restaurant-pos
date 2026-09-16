@@ -31,10 +31,18 @@ export const PEOPLE_TAB_HASH: Record<PeopleTab, string> = {
 
 export function peopleTabFromHash(hash: string): PeopleTab {
   const normalized = String(hash || "").toLowerCase();
-  if (normalized.includes("roster")) return "roster";
-  if (normalized.includes("advance")) return "advances";
-  if (normalized.includes("attendance")) return "attendance";
-  if (normalized.includes("account") || normalized.includes("user")) return "accounts";
+  if (normalized.includes("roster")) {
+    return "roster";
+  }
+  if (normalized.includes("advance")) {
+    return "advances";
+  }
+  if (normalized.includes("attendance")) {
+    return "attendance";
+  }
+  if (normalized.includes("account") || normalized.includes("user")) {
+    return "accounts";
+  }
   return "attendance";
 }
 

@@ -144,6 +144,17 @@
   --pos-motion-overlay: 240ms;
   --pos-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
 
+  --pos-loader-mark-fill: linear-gradient(
+    135deg,
+    var(--pos-teal),
+    color-mix(in srgb, var(--pos-teal) 65%, #000)
+  );
+  --pos-loader-bar-fill: linear-gradient(
+    90deg,
+    var(--pos-teal),
+    color-mix(in srgb, var(--pos-teal) 55%, white)
+  );
+
   --pos-hit-pos: 40px;
   --pos-hit-dense: 32px;
   --pos-shell-h: 56px;

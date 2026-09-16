@@ -32,7 +32,9 @@ export function ConfirmModal({
       open={open}
       title={title}
       onClose={() => {
-        if (!loading) onClose();
+        if (!loading) {
+          onClose();
+        }
       }}
     >
       <div className="ui-form-stack">

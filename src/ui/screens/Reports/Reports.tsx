@@ -9,11 +9,7 @@ import {
 } from "../../../app/db/posRepository";
 import { ENV } from "../../../config/env";
 import type { ProductSalesReportDto, ProfitabilitySummaryDto } from "../../../shared/pos";
-import {
-  DEFAULT_GST_CONFIG,
-  formatGstRate,
-  normalizeGstConfig,
-} from "../../../shared/gst";
+import { DEFAULT_GST_CONFIG, formatGstRate, normalizeGstConfig } from "../../../shared/gst";
 import { CATEGORY_CHART_COLORS } from "../../theme/external-brands";
 import { PRINT } from "../../theme/print-html";
 import { DataTable } from "../../components/ui/DataTable";
@@ -47,11 +43,10 @@ const EMPTY_PRODUCT_SALES_REPORT: ProductSalesReportDto = {
 
 const CATEGORY_COLORS = CATEGORY_CHART_COLORS;
 
-function topCategoryRows(
-  rows: ProductSalesReportDto["categorySales"],
-  metric: CategoryMetric,
-) {
-  const sorted = [...rows].sort((a, b) => b[metric] - a[metric] || a.category.localeCompare(b.category));
+function topCategoryRows(rows: ProductSalesReportDto["categorySales"], metric: CategoryMetric) {
+  const sorted = [...rows].sort(
+    (a, b) => b[metric] - a[metric] || a.category.localeCompare(b.category),
+  );
   if (sorted.length <= 8) {
     return sorted;
   }
@@ -79,7 +74,7 @@ function escapeHtml(value: unknown) {
         return "&lt;";
       case ">":
         return "&gt;";
-      case "\"":
+      case '"':
         return "&quot;";
       default:
         return "&#39;";
@@ -171,10 +166,11 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
         const breakdown = await getPaymentBreakdown({ from: fromTs, to: toTs });
         let creditCollections: Record<string, number> = {};
         try {
-          creditCollections = (await window.pos?.reports?.creditCollections?.({
-            from: fromTs,
-            to: toTs,
-          })) || {};
+          creditCollections =
+            (await window.pos?.reports?.creditCollections?.({
+              from: fromTs,
+              to: toTs,
+            })) || {};
         } catch {
           creditCollections = {};
         }
@@ -195,9 +191,7 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
         const ordersCount = summary.orders || 0;
         const gstAmount = Number(summary.taxTotal || 0);
         const subtotal = Number(
-          summary.subtotal !== undefined
-            ? summary.subtotal
-            : +(totalSales - gstAmount).toFixed(2),
+          summary.subtotal !== undefined ? summary.subtotal : +(totalSales - gstAmount).toFixed(2),
         );
         try {
           const gstCfg = normalizeGstConfig(await getConfigGst());
@@ -505,9 +499,7 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
         // Electron: native save dialog → PDF via printToPDF
         await window.pos.exportReportPdf(
           html,
-          `sales-report-${rangeLabel
-            .replace(/[^a-z0-9]/gi, "-")
-            .toLowerCase()}`,
+          `sales-report-${rangeLabel.replace(/[^a-z0-9]/gi, "-").toLowerCase()}`,
         );
       } else {
         throw new Error("PDF export is available only in Electron.");
@@ -523,19 +515,28 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
   const rangeControls = <BusinessRangeControls rangeState={rangeState} />;
 
   return (
-    <div style={{ background: embedded ? "transparent" : "var(--pos-bg, var(--pos-surface))", minHeight: embedded ? undefined : "100%", padding: 0 }}>
-
+    <div
+      style={{
+        background: embedded ? "transparent" : "var(--pos-bg, var(--pos-surface))",
+        minHeight: embedded ? undefined : "100%",
+        padding: 0,
+      }}
+    >
       <div className="rpt-wrap" style={embedded ? { padding: 0 } : undefined}>
-        {!embedded && (
-          <PageHeader
-            title="Reports"
-            subtitle="Sales and profitability"
-          />
-        )}
+        {!embedded && <PageHeader title="Reports" subtitle="Sales and profitability" />}
 
         {rangeControls}
 
-        <div className="rpt-tabs" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <div
+          className="rpt-tabs"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
           <SegmentedControl
             ariaLabel="Report sections"
             options={REPORT_TABS}
@@ -557,268 +558,291 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
 
         {reportTab === "sales" && (
           <>
-        <div className="rpt-kpi-grid">
-          <Stat
-            primary
-            label="Total Sales"
-            value={loading ? "———" : formatCurrency(sales)}
-            sub={loading ? "Loading…" : `${orders} paid bills`}
-          />
-          <Stat
-            label="Collected"
-            value={loading ? "———" : formatCurrency(collectedAmount)}
-            sub={
-              loading
-                ? "Loading…"
-                : creditCollectedAmount > 0
-                  ? `Includes ${formatCurrency(creditCollectedAmount)} credit receipts`
-                  : "Cash / UPI / card in range (excludes new credit sales)"
-            }
-          />
-          <Stat
-            label="Paid Bills"
-            value={loading ? "——" : orders}
-            sub={loading ? "Loading…" : BUSINESS_RANGE_SEMANTICS.reports.shortLabel}
-          />
-          <Stat
-            label="Avg. Order Value"
-            value={loading ? "———" : formatCurrency(avgOrder)}
-            sub={loading ? "Loading…" : orders > 0 ? "Per completed order" : "No orders yet"}
-          />
-          {(loading || hasGst) && (
-            <Stat
-              label="GST Collected"
-              value={loading ? "———" : formatCurrency(displayedGst)}
-              sub={
-                loading
-                  ? "Loading…"
-                  : `${gstRateLabel} GST · CGST ${formatCurrency(cgst)} + SGST ${formatCurrency(sgst)}`
-              }
-            />
-          )}
-          {(loading || discountTotal > 0) && (
-            <Stat
-              label="Discounts Given"
-              value={loading ? "———" : formatCurrency(discountTotal)}
-              sub={loading ? "Loading…" : "Total discount deducted from orders"}
-            />
-          )}
-          {(loading || creditOutstandingTotal > 0 || creditOverdueTotal > 0 || creditSalesAmount > 0) && (
-            <Stat
-              label="Credit Outstanding"
-              value={loading ? "———" : formatCurrency(creditOutstandingTotal)}
-              sub={
-                loading
-                  ? "Loading…"
-                  : creditOverdueTotal > 0
-                    ? `${formatCurrency(creditOverdueTotal)} overdue across open bills`
-                    : "Open customer credit across all dates"
-              }
-            />
-          )}
-        </div>
+            <div className="rpt-kpi-grid">
+              <Stat
+                primary
+                label="Total Sales"
+                value={loading ? "———" : formatCurrency(sales)}
+                sub={loading ? "Loading…" : `${orders} paid bills`}
+              />
+              <Stat
+                label="Collected"
+                value={loading ? "———" : formatCurrency(collectedAmount)}
+                sub={
+                  loading
+                    ? "Loading…"
+                    : creditCollectedAmount > 0
+                      ? `Includes ${formatCurrency(creditCollectedAmount)} credit receipts`
+                      : "Cash / UPI / card in range (excludes new credit sales)"
+                }
+              />
+              <Stat
+                label="Paid Bills"
+                value={loading ? "——" : orders}
+                sub={loading ? "Loading…" : BUSINESS_RANGE_SEMANTICS.reports.shortLabel}
+              />
+              <Stat
+                label="Avg. Order Value"
+                value={loading ? "———" : formatCurrency(avgOrder)}
+                sub={loading ? "Loading…" : orders > 0 ? "Per completed order" : "No orders yet"}
+              />
+              {(loading || hasGst) && (
+                <Stat
+                  label="GST Collected"
+                  value={loading ? "———" : formatCurrency(displayedGst)}
+                  sub={
+                    loading
+                      ? "Loading…"
+                      : `${gstRateLabel} GST · CGST ${formatCurrency(cgst)} + SGST ${formatCurrency(sgst)}`
+                  }
+                />
+              )}
+              {(loading || discountTotal > 0) && (
+                <Stat
+                  label="Discounts Given"
+                  value={loading ? "———" : formatCurrency(discountTotal)}
+                  sub={loading ? "Loading…" : "Total discount deducted from orders"}
+                />
+              )}
+              {(loading ||
+                creditOutstandingTotal > 0 ||
+                creditOverdueTotal > 0 ||
+                creditSalesAmount > 0) && (
+                <Stat
+                  label="Credit Outstanding"
+                  value={loading ? "———" : formatCurrency(creditOutstandingTotal)}
+                  sub={
+                    loading
+                      ? "Loading…"
+                      : creditOverdueTotal > 0
+                        ? `${formatCurrency(creditOverdueTotal)} overdue across open bills`
+                        : "Open customer credit across all dates"
+                  }
+                />
+              )}
+            </div>
 
-        {/* ── Bottom Row ── */}
-        <div className="rpt-bottom">
-          {/* Payment Methods */}
-          <div className="rpt-card" style={{ padding: 0 }}>
-            <div className="rpt-section-title">Payment Methods</div>
-            <div style={{ padding: "18px 20px" }}>
-              {payMethods.map((m) => (
-                <div key={m.label} className="rpt-pay-row">
-                  <div className="rpt-pay-meta">
-                    <span style={{ fontSize: 13, fontWeight: 600, color: "var(--pos-tx-sec)" }}>
-                      {m.label}
-                    </span>
-                    <div>
-                      <span
-                        style={{
-                          fontSize: 15,
-                          fontWeight: 700,
-                          color: m.color,
-                          fontVariantNumeric: "tabular-nums",
-                        }}
-                      >
-                        {loading ? "—" : formatCurrency(m.amount)}
-                      </span>
-                      <span style={{ fontSize: 11, color: "var(--pos-tx-muted)", marginLeft: 7 }}>
-                        {loading ? "" : `${m.pct}%`}
-                      </span>
+            {/* ── Bottom Row ── */}
+            <div className="rpt-bottom">
+              {/* Payment Methods */}
+              <div className="rpt-card" style={{ padding: 0 }}>
+                <div className="rpt-section-title">Payment Methods</div>
+                <div style={{ padding: "18px 20px" }}>
+                  {payMethods.map((m) => (
+                    <div key={m.label} className="rpt-pay-row">
+                      <div className="rpt-pay-meta">
+                        <span style={{ fontSize: 13, fontWeight: 600, color: "var(--pos-tx-sec)" }}>
+                          {m.label}
+                        </span>
+                        <div>
+                          <span
+                            style={{
+                              fontSize: 15,
+                              fontWeight: 700,
+                              color: m.color,
+                              fontVariantNumeric: "tabular-nums",
+                            }}
+                          >
+                            {loading ? "—" : formatCurrency(m.amount)}
+                          </span>
+                          <span
+                            style={{ fontSize: 11, color: "var(--pos-tx-muted)", marginLeft: 7 }}
+                          >
+                            {loading ? "" : `${m.pct}%`}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="rpt-pay-bar-bg">
+                        <div
+                          className="rpt-pay-bar-fill"
+                          style={{
+                            width: loading ? "0%" : `${m.pct}%`,
+                            background: "var(--pos-teal)",
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* GST Breakdown */}
+              {hasGst && (
+                <div className="rpt-card" style={{ padding: 0 }}>
+                  <div className="rpt-section-title">GST Breakdown</div>
+                  <DataTable
+                    headers={["Tax Type", "Rate", "Taxable Amount", "Tax Amount"]}
+                    rows={[
+                      [
+                        "CGST",
+                        gstHalfRateLabel,
+                        formatCurrency(subtotalSales),
+                        formatCurrency(cgst),
+                      ],
+                      [
+                        "SGST",
+                        gstHalfRateLabel,
+                        formatCurrency(subtotalSales),
+                        formatCurrency(sgst),
+                      ],
+                      ["Total GST", "", "", formatCurrency(displayedGst)],
+                    ]}
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="rpt-product-grid">
+              <div className="rpt-card" style={{ padding: 0 }}>
+                <div className="rpt-section-head">
+                  <div>
+                    <div className="rpt-section-title" style={{ padding: 0, borderBottom: "none" }}>
+                      Category Sales
+                    </div>
+                    <div style={{ marginTop: 6, fontSize: 12, color: "var(--pos-tx-muted)" }}>
+                      {formatCurrency(productSales.totals.totalSales)} sales -{" "}
+                      {formatUnits(productSales.totals.totalUnits)} units
                     </div>
                   </div>
-                  <div className="rpt-pay-bar-bg">
-                    <div
-                      className="rpt-pay-bar-fill"
-                      style={{
-                        width: loading ? "0%" : `${m.pct}%`,
-                        background: "var(--pos-teal)",
-                      }}
+                  <div className="rpt-metric-toggle" aria-label="Category metric">
+                    <button
+                      type="button"
+                      className={categoryMetric === "sales" ? "active" : ""}
+                      onClick={() => setCategoryMetric("sales")}
+                    >
+                      Sales Amount
+                    </button>
+                    <button
+                      type="button"
+                      className={categoryMetric === "units" ? "active" : ""}
+                      onClick={() => setCategoryMetric("units")}
+                    >
+                      Units Sold
+                    </button>
+                  </div>
+                </div>
+
+                {loading ? (
+                  <div className="rpt-empty-state">Loading...</div>
+                ) : hasCategorySales ? (
+                  <div className="rpt-chart-wrap">
+                    <svg
+                      className="rpt-chart-svg"
+                      viewBox="0 0 120 120"
+                      role="img"
+                      aria-label="Category sales chart"
+                    >
+                      <circle className="rpt-chart-empty" cx="60" cy="60" r="42" />
+                      <g transform="rotate(-90 60 60)">
+                        {categoryChartSegments.map((segment) => (
+                          <circle
+                            key={segment.category}
+                            className="rpt-chart-segment"
+                            cx="60"
+                            cy="60"
+                            r="42"
+                            stroke={segment.color}
+                            strokeDasharray={segment.dash}
+                            strokeDashoffset={segment.offset}
+                          />
+                        ))}
+                      </g>
+                      <text x="60" y="58" className="rpt-chart-center">
+                        {categoryMetric === "sales" ? "Sales" : "Units"}
+                      </text>
+                      <text x="60" y="73" className="rpt-chart-total">
+                        {categoryRows.length} groups
+                      </text>
+                    </svg>
+                    <div style={{ width: "100%" }}>
+                      {categoryChartSegments.map((segment) => {
+                        const percent = pct(segment.value, categoryMetricTotal);
+                        return (
+                          <div key={segment.category} className="rpt-legend-row">
+                            <span
+                              className="rpt-legend-swatch"
+                              style={{ background: segment.color }}
+                            />
+                            <span className="rpt-legend-name">{segment.category}</span>
+                            <span className="rpt-legend-value">
+                              {categoryMetric === "sales"
+                                ? formatCurrency(segment.sales)
+                                : formatUnits(segment.units)}{" "}
+                              ({percent}%)
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rpt-empty-state">No category sales for this range</div>
+                )}
+              </div>
+
+              <div className="rpt-card" style={{ padding: 0 }}>
+                <div className="rpt-section-title">Menu Items Sold</div>
+                {hasItemSales && (
+                  <div className="rpt-table-toolbar">
+                    <input
+                      className="rpt-search-input"
+                      value={itemSearch}
+                      onChange={(e) => setItemSearch(e.target.value)}
+                      placeholder="Search item or category"
+                      aria-label="Search menu items sold"
                     />
+                    <select
+                      className="rpt-sort-select"
+                      value={itemSort}
+                      onChange={(e) => setItemSort(e.target.value as ItemSort)}
+                      aria-label="Sort menu items sold"
+                    >
+                      <option value="units">Sort by Units Sold</option>
+                      <option value="sales">Sort by Sales Amount</option>
+                      <option value="name">Sort by Item Name</option>
+                    </select>
                   </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* GST Breakdown */}
-          {hasGst && (
-          <div className="rpt-card" style={{ padding: 0 }}>
-            <div className="rpt-section-title">GST Breakdown</div>
-            <DataTable
-              headers={["Tax Type", "Rate", "Taxable Amount", "Tax Amount"]}
-              rows={[
-                ["CGST", gstHalfRateLabel, formatCurrency(subtotalSales), formatCurrency(cgst)],
-                ["SGST", gstHalfRateLabel, formatCurrency(subtotalSales), formatCurrency(sgst)],
-                ["Total GST", "", "", formatCurrency(displayedGst)],
-              ]}
-            />
-          </div>
-          )}
-        </div>
-
-        <div className="rpt-product-grid">
-          <div className="rpt-card" style={{ padding: 0 }}>
-            <div className="rpt-section-head">
-              <div>
-                <div className="rpt-section-title" style={{ padding: 0, borderBottom: "none" }}>
-                  Category Sales
-                </div>
-                <div style={{ marginTop: 6, fontSize: 12, color: "var(--pos-tx-muted)" }}>
-                  {formatCurrency(productSales.totals.totalSales)} sales -{" "}
-                  {formatUnits(productSales.totals.totalUnits)} units
-                </div>
-              </div>
-              <div className="rpt-metric-toggle" aria-label="Category metric">
-                <button
-                  type="button"
-                  className={categoryMetric === "sales" ? "active" : ""}
-                  onClick={() => setCategoryMetric("sales")}
-                >
-                  Sales Amount
-                </button>
-                <button
-                  type="button"
-                  className={categoryMetric === "units" ? "active" : ""}
-                  onClick={() => setCategoryMetric("units")}
-                >
-                  Units Sold
-                </button>
-              </div>
-            </div>
-
-            {loading ? (
-              <div className="rpt-empty-state">Loading...</div>
-            ) : hasCategorySales ? (
-              <div className="rpt-chart-wrap">
-                <svg className="rpt-chart-svg" viewBox="0 0 120 120" role="img" aria-label="Category sales chart">
-                  <circle className="rpt-chart-empty" cx="60" cy="60" r="42" />
-                  <g transform="rotate(-90 60 60)">
-                    {categoryChartSegments.map((segment) => (
-                      <circle
-                        key={segment.category}
-                        className="rpt-chart-segment"
-                        cx="60"
-                        cy="60"
-                        r="42"
-                        stroke={segment.color}
-                        strokeDasharray={segment.dash}
-                        strokeDashoffset={segment.offset}
+                )}
+                {loading ? (
+                  <div className="rpt-empty-state">Loading...</div>
+                ) : hasItemSales ? (
+                  hasVisibleItemSales ? (
+                    <>
+                      <DataTable
+                        headers={["Item", "Category", "Units Sold", "Sales Amount"]}
+                        rows={visibleItemSales.map((item) => [
+                          item.itemName,
+                          item.category,
+                          formatUnits(item.units),
+                          formatCurrency(item.sales),
+                        ])}
                       />
-                    ))}
-                  </g>
-                  <text x="60" y="58" className="rpt-chart-center">
-                    {categoryMetric === "sales" ? "Sales" : "Units"}
-                  </text>
-                  <text x="60" y="73" className="rpt-chart-total">
-                    {categoryRows.length} groups
-                  </text>
-                </svg>
-                <div style={{ width: "100%" }}>
-                  {categoryChartSegments.map((segment) => {
-                    const percent = pct(segment.value, categoryMetricTotal);
-                    return (
-                      <div key={segment.category} className="rpt-legend-row">
-                        <span className="rpt-legend-swatch" style={{ background: segment.color }} />
-                        <span className="rpt-legend-name">{segment.category}</span>
-                        <span className="rpt-legend-value">
-                          {categoryMetric === "sales"
-                            ? formatCurrency(segment.sales)
-                            : formatUnits(segment.units)}{" "}
-                          ({percent}%)
+                      <div className="rpt-table-foot">
+                        <span>
+                          Showing {visibleItemSales.length} of {filteredItemSales.length} items
+                          {productSales.itemSales.length !== filteredItemSales.length
+                            ? ` matching ${productSales.itemSales.length} total`
+                            : ""}
                         </span>
+                        {canShowMoreItems && (
+                          <button
+                            type="button"
+                            className="rpt-show-more"
+                            onClick={() => setVisibleItemCount((count) => count + ITEM_PAGE_SIZE)}
+                          >
+                            Show more
+                          </button>
+                        )}
                       </div>
-                    );
-                  })}
-                </div>
+                    </>
+                  ) : (
+                    <div className="rpt-empty-state">No menu items match this search</div>
+                  )
+                ) : (
+                  <div className="rpt-empty-state">No menu items sold for this range</div>
+                )}
               </div>
-            ) : (
-              <div className="rpt-empty-state">No category sales for this range</div>
-            )}
-          </div>
-
-          <div className="rpt-card" style={{ padding: 0 }}>
-            <div className="rpt-section-title">Menu Items Sold</div>
-            {hasItemSales && (
-              <div className="rpt-table-toolbar">
-                <input
-                  className="rpt-search-input"
-                  value={itemSearch}
-                  onChange={(e) => setItemSearch(e.target.value)}
-                  placeholder="Search item or category"
-                  aria-label="Search menu items sold"
-                />
-                <select
-                  className="rpt-sort-select"
-                  value={itemSort}
-                  onChange={(e) => setItemSort(e.target.value as ItemSort)}
-                  aria-label="Sort menu items sold"
-                >
-                  <option value="units">Sort by Units Sold</option>
-                  <option value="sales">Sort by Sales Amount</option>
-                  <option value="name">Sort by Item Name</option>
-                </select>
-              </div>
-            )}
-            {loading ? (
-              <div className="rpt-empty-state">Loading...</div>
-            ) : hasItemSales ? (
-              hasVisibleItemSales ? (
-                <>
-                  <DataTable
-                    headers={["Item", "Category", "Units Sold", "Sales Amount"]}
-                    rows={visibleItemSales.map((item) => [
-                      item.itemName,
-                      item.category,
-                      formatUnits(item.units),
-                      formatCurrency(item.sales),
-                    ])}
-                  />
-                  <div className="rpt-table-foot">
-                    <span>
-                      Showing {visibleItemSales.length} of {filteredItemSales.length} items
-                      {productSales.itemSales.length !== filteredItemSales.length
-                        ? ` matching ${productSales.itemSales.length} total`
-                        : ""}
-                    </span>
-                    {canShowMoreItems && (
-                      <button
-                        type="button"
-                        className="rpt-show-more"
-                        onClick={() => setVisibleItemCount((count) => count + ITEM_PAGE_SIZE)}
-                      >
-                        Show more
-                      </button>
-                    )}
-                  </div>
-                </>
-              ) : (
-                <div className="rpt-empty-state">No menu items match this search</div>
-              )
-            ) : (
-              <div className="rpt-empty-state">No menu items sold for this range</div>
-            )}
-          </div>
-        </div>
+            </div>
           </>
         )}
 
@@ -881,7 +905,9 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
                           <span className="rpt-profit-cat">{row.categoryName}</span>
                           <span className="rpt-profit-amt">{formatCurrency(row.amount)}</span>
                           <span className="rpt-profit-pct">
-                            {row.percentOfRevenue != null ? `${row.percentOfRevenue}% of revenue` : "—"}
+                            {row.percentOfRevenue != null
+                              ? `${row.percentOfRevenue}% of revenue`
+                              : "—"}
                           </span>
                         </div>
                       ))}

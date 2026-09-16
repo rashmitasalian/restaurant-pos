@@ -2,7 +2,15 @@ import * as XLSX from "xlsx";
 import type { HistoryMatrix, HistoryPeriod } from "./historyUtils";
 import { exportStatusCode, formatDayHeader, formatOtHoursTotal } from "./historyUtils";
 
-const SUMMARY_HEADER = ["Employee", "Present", "Absent", "Half Day", "Leave", "Late", "OT Hours"] as const;
+const SUMMARY_HEADER = [
+  "Employee",
+  "Present",
+  "Absent",
+  "Half Day",
+  "Leave",
+  "Late",
+  "OT Hours",
+] as const;
 
 function registerTitle(period: HistoryPeriod) {
   if (period === "month") {

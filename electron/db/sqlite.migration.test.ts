@@ -199,9 +199,7 @@ describe("sqlite order cancellation column upgrades", () => {
     const columns = db.prepare("PRAGMA table_info(orders)").all() as Array<{ name: string }>;
     const indexes = db.prepare("PRAGMA index_list(orders)").all() as Array<{ name: string }>;
     const cancelled = db
-      .prepare(
-        "SELECT cancelled_at, cancelled_by, cancellation_reason FROM orders WHERE id = ?",
-      )
+      .prepare("SELECT cancelled_at, cancelled_by, cancellation_reason FROM orders WHERE id = ?")
       .get("order:legacy-cancel") as {
       cancelled_at: number | null;
       cancelled_by: string | null;

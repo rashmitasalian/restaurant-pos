@@ -2,7 +2,12 @@ import { DEMO_MENUS } from "../data/menu";
 import type { MenuCategory, PublicMenuItem, Restaurant } from "../types/menu";
 
 export type MenuQueryResult =
-  | { status: "success"; restaurant: Restaurant; categories: MenuCategory[]; items: PublicMenuItem[] }
+  | {
+      status: "success";
+      restaurant: Restaurant;
+      categories: MenuCategory[];
+      items: PublicMenuItem[];
+    }
   | { status: "empty"; restaurant: Restaurant }
   | { status: "not-found" };
 

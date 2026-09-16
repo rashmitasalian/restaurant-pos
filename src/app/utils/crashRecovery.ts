@@ -44,8 +44,8 @@ export class CrashRecovery {
     try {
       const stored = localStorage.getItem(RECOVERY_KEY);
       if (!stored) {
-return false;
-}
+        return false;
+      }
 
       const state = JSON.parse(stored) as CrashRecoveryState;
       // Only consider state recoverable if it's less than 1 hour old
@@ -65,8 +65,8 @@ return false;
     try {
       const stored = localStorage.getItem(RECOVERY_KEY);
       if (!stored) {
-return null;
-}
+        return null;
+      }
 
       const state = JSON.parse(stored) as CrashRecoveryState;
       state.recovered = true;
@@ -95,8 +95,8 @@ return null;
     try {
       const stored = localStorage.getItem(RECOVERY_KEY);
       if (!stored) {
-return null;
-}
+        return null;
+      }
 
       const state = JSON.parse(stored) as CrashRecoveryState;
       const ageMs = Date.now() - state.timestamp;
@@ -112,8 +112,8 @@ return null;
   static exportRecoveryState(): string {
     const state = this.getRecoveryState();
     if (!state) {
-return "No recovery state available";
-}
+      return "No recovery state available";
+    }
 
     return JSON.stringify(state, null, 2);
   }

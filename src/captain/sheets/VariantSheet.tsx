@@ -53,7 +53,11 @@ export function VariantSheet({
               <Icon icon={Minus} size="md" />
             </button>
             <span>{qty}</span>
-            <button type="button" aria-label="Increase quantity" onClick={() => setQty((value) => value + 1)}>
+            <button
+              type="button"
+              aria-label="Increase quantity"
+              onClick={() => setQty((value) => value + 1)}
+            >
               <Icon icon={Plus} size="md" />
             </button>
           </div>

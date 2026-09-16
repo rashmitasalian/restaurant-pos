@@ -11,7 +11,8 @@ export const VALIDATION_MESSAGES: Record<string, string> = {
   "customer-phone-invalid": "Please enter a valid 10-digit Indian mobile number (starts with 6-9).",
   "customer-phone-duplicate": "This phone number is already added.",
   "customer-has-outstanding": "Clear this customer's outstanding balance before removing them.",
-  "cannot-delete-order-with-credit": "This bill still has unpaid customer credit and cannot be deleted.",
+  "cannot-delete-order-with-credit":
+    "This bill still has unpaid customer credit and cannot be deleted.",
   "credit-disabled": "Customer credit is turned off in Settings.",
   "credit-customer-required": "Select a saved customer to put this bill on credit.",
   "credit-customer-blocked": "This customer's credit account is blocked.",
@@ -21,11 +22,14 @@ export const VALIDATION_MESSAGES: Record<string, string> = {
   "credit-amount-exceeds-outstanding": "Amount is more than the outstanding balance.",
   "credit-due-date-invalid": "Enter a valid due date.",
   "credit-payment-method-invalid": "Choose cash, UPI, card, or other.",
-  "credit-split-not-allowed": "Credit cannot be combined with other payment methods on the same bill.",
+  "credit-split-not-allowed":
+    "Credit cannot be combined with other payment methods on the same bill.",
   "credit-reference-too-long": "Reference must be 80 characters or fewer.",
   "credit-notes-too-long": "Notes must be 500 characters or fewer.",
-  "credit-manage-forbidden": "Only a manager or admin can change credit limits or void credit bills.",
-  "credit-allocation-incomplete": "Could not allocate this payment against open credit bills. Try again.",
+  "credit-manage-forbidden":
+    "Only a manager or admin can change credit limits or void credit bills.",
+  "credit-allocation-incomplete":
+    "Could not allocate this payment against open credit bills. Try again.",
   "credit-sale-not-found": "That credit bill was not found.",
   "credit-sale-already-settled": "This credit bill is already fully settled.",
   "credit-void-reason-too-long": "Void reason must be 500 characters or fewer.",
@@ -39,9 +43,12 @@ export const VALIDATION_MESSAGES: Record<string, string> = {
   "staff-notes-too-long": "Notes must be 500 characters or fewer.",
   "staff-photo-invalid": "Please choose a valid image file.",
   "staff-photo-too-large": "Staff photo must be 500 KB or smaller after compression.",
-  "staff-has-attendance": "This staff member has attendance records. Mark them as Left instead of deleting.",
-  "staff-has-account": "This staff member has a linked RestoNiti account. Mark them as Left instead of deleting.",
-  "staff-has-history": "This staff member has historical records. Mark them as Left instead of deleting.",
+  "staff-has-attendance":
+    "This staff member has attendance records. Mark them as Left instead of deleting.",
+  "staff-has-account":
+    "This staff member has a linked RestoNiti account. Mark them as Left instead of deleting.",
+  "staff-has-history":
+    "This staff member has historical records. Mark them as Left instead of deleting.",
   "staff-account-already-linked": "This staff member already has a RestoNiti account.",
   "salary-advance-amount-invalid": "Advance amount must be greater than zero.",
   "salary-advance-date-invalid": "Advance date must be valid.",
@@ -61,9 +68,11 @@ export const VALIDATION_MESSAGES: Record<string, string> = {
   "attendance-remarks-required-for-leave": "Remarks are required when status is Leave.",
   "attendance-duplicate-day": "An attendance record already exists for this employee on this date.",
   "attendance-not-found": "Attendance record was not found.",
-  "pos-attendance-api-unavailable": "Attendance tools are still loading. Restart the app and try again.",
+  "pos-attendance-api-unavailable":
+    "Attendance tools are still loading. Restart the app and try again.",
   "pos-staff-api-unavailable": "Staff tools are still loading. Restart the app and try again.",
-  "pos-review-api-unavailable": "Owner Review tools are still loading. Restart the app and try again.",
+  "pos-review-api-unavailable":
+    "Owner Review tools are still loading. Restart the app and try again.",
   "category-name-required": "Category name is required.",
   "category-name-duplicate": "Category already exists.",
   "delivery-platform-required": "Delivery platform is required.",
@@ -71,7 +80,8 @@ export const VALIDATION_MESSAGES: Record<string, string> = {
   "rider-name-invalid": "Rider name must include a letter.",
   "display-name-invalid": "Display name must include a letter.",
   "rider-phone-invalid": "Please enter a valid 10-digit rider phone number, or leave it blank.",
-  "kot-sent-item-requires-void": "Sent kitchen items must be voided before reducing or removing them.",
+  "kot-sent-item-requires-void":
+    "Sent kitchen items must be voided before reducing or removing them.",
   "kot-void-reason-required": "Void reason is required.",
   "cancel-reason-required": "A cancellation reason is required.",
   "cannot-delete-cancelled-order": "Cancelled orders cannot be deleted.",
@@ -93,12 +103,13 @@ export const VALIDATION_MESSAGES: Record<string, string> = {
   "grocery-item-not-found": "Grocery item was not found.",
   "grocery-list-not-found": "Grocery list was not found.",
   "grocery-purchase-not-found": "Purchase entry was not found.",
-  "grocery-list-purchase-mode-conflict": "Use either whole-list or item-wise purchase amounts for one buying list, not both.",
+  "grocery-list-purchase-mode-conflict":
+    "Use either whole-list or item-wise purchase amounts for one buying list, not both.",
 };
 
 export const SYSTEM_MESSAGES: Record<string, string> = {
   "auth-required": "Your session has expired. Please sign in again.",
-  "forbidden": "You do not have permission to do that.",
+  forbidden: "You do not have permission to do that.",
   "password-change-required": "Please change your password before continuing.",
   "internal-error": "Something went wrong. Please try again.",
   "unknown-error": "Something went wrong. Please try again.",
@@ -112,36 +123,63 @@ export const STAFF_TEXT_LIMITS = {
 } as const;
 
 export function normalizeClientErrorMessage(error: unknown): string {
-  const initial =
-    error instanceof Error
-      ? error.message
-      : typeof error === "string"
-        ? error
-        : "";
+  const initial = error instanceof Error ? error.message : typeof error === "string" ? error : "";
   let message = initial.trim();
   const ipcMatch = message.match(/^Error invoking remote method '[^']+':\s*(.+)$/s);
-  if (ipcMatch) message = ipcMatch[1].trim();
-  if (message.startsWith("Error: ")) message = message.slice(7).trim();
-  const typedMatch = message.match(/^(?:SqliteError|TypeError|ReferenceError|RangeError):\s*(.+)$/i);
-  if (typedMatch) message = typedMatch[1].trim();
+  if (ipcMatch) {
+    message = ipcMatch[1].trim();
+  }
+  if (message.startsWith("Error: ")) {
+    message = message.slice(7).trim();
+  }
+  const typedMatch = message.match(
+    /^(?:SqliteError|TypeError|ReferenceError|RangeError):\s*(.+)$/i,
+  );
+  if (typedMatch) {
+    message = typedMatch[1].trim();
+  }
   return message;
 }
 
 export function isTechnicalErrorMessage(message: string): boolean {
   const trimmed = message.trim();
-  if (!trimmed) return true;
+  if (!trimmed) {
+    return true;
+  }
   const lower = trimmed.toLowerCase();
-  if (lower.startsWith("error invoking remote method")) return true;
-  if (lower.includes("sqliteerror") || lower.includes("sqlite_")) return true;
-  if (/^(?:error|typeerror|referenceerror|rangeerror|syntaxerror)\b/.test(lower)) return true;
-  if (/^[a-z]+error:/i.test(trimmed)) return true;
-  if (/^[A-Z][A-Z0-9_]*:/.test(trimmed)) return true;
-  if (/\bambiguous column\b/.test(lower)) return true;
-  if (/\bsyntax error\b/.test(lower)) return true;
-  if (/\bno such table\b/.test(lower)) return true;
-  if (/\bno such column\b/.test(lower)) return true;
-  if (/\n\s+at\s+/m.test(trimmed)) return true;
-  if (trimmed.length > 240) return true;
+  if (lower.startsWith("error invoking remote method")) {
+    return true;
+  }
+  if (lower.includes("sqliteerror") || lower.includes("sqlite_")) {
+    return true;
+  }
+  if (/^(?:error|typeerror|referenceerror|rangeerror|syntaxerror)\b/.test(lower)) {
+    return true;
+  }
+  if (/^[a-z]+error:/i.test(trimmed)) {
+    return true;
+  }
+  if (/^[A-Z][A-Z0-9_]*:/.test(trimmed)) {
+    return true;
+  }
+  if (/\bambiguous column\b/.test(lower)) {
+    return true;
+  }
+  if (/\bsyntax error\b/.test(lower)) {
+    return true;
+  }
+  if (/\bno such table\b/.test(lower)) {
+    return true;
+  }
+  if (/\bno such column\b/.test(lower)) {
+    return true;
+  }
+  if (/\n\s+at\s+/m.test(trimmed)) {
+    return true;
+  }
+  if (trimmed.length > 240) {
+    return true;
+  }
   return false;
 }
 
@@ -150,15 +188,24 @@ export function logSanitizedClientError(error: unknown, defaultMessage: string) 
   logger.error(`[ui] ${defaultMessage}`, err);
 }
 
-export function validationMessage(error: unknown, defaultMessage = "Something went wrong. Please try again.") {
+export function validationMessage(
+  error: unknown,
+  defaultMessage = "Something went wrong. Please try again.",
+) {
   const raw = normalizeClientErrorMessage(error);
-  if (!raw) return defaultMessage;
+  if (!raw) {
+    return defaultMessage;
+  }
   if (raw === "internal-error") {
     logSanitizedClientError(error, defaultMessage);
     return defaultMessage;
   }
-  if (VALIDATION_MESSAGES[raw]) return VALIDATION_MESSAGES[raw];
-  if (SYSTEM_MESSAGES[raw]) return SYSTEM_MESSAGES[raw];
+  if (VALIDATION_MESSAGES[raw]) {
+    return VALIDATION_MESSAGES[raw];
+  }
+  if (SYSTEM_MESSAGES[raw]) {
+    return SYSTEM_MESSAGES[raw];
+  }
   if (isTechnicalErrorMessage(raw)) {
     logSanitizedClientError(error, defaultMessage);
     return defaultMessage;
@@ -177,20 +224,23 @@ export function sanitizeIpcError(error: unknown): never {
 }
 
 export function normalizeText(value: unknown) {
-  return String(value ?? "").trim().replace(/\s+/g, " ");
+  return String(value ?? "")
+    .trim()
+    .replace(/\s+/g, " ");
 }
 
 export function hasLetter(value: unknown) {
   return /\p{L}/u.test(normalizeText(value));
 }
 
-export function isValidPersonName(
-  value: unknown,
-  options: { min?: number; max?: number } = {},
-) {
+export function isValidPersonName(value: unknown, options: { min?: number; max?: number } = {}) {
   const text = normalizeText(value);
   const min = options.min ?? 2;
-  return text.length >= min && (options.max === undefined || text.length <= options.max) && hasLetter(text);
+  return (
+    text.length >= min &&
+    (options.max === undefined || text.length <= options.max) &&
+    hasLetter(text)
+  );
 }
 
 export function normalizeSku(value: unknown) {
@@ -220,16 +270,14 @@ export function isValidDateOnly(value: unknown) {
   const text = String(value ?? "").trim();
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
   if (!match) {
-return false;
-}
+    return false;
+  }
   const year = Number(match[1]);
   const month = Number(match[2]);
   const day = Number(match[3]);
   const date = new Date(Date.UTC(year, month - 1, day));
   return (
-    date.getUTCFullYear() === year &&
-    date.getUTCMonth() === month - 1 &&
-    date.getUTCDate() === day
+    date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
   );
 }
 

@@ -7,11 +7,7 @@ interface ScrollableListProps {
   style?: React.CSSProperties;
 }
 
-export default function ScrollableList({
-  children,
-  className = "",
-  style,
-}: ScrollableListProps) {
+export default function ScrollableList({ children, className = "", style }: ScrollableListProps) {
   return (
     <div className={`${styles.scrollArea} ${className}`} style={style}>
       {children}

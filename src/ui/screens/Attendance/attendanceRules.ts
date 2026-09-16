@@ -17,7 +17,10 @@ export function canSetShift(status: AttendanceStatus | null | undefined): boolea
   return isWorkingAttendanceStatus(status);
 }
 
-export function attendanceFieldHint(field: "late" | "ot" | "shift", status: AttendanceStatus | null): string {
+export function attendanceFieldHint(
+  field: "late" | "ot" | "shift",
+  status: AttendanceStatus | null,
+): string {
   if (isWorkingAttendanceStatus(status)) {
     return "";
   }

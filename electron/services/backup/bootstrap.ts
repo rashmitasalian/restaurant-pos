@@ -1,7 +1,9 @@
 import { configureBackupManager, BackupManager } from "./backupManager";
 import { posService } from "../posService";
 
-export function bootstrapBackupManager(logger?: (level: string, message: string, context?: any) => void) {
+export function bootstrapBackupManager(
+  logger?: (level: string, message: string, context?: any) => void,
+) {
   const manager = new BackupManager({
     logger,
     settings: {

@@ -17,7 +17,9 @@ type DrawerProps = {
 export function Drawer({ open, title, onClose, children, footer, wide }: DrawerProps) {
   const panelRef = useFocusTrap<HTMLElement>(open, onClose);
 
-  if (!open) return null;
+  if (!open) {
+    return null;
+  }
 
   return createPortal(
     <div className={styles.overlay} onClick={onClose} role="presentation">

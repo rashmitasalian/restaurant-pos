@@ -13,9 +13,7 @@ import { useToast } from "../../context/ToastContext";
 import { reportClientError } from "../../../app/utils/clientError";
 import { useFocusTrap } from "../../hooks/useFocusTrap";
 import { useBusinessDateRange } from "../../hooks/useBusinessDateRange";
-import {
-  BusinessRangeControls,
-} from "../../components/BusinessRangeControls";
+import { BusinessRangeControls } from "../../components/BusinessRangeControls";
 import { buildReceiptLines } from "../Billing/utils/receiptBuilder";
 import type { ReceiptBranding } from "../Billing/utils/receiptBuilder";
 import {
@@ -99,7 +97,10 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
   const sentinelRef = React.useRef<HTMLDivElement | null>(null);
 
   const beginAction = React.useCallback(
-    (ref: React.MutableRefObject<boolean>, setBusy: React.Dispatch<React.SetStateAction<boolean>>) => {
+    (
+      ref: React.MutableRefObject<boolean>,
+      setBusy: React.Dispatch<React.SetStateAction<boolean>>,
+    ) => {
       if (ref.current) {
         return false;
       }
@@ -111,7 +112,10 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
   );
 
   const endAction = React.useCallback(
-    (ref: React.MutableRefObject<boolean>, setBusy: React.Dispatch<React.SetStateAction<boolean>>) => {
+    (
+      ref: React.MutableRefObject<boolean>,
+      setBusy: React.Dispatch<React.SetStateAction<boolean>>,
+    ) => {
       ref.current = false;
       setBusy(false);
     },
@@ -419,10 +423,10 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
   };
 
   const getDeleteAllQuery = () => ({
-      from: fromTs,
-      to: toTs,
-      search: search.trim() || undefined,
-    });
+    from: fromTs,
+    to: toTs,
+    search: search.trim() || undefined,
+  });
 
   const closeSelectedConfirm = React.useCallback(() => {
     setConfirmSelectedOpen(false);
@@ -572,9 +576,17 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
       const tableNum: number | null = full.tableId ?? full.table ?? null;
       const discPct: number = full.discountPercent ?? 0;
       const tableLabel = formatTableLabel(tableNum, full.tableName);
-      const lines = buildReceiptLines(full, tableNum, discPct, computeTotals(full), gstConfig, branding, {
-        tableLabel,
-      });
+      const lines = buildReceiptLines(
+        full,
+        tableNum,
+        discPct,
+        computeTotals(full),
+        gstConfig,
+        branding,
+        {
+          tableLabel,
+        },
+      );
       await printReceipt({ lines });
       showToast("Receipt reprinted", "success");
     } catch (e: any) {
@@ -594,7 +606,8 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
     const calculated = calculateGstTotals(ord?.items || [], Number(ord?.discountPercent || 0), cfg);
     const paymentsArr = (ord?.payments || []) as any[];
     const paidTotal = paymentsArr.reduce((s: number, p: any) => s + (Number(p?.amount) || 0), 0);
-    const total = typeof ord?.total === "number" ? ord.total : paidTotal > 0 ? paidTotal : calculated.total;
+    const total =
+      typeof ord?.total === "number" ? ord.total : paidTotal > 0 ? paidTotal : calculated.total;
     const taxableSubtotal =
       typeof ord?.subtotal === "number" ? ord.subtotal : calculated.taxableSubtotal;
     const taxTotal = calculated.taxTotal;
@@ -663,14 +676,19 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
       ? "order-history-selected"
       : `order-history-${label.replace(/[^a-z0-9]/gi, "-").toLowerCase()}`;
     try {
-      allItems = exportingSelected ? await fetchSelectedForExport() : await fetchFilteredForExport();
+      allItems = exportingSelected
+        ? await fetchSelectedForExport()
+        : await fetchFilteredForExport();
     } catch {
       showToast("Export failed: could not load records", "error");
       endAction(exportingRef, setExporting);
       return;
     }
     if (allItems.length === 0) {
-      showToast(exportingSelected ? "No selected orders to export" : "No orders to export for this filter", "error");
+      showToast(
+        exportingSelected ? "No selected orders to export" : "No orders to export for this filter",
+        "error",
+      );
       endAction(exportingRef, setExporting);
       return;
     }
@@ -724,7 +742,7 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
       ${rows}
       <tr class="total-row">
         <td colspan="5">Total</td>
-        <td style="text-align:center;color:var(--pos-danger)">${grandDiscount > 0 ? `−${fmt(grandDiscount)}` : '—'}</td>
+        <td style="text-align:center;color:var(--pos-danger)">${grandDiscount > 0 ? `−${fmt(grandDiscount)}` : "—"}</td>
         <td style="text-align:right">${fmt(grandTotal)}</td>
       </tr>
     </tbody>
@@ -750,46 +768,59 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
   return (
     <div className={embedded ? undefined : "pos-page"}>
       {!embedded && (
-      <PageHeader
-        title="Order History"
-        subtitle="Paid orders"
-        actions={
-          <>
-          <input
-            placeholder="Search order, method…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-loadFirstPage(pageSize, search, fromTs, toTs);
-}
-            }}
-            className="pos-input"
-            style={{ width: 200 }}
-          />
-          <Button onClick={() => loadFirstPage(pageSize, search, fromTs, toTs)} variant="secondary">
-            Search
-          </Button>
-          <Button
-            onClick={handleExport}
-            disabled={exporting}
-            variant="secondary"
-            title={
-              selected.length > 0 ? "Save selected orders as PDF" : "Save filtered orders as PDF"
-            }
-          >
-            {exporting
-              ? "Exporting..."
-              : selected.length > 0
-                ? `Export Selected PDF (${selected.length})`
-                : "Export PDF"}
-          </Button>
-          </>
-        }
-      />
+        <PageHeader
+          title="Order History"
+          subtitle="Paid orders"
+          actions={
+            <>
+              <input
+                placeholder="Search order, method…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    loadFirstPage(pageSize, search, fromTs, toTs);
+                  }
+                }}
+                className="pos-input"
+                style={{ width: 200 }}
+              />
+              <Button
+                onClick={() => loadFirstPage(pageSize, search, fromTs, toTs)}
+                variant="secondary"
+              >
+                Search
+              </Button>
+              <Button
+                onClick={handleExport}
+                disabled={exporting}
+                variant="secondary"
+                title={
+                  selected.length > 0
+                    ? "Save selected orders as PDF"
+                    : "Save filtered orders as PDF"
+                }
+              >
+                {exporting
+                  ? "Exporting..."
+                  : selected.length > 0
+                    ? `Export Selected PDF (${selected.length})`
+                    : "Export PDF"}
+              </Button>
+            </>
+          }
+        />
       )}
       {embedded && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14, alignItems: "center" }}>
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 8,
+            marginBottom: 14,
+            alignItems: "center",
+          }}
+        >
           <input
             placeholder="Search order, method…"
             value={search}
@@ -871,8 +902,12 @@ loadFirstPage(pageSize, search, fromTs, toTs);
               alignItems: "center",
               padding: "10px 16px",
               borderRadius: 10,
-              background: selected.includes(s.uid) ? "var(--pos-saffron-tint)" : "var(--pos-surface)",
-              border: selected.includes(s.uid) ? "1.5px solid var(--pos-saffron-line)" : "1px solid var(--pos-surface-sunken)",
+              background: selected.includes(s.uid)
+                ? "var(--pos-saffron-tint)"
+                : "var(--pos-surface)",
+              border: selected.includes(s.uid)
+                ? "1.5px solid var(--pos-saffron-line)"
+                : "1px solid var(--pos-surface-sunken)",
               boxShadow: "var(--pos-shadow-1)",
               transition: "background 120ms, border-color 120ms",
             }}
@@ -889,12 +924,25 @@ loadFirstPage(pageSize, search, fromTs, toTs);
             </div>
             {/* # */}
             <span
-              style={{ fontSize: 12, color: "var(--pos-tx-muted)", fontFamily: "'Courier New', monospace" }}
+              style={{
+                fontSize: 12,
+                color: "var(--pos-tx-muted)",
+                fontFamily: "'Courier New', monospace",
+              }}
             >
               {rowIdx + 1}
             </span>
             {/* Order label */}
-            <div style={{ fontWeight: 700, fontSize: 14, color: "var(--pos-tx)", display: "flex", alignItems: "center", gap: 6 }}>
+            <div
+              style={{
+                fontWeight: 700,
+                fontSize: 14,
+                color: "var(--pos-tx)",
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
               {s.orderLabel}
               {s.discountPercent > 0 && (
                 <span
@@ -924,7 +972,14 @@ loadFirstPage(pageSize, search, fromTs, toTs);
               })}
             </span>
             {/* Items */}
-            <span style={{ textAlign: "center", fontSize: 13, color: "var(--pos-tx-sec)", fontWeight: 600 }}>
+            <span
+              style={{
+                textAlign: "center",
+                fontSize: 13,
+                color: "var(--pos-tx-sec)",
+                fontWeight: 600,
+              }}
+            >
               {s.items}
             </span>
             {/* Method badge */}
@@ -965,7 +1020,12 @@ loadFirstPage(pageSize, search, fromTs, toTs);
             </div>
             {/* Actions */}
             <div style={{ display: "flex", gap: 5, justifyContent: "center" }}>
-              <Button size="sm" variant="secondary" onClick={() => openOrder(s)} title="Preview order">
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => openOrder(s)}
+                title="Preview order"
+              >
                 Preview
               </Button>
               <Button
@@ -979,7 +1039,9 @@ loadFirstPage(pageSize, search, fromTs, toTs);
               </Button>
             </div>
             {/* Total */}
-            <span style={{ textAlign: "right", fontWeight: 800, fontSize: 15, color: "var(--pos-tx)" }}>
+            <span
+              style={{ textAlign: "right", fontWeight: 800, fontSize: 15, color: "var(--pos-tx)" }}
+            >
               ₹{s.total.toLocaleString("en-IN")}
             </span>
           </div>
@@ -1025,7 +1087,12 @@ loadFirstPage(pageSize, search, fromTs, toTs);
           }}
         >
           <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-            <Button size="sm" variant="secondary" onClick={() => loadPrevPage()} disabled={currentPageIndex === 0}>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => loadPrevPage()}
+              disabled={currentPageIndex === 0}
+            >
               ← Prev
             </Button>
             <Button
@@ -1086,7 +1153,10 @@ loadFirstPage(pageSize, search, fromTs, toTs);
               boxShadow: "var(--pos-shadow-overlay)",
             }}
           >
-            <h3 id="deleteSelectedTitle" style={{ margin: 0, fontSize: 17, fontWeight: 800, color: "var(--pos-tx)" }}>
+            <h3
+              id="deleteSelectedTitle"
+              style={{ margin: 0, fontSize: 17, fontWeight: 800, color: "var(--pos-tx)" }}
+            >
               Delete selected orders?
             </h3>
             <p style={{ marginTop: 8, marginBottom: 20, color: "var(--pos-tx-sub)", fontSize: 14 }}>
@@ -1094,7 +1164,11 @@ loadFirstPage(pageSize, search, fromTs, toTs);
               {selected.length !== 1 ? "s" : ""}.
             </p>
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-              <Button variant="secondary" onClick={closeSelectedConfirm} disabled={deletingSelected}>
+              <Button
+                variant="secondary"
+                onClick={closeSelectedConfirm}
+                disabled={deletingSelected}
+              >
                 Cancel
               </Button>
               <Button variant="danger" onClick={deleteSelected} disabled={deletingSelected}>
@@ -1133,7 +1207,10 @@ loadFirstPage(pageSize, search, fromTs, toTs);
               boxShadow: "var(--pos-shadow-overlay)",
             }}
           >
-            <h3 id="deleteAllTitle" style={{ margin: 0, fontSize: 17, fontWeight: 800, color: "var(--pos-tx)" }}>
+            <h3
+              id="deleteAllTitle"
+              style={{ margin: 0, fontSize: 17, fontWeight: 800, color: "var(--pos-tx)" }}
+            >
               Delete all history?
             </h3>
             <p style={{ marginTop: 8, marginBottom: 20, color: "var(--pos-tx-sub)", fontSize: 14 }}>
@@ -1141,8 +1218,8 @@ loadFirstPage(pageSize, search, fromTs, toTs);
                 "Counting matching orders..."
               ) : (
                 <>
-                  This will permanently delete <strong>{deleteAllCount ?? 0}</strong> matching
-                  order{deleteAllCount === 1 ? "" : "s"}. This cannot be undone.
+                  This will permanently delete <strong>{deleteAllCount ?? 0}</strong> matching order
+                  {deleteAllCount === 1 ? "" : "s"}. This cannot be undone.
                 </>
               )}
             </p>
@@ -1211,7 +1288,10 @@ loadFirstPage(pageSize, search, fromTs, toTs);
               }}
             >
               <div>
-                <h3 id="historyPreviewTitle" style={{ margin: 0, fontSize: 17, fontWeight: 800, color: "var(--pos-tx)" }}>
+                <h3
+                  id="historyPreviewTitle"
+                  style={{ margin: 0, fontSize: 17, fontWeight: 800, color: "var(--pos-tx)" }}
+                >
                   {previewFull
                     ? previewFull.orderType === "takeaway"
                       ? `Takeaway${previewFull.meta?.customerName ? ` – ${previewFull.meta.customerName}` : ""}`
@@ -1250,7 +1330,12 @@ loadFirstPage(pageSize, search, fromTs, toTs);
             {/* Loading state */}
             {previewLoading && (
               <div
-                style={{ color: "var(--pos-tx-muted)", padding: "32px 0", textAlign: "center", fontSize: 14 }}
+                style={{
+                  color: "var(--pos-tx-muted)",
+                  padding: "32px 0",
+                  textAlign: "center",
+                  fontSize: 14,
+                }}
               >
                 Loading…
               </div>
@@ -1298,17 +1383,22 @@ loadFirstPage(pageSize, search, fromTs, toTs);
                         columnGap: 8,
                         padding: "9px 10px",
                         borderRadius: 8,
-                        background: idx % 2 === 0 ? "var(--pos-surface)" : "var(--pos-surface-hover)",
+                        background:
+                          idx % 2 === 0 ? "var(--pos-surface)" : "var(--pos-surface-hover)",
                         borderBottom: "1px solid var(--pos-surface-sunken)",
                       }}
                     >
                       <span style={{ fontWeight: 600, fontSize: 13, color: "var(--pos-tx)" }}>
                         {it.name || it.title || "Item"}
                       </span>
-                      <span style={{ textAlign: "center", fontSize: 13, color: "var(--pos-tx-sec)" }}>
+                      <span
+                        style={{ textAlign: "center", fontSize: 13, color: "var(--pos-tx-sec)" }}
+                      >
                         {it.qty}
                       </span>
-                      <span style={{ textAlign: "right", fontSize: 13, color: "var(--pos-tx-sub)" }}>
+                      <span
+                        style={{ textAlign: "right", fontSize: 13, color: "var(--pos-tx-sub)" }}
+                      >
                         ₹{(it.rate || 0).toLocaleString("en-IN")}
                       </span>
                       <span

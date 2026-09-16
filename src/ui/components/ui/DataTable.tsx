@@ -68,25 +68,38 @@ export function DataTable({
 
   const displayOrder = React.useMemo(() => {
     const indexes = rows.map((_, i) => i);
-    if (sortCol == null || !sortValues) return indexes;
+    if (sortCol == null || !sortValues) {
+      return indexes;
+    }
     const col = cols[sortCol];
     const key = col?.sortKey || col?.key || String(sortCol);
     return indexes.sort((a, b) => {
       const av = sortValues[a]?.[key];
       const bv = sortValues[b]?.[key];
-      if (av == null && bv == null) return 0;
-      if (av == null) return 1;
-      if (bv == null) return -1;
+      if (av == null && bv == null) {
+        return 0;
+      }
+      if (av == null) {
+        return 1;
+      }
+      if (bv == null) {
+        return -1;
+      }
       let cmp = 0;
-      if (typeof av === "number" && typeof bv === "number") cmp = av - bv;
-      else cmp = String(av).localeCompare(String(bv), undefined, { sensitivity: "base" });
+      if (typeof av === "number" && typeof bv === "number") {
+        cmp = av - bv;
+      } else {
+        cmp = String(av).localeCompare(String(bv), undefined, { sensitivity: "base" });
+      }
       return sortDir === "asc" ? cmp : -cmp;
     });
   }, [rows, sortCol, sortDir, sortValues, cols]);
 
   const toggleSort = (index: number) => {
     const col = cols[index];
-    if (!col?.sortable) return;
+    if (!col?.sortable) {
+      return;
+    }
     if (sortCol === index) {
       setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     } else {
@@ -96,16 +109,26 @@ export function DataTable({
   };
 
   const toggleAll = () => {
-    if (!onSelectionChange) return;
-    if (selected.size === rows.length) onSelectionChange([]);
-    else onSelectionChange(rows.map((_, i) => i));
+    if (!onSelectionChange) {
+      return;
+    }
+    if (selected.size === rows.length) {
+      onSelectionChange([]);
+    } else {
+      onSelectionChange(rows.map((_, i) => i));
+    }
   };
 
   const toggleOne = (rowIndex: number) => {
-    if (!onSelectionChange) return;
+    if (!onSelectionChange) {
+      return;
+    }
     const next = new Set(selected);
-    if (next.has(rowIndex)) next.delete(rowIndex);
-    else next.add(rowIndex);
+    if (next.has(rowIndex)) {
+      next.delete(rowIndex);
+    } else {
+      next.add(rowIndex);
+    }
     onSelectionChange(Array.from(next).sort((a, b) => a - b));
   };
 
@@ -120,7 +143,9 @@ export function DataTable({
       onRowClick(displayOrder[activeRow] ?? activeRow);
       return;
     }
-    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") {
+      return;
+    }
     event.preventDefault();
     const delta = event.key === "ArrowDown" ? 1 : -1;
     setActiveRow((current) => Math.min(rows.length - 1, Math.max(0, current + delta)));
@@ -208,7 +233,9 @@ export function DataTable({
                     clickable
                       ? (e) => {
                           const target = e.target as HTMLElement;
-                          if (target.closest("button, a, input, select, textarea, label")) return;
+                          if (target.closest("button, a, input, select, textarea, label")) {
+                            return;
+                          }
                           onRowClick?.(rowIndex);
                         }
                       : undefined
@@ -227,12 +254,11 @@ export function DataTable({
                   {cols.map((col, colIndex) => (
                     <td
                       key={col.key || colIndex}
-                      className={[
-                        columnClass(col),
-                        col.align === "right" ? "pos-tabular" : undefined,
-                      ]
-                        .filter(Boolean)
-                        .join(" ") || undefined}
+                      className={
+                        [columnClass(col), col.align === "right" ? "pos-tabular" : undefined]
+                          .filter(Boolean)
+                          .join(" ") || undefined
+                      }
                     >
                       {row[colIndex]}
                     </td>

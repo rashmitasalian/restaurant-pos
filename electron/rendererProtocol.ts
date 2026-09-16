@@ -30,7 +30,10 @@ export function mimeTypeForRendererFile(filePath: string): string {
 }
 
 /** Map restoniti://app/... to a file under the unpacked dist folder. */
-export function rendererFileFromRequestUrl(requestUrl: string, rendererRoot: string): string | null {
+export function rendererFileFromRequestUrl(
+  requestUrl: string,
+  rendererRoot: string,
+): string | null {
   let url: URL;
   try {
     url = new URL(requestUrl);

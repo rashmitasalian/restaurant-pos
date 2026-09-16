@@ -471,8 +471,8 @@ export default function PaymentsModal({
       }
     }
     if (e.key === "Enter" && expanded && canConfirm) {
-handleConfirm();
-}
+      handleConfirm();
+    }
   };
 
   const handleSplitChange = (idx: 0 | 1, val: string) => {
@@ -674,7 +674,15 @@ handleConfirm();
             }}
           >
             <label
-              style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 13, color: "var(--pos-tx-sec)", fontWeight: 600 }}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                cursor: "pointer",
+                fontSize: 13,
+                color: "var(--pos-tx-sec)",
+                fontWeight: 600,
+              }}
             >
               <input
                 type="checkbox"
@@ -806,27 +814,27 @@ handleConfirm();
                   ? ["cash", "card", "upi", "split", "voucher", "other", "credit"]
                   : ["cash", "card", "upi", "split", "voucher", "other"]) as PaymentMethod[]
               ).map((m) => (
-                  <button
-                    key={m}
-                    style={{ ...methodBtn(method === m), opacity: processing ? 0.6 : 1 }}
-                    onClick={() => setMethod(m)}
-                    disabled={processing}
-                  >
-                    {m === "cash"
-                      ? "Cash"
-                      : m === "card"
-                        ? "Card"
-                        : m === "upi"
-                          ? "UPI"
-                          : m === "split"
-                            ? "Split"
-                            : m === "voucher"
-                              ? "Voucher"
-                              : m === "credit"
-                                ? "Credit"
-                                : "Other"}
-                  </button>
-                ))}
+                <button
+                  key={m}
+                  style={{ ...methodBtn(method === m), opacity: processing ? 0.6 : 1 }}
+                  onClick={() => setMethod(m)}
+                  disabled={processing}
+                >
+                  {m === "cash"
+                    ? "Cash"
+                    : m === "card"
+                      ? "Card"
+                      : m === "upi"
+                        ? "UPI"
+                        : m === "split"
+                          ? "Split"
+                          : m === "voucher"
+                            ? "Voucher"
+                            : m === "credit"
+                              ? "Credit"
+                              : "Other"}
+                </button>
+              ))}
             </div>
 
             {method === "credit" && (
@@ -856,18 +864,18 @@ handleConfirm();
                           onClick={() => {
                             setShowNewCustomer(true);
                             setNewError(null);
-                          const q = customerSearch.trim();
-                          if (q) {
-                            if (/^\d/.test(q)) {
-                              setNewPhone(q);
-                            } else {
-                              setNewName(q);
+                            const q = customerSearch.trim();
+                            if (q) {
+                              if (/^\d/.test(q)) {
+                                setNewPhone(q);
+                              } else {
+                                setNewName(q);
+                              }
                             }
-                          }
-                        }}
-                      >
-                        New customer
-                      </Button>
+                          }}
+                        >
+                          New customer
+                        </Button>
                         <div className="ui-field-error" aria-hidden />
                       </div>
                     </div>
@@ -952,7 +960,9 @@ handleConfirm();
                         Boolean(customerSearch.trim()) &&
                         unmatchedCreditSearch && (
                           <div style={{ padding: 12, fontSize: 13, color: "var(--pos-tx-sub)" }}>
-                            <div style={{ fontWeight: 700, color: "var(--pos-tx)", marginBottom: 4 }}>
+                            <div
+                              style={{ fontWeight: 700, color: "var(--pos-tx)", marginBottom: 4 }}
+                            >
                               {unmatchedCreditSearch.name}{" "}
                               <span
                                 style={{
@@ -1187,7 +1197,11 @@ handleConfirm();
                             />
                             {creditSetupError ? (
                               <div
-                                style={{ color: "var(--pos-danger)", fontSize: 13, fontWeight: 600 }}
+                                style={{
+                                  color: "var(--pos-danger)",
+                                  fontSize: 13,
+                                  fontWeight: 600,
+                                }}
                               >
                                 {creditSetupError}
                               </div>
@@ -1204,7 +1218,9 @@ handleConfirm();
                             </Button>
                           </>
                         ) : (
-                          <div style={{ color: "var(--pos-danger)", fontWeight: 700, fontSize: 13 }}>
+                          <div
+                            style={{ color: "var(--pos-danger)", fontWeight: 700, fontSize: 13 }}
+                          >
                             Credit is not enabled for this customer. Ask a manager to enable a limit
                             on Customers.
                           </div>
@@ -1216,7 +1232,9 @@ handleConfirm();
                       creditLimit > 0 &&
                       amount > availableCredit && (
                         <div style={{ display: "grid", gap: 10 }}>
-                          <div style={{ color: "var(--pos-danger)", fontWeight: 700, fontSize: 13 }}>
+                          <div
+                            style={{ color: "var(--pos-danger)", fontWeight: 700, fontSize: 13 }}
+                          >
                             Exceeds available credit (need ₹{amount.toFixed(0)}, available ₹
                             {availableCredit.toFixed(0)})
                           </div>
@@ -1332,16 +1350,27 @@ handleConfirm();
                       alignItems: "center",
                     }}
                   >
-                    <span style={{ fontWeight: 600, color: "var(--pos-success-text)", fontSize: 14 }}>
+                    <span
+                      style={{ fontWeight: 600, color: "var(--pos-success-text)", fontSize: 14 }}
+                    >
                       Change to return
                     </span>
-                    <span style={{ fontWeight: 900, color: "var(--pos-success-text)", fontSize: 22 }}>
+                    <span
+                      style={{ fontWeight: 900, color: "var(--pos-success-text)", fontSize: 22 }}
+                    >
                       ₹{change.toFixed(2)}
                     </span>
                   </div>
                 )}
                 {numCash > 0 && numCash < amount && (
-                  <div style={{ marginTop: 8, color: "var(--pos-danger)", fontSize: 13, fontWeight: 600 }}>
+                  <div
+                    style={{
+                      marginTop: 8,
+                      color: "var(--pos-danger)",
+                      fontSize: 13,
+                      fontWeight: 600,
+                    }}
+                  >
                     ₹{(amount - numCash).toFixed(2)} still needed
                   </div>
                 )}
@@ -1474,7 +1503,7 @@ handleConfirm();
                 )}
                 {splitBalance === 0 && splitTotal > 0 && (
                   <div style={{ color: "var(--pos-success)", fontSize: 13, fontWeight: 600 }}>
-                     Fully covered
+                    Fully covered
                   </div>
                 )}
               </div>
@@ -1494,7 +1523,9 @@ handleConfirm();
                 borderRadius: 10,
               }}
             >
-              <div style={{ fontSize: 11, color: "var(--pos-tx-muted)", marginBottom: 4 }}>Amount Due</div>
+              <div style={{ fontSize: 11, color: "var(--pos-tx-muted)", marginBottom: 4 }}>
+                Amount Due
+              </div>
               <div style={{ fontSize: 26, fontWeight: 900, color: "var(--pos-tx)", lineHeight: 1 }}>
                 ₹{amount.toFixed(2)}
               </div>
@@ -1511,7 +1542,9 @@ handleConfirm();
                     borderRadius: 8,
                   }}
                 >
-                  <div style={{ fontSize: 11, color: "var(--pos-tx-muted)", marginBottom: 2 }}>Received</div>
+                  <div style={{ fontSize: 11, color: "var(--pos-tx-muted)", marginBottom: 2 }}>
+                    Received
+                  </div>
                   <div style={{ fontSize: 18, fontWeight: 800, color: "var(--pos-tx-sec)" }}>
                     ₹{numCash.toFixed(2)}
                   </div>
@@ -1525,8 +1558,14 @@ handleConfirm();
                       borderRadius: 8,
                     }}
                   >
-                    <div style={{ fontSize: 11, color: "var(--pos-success-text)", marginBottom: 2 }}>Change</div>
-                    <div style={{ fontSize: 20, fontWeight: 900, color: "var(--pos-success-text)" }}>
+                    <div
+                      style={{ fontSize: 11, color: "var(--pos-success-text)", marginBottom: 2 }}
+                    >
+                      Change
+                    </div>
+                    <div
+                      style={{ fontSize: 20, fontWeight: 900, color: "var(--pos-success-text)" }}
+                    >
                       ₹{change.toFixed(2)}
                     </div>
                   </div>
@@ -1544,7 +1583,9 @@ handleConfirm();
                   borderRadius: 8,
                 }}
               >
-                <div style={{ fontSize: 11, color: "var(--pos-tx-muted)", marginBottom: 2 }}>Collected</div>
+                <div style={{ fontSize: 11, color: "var(--pos-tx-muted)", marginBottom: 2 }}>
+                  Collected
+                </div>
                 <div
                   style={{
                     fontSize: 18,
@@ -1560,7 +1601,15 @@ handleConfirm();
             <div style={{ flex: 1 }} />
 
             <label
-              style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 13, color: "var(--pos-tx-sec)", fontWeight: 600 }}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                cursor: "pointer",
+                fontSize: 13,
+                color: "var(--pos-tx-sec)",
+                fontWeight: 600,
+              }}
             >
               <input
                 type="checkbox"
@@ -1587,11 +1636,7 @@ handleConfirm();
                 transition: "background 0.15s",
               }}
             >
-              {processing
-                ? "Processing..."
-                : method === "credit"
-                  ? " Save to account"
-                  : " Settle"}
+              {processing ? "Processing..." : method === "credit" ? " Save to account" : " Settle"}
             </button>
 
             <button

@@ -39,8 +39,8 @@ function computeMatchData(it: any, q: string): MatchResult | null {
   const tokens = q.toLowerCase().trim().split(/\s+/).filter(Boolean);
 
   if (tokens.length === 0) {
-return null;
-}
+    return null;
+  }
 
   let score = 0;
   const matches: { start: number; end: number }[] = [];
@@ -60,8 +60,8 @@ return null;
   }
 
   if (hayName === q.toLowerCase()) {
-score += 200;
-}
+    score += 200;
+  }
 
   const merged: { start: number; end: number }[] = [];
   for (const m of matches.filter((m) => m.start >= 0).sort((a, b) => a.start - b.start)) {
@@ -84,14 +84,14 @@ score += 200;
     let ptr = 0;
     for (const mm of merged) {
       if (ptr < mm.start) {
-parts.push({ text: (it.name || "").slice(ptr, mm.start), match: false });
-}
+        parts.push({ text: (it.name || "").slice(ptr, mm.start), match: false });
+      }
       parts.push({ text: (it.name || "").slice(mm.start, mm.end), match: true });
       ptr = mm.end;
     }
     if (ptr < (it.name || "").length) {
-parts.push({ text: (it.name || "").slice(ptr), match: false });
-}
+      parts.push({ text: (it.name || "").slice(ptr), match: false });
+    }
   }
 
   return { score, parts };
@@ -131,8 +131,8 @@ export default function ItemSearch({ items, onSelect, inputRef }: ItemSearchProp
       .map((it) => {
         const md = computeMatchData(it, q);
         if (!md) {
-return null;
-}
+          return null;
+        }
         return { item: it, score: md.score, parts: md.parts };
       })
       .filter(Boolean) as SearchResult[];
@@ -158,14 +158,14 @@ return null;
     if (e.key === "ArrowDown") {
       e.preventDefault();
       if (filtered.length === 0) {
-return;
-}
+        return;
+      }
       setHighlighted((h) => (h + 1) % filtered.length);
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       if (filtered.length === 0) {
-return;
-}
+        return;
+      }
       setHighlighted((h) => (h - 1 + filtered.length) % filtered.length);
     } else if (e.key === "Enter") {
       e.preventDefault();
@@ -193,8 +193,8 @@ return;
         onBlur={() => {
           // Delay closing so click on dropdown item fires first
           if (selectingRef.current) {
-return;
-}
+            return;
+          }
           setTimeout(() => {
             if (!selectingRef.current) {
               setShowDropdown(false);
@@ -203,8 +203,8 @@ return;
         }}
         onFocus={() => {
           if (filtered.length > 0) {
-setShowDropdown(true);
-}
+            setShowDropdown(true);
+          }
         }}
         placeholder="Search…"
         className={styles.searchInput}
@@ -249,7 +249,8 @@ setShowDropdown(true);
                 </div>
                 {Array.isArray(f.item.variants) && f.item.variants.length > 0 && (
                   <div className={styles.itemSub}>
-                    {f.item.variants.length} option{f.item.variants.length !== 1 ? "s" : ""} · {getItemPriceLabel(f.item)} · tap to choose
+                    {f.item.variants.length} option{f.item.variants.length !== 1 ? "s" : ""} ·{" "}
+                    {getItemPriceLabel(f.item)} · tap to choose
                   </div>
                 )}
                 {(!Array.isArray(f.item.variants) || f.item.variants.length === 0) && (

@@ -10,11 +10,11 @@ export function buyingListPrintLines(list: GroceryListDoc, withPurchaseDetails =
     "SEP",
     ...list.lines.map((line) => {
       const base = `LEFT:${line.itemName} - ${line.quantity} ${line.unit}`;
-      if (!withPurchaseDetails) return base;
+      if (!withPurchaseDetails) {
+        return base;
+      }
       const purchased =
-        line.purchasedQuantity != null
-          ? ` purchased ${line.purchasedQuantity} ${line.unit}`
-          : "";
+        line.purchasedQuantity != null ? ` purchased ${line.purchasedQuantity} ${line.unit}` : "";
       return `${base}${purchased}`;
     }),
     "SEP",
@@ -36,9 +36,7 @@ export function buyingListHtml(list: GroceryListDoc) {
         )}</td></tr>`,
     )
     .join("");
-  return `<!doctype html><html><head><meta charset="utf-8"/><title>${escapeHtml(
-    list.title,
-  )}</title>
+  return `<!doctype html><html><head><meta charset="utf-8"/><title>${escapeHtml(list.title)}</title>
   <style>
     body{font-family:Segoe UI,Arial,sans-serif;padding:24px;color:${PRINT.ink}}
     h1{font-size:20px;margin:0 0 4px}

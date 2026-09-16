@@ -33,7 +33,9 @@ type TableInfo = {
 export default function Tables() {
   const [query, setQuery] = React.useState("");
   const [tables, setTables] = React.useState<TableInfo[]>([]);
-  const [areas, setAreas] = React.useState<Array<{ id: string; name: string; active?: boolean }>>([]);
+  const [areas, setAreas] = React.useState<Array<{ id: string; name: string; active?: boolean }>>(
+    [],
+  );
   const [selectedAreaId, setSelectedAreaId] = React.useState<string>("all");
   const [openOrders, setOpenOrders] = React.useState<any[] | null>(null);
   const [openOrdersLoading, setOpenOrdersLoading] = React.useState(false);
@@ -74,7 +76,9 @@ export default function Tables() {
       } as TableInfo;
     });
     mapped.sort((a, b) => a.id - b.id);
-    setAreas((snapshot.areas || []).map((area) => ({ id: area.id, name: area.name, active: area.active })));
+    setAreas(
+      (snapshot.areas || []).map((area) => ({ id: area.id, name: area.name, active: area.active })),
+    );
     setTables(mapped);
   }, []);
 
@@ -255,7 +259,8 @@ export default function Tables() {
         </div>
 
         {Array.from(grouped.entries()).map(([areaId, areaTables]) => {
-          const areaName = areaTables[0]?.areaName || areas.find((area) => area.id === areaId)?.name || "Area";
+          const areaName =
+            areaTables[0]?.areaName || areas.find((area) => area.id === areaId)?.name || "Area";
           return (
             <section key={areaId} className={styles.areaSection}>
               {showAreaTitles ? <div className={styles.areaTitle}>{areaName}</div> : null}
@@ -285,9 +290,7 @@ export default function Tables() {
                       seats={seats}
                       itemCount={t.occupied ? Number(t.count || 0) : null}
                       amountLabel={
-                        t.occupied
-                          ? `₹${Number(t.total || 0).toLocaleString("en-IN")}`
-                          : undefined
+                        t.occupied ? `₹${Number(t.total || 0).toLocaleString("en-IN")}` : undefined
                       }
                       elapsed={appearance.elapsed}
                       metaLabel={appearance.metaLabel}
@@ -306,9 +309,7 @@ export default function Tables() {
           );
         })}
 
-        {filtered.length === 0 && (
-          <div className={styles.noMatch}>No tables match “{query}”</div>
-        )}
+        {filtered.length === 0 && <div className={styles.noMatch}>No tables match “{query}”</div>}
       </div>
 
       {/* Open Orders Modal */}
@@ -334,20 +335,28 @@ export default function Tables() {
             className={styles.modalDialog}
             tabIndex={-1}
           >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-              <h3 id="open-orders-title" style={{ margin: 0, fontSize: 17, fontWeight: 800, color: "var(--pos-tx)" }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: 16,
+              }}
+            >
+              <h3
+                id="open-orders-title"
+                style={{ margin: 0, fontSize: 17, fontWeight: 800, color: "var(--pos-tx)" }}
+              >
                 Open Orders
               </h3>
-              <button
-                onClick={closeModal}
-                aria-label="Close"
-                className={styles.modalClose}
-              >
+              <button onClick={closeModal} aria-label="Close" className={styles.modalClose}>
                 ×
               </button>
             </div>
             {openOrders.length === 0 ? (
-              <div style={{ color: "var(--pos-tx-muted)", fontSize: 14 }}>No open dine-in orders</div>
+              <div style={{ color: "var(--pos-tx-muted)", fontSize: 14 }}>
+                No open dine-in orders
+              </div>
             ) : (
               <div className={styles.modalList}>
                 {openOrders.map((o) => (
@@ -364,9 +373,7 @@ export default function Tables() {
                       }
                     }}
                   >
-                    <div style={{ fontWeight: 800, color: "var(--pos-tx)" }}>
-                      Table {o.tableId}
-                    </div>
+                    <div style={{ fontWeight: 800, color: "var(--pos-tx)" }}>Table {o.tableId}</div>
                     <div style={{ fontSize: 13, color: "var(--pos-tx-sub)", marginTop: 4 }}>
                       {(o.items || []).length} items · ₹
                       {Number(

@@ -41,7 +41,9 @@ export default function Overview({ onNavigate }: OverviewProps) {
       try {
         const range = getHistoryRange("active");
         const lists = await listGroceryLists({ from: range.from, to: range.to, limit: 50 });
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
         const todayStart = startOfDay(new Date()).getTime();
         const todayLists = lists.filter(
           (list) =>
@@ -73,9 +75,13 @@ export default function Overview({ onNavigate }: OverviewProps) {
           purchased: 0,
         });
       } catch {
-        if (!cancelled) setAttention([]);
+        if (!cancelled) {
+          setAttention([]);
+        }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     })();
     return () => {

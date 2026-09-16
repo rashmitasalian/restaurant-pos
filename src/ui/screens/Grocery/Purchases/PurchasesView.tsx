@@ -30,14 +30,22 @@ import styles from "../Grocery.module.css";
 import { RecordPurchaseFlow } from "./RecordPurchaseFlow";
 
 function formatLinkedList(header: GroceryPurchaseDto) {
-  if (header.buyingListTitle) return header.buyingListTitle;
-  if (header.buyingListId) return "Deleted list";
+  if (header.buyingListTitle) {
+    return header.buyingListTitle;
+  }
+  if (header.buyingListId) {
+    return "Deleted list";
+  }
   return "—";
 }
 
 function paymentTone(status: string): "neutral" | "attention" | "success" | "danger" {
-  if (status === "paid") return "success";
-  if (status === "partial") return "attention";
+  if (status === "paid") {
+    return "success";
+  }
+  if (status === "partial") {
+    return "attention";
+  }
   return "neutral";
 }
 
@@ -61,7 +69,9 @@ export function PurchasesView() {
 
   const applyPreset = (next: HistoryPreset) => {
     setPreset(next);
-    if (next === "custom") return;
+    if (next === "custom") {
+      return;
+    }
     const range = getHistoryRange(next);
     setFromTs(range.from);
     setToTs(range.to);
@@ -132,12 +142,16 @@ export function PurchasesView() {
   };
 
   const requestVoidPurchase = (header: GroceryPurchaseDto) => {
-    if (header.status === "voided") return;
+    if (header.status === "voided") {
+      return;
+    }
     setVoidTarget(header);
   };
 
   const confirmVoidPurchase = async () => {
-    if (!voidTarget || voidTarget.status === "voided" || saving) return;
+    if (!voidTarget || voidTarget.status === "voided" || saving) {
+      return;
+    }
     setSaving(true);
     try {
       await voidGroceryPurchaseHeader(voidTarget.id);
@@ -212,7 +226,10 @@ export function PurchasesView() {
             />
           </>
         )}
-        <label className={styles.hint} style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+        <label
+          className={styles.hint}
+          style={{ display: "inline-flex", gap: 6, alignItems: "center" }}
+        >
           <input
             type="checkbox"
             checked={includeVoided}
@@ -260,7 +277,11 @@ export function PurchasesView() {
             <Badge key={`${header.id}-st`} tone={header.status === "voided" ? "danger" : "success"}>
               {header.status}
             </Badge>,
-            <span key={`${header.id}-list`} className={styles.listNameCell} title={formatLinkedList(header)}>
+            <span
+              key={`${header.id}-list`}
+              className={styles.listNameCell}
+              title={formatLinkedList(header)}
+            >
               {formatLinkedList(header)}
             </span>,
             <div key={`${header.id}-lines`} className={styles.tableActionCell}>
@@ -306,7 +327,10 @@ export function PurchasesView() {
       >
         {!selected ? null : (
           <div className={styles.stack}>
-            <div className={styles.kpiGrid} style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
+            <div
+              className={styles.kpiGrid}
+              style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}
+            >
               <div className={styles.kpi}>
                 <div className={styles.kpiLabel}>Total</div>
                 <div className={styles.kpiValue}>{formatCurrency(selected.total)}</div>
@@ -326,7 +350,9 @@ export function PurchasesView() {
             </div>
             <div className={styles.actions}>
               <Badge tone={paymentTone(selected.paymentStatus)}>{selected.paymentStatus}</Badge>
-              <Badge tone={selected.status === "voided" ? "danger" : "success"}>{selected.status}</Badge>
+              <Badge tone={selected.status === "voided" ? "danger" : "success"}>
+                {selected.status}
+              </Badge>
             </div>
             <div className="pos-sect-label">Line items</div>
             {linesLoading ? (

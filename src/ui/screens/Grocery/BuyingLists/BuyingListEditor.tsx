@@ -34,7 +34,9 @@ const LINE_GRID =
 const PARTIAL_MONEY_INPUT = /^\d*\.?\d*$/;
 
 function formatEstimatedRate(value: number | null | undefined) {
-  if (value == null || Number.isNaN(Number(value))) return "";
+  if (value == null || Number.isNaN(Number(value))) {
+    return "";
+  }
   return String(value);
 }
 
@@ -111,7 +113,9 @@ export function BuyingListEditor({ listId, onClose, onChanged, onRecordPurchase 
         listGroceryPurchases({ listId, limit: 200 }),
         listGroceryPurchaseHeaders({ listId, includeVoided: true, limit: 100 }),
       ]);
-      if (!doc) throw new Error("Buying list not found");
+      if (!doc) {
+        throw new Error("Buying list not found");
+      }
       setList(doc);
       setLines(doc.lines.map((line) => ({ ...line })));
       setRateDrafts({});
@@ -139,7 +143,9 @@ export function BuyingListEditor({ listId, onClose, onChanged, onRecordPurchase 
 
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        onClose();
+      }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
@@ -157,7 +163,9 @@ export function BuyingListEditor({ listId, onClose, onChanged, onRecordPurchase 
   );
 
   const persist = async (nextLines = lines, nextStatus?: GroceryListDoc["status"]) => {
-    if (!list) throw new Error("List not loaded");
+    if (!list) {
+      throw new Error("List not loaded");
+    }
     const updated = await updateGroceryList(list.id, {
       title: title.trim() || list.title,
       notes: notes.trim() || null,
@@ -170,7 +178,9 @@ export function BuyingListEditor({ listId, onClose, onChanged, onRecordPurchase 
   };
 
   const save = async () => {
-    if (saving) return;
+    if (saving) {
+      return;
+    }
     setSaving(true);
     setStatus(null);
     try {
@@ -188,13 +198,14 @@ export function BuyingListEditor({ listId, onClose, onChanged, onRecordPurchase 
   const updateLine = (index: number, updates: Partial<DraftLine>) => {
     setLines((current) =>
       current.map((line, i) => {
-        if (i !== index) return line;
+        if (i !== index) {
+          return line;
+        }
         const next = { ...line, ...updates };
         if (updates.estimatedUnitPrice !== undefined || updates.quantity !== undefined) {
           const qty = Number(next.quantity) || 0;
           const rawRate = next.estimatedUnitPrice;
-          const rate =
-            rawRate == null || Number.isNaN(Number(rawRate)) ? null : Number(rawRate);
+          const rate = rawRate == null || Number.isNaN(Number(rawRate)) ? null : Number(rawRate);
           next.estimatedUnitPrice = rate;
           next.estimatedTotal = rate == null ? null : +(rate * qty).toFixed(2);
         }
@@ -230,7 +241,9 @@ export function BuyingListEditor({ listId, onClose, onChanged, onRecordPurchase 
       setLines((current) => [...current, draftLineFromItem(item)]);
     } else {
       const name = normalizedQuery;
-      if (!name) return;
+      if (!name) {
+        return;
+      }
       if (existingIndex >= 0) {
         setStatus("Item is already on this list");
         return;
@@ -243,20 +256,26 @@ export function BuyingListEditor({ listId, onClose, onChanged, onRecordPurchase 
   };
 
   const printList = async () => {
-    if (!list || saving) return;
+    if (!list || saving) {
+      return;
+    }
     setSaving(true);
     setStatus(null);
     try {
       await persist(lines);
       const updated = await updateGroceryList(list.id, { recordPrint: true });
       setList(updated);
-      if (!window.pos?.print) throw new Error("Print is unavailable.");
+      if (!window.pos?.print) {
+        throw new Error("Print is unavailable.");
+      }
       const result = await window.pos.print({
         type: "receipt",
         printer: "counter",
         data: { lines: buyingListPrintLines(updated, false) },
       });
-      if (!result?.ok) throw new Error(result?.error || "print-failed");
+      if (!result?.ok) {
+        throw new Error(result?.error || "print-failed");
+      }
       setStatus("Buying list sent to printer");
       await onChanged();
     } catch (error) {
@@ -267,16 +286,19 @@ export function BuyingListEditor({ listId, onClose, onChanged, onRecordPurchase 
   };
 
   const exportPdf = async () => {
-    if (!list) return;
+    if (!list) {
+      return;
+    }
     try {
       await persist(lines);
       const fresh = await getGroceryList(list.id);
-      if (!fresh) throw new Error("Buying list not found");
-      if (!window.pos?.exportReportPdf) throw new Error("PDF export is unavailable.");
-      await window.pos.exportReportPdf(
-        buyingListHtml(fresh),
-        `buying-list-${fresh.id.slice(-8)}`,
-      );
+      if (!fresh) {
+        throw new Error("Buying list not found");
+      }
+      if (!window.pos?.exportReportPdf) {
+        throw new Error("PDF export is unavailable.");
+      }
+      await window.pos.exportReportPdf(buyingListHtml(fresh), `buying-list-${fresh.id.slice(-8)}`);
       setStatus("PDF exported");
     } catch (error) {
       setStatus(validationMessage(error, "Could not export PDF"));
@@ -287,15 +309,20 @@ export function BuyingListEditor({ listId, onClose, onChanged, onRecordPurchase 
     list && list.status !== "cancelled" && list.status !== "completed" && lines.length > 0;
 
   const body = (
-    <div className={styles.editorOverlay} role="dialog" aria-modal="true" aria-label="Edit buying list">
+    <div
+      className={styles.editorOverlay}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Edit buying list"
+    >
       <div className={styles.editorPane}>
         <header className={styles.editorHeader}>
           <div>
             <h2 className={styles.editorTitle}>{title || "Edit Buying List"}</h2>
             {list && (
               <div className={styles.sessionMeta}>
-                {formatListDate(list.listDate)} · {statusLabel(list.status)} · {lines.length} items ·{" "}
-                {formatCurrency(plannedTotal(lines))} planned
+                {formatListDate(list.listDate)} · {statusLabel(list.status)} · {lines.length} items
+                · {formatCurrency(plannedTotal(lines))} planned
                 {list.printCount > 0 ? ` · Printed ${list.printCount}×` : ""}
               </div>
             )}
@@ -372,8 +399,11 @@ export function BuyingListEditor({ listId, onClose, onChanged, onRecordPurchase 
                         setHighlight((i) => Math.max(0, i - 1));
                       } else if (e.key === "Enter") {
                         e.preventDefault();
-                        if (matches[highlight]) addLine(matches[highlight]);
-                        else addLine();
+                        if (matches[highlight]) {
+                          addLine(matches[highlight]);
+                        } else {
+                          addLine();
+                        }
                       }
                     }}
                     placeholder="Search catalog or type a custom item"
@@ -489,7 +519,9 @@ export function BuyingListEditor({ listId, onClose, onChanged, onRecordPurchase 
                       }
                       onChange={(e) => {
                         const value = e.target.value;
-                        if (value !== "" && !PARTIAL_MONEY_INPUT.test(value)) return;
+                        if (value !== "" && !PARTIAL_MONEY_INPUT.test(value)) {
+                          return;
+                        }
                         setRateDrafts((current) => ({ ...current, [line.id]: value }));
                         updateLine(index, { estimatedUnitPrice: parseMoney(value) });
                       }}

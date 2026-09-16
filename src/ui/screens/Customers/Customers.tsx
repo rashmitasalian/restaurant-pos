@@ -20,10 +20,7 @@ import { Drawer } from "../../components/ui/Drawer";
 import { DataTable } from "../../components/ui/DataTable";
 import { Stat } from "../../components/ui/Stat";
 import { ConfirmModal } from "../../components/ui/ConfirmModal";
-import {
-  buildCreditCollectionLines,
-  buildCreditStatementLines,
-} from "./creditPrintBuilders";
+import { buildCreditCollectionLines, buildCreditStatementLines } from "./creditPrintBuilders";
 
 const CUSTOMER_ROW_HEIGHT = 112;
 const LEDGER_PAGE_SIZE = 20;
@@ -146,7 +143,9 @@ export default function Customers() {
   const [accountLoading, setAccountLoading] = React.useState(false);
   const [receiveOpen, setReceiveOpen] = React.useState(false);
   const [receiveAmount, setReceiveAmount] = React.useState("");
-  const [receiveMethod, setReceiveMethod] = React.useState<"cash" | "upi" | "card" | "other">("upi");
+  const [receiveMethod, setReceiveMethod] = React.useState<"cash" | "upi" | "card" | "other">(
+    "upi",
+  );
   const [receiveNotes, setReceiveNotes] = React.useState("");
   const [receivePrintSlip, setReceivePrintSlip] = React.useState(true);
   const [receiving, setReceiving] = React.useState(false);
@@ -457,7 +456,9 @@ export default function Customers() {
       setAccount(result?.account || account);
       setVoidTarget(null);
       setVoidReason("");
-      showToast(`Voided ${formatMoney(Number(result?.voided?.amount || voidTarget.remaining || 0))}`);
+      showToast(
+        `Voided ${formatMoney(Number(result?.voided?.amount || voidTarget.remaining || 0))}`,
+      );
       await loadCustomers();
       await loadLedgerPage(selectedCustomer.id, 0, false);
     } catch (e: any) {
@@ -572,7 +573,13 @@ export default function Customers() {
           </div>
           {isEditing ? (
             <div
-              style={{ display: "flex", gap: 8, flexWrap: "wrap", flex: 1, alignItems: "flex-start" }}
+              style={{
+                display: "flex",
+                gap: 8,
+                flexWrap: "wrap",
+                flex: 1,
+                alignItems: "flex-start",
+              }}
               onClick={(e) => e.stopPropagation()}
             >
               <div style={{ flex: "1 1 160px" }}>
@@ -646,7 +653,12 @@ export default function Customers() {
         >
           {isEditing ? (
             <>
-              <Button size="sm" variant="primary" onClick={() => saveCustomer(c)} disabled={savingEdit}>
+              <Button
+                size="sm"
+                variant="primary"
+                onClick={() => saveCustomer(c)}
+                disabled={savingEdit}
+              >
                 {savingEdit ? "Saving..." : "Save"}
               </Button>
               <Button size="sm" variant="secondary" onClick={cancelEdit} disabled={savingEdit}>
@@ -829,11 +841,13 @@ export default function Customers() {
             paddingTop: 2,
           }}
         >
-          {([
-            ["all", "All"],
-            ["outstanding", "Outstanding"],
-            ["overdue", "Overdue"],
-          ] as Array<[CustomerFilter, string]>).map(([key, label]) => (
+          {(
+            [
+              ["all", "All"],
+              ["outstanding", "Outstanding"],
+              ["overdue", "Overdue"],
+            ] as Array<[CustomerFilter, string]>
+          ).map(([key, label]) => (
             <Button
               key={key}
               size="sm"
@@ -1054,11 +1068,7 @@ export default function Customers() {
                         isSale && entry.remaining != null && entry.remaining > 0;
                       const detail = [
                         entry.invoiceNumber ||
-                          (isPay
-                            ? "Payment"
-                            : isVoid
-                              ? "Void"
-                              : entry.entryType.replace("_", " ")),
+                          (isPay ? "Payment" : isVoid ? "Void" : entry.entryType.replace("_", " ")),
                         entry.description || "",
                         entry.dueDate ? `due ${entry.dueDate}` : "",
                         openRemaining ? `left ${formatMoney(entry.remaining || 0)}` : "",

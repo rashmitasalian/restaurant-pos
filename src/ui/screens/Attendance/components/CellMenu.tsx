@@ -66,12 +66,7 @@ export default function CellMenu<T extends string>({
         <span className={menuStyles.triggerLabel}>{label}</span>
         <ChevronDown size={14} className={menuStyles.chevron} aria-hidden />
       </button>
-      <PortalMenu
-        open={open}
-        anchorRef={triggerRef}
-        align={align}
-        onClose={() => setOpen(false)}
-      >
+      <PortalMenu open={open} anchorRef={triggerRef} align={align} onClose={() => setOpen(false)}>
         <div role="listbox">
           {options.map((option) => (
             <button

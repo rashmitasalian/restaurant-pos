@@ -1,10 +1,6 @@
 import React from "react";
 import { ManageShell } from "../Manager/ManageShell";
-import {
-  PEOPLE_TAB_HASH,
-  peopleTabFromHash,
-  type PeopleTab,
-} from "../Manager/managerSections";
+import { PEOPLE_TAB_HASH, peopleTabFromHash, type PeopleTab } from "../Manager/managerSections";
 import { getDefaultPeopleTab } from "../../../shared/permissions";
 import Attendance from "../Attendance/Attendance";
 import AttendanceHistory from "../Attendance/AttendanceHistory";
@@ -33,7 +29,9 @@ type PeopleProps = {
 function staffIdFromHash(): string | null {
   const hash = window.location.hash || "";
   const q = hash.indexOf("?");
-  if (q === -1) return null;
+  if (q === -1) {
+    return null;
+  }
   const params = new URLSearchParams(hash.slice(q + 1));
   return params.get("staff") || params.get("staffId");
 }
@@ -54,12 +52,16 @@ export default function People({ allowedPeopleTabs }: PeopleProps) {
 
   const effectiveTab = allowedPeopleTabs.includes(tab)
     ? tab
-    : allowedPeopleTabs[0] ?? getDefaultPeopleTab("admin");
+    : (allowedPeopleTabs[0] ?? getDefaultPeopleTab("admin"));
 
   React.useEffect(() => {
     const onHash = () => {
       const next = peopleTabFromHash(window.location.hash);
-      setTab(allowedPeopleTabs.includes(next) ? next : allowedPeopleTabs[0] ?? getDefaultPeopleTab("admin"));
+      setTab(
+        allowedPeopleTabs.includes(next)
+          ? next
+          : (allowedPeopleTabs[0] ?? getDefaultPeopleTab("admin")),
+      );
     };
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
@@ -67,7 +69,12 @@ export default function People({ allowedPeopleTabs }: PeopleProps) {
 
   React.useEffect(() => {
     const hash = String(window.location.hash || "").toLowerCase();
-    if (hash === "#manage-people" || hash === "#staff" || hash === "#attendance" || hash === "#users") {
+    if (
+      hash === "#manage-people" ||
+      hash === "#staff" ||
+      hash === "#attendance" ||
+      hash === "#users"
+    ) {
       window.location.hash = PEOPLE_TAB_HASH[effectiveTab];
     }
   }, [effectiveTab]);
@@ -140,7 +147,9 @@ export default function People({ allowedPeopleTabs }: PeopleProps) {
       width="operational"
     >
       {effectiveTab === "attendance" && attendanceView === "daily" && <Attendance embedded />}
-      {effectiveTab === "attendance" && attendanceView === "history" && <AttendanceHistory embedded />}
+      {effectiveTab === "attendance" && attendanceView === "history" && (
+        <AttendanceHistory embedded />
+      )}
       {effectiveTab === "roster" && (
         <Staff
           embedded

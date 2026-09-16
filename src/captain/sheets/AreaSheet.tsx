@@ -28,7 +28,12 @@ export function AreaSheet({
       <div className="cap-modal-card">
         <div className="cap-sheet-head">
           <h3>Select area</h3>
-          <button type="button" className="cap-icon-btn cap-icon-btn-light" onClick={onClose} aria-label="Close">
+          <button
+            type="button"
+            className="cap-icon-btn cap-icon-btn-light"
+            onClick={onClose}
+            aria-label="Close"
+          >
             <Icon icon={X} size="lg" />
           </button>
         </div>

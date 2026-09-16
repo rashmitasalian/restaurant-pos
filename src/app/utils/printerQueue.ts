@@ -95,13 +95,19 @@ export class PrinterOfflineQueue {
       }
 
       const content =
-        typeof job.content === "string" ? { text: job.content, printer: job.printerName } : job.content || {};
+        typeof job.content === "string"
+          ? { text: job.content, printer: job.printerName }
+          : job.content || {};
       const payload = {
         type: job.jobType,
         data: content,
         printer: (content as any)?.printer || job.printerName,
       };
-      if (job.jobType === "kot" && (content as any)?.orderId && Array.isArray((content as any)?.sentLines)) {
+      if (
+        job.jobType === "kot" &&
+        (content as any)?.orderId &&
+        Array.isArray((content as any)?.sentLines)
+      ) {
         const order = await window.pos?.orders?.get((content as any).orderId);
         if (!kotSentLinesNeedPrint(order, (content as any).sentLines)) {
           await queueApi().markCompleted(jobId);
@@ -112,9 +118,16 @@ export class PrinterOfflineQueue {
       // @ts-ignore
       const result = await window.pos?.print?.(payload);
       if (result?.ok) {
-        if (job.jobType === "kot" && (content as any)?.orderId && Array.isArray((content as any)?.sentLines)) {
+        if (
+          job.jobType === "kot" &&
+          (content as any)?.orderId &&
+          Array.isArray((content as any)?.sentLines)
+        ) {
           try {
-            await window.pos?.orders?.markKotSent((content as any).orderId, (content as any).sentLines);
+            await window.pos?.orders?.markKotSent(
+              (content as any).orderId,
+              (content as any).sentLines,
+            );
           } catch (error: any) {
             const message = String(error?.message || error || "");
             if (!message.includes("kot-no-unsent-items") && !message.includes("order-closed")) {

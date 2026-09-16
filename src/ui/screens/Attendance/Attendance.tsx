@@ -72,7 +72,13 @@ const STATUS_DOT_CLASS: Record<string, string> = {
   empty: menuStyles.statusDotEmpty,
 };
 
-function StatusDisplay({ status, isLate = false }: { status: AttendanceStatus | null; isLate?: boolean }) {
+function StatusDisplay({
+  status,
+  isLate = false,
+}: {
+  status: AttendanceStatus | null;
+  isLate?: boolean;
+}) {
   if (!status) {
     return (
       <>
@@ -136,7 +142,9 @@ function toShiftOptions(shifts: AttendanceShiftConfig[] | null | undefined): Shi
   }
   const mapped = shifts
     .map((entry) => ({
-      value: String(entry.id || "").trim().toLowerCase(),
+      value: String(entry.id || "")
+        .trim()
+        .toLowerCase(),
       label: String(entry.label || "").trim(),
       hours: Number(entry.hours),
     }))
@@ -217,7 +225,9 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
   const [error, setError] = React.useState<string | null>(null);
   const [moreOpen, setMoreOpen] = React.useState(false);
   const [otEditor, setOtEditor] = React.useState<{ index: number; employee: string } | null>(null);
-  const [noteEditor, setNoteEditor] = React.useState<{ index: number; employee: string } | null>(null);
+  const [noteEditor, setNoteEditor] = React.useState<{ index: number; employee: string } | null>(
+    null,
+  );
   const [holidays, setHolidays] = React.useState<string[]>([]);
   const dateInputRef = React.useRef<HTMLInputElement>(null);
   const moreButtonRef = React.useRef<HTMLButtonElement>(null);
@@ -260,31 +270,28 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
     loadData();
   }, [loadData]);
 
-  const setRowField = React.useCallback(
-    (index: number, patch: Partial<AttendanceRow>) => {
-      setRows((previous) =>
-        previous.map((row, rowIndex) => {
-          if (rowIndex !== index) {
-            return row;
+  const setRowField = React.useCallback((index: number, patch: Partial<AttendanceRow>) => {
+    setRows((previous) =>
+      previous.map((row, rowIndex) => {
+        if (rowIndex !== index) {
+          return row;
+        }
+        const next = { ...row, ...patch, dirty: true };
+        if (patch.status !== undefined) {
+          if (!isWorkingAttendanceStatus(patch.status)) {
+            next.isLate = false;
+            next.overtimeMinutes = 0;
+            next.manualOvertime = false;
           }
-          const next = { ...row, ...patch, dirty: true };
-          if (patch.status !== undefined) {
-            if (!isWorkingAttendanceStatus(patch.status)) {
-              next.isLate = false;
-              next.overtimeMinutes = 0;
-              next.manualOvertime = false;
-            }
-          }
-          if (patch.overtimeMinutes !== undefined) {
-            next.manualOvertime = true;
-          }
-          next.errors = validateRow(next);
-          return next;
-        }),
-      );
-    },
-    [],
-  );
+        }
+        if (patch.overtimeMinutes !== undefined) {
+          next.manualOvertime = true;
+        }
+        next.errors = validateRow(next);
+        return next;
+      }),
+    );
+  }, []);
 
   const filteredRows = React.useMemo(() => {
     const lowered = normalizeText(search).toLowerCase();
@@ -299,15 +306,12 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
     });
   }, [editedOnly, rows, search, shiftFilter]);
 
-  const changeDate = React.useCallback(
-    (nextDate: string) => {
-      if (nextDate > todayDateOnly()) {
-        return;
-      }
-      setAttendanceDate(nextDate);
-    },
-    [],
-  );
+  const changeDate = React.useCallback((nextDate: string) => {
+    if (nextDate > todayDateOnly()) {
+      return;
+    }
+    setAttendanceDate(nextDate);
+  }, []);
 
   const stepDate = React.useCallback(
     (delta: number) => {
@@ -338,26 +342,23 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
     };
   }, [rows]);
 
-  const markAll = React.useCallback(
-    (status: AttendanceStatus, includeScheduledOff = false) => {
-      setRows((previous) =>
-        previous.map((row) => {
-          if (row.scheduledOff && !includeScheduledOff) {
-            return row;
-          }
-          const next = {
-            ...row,
-            status,
-            dirty: true,
-            isLate: status === "present" || status === "half-day" ? row.isLate : false,
-          };
-          next.errors = validateRow(next);
-          return next;
-        }),
-      );
-    },
-    [],
-  );
+  const markAll = React.useCallback((status: AttendanceStatus, includeScheduledOff = false) => {
+    setRows((previous) =>
+      previous.map((row) => {
+        if (row.scheduledOff && !includeScheduledOff) {
+          return row;
+        }
+        const next = {
+          ...row,
+          status,
+          dirty: true,
+          isLate: status === "present" || status === "half-day" ? row.isLate : false,
+        };
+        next.errors = validateRow(next);
+        return next;
+      }),
+    );
+  }, []);
 
   const copyYesterday = React.useCallback(async () => {
     const sourceDate = yesterdayDateOnly(attendanceDate);
@@ -500,9 +501,12 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
     }
   }, [attendanceDate, getShiftLabel, rows, showToast]);
 
-  const focusRowAt = React.useCallback((index: number) => {
-    focusedRowRef.current = Math.max(0, Math.min(index, filteredRows.length - 1));
-  }, [filteredRows.length]);
+  const focusRowAt = React.useCallback(
+    (index: number) => {
+      focusedRowRef.current = Math.max(0, Math.min(index, filteredRows.length - 1));
+    },
+    [filteredRows.length],
+  );
 
   useAttendanceShortcuts({
     onSave: save,
@@ -525,191 +529,185 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
       <div className={styles.stickyChrome}>
         <div className={styles.toolbar}>
           <div className={styles.contextBar}>
-          <div className={styles.contextPrimary}>
-            <div className={styles.dateNav}>
-              <button
-                type="button"
-                className={styles.dateNavBtn}
-                onClick={() => stepDate(-1)}
-                aria-label="Previous day"
-              >
-                <ChevronLeft size={18} />
-              </button>
-              <button
-                type="button"
-                className={styles.dateDisplay}
-                onClick={() => dateInputRef.current?.showPicker?.() ?? dateInputRef.current?.click()}
-              >
-                {formatAttendanceDate(attendanceDate)}
-              </button>
-              <button
-                type="button"
-                className={styles.dateNavBtn}
-                onClick={() => stepDate(1)}
-                disabled={attendanceDate >= todayDateOnly()}
-                aria-label="Next day"
-              >
-                <ChevronRight size={18} />
-              </button>
-              <input
-                ref={dateInputRef}
-                type="date"
-                className={styles.hiddenDateInput}
-                value={attendanceDate}
-                max={todayDateOnly()}
-                onChange={(event) => changeDate(event.target.value)}
-                tabIndex={-1}
-                aria-hidden
-              />
+            <div className={styles.contextPrimary}>
+              <div className={styles.dateNav}>
+                <button
+                  type="button"
+                  className={styles.dateNavBtn}
+                  onClick={() => stepDate(-1)}
+                  aria-label="Previous day"
+                >
+                  <ChevronLeft size={18} />
+                </button>
+                <button
+                  type="button"
+                  className={styles.dateDisplay}
+                  onClick={() =>
+                    dateInputRef.current?.showPicker?.() ?? dateInputRef.current?.click()
+                  }
+                >
+                  {formatAttendanceDate(attendanceDate)}
+                </button>
+                <button
+                  type="button"
+                  className={styles.dateNavBtn}
+                  onClick={() => stepDate(1)}
+                  disabled={attendanceDate >= todayDateOnly()}
+                  aria-label="Next day"
+                >
+                  <ChevronRight size={18} />
+                </button>
+                <input
+                  ref={dateInputRef}
+                  type="date"
+                  className={styles.hiddenDateInput}
+                  value={attendanceDate}
+                  max={todayDateOnly()}
+                  onChange={(event) => changeDate(event.target.value)}
+                  tabIndex={-1}
+                  aria-hidden
+                />
+              </div>
+              <div className={styles.filterGroup}>
+                <select
+                  id="attendance-shift-filter"
+                  className={`pos-select ${styles.shiftFilter}`}
+                  value={shiftFilter}
+                  onChange={(event) => setShiftFilter(event.target.value)}
+                  aria-label="Filter by shift"
+                >
+                  <option value="all">All Shifts</option>
+                  {shiftOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  id="attendance-search"
+                  className={`pos-input ${styles.searchInput}`}
+                  placeholder="Search employee..."
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                />
+              </div>
             </div>
-            <div className={styles.filterGroup}>
-              <select
-                id="attendance-shift-filter"
-                className={`pos-select ${styles.shiftFilter}`}
-                value={shiftFilter}
-                onChange={(event) => setShiftFilter(event.target.value)}
-                aria-label="Filter by shift"
-              >
-                <option value="all">All Shifts</option>
-                {shiftOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-              <input
-                id="attendance-search"
-                className={`pos-input ${styles.searchInput}`}
-                placeholder="Search employee..."
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-              />
+          </div>
+
+          {isRestaurantHoliday ? (
+            <div className={styles.holidayBanner} role="status">
+              Restaurant holiday — mark staff as Holiday or skip unscheduled workers.
             </div>
-          </div>
-        </div>
+          ) : null}
 
-        {isRestaurantHoliday ? (
-          <div className={styles.holidayBanner} role="status">
-            Restaurant holiday — mark staff as Holiday or skip unscheduled workers.
-          </div>
-        ) : null}
+          <div className={styles.statusStrip}>
+            <div className={styles.summaryStats} aria-label="Attendance summary">
+              <span className={styles.stat}>
+                <strong>{summary.present}</strong> Present
+              </span>
+              <span className={styles.stat}>
+                <strong>{summary.absent}</strong> Absent
+              </span>
+              <span className={styles.stat}>
+                <strong>{summary.halfDay}</strong> Half Day
+              </span>
+              <span className={styles.stat}>
+                <strong>{summary.leave}</strong> Leave
+              </span>
+              <span className={styles.stat}>
+                <strong>{summary.late}</strong> Late
+              </span>
+              <span className={styles.stat}>
+                <strong>{summary.unrecorded}</strong> Not set
+              </span>
+              <span className={styles.stat}>
+                <strong>{summary.overtimeHours}h</strong> OT
+              </span>
+            </div>
 
-        <div className={styles.statusStrip}>
-          <div className={styles.summaryStats} aria-label="Attendance summary">
-            <span className={styles.stat}>
-              <strong>{summary.present}</strong> Present
-            </span>
-            <span className={styles.stat}>
-              <strong>{summary.absent}</strong> Absent
-            </span>
-            <span className={styles.stat}>
-              <strong>{summary.halfDay}</strong> Half Day
-            </span>
-            <span className={styles.stat}>
-              <strong>{summary.leave}</strong> Leave
-            </span>
-            <span className={styles.stat}>
-              <strong>{summary.late}</strong> Late
-            </span>
-            <span className={styles.stat}>
-              <strong>{summary.unrecorded}</strong> Not set
-            </span>
-            <span className={styles.stat}>
-              <strong>{summary.overtimeHours}h</strong> OT
-            </span>
-          </div>
-
-          <div className={styles.stripActions}>
-            <button
-              type="button"
-              className={styles.stripBtn}
-              onClick={() => markAll("present")}
-            >
-              Mark all present
-            </button>
-            <button
-              type="button"
-              className={styles.stripBtn}
-              onClick={() => markAll("absent")}
-            >
-              Mark all absent
-            </button>
-            {isRestaurantHoliday ? (
-              <button
-                type="button"
-                className={styles.stripBtn}
-                onClick={() => markAll("holiday", true)}
-              >
-                Mark all holiday
+            <div className={styles.stripActions}>
+              <button type="button" className={styles.stripBtn} onClick={() => markAll("present")}>
+                Mark all present
               </button>
-            ) : null}
+              <button type="button" className={styles.stripBtn} onClick={() => markAll("absent")}>
+                Mark all absent
+              </button>
+              {isRestaurantHoliday ? (
+                <button
+                  type="button"
+                  className={styles.stripBtn}
+                  onClick={() => markAll("holiday", true)}
+                >
+                  Mark all holiday
+                </button>
+              ) : null}
 
-            <button
-              ref={moreButtonRef}
-              type="button"
-              className={styles.iconMenuBtn}
-              aria-label="More actions"
-              aria-haspopup="menu"
-              aria-expanded={moreOpen}
-              onClick={() => {
-                setMoreOpen((open) => !open);
-              }}
-            >
-              <MoreHorizontal size={18} />
-            </button>
-            <PortalMenu
-              open={moreOpen}
-              anchorRef={moreButtonRef}
-              align="right"
-              onClose={() => setMoreOpen(false)}
-            >
-              <PortalMenuItem
-                disabled={saving}
+              <button
+                ref={moreButtonRef}
+                type="button"
+                className={styles.iconMenuBtn}
+                aria-label="More actions"
+                aria-haspopup="menu"
+                aria-expanded={moreOpen}
                 onClick={() => {
-                  void copyYesterday();
-                  setMoreOpen(false);
+                  setMoreOpen((open) => !open);
                 }}
               >
-                Copy yesterday
-              </PortalMenuItem>
-              <PortalMenuItem
-                onClick={() => {
-                  exportExcel();
-                  setMoreOpen(false);
-                }}
+                <MoreHorizontal size={18} />
+              </button>
+              <PortalMenu
+                open={moreOpen}
+                anchorRef={moreButtonRef}
+                align="right"
+                onClose={() => setMoreOpen(false)}
               >
-                Export CSV
-              </PortalMenuItem>
-              <PortalMenuItem
-                onClick={() => {
-                  void exportPdf();
-                  setMoreOpen(false);
-                }}
-              >
-                Export PDF
-              </PortalMenuItem>
-              <PortalMenuItem
-                onClick={() => {
-                  setEditedOnly((value) => !value);
-                  setMoreOpen(false);
-                }}
-              >
-                {editedOnly ? "Show all rows" : "Show edited only"}
-              </PortalMenuItem>
-              {hasActiveFilters ? (
                 <PortalMenuItem
+                  disabled={saving}
                   onClick={() => {
-                    clearFilters();
+                    void copyYesterday();
                     setMoreOpen(false);
                   }}
                 >
-                  Reset filters
+                  Copy yesterday
                 </PortalMenuItem>
-              ) : null}
-            </PortalMenu>
+                <PortalMenuItem
+                  onClick={() => {
+                    exportExcel();
+                    setMoreOpen(false);
+                  }}
+                >
+                  Export CSV
+                </PortalMenuItem>
+                <PortalMenuItem
+                  onClick={() => {
+                    void exportPdf();
+                    setMoreOpen(false);
+                  }}
+                >
+                  Export PDF
+                </PortalMenuItem>
+                <PortalMenuItem
+                  onClick={() => {
+                    setEditedOnly((value) => !value);
+                    setMoreOpen(false);
+                  }}
+                >
+                  {editedOnly ? "Show all rows" : "Show edited only"}
+                </PortalMenuItem>
+                {hasActiveFilters ? (
+                  <PortalMenuItem
+                    onClick={() => {
+                      clearFilters();
+                      setMoreOpen(false);
+                    }}
+                  >
+                    Reset filters
+                  </PortalMenuItem>
+                ) : null}
+              </PortalMenu>
+            </div>
           </div>
         </div>
-      </div>
       </div>
 
       {error && (
@@ -718,7 +716,7 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
             <strong>Could not load attendance</strong>
             <p>{error}</p>
           </div>
-          <Button type="button"  onClick={() => void loadData()} variant="secondary">
+          <Button type="button" onClick={() => void loadData()} variant="secondary">
             Retry
           </Button>
         </div>
@@ -819,7 +817,9 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
                         }}
                         aria-label={`Late for ${row.employee}`}
                         aria-pressed={row.isLate}
-                        title={lateEnabled ? "Mark as late" : attendanceFieldHint("late", row.status)}
+                        title={
+                          lateEnabled ? "Mark as late" : attendanceFieldHint("late", row.status)
+                        }
                       >
                         Late
                       </button>
@@ -854,7 +854,9 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
                         title={row.remarks || "Add note"}
                       >
                         <StickyNote size={16} />
-                        {row.remarks ? <span className={styles.notePreview}>{row.remarks}</span> : null}
+                        {row.remarks ? (
+                          <span className={styles.notePreview}>{row.remarks}</span>
+                        ) : null}
                       </button>
                     </td>
                   </tr>

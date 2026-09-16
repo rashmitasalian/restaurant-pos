@@ -44,7 +44,12 @@ import {
   validateSqliteBackup,
 } from "../db/sqlite";
 import { posService } from "./posService";
-import { compareVersions, UpdateService, validateManifest, type UpdateManifest } from "./updateService";
+import {
+  compareVersions,
+  UpdateService,
+  validateManifest,
+  type UpdateManifest,
+} from "./updateService";
 
 const ONE_GB = 1024 * 1024 * 1024;
 const appGetVersionMock = app.getVersion as jest.Mock;
@@ -176,10 +181,12 @@ describe("updateService", () => {
     });
 
     expect(() => validateManifest(validManifest({ version: "latest" }))).toThrow("invalid-version");
-    expect(() => validateManifest(validManifest({ installerUrl: "http://updates.example.com/app.exe" }))).toThrow(
-      "installer-url-must-use-https",
+    expect(() =>
+      validateManifest(validManifest({ installerUrl: "http://updates.example.com/app.exe" })),
+    ).toThrow("installer-url-must-use-https");
+    expect(() => validateManifest(validManifest({ sha256: "" }))).toThrow(
+      "installer-sha256-required",
     );
-    expect(() => validateManifest(validManifest({ sha256: "" }))).toThrow("installer-sha256-required");
   });
 
   it("enforces HTTPS for the manifest URL before downloading", async () => {
@@ -231,7 +238,10 @@ describe("updateService", () => {
 
     const result = await service.prepareUpdate({ allowBusinessActivity: true });
 
-    expect(result).toMatchObject({ ok: true, state: { status: "prepared", targetVersion: "1.1.0" } });
+    expect(result).toMatchObject({
+      ok: true,
+      state: { status: "prepared", targetVersion: "1.1.0" },
+    });
     expect(backupDatabaseMock).toHaveBeenCalledWith(paths.preUpdateBackup);
     expect(validateSqliteBackupMock).toHaveBeenCalledWith(paths.preUpdateBackup);
     expect(fs.existsSync(paths.instructions)).toBe(true);
@@ -265,7 +275,10 @@ describe("updateService", () => {
     const db = mockCountDb();
     service.writeState({ status: "installing", previousVersion: "0.9.0", targetVersion: "1.0.0" });
 
-    expect(service.processStartupState()).toMatchObject({ status: "successful", healthResult: "successful" });
+    expect(service.processStartupState()).toMatchObject({
+      status: "successful",
+      healthResult: "successful",
+    });
     expect(db.pragma).toHaveBeenCalledWith("integrity_check", { simple: true });
     expect(db.prepare).toHaveBeenCalledWith("SELECT COUNT(*) AS count FROM print_jobs");
     expect(listPrintJobsMock).toHaveBeenCalledWith("pending");

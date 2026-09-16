@@ -44,35 +44,35 @@ const FONT_5X7: Record<string, number[]> = {
   "=": [0, 0, 31, 0, 31, 0, 0],
   ">": [8, 4, 2, 1, 2, 4, 8],
   "?": [14, 17, 1, 6, 4, 0, 4],
-  "A": [14, 17, 17, 31, 17, 17, 17],
-  "B": [30, 17, 17, 30, 17, 17, 30],
-  "C": [14, 17, 16, 16, 16, 17, 14],
-  "D": [30, 17, 17, 17, 17, 17, 30],
-  "E": [31, 16, 16, 30, 16, 16, 31],
-  "F": [31, 16, 16, 30, 16, 16, 16],
-  "G": [14, 17, 16, 19, 17, 17, 15],
-  "H": [17, 17, 17, 31, 17, 17, 17],
-  "I": [14, 4, 4, 4, 4, 4, 14],
-  "J": [1, 1, 1, 1, 17, 17, 14],
-  "K": [17, 18, 20, 24, 20, 18, 17],
-  "L": [16, 16, 16, 16, 16, 16, 31],
-  "M": [17, 27, 21, 21, 17, 17, 17],
-  "N": [17, 25, 21, 19, 17, 17, 17],
-  "O": [14, 17, 17, 17, 17, 17, 14],
-  "P": [30, 17, 17, 30, 16, 16, 16],
-  "Q": [14, 17, 17, 17, 21, 18, 13],
-  "R": [30, 17, 17, 30, 20, 18, 17],
-  "S": [14, 17, 16, 14, 1, 17, 14],
-  "T": [31, 4, 4, 4, 4, 4, 4],
-  "U": [17, 17, 17, 17, 17, 17, 14],
-  "V": [17, 17, 17, 17, 17, 10, 4],
-  "W": [17, 17, 17, 21, 21, 21, 10],
-  "X": [17, 17, 10, 4, 10, 17, 17],
-  "Y": [17, 17, 10, 4, 4, 4, 4],
-  "Z": [31, 1, 2, 4, 8, 16, 31],
+  A: [14, 17, 17, 31, 17, 17, 17],
+  B: [30, 17, 17, 30, 17, 17, 30],
+  C: [14, 17, 16, 16, 16, 17, 14],
+  D: [30, 17, 17, 17, 17, 17, 30],
+  E: [31, 16, 16, 30, 16, 16, 31],
+  F: [31, 16, 16, 30, 16, 16, 16],
+  G: [14, 17, 16, 19, 17, 17, 15],
+  H: [17, 17, 17, 31, 17, 17, 17],
+  I: [14, 4, 4, 4, 4, 4, 14],
+  J: [1, 1, 1, 1, 17, 17, 14],
+  K: [17, 18, 20, 24, 20, 18, 17],
+  L: [16, 16, 16, 16, 16, 16, 31],
+  M: [17, 27, 21, 21, 17, 17, 17],
+  N: [17, 25, 21, 19, 17, 17, 17],
+  O: [14, 17, 17, 17, 17, 17, 14],
+  P: [30, 17, 17, 30, 16, 16, 16],
+  Q: [14, 17, 17, 17, 21, 18, 13],
+  R: [30, 17, 17, 30, 20, 18, 17],
+  S: [14, 17, 16, 14, 1, 17, 14],
+  T: [31, 4, 4, 4, 4, 4, 4],
+  U: [17, 17, 17, 17, 17, 17, 14],
+  V: [17, 17, 17, 17, 17, 10, 4],
+  W: [17, 17, 17, 21, 21, 21, 10],
+  X: [17, 17, 10, 4, 10, 17, 17],
+  Y: [17, 17, 10, 4, 4, 4, 4],
+  Z: [31, 1, 2, 4, 8, 16, 31],
   "[": [14, 8, 8, 8, 8, 8, 14],
   "]": [14, 2, 2, 2, 2, 2, 14],
-  "_": [0, 0, 0, 0, 0, 0, 31],
+  _: [0, 0, 0, 0, 0, 0, 31],
   a: [0, 0, 14, 1, 15, 17, 15],
   b: [16, 16, 30, 17, 17, 17, 30],
   c: [0, 0, 14, 16, 16, 17, 14],
@@ -116,7 +116,11 @@ const VOID_CHAR_H = 7 * VOID_SCALE_Y + 10;
 const VOID_STRIKE_THICKNESS = 2;
 const VOID_GLYPH_LEFT = 1;
 
-export function buildStruckTextRaster(text: string): { width: number; height: number; data: Uint8Array } {
+export function buildStruckTextRaster(text: string): {
+  width: number;
+  height: number;
+  data: Uint8Array;
+} {
   const width = VOID_RASTER_WIDTH;
   const height = VOID_CHAR_H;
   const widthBytes = Math.ceil(width / 8);
@@ -206,14 +210,25 @@ function pushMonoImage(cmds: number[], directive: string) {
   const [, widthRaw, heightRaw, dataBase64] = directive.split(":");
   const width = Number(widthRaw);
   const height = Number(heightRaw);
-  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0 || !dataBase64) {
+  if (
+    !Number.isFinite(width) ||
+    !Number.isFinite(height) ||
+    width <= 0 ||
+    height <= 0 ||
+    !dataBase64
+  ) {
     return;
   }
   const widthBytes = Math.ceil(width / 8);
   const MAX_WIDTH = 576;
   const MAX_HEIGHT = 512;
   const MAX_BYTES = 64 * 1024;
-  if (width > MAX_WIDTH || height > MAX_HEIGHT || !dataBase64 || dataBase64.length > MAX_BYTES * 2) {
+  if (
+    width > MAX_WIDTH ||
+    height > MAX_HEIGHT ||
+    !dataBase64 ||
+    dataBase64.length > MAX_BYTES * 2
+  ) {
     return;
   }
   const data = Buffer.from(dataBase64, "base64");
@@ -224,7 +239,16 @@ function pushMonoImage(cmds: number[], directive: string) {
   const ESC = 0x1b;
   const GS = 0x1d;
   cmds.push(ESC, 0x61, 0x01);
-  cmds.push(GS, 0x76, 0x30, 0x00, widthBytes & 0xff, (widthBytes >> 8) & 0xff, height & 0xff, (height >> 8) & 0xff);
+  cmds.push(
+    GS,
+    0x76,
+    0x30,
+    0x00,
+    widthBytes & 0xff,
+    (widthBytes >> 8) & 0xff,
+    height & 0xff,
+    (height >> 8) & 0xff,
+  );
   for (let i = 0; i < widthBytes * height; i += 1) {
     cmds.push(data[i]);
   }

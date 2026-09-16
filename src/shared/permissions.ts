@@ -115,9 +115,7 @@ export function isDesktopLoginRole(role: Role): boolean {
 }
 
 export function permissionsToPages(permissions: readonly Permission[]): string[] {
-  return permissions
-    .filter((p) => p.startsWith("page:"))
-    .map((p) => p.slice("page:".length));
+  return permissions.filter((p) => p.startsWith("page:")).map((p) => p.slice("page:".length));
 }
 
 export function managerSectionPermission(section: ManagerSection): Permission {

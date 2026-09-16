@@ -184,7 +184,9 @@ export default function LogSettings() {
   };
 
   const confirmLogAction = async () => {
-    if (!confirmAction) return;
+    if (!confirmAction) {
+      return;
+    }
     try {
       if (confirmAction.kind === "clear-logs") {
         (logger as any).logs = [];
@@ -195,7 +197,9 @@ export default function LogSettings() {
         await loadArchiveData();
         alert("Archive deleted successfully");
       } else if (confirmAction.kind === "bulk-delete") {
-        await Promise.all([...selectedArchives].map((archiveId) => AuditArchiver.deleteArchive(archiveId)));
+        await Promise.all(
+          [...selectedArchives].map((archiveId) => AuditArchiver.deleteArchive(archiveId)),
+        );
         await loadArchiveData();
         setSelectedArchives(new Set());
         alert("Archives deleted successfully");
@@ -217,8 +221,8 @@ export default function LogSettings() {
 
   const formatBytes = (bytes: number) => {
     if (bytes === 0) {
-return "0 B";
-}
+      return "0 B";
+    }
     const k = 1024;
     const sizes = ["B", "KB", "MB", "GB"];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
@@ -245,219 +249,229 @@ return "0 B";
 
   return (
     <>
-    <div className={styles.container}>
-      <h2>System Logs & Archives</h2>
+      <div className={styles.container}>
+        <h2>System Logs & Archives</h2>
 
-      {/* Tab Navigation */}
-      <div className={styles.tabNavigation} role="group" aria-label="Log settings sections">
-        <button
-          className={`${styles.tabButton} ${activeTab === "logs" ? styles.active : ""}`}
-          aria-pressed={activeTab === "logs"}
-          onClick={() => setActiveTab("logs")}
-        >
-           Recent Logs
-        </button>
-        <button
-          className={`${styles.tabButton} ${activeTab === "archives" ? styles.active : ""}`}
-          aria-pressed={activeTab === "archives"}
-          onClick={() => setActiveTab("archives")}
-        >
-           Archives ({archiveStats.totalArchives})
-        </button>
-        <button
-          className={`${styles.tabButton} ${activeTab === "recovery" ? styles.active : ""}`}
-          aria-pressed={activeTab === "recovery"}
-          onClick={() => setActiveTab("recovery")}
-        >
-           Recovery
-        </button>
-      </div>
+        {/* Tab Navigation */}
+        <div className={styles.tabNavigation} role="group" aria-label="Log settings sections">
+          <button
+            className={`${styles.tabButton} ${activeTab === "logs" ? styles.active : ""}`}
+            aria-pressed={activeTab === "logs"}
+            onClick={() => setActiveTab("logs")}
+          >
+            Recent Logs
+          </button>
+          <button
+            className={`${styles.tabButton} ${activeTab === "archives" ? styles.active : ""}`}
+            aria-pressed={activeTab === "archives"}
+            onClick={() => setActiveTab("archives")}
+          >
+            Archives ({archiveStats.totalArchives})
+          </button>
+          <button
+            className={`${styles.tabButton} ${activeTab === "recovery" ? styles.active : ""}`}
+            aria-pressed={activeTab === "recovery"}
+            onClick={() => setActiveTab("recovery")}
+          >
+            Recovery
+          </button>
+        </div>
 
-      {/* Logs Tab */}
-      {activeTab === "logs" && (
-        <div className={styles.tabPanel}>
-          <div className={styles.header}>
-            <h3>Recent Logs</h3>
-            <div className={styles.stats}>
-              <div className={styles.stat}>
-                <span className={styles.statLabel}>Total Logs:</span>
-                <span className={styles.statValue}>{logStats.totalLogs}</span>
-              </div>
-              <div className={styles.stat}>
-                <span className={styles.statLabel}>Last Updated:</span>
-                <span className={styles.statValue}>
-                  {logStats.lastUpdated.toLocaleTimeString()}
-                </span>
+        {/* Logs Tab */}
+        {activeTab === "logs" && (
+          <div className={styles.tabPanel}>
+            <div className={styles.header}>
+              <h3>Recent Logs</h3>
+              <div className={styles.stats}>
+                <div className={styles.stat}>
+                  <span className={styles.statLabel}>Total Logs:</span>
+                  <span className={styles.statValue}>{logStats.totalLogs}</span>
+                </div>
+                <div className={styles.stat}>
+                  <span className={styles.statLabel}>Last Updated:</span>
+                  <span className={styles.statValue}>
+                    {logStats.lastUpdated.toLocaleTimeString()}
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className={styles.actions}>
-            <Button
-              variant="secondary"
-              onClick={() => handleExportLogs("json")}
-              disabled={exportingLogs}
-            >
-              Export JSON
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={() => handleExportLogs("csv")}
-              disabled={exportingLogs}
-            >
-              Export CSV
-            </Button>
-            <Button variant="danger" onClick={handleClearLogs}>
-              Clear All Logs
-            </Button>
-          </div>
+            <div className={styles.actions}>
+              <Button
+                variant="secondary"
+                onClick={() => handleExportLogs("json")}
+                disabled={exportingLogs}
+              >
+                Export JSON
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => handleExportLogs("csv")}
+                disabled={exportingLogs}
+              >
+                Export CSV
+              </Button>
+              <Button variant="danger" onClick={handleClearLogs}>
+                Clear All Logs
+              </Button>
+            </div>
 
-          <div className={styles.logsList}>
-            {recentLogs.length === 0 ? (
-              <div className={styles.empty}>No logs available</div>
-            ) : (
-              recentLogs.map((log, index) => (
-                <div key={index} className={`${styles.logEntry} ${styles[log.level]}`}>
-                  <div className={styles.logHeader}>
-                    <span className={styles.timestamp}>{log.timestamp}</span>
-                    <Badge tone={logLevelTone(log.level)}>{log.level.toUpperCase()}</Badge>
-                  </div>
-                  <div className={styles.message}>{log.message}</div>
-                  {log.context && Object.keys(log.context).length > 0 && (
-                    <div className={styles.context}>
-                      <code>{JSON.stringify(log.context, null, 2)}</code>
+            <div className={styles.logsList}>
+              {recentLogs.length === 0 ? (
+                <div className={styles.empty}>No logs available</div>
+              ) : (
+                recentLogs.map((log, index) => (
+                  <div key={index} className={`${styles.logEntry} ${styles[log.level]}`}>
+                    <div className={styles.logHeader}>
+                      <span className={styles.timestamp}>{log.timestamp}</span>
+                      <Badge tone={logLevelTone(log.level)}>{log.level.toUpperCase()}</Badge>
                     </div>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Archives Tab */}
-      {activeTab === "archives" && (
-        <div className={styles.tabPanel}>
-          <div className={styles.header}>
-            <h3>Audit Archives</h3>
-            <div className={styles.stats}>
-              <div className={styles.stat}>
-                <span className={styles.statLabel}>Total Archives:</span>
-                <span className={styles.statValue}>{archiveStats.totalArchives}</span>
-              </div>
-              <div className={styles.stat}>
-                <span className={styles.statLabel}>Total Size:</span>
-                <span className={styles.statValue}>{formatBytes(archiveStats.totalSize || 0)}</span>
-              </div>
+                    <div className={styles.message}>{log.message}</div>
+                    {log.context && Object.keys(log.context).length > 0 && (
+                      <div className={styles.context}>
+                        <code>{JSON.stringify(log.context, null, 2)}</code>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
             </div>
           </div>
+        )}
 
-          <div className={styles.actions}>
-            <Button
-              variant="danger"
-              onClick={handleBulkDeleteArchives}
-              disabled={selectedArchives.size === 0}
-            >
-              Delete Selected ({selectedArchives.size})
-            </Button>
-            <Button variant="accent" onClick={() => handleCleanupOldArchives(12)}>
-              Cleanup Archives &gt;1 year
-            </Button>
+        {/* Archives Tab */}
+        {activeTab === "archives" && (
+          <div className={styles.tabPanel}>
+            <div className={styles.header}>
+              <h3>Audit Archives</h3>
+              <div className={styles.stats}>
+                <div className={styles.stat}>
+                  <span className={styles.statLabel}>Total Archives:</span>
+                  <span className={styles.statValue}>{archiveStats.totalArchives}</span>
+                </div>
+                <div className={styles.stat}>
+                  <span className={styles.statLabel}>Total Size:</span>
+                  <span className={styles.statValue}>
+                    {formatBytes(archiveStats.totalSize || 0)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className={styles.actions}>
+              <Button
+                variant="danger"
+                onClick={handleBulkDeleteArchives}
+                disabled={selectedArchives.size === 0}
+              >
+                Delete Selected ({selectedArchives.size})
+              </Button>
+              <Button variant="accent" onClick={() => handleCleanupOldArchives(12)}>
+                Cleanup Archives &gt;1 year
+              </Button>
+            </div>
+
+            <div className={styles.archivesList}>
+              {archives.length === 0 ? (
+                <div className={styles.empty}>No archives available</div>
+              ) : (
+                archives.map((archive) => (
+                  <div key={archive._id} className={styles.archiveItem}>
+                    <div className={styles.archiveHeader}>
+                      <input
+                        type="checkbox"
+                        checked={selectedArchives.has(archive._id)}
+                        onChange={() => handleToggleArchiveSelection(archive._id)}
+                      />
+                      <span className={styles.archiveTitle}>
+                        {formatDate(archive.startDate)} → {formatDate(archive.endDate)}
+                      </span>
+                      <span className={styles.archiveMeta}>
+                        {archive.count} entries • {formatBytes(archive.fileSize || 0)}
+                      </span>
+                    </div>
+                    <div className={styles.archiveActions}>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => handleExportArchive(archive._id)}
+                      >
+                        Export
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="danger"
+                        onClick={() => handleDeleteArchive(archive._id)}
+                      >
+                        Delete
+                      </Button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
+        )}
 
-          <div className={styles.archivesList}>
-            {archives.length === 0 ? (
-              <div className={styles.empty}>No archives available</div>
+        {/* Recovery Tab */}
+        {activeTab === "recovery" && (
+          <div className={styles.tabPanel}>
+            <div className={styles.header}>
+              <h3>Crash Recovery</h3>
+            </div>
+
+            {recoveryState ? (
+              <div className={styles.recoveryInfo}>
+                <div className={styles.recoveryItem}>
+                  <span className={styles.label}>Recovered At:</span>
+                  <span>{formatDate(recoveryState.timestamp)}</span>
+                </div>
+                {recoveryState.currentOrderId && (
+                  <div className={styles.recoveryItem}>
+                    <span className={styles.label}>Order ID:</span>
+                    <span>{recoveryState.currentOrderId}</span>
+                  </div>
+                )}
+                {recoveryState.currentTable && (
+                  <div className={styles.recoveryItem}>
+                    <span className={styles.label}>Table:</span>
+                    <span>Table {recoveryState.currentTable}</span>
+                  </div>
+                )}
+                <div className={styles.recoveryItem}>
+                  <span className={styles.label}>Cart Items:</span>
+                  <span>{recoveryState.cartItems?.length || 0} items</span>
+                </div>
+                <div className={styles.recoveryItem}>
+                  <span className={styles.label}>Discount:</span>
+                  <span>{recoveryState.discountPercent || 0}%</span>
+                </div>
+
+                <div className={styles.recoveryJSON}>
+                  <h4>Full Recovery State:</h4>
+                  <code>{JSON.stringify(CrashRecovery.exportRecoveryState(), null, 2)}</code>
+                </div>
+
+                <div className={styles.actions}>
+                  <Button variant="secondary" onClick={handleViewRecoveryState}>
+                    View Recovery State
+                  </Button>
+                  <Button variant="danger" onClick={handleClearRecovery}>
+                    Clear Recovery State
+                  </Button>
+                </div>
+              </div>
             ) : (
-              archives.map((archive) => (
-                <div key={archive._id} className={styles.archiveItem}>
-                  <div className={styles.archiveHeader}>
-                    <input
-                      type="checkbox"
-                      checked={selectedArchives.has(archive._id)}
-                      onChange={() => handleToggleArchiveSelection(archive._id)}
-                    />
-                    <span className={styles.archiveTitle}>
-                      {formatDate(archive.startDate)} → {formatDate(archive.endDate)}
-                    </span>
-                    <span className={styles.archiveMeta}>
-                      {archive.count} entries • {formatBytes(archive.fileSize || 0)}
-                    </span>
-                  </div>
-                  <div className={styles.archiveActions}>
-                    <Button size="sm" variant="secondary" onClick={() => handleExportArchive(archive._id)}>
-                      Export
-                    </Button>
-                    <Button size="sm" variant="danger" onClick={() => handleDeleteArchive(archive._id)}>
-                      Delete
-                    </Button>
-                  </div>
-                </div>
-              ))
+              <div className={styles.empty}>
+                <p>No recovery state available</p>
+                <p style={{ fontSize: "0.9em", color: "var(--pos-tx-sub)" }}>
+                  Recovery data is created when the app crashes unexpectedly with unsaved orders
+                </p>
+              </div>
             )}
           </div>
-        </div>
-      )}
-
-      {/* Recovery Tab */}
-      {activeTab === "recovery" && (
-        <div className={styles.tabPanel}>
-          <div className={styles.header}>
-            <h3>Crash Recovery</h3>
-          </div>
-
-          {recoveryState ? (
-            <div className={styles.recoveryInfo}>
-              <div className={styles.recoveryItem}>
-                <span className={styles.label}>Recovered At:</span>
-                <span>{formatDate(recoveryState.timestamp)}</span>
-              </div>
-              {recoveryState.currentOrderId && (
-                <div className={styles.recoveryItem}>
-                  <span className={styles.label}>Order ID:</span>
-                  <span>{recoveryState.currentOrderId}</span>
-                </div>
-              )}
-              {recoveryState.currentTable && (
-                <div className={styles.recoveryItem}>
-                  <span className={styles.label}>Table:</span>
-                  <span>Table {recoveryState.currentTable}</span>
-                </div>
-              )}
-              <div className={styles.recoveryItem}>
-                <span className={styles.label}>Cart Items:</span>
-                <span>{recoveryState.cartItems?.length || 0} items</span>
-              </div>
-              <div className={styles.recoveryItem}>
-                <span className={styles.label}>Discount:</span>
-                <span>{recoveryState.discountPercent || 0}%</span>
-              </div>
-
-              <div className={styles.recoveryJSON}>
-                <h4>Full Recovery State:</h4>
-                <code>{JSON.stringify(CrashRecovery.exportRecoveryState(), null, 2)}</code>
-              </div>
-
-              <div className={styles.actions}>
-                <Button variant="secondary" onClick={handleViewRecoveryState}>
-                  View Recovery State
-                </Button>
-                <Button variant="danger" onClick={handleClearRecovery}>
-                  Clear Recovery State
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div className={styles.empty}>
-              <p>No recovery state available</p>
-              <p style={{ fontSize: "0.9em", color: "var(--pos-tx-sub)" }}>
-                Recovery data is created when the app crashes unexpectedly with unsaved orders
-              </p>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
+        )}
+      </div>
 
       <ConfirmModal
         open={confirmAction?.kind === "clear-logs"}
@@ -487,8 +501,10 @@ return "0 B";
         confirmLabel="Delete archives"
       >
         <p style={{ margin: 0 }}>
-          Permanently delete <strong>{confirmAction?.kind === "bulk-delete" ? confirmAction.count : 0}</strong>{" "}
-          selected archive{confirmAction?.kind === "bulk-delete" && confirmAction.count === 1 ? "" : "s"}.
+          Permanently delete{" "}
+          <strong>{confirmAction?.kind === "bulk-delete" ? confirmAction.count : 0}</strong>{" "}
+          selected archive
+          {confirmAction?.kind === "bulk-delete" && confirmAction.count === 1 ? "" : "s"}.
         </p>
       </ConfirmModal>
 
@@ -501,7 +517,10 @@ return "0 B";
       >
         <p style={{ margin: 0 }}>
           Delete archives older than{" "}
-          <strong>{confirmAction?.kind === "cleanup-old" ? confirmAction.ageMonths : 12} months</strong>.
+          <strong>
+            {confirmAction?.kind === "cleanup-old" ? confirmAction.ageMonths : 12} months
+          </strong>
+          .
         </p>
       </ConfirmModal>
 

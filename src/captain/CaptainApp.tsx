@@ -1,8 +1,5 @@
 import React from "react";
-import {
-  CANCEL_REASON_PRESETS,
-  resolveCancelReason,
-} from "../shared/cancelReasons";
+import { CANCEL_REASON_PRESETS, resolveCancelReason } from "../shared/cancelReasons";
 import {
   captainApi,
   clearStoredSession,
@@ -12,7 +9,7 @@ import {
   type CaptainUser,
 } from "./captainApi";
 import { formatTableLabel } from "../shared/floorLayout";
-import { isAuthRequiredError, waiterError, type ConnectionState } from "./copy";
+import { isAuthRequiredError, isOrderConflictError, waiterError, type ConnectionState } from "./copy";
 import { CaptainShell, type CaptainTab } from "./CaptainShell";
 import { LoginScreen } from "./screens/LoginScreen";
 import { TablesScreen, type TableRow } from "./screens/TablesScreen";
@@ -31,7 +28,9 @@ export function CaptainApp() {
   const [token, setToken] = React.useState<string | null>(stored.token);
   const [user, setUser] = React.useState<CaptainUser | null>(stored.user);
   const [branding, setBranding] = React.useState<{ hotelName?: string }>({});
-  const [connection, setConnection] = React.useState<ConnectionState>(stored.token ? "reconnecting" : "offline");
+  const [connection, setConnection] = React.useState<ConnectionState>(
+    stored.token ? "reconnecting" : "offline",
+  );
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
   const [addingItemId, setAddingItemId] = React.useState<string | null>(null);
@@ -94,12 +93,81 @@ export function CaptainApp() {
   const orderIdRef = React.useRef<string | null>(null);
   const orderRef = React.useRef<any>(null);
   const ensureOrderLock = React.useRef<Promise<any> | null>(null);
+  const refreshDueRef = React.useRef(false);
+  const refreshInFlightRef = React.useRef(false);
+  const refreshTimerRef = React.useRef<number | null>(null);
+  const LIVE_REFRESH_DEBOUNCE_MS = 200;
+
   React.useEffect(() => {
     orderIdRef.current = order?._id || null;
     orderRef.current = order;
   }, [order, order?._id]);
 
-  const mutationError = React.useCallback((err: any, fallback: string) => waiterError(err, fallback), []);
+  const mutationError = React.useCallback(
+    (err: any, fallback: string) => waiterError(err, fallback),
+    [],
+  );
+
+  const reloadOpenOrder = React.useCallback(async (sessionToken: string) => {
+    const id = orderIdRef.current;
+    if (!id) {
+      return;
+    }
+    try {
+      const next = await captainApi.getOrder(sessionToken, id);
+      if (orderIdRef.current === id) {
+        orderRef.current = next;
+        setOrder(next);
+      }
+    } catch {
+      // ignore — next SSE/visibility refresh will retry
+    }
+  }, []);
+
+  const runCoalescedLiveRefresh = React.useCallback(
+    async (sessionToken: string) => {
+      if (refreshInFlightRef.current) {
+        refreshDueRef.current = true;
+        return;
+      }
+      refreshInFlightRef.current = true;
+      try {
+        do {
+          refreshDueRef.current = false;
+          await refreshTables(sessionToken);
+          await refreshKots(sessionToken);
+          await reloadOpenOrder(sessionToken);
+        } while (refreshDueRef.current);
+      } finally {
+        refreshInFlightRef.current = false;
+      }
+    },
+    [refreshTables, refreshKots, reloadOpenOrder],
+  );
+
+  const scheduleLiveRefresh = React.useCallback(
+    (sessionToken: string) => {
+      refreshDueRef.current = true;
+      if (refreshTimerRef.current != null) {
+        return;
+      }
+      refreshTimerRef.current = window.setTimeout(() => {
+        refreshTimerRef.current = null;
+        void runCoalescedLiveRefresh(sessionToken);
+      }, LIVE_REFRESH_DEBOUNCE_MS);
+    },
+    [runCoalescedLiveRefresh],
+  );
+
+  const handleOrderConflict = React.useCallback(
+    async (sessionToken: string, err: unknown) => {
+      await reloadOpenOrder(sessionToken);
+      void refreshTables(sessionToken);
+      void refreshKots(sessionToken);
+      showToast(waiterError(err, "Ticket updated by someone else — review qty."));
+    },
+    [reloadOpenOrder, refreshTables, refreshKots, showToast],
+  );
 
   React.useEffect(() => {
     captainApi
@@ -135,19 +203,7 @@ export function CaptainApp() {
             event?.type === "tables-changed" ||
             event?.type === "activity-changed"
           ) {
-            void refreshTables(token);
-            void refreshKots(token);
-            if (orderIdRef.current) {
-              const id = orderIdRef.current;
-              void captainApi
-                .getOrder(token, id)
-                .then((next) => {
-                  if (orderIdRef.current === id) {
-                    setOrder(next);
-                  }
-                })
-                .catch(() => undefined);
-            }
+            scheduleLiveRefresh(token);
           }
         },
         {
@@ -198,9 +254,13 @@ export function CaptainApp() {
       if (retryTimer) {
         clearTimeout(retryTimer);
       }
+      if (refreshTimerRef.current != null) {
+        clearTimeout(refreshTimerRef.current);
+        refreshTimerRef.current = null;
+      }
       stopEvents();
     };
-  }, [token, refreshTables, refreshKots]);
+  }, [token, refreshTables, refreshKots, scheduleLiveRefresh]);
 
   React.useEffect(() => {
     if (!token) {
@@ -391,6 +451,7 @@ export function CaptainApp() {
           rate,
           menuItemId,
           categoryName,
+          baseUpdatedAt: ticket.updatedAt ?? null,
         },
         newClientOpId("add-item"),
       );
@@ -399,6 +460,10 @@ export function CaptainApp() {
     } catch (err: any) {
       if (isAuthRequiredError(err)) {
         void logout("pos-restart");
+        return;
+      }
+      if (isOrderConflictError(err)) {
+        await handleOrderConflict(token, err);
         return;
       }
       setError(mutationError(err, "Couldn’t add that item."));
@@ -443,11 +508,16 @@ export function CaptainApp() {
         order._id,
         lines,
         newClientOpId("update-lines"),
+        order.updatedAt ?? null,
       );
       setOrder(next);
     } catch (err: any) {
       if (isAuthRequiredError(err)) {
         void logout("pos-restart");
+        return;
+      }
+      if (isOrderConflictError(err)) {
+        await handleOrderConflict(token, err);
         return;
       }
       setError(mutationError(err, "Couldn’t update that item."));
@@ -484,7 +554,12 @@ export function CaptainApp() {
     setSendError(null);
     setError(null);
     try {
-      const result = await captainApi.sendKot(token, order._id, newClientOpId("send-kot"));
+      const result = await captainApi.sendKot(
+        token,
+        order._id,
+        newClientOpId("send-kot"),
+        order.updatedAt ?? null,
+      );
       setOrder(result.order || (await captainApi.getOrder(token, order._id)));
       setSendPhase("sent");
       void refreshKots(token);
@@ -499,6 +574,11 @@ export function CaptainApp() {
     } catch (err: any) {
       if (isAuthRequiredError(err)) {
         void logout("pos-restart");
+        return;
+      }
+      if (isOrderConflictError(err)) {
+        await handleOrderConflict(token, err);
+        setSendPhase("idle");
         return;
       }
       const message = mutationError(err, "Your order has not been confirmed.");
@@ -522,7 +602,12 @@ export function CaptainApp() {
       const result = await captainApi.voidItem(
         token,
         order._id,
-        { lineId: voidLine.id, finalQty: voidTargetQty, reason },
+        {
+          lineId: voidLine.id,
+          finalQty: voidTargetQty,
+          reason,
+          baseUpdatedAt: order.updatedAt ?? null,
+        },
         newClientOpId("void-item"),
       );
       setOrder(result.order || (await captainApi.getOrder(token, order._id)));
@@ -533,6 +618,11 @@ export function CaptainApp() {
     } catch (err: any) {
       if (isAuthRequiredError(err)) {
         void logout("pos-restart");
+        return;
+      }
+      if (isOrderConflictError(err)) {
+        await handleOrderConflict(token, err);
+        setVoidLine(null);
         return;
       }
       setError(mutationError(err, "Void KOT could not be printed. Order was not changed."));

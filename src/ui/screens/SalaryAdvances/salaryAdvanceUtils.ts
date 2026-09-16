@@ -161,11 +161,15 @@ export function buildExportFileName(scopeSlug: string, employeeSlug?: string | n
 }
 
 export function formatMoney(value: number | null | undefined): string {
-  if (value === null || value === undefined || !Number.isFinite(value)) return "—";
+  if (value === null || value === undefined || !Number.isFinite(value)) {
+    return "—";
+  }
   return `₹${value.toLocaleString("en-IN")}`;
 }
 
 export function formatMoneyPlain(value: number | null | undefined): string {
-  if (value === null || value === undefined || !Number.isFinite(value)) return "";
+  if (value === null || value === undefined || !Number.isFinite(value)) {
+    return "";
+  }
   return value.toLocaleString("en-IN");
 }

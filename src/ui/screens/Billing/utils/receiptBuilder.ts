@@ -141,8 +141,9 @@ export function buildReceiptLines(
           : normalizedOrderTypeLabel
             ? normalizedOrderTypeLabel.toUpperCase()
             : "ORDER";
-  const tableLabel = String(options?.tableLabel || ord?.tableName || "").trim()
-    || (tableNum !== null && tableNum !== undefined ? `Table ${tableNum}` : "");
+  const tableLabel =
+    String(options?.tableLabel || ord?.tableName || "").trim() ||
+    (tableNum !== null && tableNum !== undefined ? `Table ${tableNum}` : "");
 
   const PAD = "  ";
   const COL_ITEM = 20;
@@ -271,4 +272,3 @@ export {
   type KotPreviewItem,
   type KotTicketBranding,
 } from "../../../../shared/kotTicket";
-

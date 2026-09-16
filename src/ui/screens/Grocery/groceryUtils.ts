@@ -21,7 +21,17 @@ export const GROCERY_TABS: Array<{ id: GroceryTab; label: string }> = [
 export const LIST_TOTAL_ITEM_NAME = "Buying List Total";
 export const LIST_TOTAL_CATEGORY = "List Total";
 
-export const GROCERY_UNITS = ["kg", "g", "L", "ml", "unit", "packet", "box", "dozen", "bunch"] as const;
+export const GROCERY_UNITS = [
+  "kg",
+  "g",
+  "L",
+  "ml",
+  "unit",
+  "packet",
+  "box",
+  "dozen",
+  "bunch",
+] as const;
 export const GROCERY_PAYMENT_METHODS = ["cash", "upi", "card", "online", "other"] as const;
 
 export function groceryRecordKey(line: { groceryItemId?: string | null; itemName: string }) {
@@ -30,15 +40,24 @@ export function groceryRecordKey(line: { groceryItemId?: string | null; itemName
     .toLowerCase()}`;
 }
 
-export function isListTotalPurchase(purchase: { itemName?: string | null; category?: string | null }) {
+export function isListTotalPurchase(purchase: {
+  itemName?: string | null;
+  category?: string | null;
+}) {
   return (
-    String(purchase.itemName || "").trim().toLowerCase() === LIST_TOTAL_ITEM_NAME.toLowerCase() &&
-    String(purchase.category || "").trim().toLowerCase() === LIST_TOTAL_CATEGORY.toLowerCase()
+    String(purchase.itemName || "")
+      .trim()
+      .toLowerCase() === LIST_TOTAL_ITEM_NAME.toLowerCase() &&
+    String(purchase.category || "")
+      .trim()
+      .toLowerCase() === LIST_TOTAL_CATEGORY.toLowerCase()
   );
 }
 
 export function parseMoney(value: string) {
-  if (value.trim() === "") return null;
+  if (value.trim() === "") {
+    return null;
+  }
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
 }
@@ -46,16 +65,30 @@ export function parseMoney(value: string) {
 export function lineProgress(lines: Array<{ lineStatus?: string | null }>) {
   const actionable = lines.filter((l) => l.lineStatus !== "skipped");
   const purchased = actionable.filter((l) => l.lineStatus === "purchased").length;
-  return { total: actionable.length, purchased, pct: actionable.length ? purchased / actionable.length : 0 };
+  return {
+    total: actionable.length,
+    purchased,
+    pct: actionable.length ? purchased / actionable.length : 0,
+  };
 }
 
 export function groceryTabFromHash(hash: string): GroceryTab {
   const normalized = String(hash || "").toLowerCase();
-  if (normalized.includes("purchase")) return "purchases";
-  if (normalized.includes("vendor")) return "vendors";
-  if (normalized.includes("item") || normalized.includes("template")) return "items";
+  if (normalized.includes("purchase")) {
+    return "purchases";
+  }
+  if (normalized.includes("vendor")) {
+    return "vendors";
+  }
+  if (normalized.includes("item") || normalized.includes("template")) {
+    return "items";
+  }
   // Insights retired — route old hashes to lists
-  if (normalized.includes("insight") || normalized.includes("summary") || normalized.includes("spend")) {
+  if (
+    normalized.includes("insight") ||
+    normalized.includes("summary") ||
+    normalized.includes("spend")
+  ) {
     return "lists";
   }
   return "lists";
@@ -105,7 +138,9 @@ export function toInputDate(ts: number) {
 
 export function fromInputDate(value: string, end = false) {
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return Date.now();
+  if (Number.isNaN(date.getTime())) {
+    return Date.now();
+  }
   return end ? endOfDay(date).getTime() : startOfDay(date).getTime();
 }
 
@@ -141,8 +176,12 @@ export function formatDayHeading(ts: number) {
       })
       .toUpperCase();
   }
-  if (day === today) return "Today";
-  if (day === yesterday) return "Yesterday";
+  if (day === today) {
+    return "Today";
+  }
+  if (day === yesterday) {
+    return "Yesterday";
+  }
   return new Date(ts)
     .toLocaleDateString("en-IN", {
       weekday: "short",
@@ -202,8 +241,12 @@ export function listTypeLabel(type: GroceryListType | string) {
 
 export function suggestListName(date = new Date()) {
   const hour = date.getHours();
-  if (hour < 12) return "Morning Procurement";
-  if (hour < 17) return "Afternoon Refill";
+  if (hour < 12) {
+    return "Morning Procurement";
+  }
+  if (hour < 17) {
+    return "Afternoon Refill";
+  }
   return "Evening Refill";
 }
 
@@ -212,9 +255,7 @@ export function plannedTotal(lines: Array<{ estimatedTotal?: number | null; quan
 }
 
 /** True when at least one line has a usable estimated total. */
-export function hasEstimatedCost(
-  lines: Array<{ estimatedTotal?: number | null }>,
-): boolean {
+export function hasEstimatedCost(lines: Array<{ estimatedTotal?: number | null }>): boolean {
   return lines.some((line) => line.estimatedTotal != null && Number(line.estimatedTotal) > 0);
 }
 
@@ -223,7 +264,9 @@ export function formatEstimatedAmount(
   amount: number,
   lines: Array<{ estimatedTotal?: number | null }>,
 ) {
-  if (!hasEstimatedCost(lines)) return "₹—";
+  if (!hasEstimatedCost(lines)) {
+    return "₹—";
+  }
   return formatCurrency(amount);
 }
 
@@ -236,13 +279,19 @@ export function costVariance(
   purchased: number,
   lines: Array<{ estimatedTotal?: number | null }>,
 ): number | null {
-  if (!hasEstimatedCost(lines)) return null;
+  if (!hasEstimatedCost(lines)) {
+    return null;
+  }
   return +(purchased - estimated).toFixed(2);
 }
 
 export function formatVariance(variance: number | null) {
-  if (variance == null) return "—";
-  if (variance === 0) return formatCurrency(0);
+  if (variance == null) {
+    return "—";
+  }
+  if (variance === 0) {
+    return formatCurrency(0);
+  }
   const sign = variance > 0 ? "+" : "−";
   return `${sign}${formatCurrency(Math.abs(variance))}`;
 }

@@ -23,7 +23,10 @@ export function writeRnBakFile(targetPath: string, header: RnBakHeader, payload:
   return file.length;
 }
 
-export function readRnBakFile(sourcePath: string): { header: RnBakHeader; payload: EncryptedPayload } {
+export function readRnBakFile(sourcePath: string): {
+  header: RnBakHeader;
+  payload: EncryptedPayload;
+} {
   const file = fs.readFileSync(sourcePath);
   if (file.length < MAGIC.length + 4 + TAG_LENGTH) {
     throw new Error("invalid-rnbak");

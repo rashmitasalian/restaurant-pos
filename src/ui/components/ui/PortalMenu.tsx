@@ -27,7 +27,12 @@ export function PortalMenu({
       return;
     }
     const rect = anchor.getBoundingClientRect();
-    if (rect.bottom < 0 || rect.top > window.innerHeight || rect.right < 0 || rect.left > window.innerWidth) {
+    if (
+      rect.bottom < 0 ||
+      rect.top > window.innerHeight ||
+      rect.right < 0 ||
+      rect.left > window.innerWidth
+    ) {
       onClose();
       return;
     }

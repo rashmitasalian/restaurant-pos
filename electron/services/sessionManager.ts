@@ -16,7 +16,11 @@ export type MainSession = {
 
 const sessions = new Map<string, MainSession>();
 
-function sessionFromUser(token: string, webContentsId: number, user: Pick<UserDto, "username" | "role" | "displayName" | "requirePasswordChange">): MainSession {
+function sessionFromUser(
+  token: string,
+  webContentsId: number,
+  user: Pick<UserDto, "username" | "role" | "displayName" | "requirePasswordChange">,
+): MainSession {
   return {
     token,
     webContentsId,
@@ -28,7 +32,10 @@ function sessionFromUser(token: string, webContentsId: number, user: Pick<UserDt
   };
 }
 
-export function createMainSession(webContentsId: number, user: Pick<UserDto, "username" | "role" | "displayName" | "requirePasswordChange">) {
+export function createMainSession(
+  webContentsId: number,
+  user: Pick<UserDto, "username" | "role" | "displayName" | "requirePasswordChange">,
+) {
   const token = randomBytes(32).toString("base64url");
   const session = sessionFromUser(token, webContentsId, user);
   sessions.set(token, session);
@@ -50,7 +57,10 @@ export function getMainSession(token: string | null | undefined, webContentsId: 
   return session;
 }
 
-export function refreshMainSession(token: string, user: Pick<UserDto, "username" | "role" | "displayName" | "requirePasswordChange">) {
+export function refreshMainSession(
+  token: string,
+  user: Pick<UserDto, "username" | "role" | "displayName" | "requirePasswordChange">,
+) {
   const current = sessions.get(token);
   if (!current) {
     return null;

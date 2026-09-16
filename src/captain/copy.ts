@@ -38,6 +38,9 @@ export function waiterError(err: unknown, fallback: string) {
   if (msg === "client-op-conflict") {
     return "That action already ran with different data. Refresh and try again.";
   }
+  if (msg === "order-conflict") {
+    return "Ticket updated by someone else — review qty and try again.";
+  }
   if (msg === "kot-no-unsent-items") {
     return "No new items to send.";
   }
@@ -56,5 +59,12 @@ export function waiterError(err: unknown, fallback: string) {
 export function isAuthRequiredError(err: unknown) {
   const msg = String((err as any)?.message || err || "");
   const status = Number((err as any)?.status);
-  return msg === "auth-required" || msg === "http-401" || msg.includes("http-401") || status === 401;
+  return (
+    msg === "auth-required" || msg === "http-401" || msg.includes("http-401") || status === 401
+  );
+}
+
+export function isOrderConflictError(err: unknown) {
+  const msg = String((err as any)?.message || err || "");
+  return msg === "order-conflict" || msg.includes("order-conflict");
 }

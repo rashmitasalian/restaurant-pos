@@ -159,7 +159,9 @@ export default function Expenses() {
   };
 
   const confirmVoidExpense = async () => {
-    if (!voidTarget || voiding) return;
+    if (!voidTarget || voiding) {
+      return;
+    }
     setVoiding(true);
     try {
       await voidExpense(voidTarget.id);
@@ -277,9 +279,7 @@ export default function Expenses() {
             {categoryBreakdown.map((row) => (
               <div key={row.name} className="exp-breakdown-row">
                 <span className="exp-breakdown-name">{row.name}</span>
-                <span className="exp-breakdown-amt">
-                  ₹{row.amount.toLocaleString("en-IN")}
-                </span>
+                <span className="exp-breakdown-amt">₹{row.amount.toLocaleString("en-IN")}</span>
                 <span className="exp-breakdown-pct">{row.pct}%</span>
               </div>
             ))}
@@ -291,7 +291,11 @@ export default function Expenses() {
         <div className="pos-empty">Loading expenses…</div>
       ) : filteredExpenses.length === 0 ? (
         <EmptyState
-          title={expenses.length === 0 ? `No expenses ${rangeLabel(preset).toLowerCase()}` : "No expenses in this category"}
+          title={
+            expenses.length === 0
+              ? `No expenses ${rangeLabel(preset).toLowerCase()}`
+              : "No expenses in this category"
+          }
           text="Record rent, electricity, staff, and other operating costs here."
           actionLabel="Add Expense"
           onAction={() => setAddOpen(true)}

@@ -27,10 +27,7 @@ function getFocusableElements(container: HTMLElement | null) {
   );
 }
 
-export function useFocusTrap<T extends HTMLElement>(
-  active: boolean,
-  onEscape?: () => void,
-) {
+export function useFocusTrap<T extends HTMLElement>(active: boolean, onEscape?: () => void) {
   const ref = React.useRef<T | null>(null);
   const previouslyFocusedRef = React.useRef<HTMLElement | null>(null);
   const onEscapeRef = React.useRef(onEscape);
@@ -81,10 +78,7 @@ export function useFocusTrap<T extends HTMLElement>(
     return () => {
       window.clearTimeout(focusFirst);
       document.removeEventListener("keydown", handleKeyDown);
-      if (
-        previouslyFocusedRef.current &&
-        document.contains(previouslyFocusedRef.current)
-      ) {
+      if (previouslyFocusedRef.current && document.contains(previouslyFocusedRef.current)) {
         previouslyFocusedRef.current.focus();
       }
       previouslyFocusedRef.current = null;

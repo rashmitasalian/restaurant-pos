@@ -212,13 +212,13 @@ export class MenuItemValidator {
 
 /**
  * Password Policy Validator
- * 
+ *
  * Security Policy for POS/Billing Systems (based on PCI DSS & NIST 800-63B):
  * - Minimum 8 characters (long, memorable passwords reduce weak patterns)
  * - At least 1 uppercase letter (ABC...XYZ)
  * - At least 1 lowercase letter (abc...xyz)
  * - At least 1 digit (0-9)
- * 
+ *
  * Why this policy:
  * - PCI DSS requires 7+ chars with complexity; 8+ is industry best practice
  * - NIST 800-63B: length > complexity for memorability and entropy
@@ -249,7 +249,9 @@ export class PasswordValidator {
     }
 
     if (password.length < this.MIN_LENGTH) {
-      errors.push(`Password must be at least ${this.MIN_LENGTH} characters (you entered ${password.length})`);
+      errors.push(
+        `Password must be at least ${this.MIN_LENGTH} characters (you entered ${password.length})`,
+      );
     }
 
     if (!/[A-Z]/.test(password)) {

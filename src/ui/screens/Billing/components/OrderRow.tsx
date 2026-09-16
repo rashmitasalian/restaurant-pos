@@ -18,19 +18,12 @@ export default function OrderRow({
 }: OrderRowProps) {
   const modeId = String(mode?.id || order?.orderType || "").toLowerCase();
   const modeName = mode?.name || "Order";
-  const platform = (
-    order?.meta?.platform ||
-    order?.meta?.orderSource ||
-    "Delivery"
-  ).toString();
+  const platform = (order?.meta?.platform || order?.meta?.orderSource || "Delivery").toString();
   const code = order?.meta?.code || order?.meta?.orderCode || "";
   const total =
     typeof order?.total === "number"
       ? order.total
-      : (order.items || []).reduce(
-          (s: number, it: any) => s + (it.qty || 0) * (it.rate || 0),
-          0,
-        );
+      : (order.items || []).reduce((s: number, it: any) => s + (it.qty || 0) * (it.rate || 0), 0);
   const brand = platformBrand(platform);
   const title =
     modeId === "delivery"

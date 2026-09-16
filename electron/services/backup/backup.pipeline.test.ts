@@ -142,7 +142,9 @@ describe("recovery key", () => {
     const backupKey = unwrapBackupKey(material.wrappedBackupKey, material.recoveryKeyNormalized);
     expect(backupKey.length).toBe(32);
     const wrappedAgain = wrapBackupKey(backupKey, normalizeRecoveryKey(material.recoveryKey));
-    expect(unwrapBackupKey(wrappedAgain, material.recoveryKeyNormalized).equals(backupKey)).toBe(true);
+    expect(unwrapBackupKey(wrappedAgain, material.recoveryKeyNormalized).equals(backupKey)).toBe(
+      true,
+    );
   });
 
   it("verifies recovery key against scrypt verifier", () => {

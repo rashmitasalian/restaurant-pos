@@ -386,7 +386,9 @@ export default function Billing() {
   );
   const [view, setView] = React.useState<string>("table");
   const [modeOrders, setModeOrders] = React.useState<Record<string, any[]>>({});
-  const [tableAreas, setTableAreas] = React.useState<Array<{ id: string; name: string; active?: boolean }>>([]);
+  const [tableAreas, setTableAreas] = React.useState<
+    Array<{ id: string; name: string; active?: boolean }>
+  >([]);
   const [selectedAreaId, setSelectedAreaId] = React.useState<string>(() => {
     try {
       return window.localStorage.getItem("billingSelectedArea") || "area:main";
@@ -573,7 +575,8 @@ export default function Billing() {
   const unsentKotItems = React.useMemo(() => getUnsentKotItems(order), [order]);
   const isPaid = order?.status === "paid";
   const canCancel = hasItems && !isPaid;
-  const allowsManualKot = Boolean(activeMode?.supportsKOT) && !Boolean(activeMode?.immediateBilling);
+  const allowsManualKot =
+    Boolean(activeMode?.supportsKOT) && !Boolean(activeMode?.immediateBilling);
   const allowsManualBillPrint = !Boolean(activeMode?.immediateBilling);
   const supportsMarkReady =
     Boolean(activeMode?.supportsOpenOrders) &&
@@ -647,7 +650,9 @@ export default function Billing() {
   const loadServiceModeConfig = React.useCallback(async () => {
     try {
       const enabled = await getEnabledServiceModes();
-      const next = enabled.length ? enabled : getDefaultServiceModes().filter((mode) => mode.enabled);
+      const next = enabled.length
+        ? enabled
+        : getDefaultServiceModes().filter((mode) => mode.enabled);
       setServiceModes(next);
       setView((current) => {
         if (next.some((mode) => mode.id === current)) {
@@ -666,7 +671,9 @@ export default function Billing() {
     try {
       const snapshot = await getTablesSnapshot();
       const activeAreas = (snapshot.areas || []).filter((area) => area.active !== false);
-      setTableAreas(activeAreas.map((area) => ({ id: area.id, name: area.name, active: area.active })));
+      setTableAreas(
+        activeAreas.map((area) => ({ id: area.id, name: area.name, active: area.active })),
+      );
       const grouped: Record<
         string,
         Array<{
@@ -1108,16 +1115,16 @@ export default function Billing() {
             entry.id === lineId ? { ...entry, name: nextLineName, rate: nextRate } : entry,
           );
 
-      const updated = await updateOrderLines(
-        order._id,
-        nextLines,
-      );
+      const updated = await updateOrderLines(order._id, nextLines);
       setOrder(updated);
       window.dispatchEvent(new Event("orders-changed"));
       setTimeout(() => searchRef.current?.focus(), 10);
     } catch (e: any) {
       logger.error("Failed to switch line variant", e);
-      showToast(reportClientError("billing.switch-variant", e, "Failed to switch variant"), "error");
+      showToast(
+        reportClientError("billing.switch-variant", e, "Failed to switch variant"),
+        "error",
+      );
     }
   };
 
@@ -1132,10 +1139,7 @@ export default function Billing() {
   };
 
   // ── Order creation ──────────────────────────────────────────────────────
-  const createStandaloneOrder = async (
-    serviceModeId: string,
-    meta: Record<string, any>,
-  ) => {
+  const createStandaloneOrder = async (serviceModeId: string, meta: Record<string, any>) => {
     if (!beginBusyAction("creatingOrder")) {
       return null;
     }
@@ -1225,7 +1229,10 @@ export default function Billing() {
     try {
       customer = await resolveCustomerByPhone(enteredName, newTakeawayPhone);
     } catch (error: any) {
-      showToast(reportClientError("billing.save-customer", error, "Could not save customer"), "error");
+      showToast(
+        reportClientError("billing.save-customer", error, "Could not save customer"),
+        "error",
+      );
       return;
     }
     if (customer === undefined) {
@@ -1261,7 +1268,10 @@ export default function Billing() {
     try {
       customer = await resolveCustomerByPhone(customerName, customerPhone);
     } catch (error: any) {
-      showToast(reportClientError("billing.save-customer", error, "Could not save customer"), "error");
+      showToast(
+        reportClientError("billing.save-customer", error, "Could not save customer"),
+        "error",
+      );
       return;
     }
     if (customer === undefined) {
@@ -1348,7 +1358,9 @@ export default function Billing() {
     if (!queue?.length) {
       return null;
     }
-    return [...queue].sort((a, b) => Number(b.updatedAt || b.createdAt || 0) - Number(a.updatedAt || a.createdAt || 0))[0];
+    return [...queue].sort(
+      (a, b) => Number(b.updatedAt || b.createdAt || 0) - Number(a.updatedAt || a.createdAt || 0),
+    )[0];
   }, []);
 
   // When viewing a non-table mode, keep center/ticket synced with the sidebar queue.
@@ -1380,15 +1392,7 @@ export default function Billing() {
     return () => {
       cancelled = true;
     };
-  }, [
-    view,
-    modeOrders,
-    serviceModes,
-    order,
-    tableNum,
-    handleSelectOrder,
-    pickPreferredQueueOrder,
-  ]);
+  }, [view, modeOrders, serviceModes, order, tableNum, handleSelectOrder, pickPreferredQueueOrder]);
 
   // ── KOT ─────────────────────────────────────────────────────────────────
   const sendKOT = async () => {
@@ -1420,7 +1424,14 @@ export default function Billing() {
       console.warn("Could not fetch KOT sequence number", e);
     }
     setKotPreviewData(
-      buildKotPreview(latestOrder, tableNum, pendingItems, currentUserLabel, kotSeqNum, activeTableLabel),
+      buildKotPreview(
+        latestOrder,
+        tableNum,
+        pendingItems,
+        currentUserLabel,
+        kotSeqNum,
+        activeTableLabel,
+      ),
     );
     setKotPreviewOpen(true);
   };
@@ -1615,12 +1626,14 @@ export default function Billing() {
       showToast("Bill printed");
     } catch (e: any) {
       logger.error("Bill print failed", e);
-      showToast(reportClientError("billing.print-bill", e, "Bill could not be printed. Please try again."), "error");
+      showToast(
+        reportClientError("billing.print-bill", e, "Bill could not be printed. Please try again."),
+        "error",
+      );
     } finally {
       endBusyAction("printBill");
     }
   };
-
 
   const handleConfirmPay = async (payment: PaymentConfirm) => {
     if (!order) {
@@ -1647,7 +1660,10 @@ export default function Billing() {
         })();
       } catch (e: any) {
         logger.error("Payment failed", e);
-        showToast(reportClientError("billing.payment", e, "Payment failed. Please try again."), "error");
+        showToast(
+          reportClientError("billing.payment", e, "Payment failed. Please try again."),
+          "error",
+        );
         return; // keep modal open so user can retry
       }
 
@@ -1703,7 +1719,10 @@ export default function Billing() {
           kotSeqNum,
           snapTableLabel,
         );
-        const sentLines = pendingItems.map((it: any) => ({ id: it.id, sentQty: it.sentQty ?? it.qty }));
+        const sentLines = pendingItems.map((it: any) => ({
+          id: it.id,
+          sentQty: it.sentQty ?? it.qty,
+        }));
         const lines = buildKotLines(preview, paidOrder, snapTableNum, branding);
         const printerTargets = await resolvePrinterTargets();
         await printKOT({
@@ -1752,7 +1771,10 @@ export default function Billing() {
             kotResult = await printKotAfterPaymentIfNeeded();
           }
           if (kotResult.printed && kotResult.copiedToCounter) {
-            showToast("Payment settled. Bill printed on counter and KOT printed on kitchen + counter.", "success");
+            showToast(
+              "Payment settled. Bill printed on counter and KOT printed on kitchen + counter.",
+              "success",
+            );
           } else if (kotResult.printed) {
             showToast("Payment settled. Bill and KOT printed.", "success");
           } else {
@@ -1826,7 +1848,10 @@ export default function Billing() {
           amountPaid: finalTotal,
         });
       } catch (e: any) {
-        showToast(reportClientError("billing.mark-delivered", e, "Failed to mark delivered"), "error");
+        showToast(
+          reportClientError("billing.mark-delivered", e, "Failed to mark delivered"),
+          "error",
+        );
         return;
       }
 
@@ -1876,7 +1901,10 @@ export default function Billing() {
         await attemptPrint();
       } catch (e: any) {
         logger.error("Delivery completion failed", e as Error);
-        showToast(reportClientError("billing.finish-delivered", e, "Failed to finish delivered order"), "error");
+        showToast(
+          reportClientError("billing.finish-delivered", e, "Failed to finish delivered order"),
+          "error",
+        );
       }
     } finally {
       endBusyAction("delivery");
@@ -2219,121 +2247,119 @@ export default function Billing() {
           </BillingMenuBoard>
           <BillingTicketPane>
             <div className={styles.ticketContext}>
-          <div className={styles.headerLeft}>
-            <button
-              onClick={() => setTablesOpenPersisted(!tablesOpen)}
-              aria-label="Toggle tables"
-              title="Toggle tables (T)"
-              className={styles.toggleBtn}
-            >
-              Menu
-            </button>
-            <div>
-              <div className={styles.headerTitle}>
-                {tableNum
-                  ? activeTableLabel
-                  : order && activeOrderType === "delivery"
-                    ? `${order.meta?.platform || order.meta?.orderSource || "Delivery"}${order.meta?.code ? ` #${order.meta.code}` : ""}`
-                    : order && !activeMode?.requiresTable
-                      ? `${modeOrderLabel(activeMode, order)}${order.meta?.customerName && activeMode?.id !== "takeaway" ? ` - ${order.meta.customerName}` : ""}`
-                      : "Billing"}
-              </div>
-              {order && (
-                <div className={styles.headerMeta}>
-                  {(order.items || []).length} item{(order.items || []).length !== 1 ? "s" : ""}
-                  {" · "}
-                  <span title="Time since this order opened">
-                    open {formatKotAge(Number(order.createdAt) || Date.now())}
-                  </span>
-                  {order.status && order.status !== "open" && (
-                    <span
-                      className={
-                        order.status === "ready"
-                          ? styles.statusReadyText
-                          : order.status === "assigned"
-                            ? styles.statusAssignedText
-                            : styles.statusOtherText
-                      }
-                      style={{ marginLeft: 8, fontWeight: 700 }}
-                    >
-                      · {order.status}
-                    </span>
+              <div className={styles.headerLeft}>
+                <button
+                  onClick={() => setTablesOpenPersisted(!tablesOpen)}
+                  aria-label="Toggle tables"
+                  title="Toggle tables (T)"
+                  className={styles.toggleBtn}
+                >
+                  Menu
+                </button>
+                <div>
+                  <div className={styles.headerTitle}>
+                    {tableNum
+                      ? activeTableLabel
+                      : order && activeOrderType === "delivery"
+                        ? `${order.meta?.platform || order.meta?.orderSource || "Delivery"}${order.meta?.code ? ` #${order.meta.code}` : ""}`
+                        : order && !activeMode?.requiresTable
+                          ? `${modeOrderLabel(activeMode, order)}${order.meta?.customerName && activeMode?.id !== "takeaway" ? ` - ${order.meta.customerName}` : ""}`
+                          : "Billing"}
+                  </div>
+                  {order && (
+                    <div className={styles.headerMeta}>
+                      {(order.items || []).length} item{(order.items || []).length !== 1 ? "s" : ""}
+                      {" · "}
+                      <span title="Time since this order opened">
+                        open {formatKotAge(Number(order.createdAt) || Date.now())}
+                      </span>
+                      {order.status && order.status !== "open" && (
+                        <span
+                          className={
+                            order.status === "ready"
+                              ? styles.statusReadyText
+                              : order.status === "assigned"
+                                ? styles.statusAssignedText
+                                : styles.statusOtherText
+                          }
+                          style={{ marginLeft: 8, fontWeight: 700 }}
+                        >
+                          · {order.status}
+                        </span>
+                      )}
+                    </div>
                   )}
                 </div>
-              )}
-            </div>
-          </div>
+              </div>
             </div>
             <div className={styles.ticketBody}>
-                {/* Order items + totals */}
-                <section>
-                  {(order?.items || []).length > 0 ? (
-                    <div className={styles.orderList}>
-                      <OrderList
-                        items={order?.items || []}
-                        menuItemsById={menuItemsById}
-                        editingQty={editingQty}
-                        editingRate={editingRate}
-                        setEditingQty={setEditingQty}
-                        setEditingRate={setEditingRate}
-                        commitQty={commitQty}
-                        commitRate={commitRate}
-                        removeLine={removeLine}
-                        updateOrderQty={updateOrderQty}
-                        onChangeVariant={changeLineVariant}
-                      />
-                    </div>
-                  ) : (
-                    <div
-                      className={styles.textMuted}
-                      style={{ textAlign: "center", padding: "28px 0", fontSize: 14 }}
-                    >
-                      {order
-                        ? "No items yet — search above to add"
-                        : "No order selected"}
-                    </div>
-                  )}
-                  {(order?.items || []).length > 0 ? (
-                    <div className={styles.discountBox}>
-                      <div className={styles.discountRow}>
-                        <span className={styles.textMuted}>Discount</span>
-                        <div className={styles.discountControls}>
-                          <input
-                            type="number"
-                            min={0}
-                            max={100}
-                            value={discountPercent}
-                            disabled={isPaid}
-                            onChange={(e) =>
-                              setDiscountPercent(
-                                Math.max(0, Math.min(100, Number(e.target.value || 0))),
-                              )
-                            }
-                            onBlur={() => {
-                              void persistDiscountIfNeeded().catch((e) => {
-                                logger.error("Failed to save discount", e);
-                                showToast(
-                                  reportClientError(
-                                    "billing.discount",
-                                    e,
-                                    "Discount could not be saved.",
-                                  ),
-                                  "error",
-                                );
-                              });
-                            }}
-                            className={styles.discountInput}
-                            aria-label="Discount percent"
-                          />
-                          <span className={styles.textMuted} style={{ fontSize: 13 }}>
-                            %
-                          </span>
-                          <span className={styles.discountAmt}>−{formatCurrency(discountAmt)}</span>
-                        </div>
+              {/* Order items + totals */}
+              <section>
+                {(order?.items || []).length > 0 ? (
+                  <div className={styles.orderList}>
+                    <OrderList
+                      items={order?.items || []}
+                      menuItemsById={menuItemsById}
+                      editingQty={editingQty}
+                      editingRate={editingRate}
+                      setEditingQty={setEditingQty}
+                      setEditingRate={setEditingRate}
+                      commitQty={commitQty}
+                      commitRate={commitRate}
+                      removeLine={removeLine}
+                      updateOrderQty={updateOrderQty}
+                      onChangeVariant={changeLineVariant}
+                    />
+                  </div>
+                ) : (
+                  <div
+                    className={styles.textMuted}
+                    style={{ textAlign: "center", padding: "28px 0", fontSize: 14 }}
+                  >
+                    {order ? "No items yet — search above to add" : "No order selected"}
+                  </div>
+                )}
+                {(order?.items || []).length > 0 ? (
+                  <div className={styles.discountBox}>
+                    <div className={styles.discountRow}>
+                      <span className={styles.textMuted}>Discount</span>
+                      <div className={styles.discountControls}>
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          value={discountPercent}
+                          disabled={isPaid}
+                          onChange={(e) =>
+                            setDiscountPercent(
+                              Math.max(0, Math.min(100, Number(e.target.value || 0))),
+                            )
+                          }
+                          onBlur={() => {
+                            void persistDiscountIfNeeded().catch((e) => {
+                              logger.error("Failed to save discount", e);
+                              showToast(
+                                reportClientError(
+                                  "billing.discount",
+                                  e,
+                                  "Discount could not be saved.",
+                                ),
+                                "error",
+                              );
+                            });
+                          }}
+                          className={styles.discountInput}
+                          aria-label="Discount percent"
+                        />
+                        <span className={styles.textMuted} style={{ fontSize: 13 }}>
+                          %
+                        </span>
+                        <span className={styles.discountAmt}>−{formatCurrency(discountAmt)}</span>
                       </div>
                     </div>
-                  ) : null}
-                </section>
+                  </div>
+                ) : null}
+              </section>
             </div>
             {(order?.items || []).length > 0 ? (
               <div className={styles.ticketSummary} aria-live="polite">
@@ -2378,104 +2404,107 @@ export default function Billing() {
               </div>
             ) : null}
             <div className={styles.ticketActions}>
-          <div className={styles.actionGroup}>
-            {allowsManualKot && (
-              <button
-                onClick={sendKOT}
-                disabled={!canKot}
-                aria-disabled={!canKot}
-                title={unsentKotItems.length > 0 ? "Send KOT (K)" : "No new KOT items to send"}
-                className={`${styles.actionBtn} ${styles.actionPrimary}`}
-              >
-                {kotPrinting ? "Printing..." : "KOT"}
-              </button>
-            )}
-            {allowsManualBillPrint && (
-              <button
-                onClick={handlePrintBill}
-                disabled={!canPrintBill}
-                aria-disabled={!canPrintBill}
-                title="Print bill for customer to review (B)"
-                className={`${styles.actionBtn} ${styles.actionSecondary}`}
-              >
-                {billPrinting ? "Printing..." : "Print Bill"}
-              </button>
-            )}
-            {!activeMode?.externalPayment && (
-              <button
-                onClick={() => {
-                  void openPayModal();
-                }}
-                disabled={!canStartPayment}
-                aria-disabled={!canStartPayment}
-                title={`Settle bill and run payment print flow: ${paymentFlowLabel(activeMode)} (P)`}
-                className={`${styles.actionBtn} ${styles.actionPay}`}
-              >
-                {paymentProcessing ? "Processing..." : "Settle"}
-              </button>
-            )}
-            {showPaymentFlowHint && (
-              <span className={styles.paymentFlowChip}>On pay: {paymentFlowLabel(activeMode)}</span>
-            )}
-            <button
-              onClick={() => setConfirmCancelOpen(true)}
-              disabled={!canStartCancel}
-              aria-disabled={!canStartCancel}
-              title="Cancel order (C)"
-              className={`${styles.actionBtn} ${styles.actionDanger}`}
-            >
-              {cancelProcessing ? "Cancelling..." : "Cancel"}
-            </button>
-            {order && supportsMarkReady && (
-              <>
+              <div className={styles.actionGroup}>
+                {allowsManualKot && (
+                  <button
+                    onClick={sendKOT}
+                    disabled={!canKot}
+                    aria-disabled={!canKot}
+                    title={unsentKotItems.length > 0 ? "Send KOT (K)" : "No new KOT items to send"}
+                    className={`${styles.actionBtn} ${styles.actionPrimary}`}
+                  >
+                    {kotPrinting ? "Printing..." : "KOT"}
+                  </button>
+                )}
+                {allowsManualBillPrint && (
+                  <button
+                    onClick={handlePrintBill}
+                    disabled={!canPrintBill}
+                    aria-disabled={!canPrintBill}
+                    title="Print bill for customer to review (B)"
+                    className={`${styles.actionBtn} ${styles.actionSecondary}`}
+                  >
+                    {billPrinting ? "Printing..." : "Print Bill"}
+                  </button>
+                )}
+                {!activeMode?.externalPayment && (
+                  <button
+                    onClick={() => {
+                      void openPayModal();
+                    }}
+                    disabled={!canStartPayment}
+                    aria-disabled={!canStartPayment}
+                    title={`Settle bill and run payment print flow: ${paymentFlowLabel(activeMode)} (P)`}
+                    className={`${styles.actionBtn} ${styles.actionPay}`}
+                  >
+                    {paymentProcessing ? "Processing..." : "Settle"}
+                  </button>
+                )}
+                {showPaymentFlowHint && (
+                  <span className={styles.paymentFlowChip}>
+                    On pay: {paymentFlowLabel(activeMode)}
+                  </span>
+                )}
                 <button
-                  onClick={markReady}
-                  disabled={!hasItems || isPaid || markReadyProcessing}
-                  aria-disabled={!hasItems || isPaid || markReadyProcessing}
-                  title="Mark order as ready"
-                  className={`${styles.actionBtn} ${styles.actionTertiary}`}
-                  style={
-                    order.status === "ready" ? { background: "var(--pos-success)", color: "var(--pos-surface)" } : undefined
-                  }
+                  onClick={() => setConfirmCancelOpen(true)}
+                  disabled={!canStartCancel}
+                  aria-disabled={!canStartCancel}
+                  title="Cancel order (C)"
+                  className={`${styles.actionBtn} ${styles.actionDanger}`}
                 >
-                  {markReadyProcessing
-                    ? "Saving..."
-                    : order.status === "ready"
-                      ? "Ready"
-                      : "Mark Ready"}
+                  {cancelProcessing ? "Cancelling..." : "Cancel"}
                 </button>
-                {activeOrderType === "delivery" && (
+                {order && supportsMarkReady && (
                   <>
                     <button
-                      onClick={openAssignRider}
-                      disabled={!hasItems || isPaid || assignRiderProcessing}
-                      aria-disabled={!hasItems || isPaid || assignRiderProcessing}
-                      title="Assign or update rider"
-                      className={`${styles.actionBtn} ${styles.actionSecondary}`}
+                      onClick={markReady}
+                      disabled={!hasItems || isPaid || markReadyProcessing}
+                      aria-disabled={!hasItems || isPaid || markReadyProcessing}
+                      title="Mark order as ready"
+                      className={`${styles.actionBtn} ${styles.actionTertiary}`}
+                      style={
+                        order.status === "ready"
+                          ? { background: "var(--pos-success)", color: "var(--pos-surface)" }
+                          : undefined
+                      }
                     >
-                      {assignRiderProcessing
+                      {markReadyProcessing
                         ? "Saving..."
-                        : (order.meta as any)?.rider?.name
-                          ? "Update Rider"
-                          : "Assign Rider"}
+                        : order.status === "ready"
+                          ? "Ready"
+                          : "Mark Ready"}
                     </button>
-                    <button
-                      onClick={handleMarkDelivered}
-                      disabled={!hasItems || isPaid || deliveryProcessing}
-                      title="Mark order as delivered (paid via aggregator)"
-                      className={`${styles.actionBtn} ${styles.actionPay}`}
-                    >
-                      {deliveryProcessing ? "Processing..." : "Delivered"}
-                    </button>
+                    {activeOrderType === "delivery" && (
+                      <>
+                        <button
+                          onClick={openAssignRider}
+                          disabled={!hasItems || isPaid || assignRiderProcessing}
+                          aria-disabled={!hasItems || isPaid || assignRiderProcessing}
+                          title="Assign or update rider"
+                          className={`${styles.actionBtn} ${styles.actionSecondary}`}
+                        >
+                          {assignRiderProcessing
+                            ? "Saving..."
+                            : (order.meta as any)?.rider?.name
+                              ? "Update Rider"
+                              : "Assign Rider"}
+                        </button>
+                        <button
+                          onClick={handleMarkDelivered}
+                          disabled={!hasItems || isPaid || deliveryProcessing}
+                          title="Mark order as delivered (paid via aggregator)"
+                          className={`${styles.actionBtn} ${styles.actionPay}`}
+                        >
+                          {deliveryProcessing ? "Processing..." : "Delivered"}
+                        </button>
+                      </>
+                    )}
                   </>
                 )}
-              </>
-            )}
-          </div>
+              </div>
             </div>
           </BillingTicketPane>
         </div>
-
 
         {/* ── Modals ────────────────────────────────────────────────────── */}
         {confirmCancelOpen && order && (
@@ -2612,7 +2641,6 @@ export default function Billing() {
             processing={receiptRetrying}
           />
         )}
-
       </div>
 
       <PaymentsModal

@@ -147,7 +147,9 @@ function ManagerInner({
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
         const tag = (e.target as HTMLElement)?.tagName;
-        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") {
+          return;
+        }
         // Don't steal focus from Billing — only when Manage is showing
         e.preventDefault();
         setPaletteOpen(true);
@@ -187,8 +189,12 @@ function ManagerInner({
     return all.filter((item) => item.id === "reports");
   }, [allowedManageSections, allowedPeopleTabs, onSectionChange, reportsOnly]);
 
-  const visibleMainSections = SECTIONS.slice(0, 4).filter((item) => allowedSectionSet.has(item.key));
-  const visibleBusinessSections = SECTIONS.slice(4).filter((item) => allowedSectionSet.has(item.key));
+  const visibleMainSections = SECTIONS.slice(0, 4).filter((item) =>
+    allowedSectionSet.has(item.key),
+  );
+  const visibleBusinessSections = SECTIONS.slice(4).filter((item) =>
+    allowedSectionSet.has(item.key),
+  );
   const visiblePeopleTabs = PEOPLE_RAIL.filter((item) => allowedPeopleTabs.includes(item.tab));
 
   const effectiveSection = React.useMemo(() => {
@@ -228,9 +234,7 @@ function ManagerInner({
             </div>
           </ManageShell>
         )}
-        {effectiveSection === "review" && (
-          <OwnerReview onOpenHistory={() => navigate("history")} />
-        )}
+        {effectiveSection === "review" && <OwnerReview onOpenHistory={() => navigate("history")} />}
         {effectiveSection === "audit" && <AuditViewer />}
         {effectiveSection === "settings" && <SettingsSection />}
       </>
@@ -267,7 +271,12 @@ function ManagerInner({
       <aside className={styles.rail} aria-label="Manage navigation">
         <div className={styles.railBrand}>
           <h2 className={styles.railTitle}>Manage</h2>
-          <Button variant="ghost" size="sm" onClick={() => setPaletteOpen(true)} className={styles.jumpBtn}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setPaletteOpen(true)}
+            className={styles.jumpBtn}
+          >
             Jump (Ctrl+K)
           </Button>
         </div>
@@ -297,7 +306,9 @@ function ManagerInner({
             className={`${styles.railButton} ${
               effectiveSection === "people" && peopleTab === item.tab ? styles.railButtonActive : ""
             }`}
-            aria-current={effectiveSection === "people" && peopleTab === item.tab ? "page" : undefined}
+            aria-current={
+              effectiveSection === "people" && peopleTab === item.tab ? "page" : undefined
+            }
             onClick={() => navigatePeopleTab(item.tab)}
           >
             <span className={styles.buttonMain}>

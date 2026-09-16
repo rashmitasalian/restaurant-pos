@@ -15,9 +15,7 @@ describe("seatingAreaUtils", () => {
   it("adds a new area draft", () => {
     const result = addSeatingAreaDraft([], "Rooftop", 1000);
     expect(result.error).toBeUndefined();
-    expect(result.areas).toEqual([
-      { id: "area:rooftop", name: "Rooftop", order: 1, active: true },
-    ]);
+    expect(result.areas).toEqual([{ id: "area:rooftop", name: "Rooftop", order: 1, active: true }]);
   });
 
   it("blocks duplicate area names", () => {

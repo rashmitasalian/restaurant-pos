@@ -34,7 +34,11 @@ export function resolveKotTableLabel(previewData: {
   if (label) {
     return label;
   }
-  if (previewData.tableNum !== null && previewData.tableNum !== undefined && previewData.tableNum !== "") {
+  if (
+    previewData.tableNum !== null &&
+    previewData.tableNum !== undefined &&
+    previewData.tableNum !== ""
+  ) {
     return String(previewData.tableNum);
   }
   return "-";

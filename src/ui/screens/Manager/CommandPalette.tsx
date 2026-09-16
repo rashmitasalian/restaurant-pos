@@ -26,14 +26,18 @@ export function CommandPalette({ open, onClose, items }: CommandPaletteProps) {
   const dialogRef = useFocusTrap<HTMLDivElement>(open, onClose);
 
   React.useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      return;
+    }
     setQuery("");
     setHighlight(0);
   }, [open]);
 
   const filtered = React.useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return items.slice(0, 12);
+    if (!q) {
+      return items.slice(0, 12);
+    }
     return items
       .filter(
         (item) =>
@@ -48,7 +52,9 @@ export function CommandPalette({ open, onClose, items }: CommandPaletteProps) {
     setHighlight(0);
   }, [query]);
 
-  if (!open) return null;
+  if (!open) {
+    return null;
+  }
 
   const run = (item: CommandItem) => {
     onClose();

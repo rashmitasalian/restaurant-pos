@@ -25,11 +25,7 @@ export async function printReceipt(data: { text?: string; lines?: string[]; prin
 
     // Queue the job for retry when printer comes back online
     const printerName = data?.printer || "default";
-    await PrinterOfflineQueue.addPrintJob(
-      printerName,
-      "receipt",
-      data,
-    );
+    await PrinterOfflineQueue.addPrintJob(printerName, "receipt", data);
 
     const printerError = new PrinterError("Failed to print receipt", true, { ...data });
     handleError(printerError);
@@ -64,11 +60,7 @@ export async function printKOT(data: {
 
     // Queue the job for retry when printer comes back online
     const printerName = data?.printer || "default";
-    await PrinterOfflineQueue.addPrintJob(
-      printerName,
-      "kot",
-      data,
-    );
+    await PrinterOfflineQueue.addPrintJob(printerName, "kot", data);
 
     const printerError = new PrinterError("Failed to print KOT", true, { ...data });
     handleError(printerError);

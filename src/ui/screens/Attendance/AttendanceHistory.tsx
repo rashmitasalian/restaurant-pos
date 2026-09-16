@@ -89,8 +89,13 @@ export default function AttendanceHistory({ embedded = false }: { embedded?: boo
       if (Array.isArray(shifts) && shifts.length > 0) {
         setShiftOptions(
           shifts
-            .filter((entry) => entry.id && entry.label && entry.id !== "half-day" && entry.id !== "half")
-            .map((entry) => ({ value: String(entry.id).toLowerCase(), label: String(entry.label) })),
+            .filter(
+              (entry) => entry.id && entry.label && entry.id !== "half-day" && entry.id !== "half",
+            )
+            .map((entry) => ({
+              value: String(entry.id).toLowerCase(),
+              label: String(entry.label),
+            })),
         );
       }
       const attendance = await listAttendanceRange({
@@ -139,7 +144,15 @@ export default function AttendanceHistory({ embedded = false }: { embedded?: boo
       matrix,
     });
     showToast(`Exported ${scopeLabel} · ${shiftLabel}`, "success");
-  }, [matrix, period, resolvedRange.fromDate, resolvedRange.toDate, scopeLabel, shiftLabel, showToast]);
+  }, [
+    matrix,
+    period,
+    resolvedRange.fromDate,
+    resolvedRange.toDate,
+    scopeLabel,
+    shiftLabel,
+    showToast,
+  ]);
 
   const periodNav = () => {
     if (period === "month") {
@@ -153,7 +166,9 @@ export default function AttendanceHistory({ embedded = false }: { embedded?: boo
           >
             <ChevronLeft size={18} />
           </button>
-          <span className={styles.periodLabel}>{formatMonthLabel(monthAnchor.year, monthAnchor.month)}</span>
+          <span className={styles.periodLabel}>
+            {formatMonthLabel(monthAnchor.year, monthAnchor.month)}
+          </span>
           <button
             type="button"
             className={styles.navBtn}
@@ -224,7 +239,12 @@ export default function AttendanceHistory({ embedded = false }: { embedded?: boo
               {scopeLabel} · {matrix.rows.length} employees
             </p>
           </div>
-          <Button variant="secondary" size="sm" onClick={exportExcel} disabled={loading || matrix.rows.length === 0}>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={exportExcel}
+            disabled={loading || matrix.rows.length === 0}
+          >
             Export Excel
           </Button>
         </div>
@@ -341,10 +361,18 @@ export default function AttendanceHistory({ embedded = false }: { embedded?: boo
                         </td>
                       );
                     })}
-                    <td className={`${styles.summaryCell} ${styles.summaryCellPresent}`}>{row.totals.present}</td>
-                    <td className={`${styles.summaryCell} ${styles.summaryCellAbsent}`}>{row.totals.absent}</td>
-                    <td className={`${styles.summaryCell} ${styles.summaryCellHalfDay}`}>{row.totals.halfDay}</td>
-                    <td className={`${styles.summaryCell} ${styles.summaryCellLeave}`}>{row.totals.leave}</td>
+                    <td className={`${styles.summaryCell} ${styles.summaryCellPresent}`}>
+                      {row.totals.present}
+                    </td>
+                    <td className={`${styles.summaryCell} ${styles.summaryCellAbsent}`}>
+                      {row.totals.absent}
+                    </td>
+                    <td className={`${styles.summaryCell} ${styles.summaryCellHalfDay}`}>
+                      {row.totals.halfDay}
+                    </td>
+                    <td className={`${styles.summaryCell} ${styles.summaryCellLeave}`}>
+                      {row.totals.leave}
+                    </td>
                     <td className={`${styles.summaryCell} ${styles.summaryCellOt}`}>
                       {formatOtHoursTotal(row.totals.overtimeMinutes)}h
                     </td>

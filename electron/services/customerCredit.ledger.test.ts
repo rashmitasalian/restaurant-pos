@@ -98,7 +98,11 @@ describe("customer credit ledger", () => {
     expect(openBills).toHaveLength(1);
     expect(openBills[0].remaining).toBe(200);
 
-    const voided = posService.voidCustomerCreditSale(openBills[0].id, { reason: "mistaken bill" }, "manager");
+    const voided = posService.voidCustomerCreditSale(
+      openBills[0].id,
+      { reason: "mistaken bill" },
+      "manager",
+    );
     expect(voided.voided.amount).toBe(200);
     expect(voided.account.outstanding).toBe(0);
 

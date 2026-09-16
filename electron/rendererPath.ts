@@ -21,7 +21,9 @@ export function resolveProductionRendererHtml(options: {
     path.join(options.resourcesPath, "app.asar.unpacked", "dist", "index.html"),
     path.join(options.dirname, "..", "..", "dist", "index.html"),
   ];
-  const usable = candidates.find((candidate) => exists(candidate) && !isInsideAsarArchive(candidate));
+  const usable = candidates.find(
+    (candidate) => exists(candidate) && !isInsideAsarArchive(candidate),
+  );
   if (!usable) {
     throw new Error(`renderer-not-found:${candidates.join("|")}`);
   }

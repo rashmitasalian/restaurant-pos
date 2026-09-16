@@ -42,7 +42,9 @@ export function MenuItem({ item }: MenuItemProps) {
           {!hasVariants ? <p className="pm-item-price">{formatPrice(item.price)}</p> : null}
         </div>
         {item.available ? (
-          item.description ? <p className="pm-item-desc">{item.description}</p> : null
+          item.description ? (
+            <p className="pm-item-desc">{item.description}</p>
+          ) : null
         ) : (
           <p className="pm-item-unavailable">Currently unavailable</p>
         )}

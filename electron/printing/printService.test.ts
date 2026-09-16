@@ -1,5 +1,11 @@
 import { isIpv4Address } from "./networkRaw";
-import { normalizePrintType, resolvePrinterTarget, type PrinterConfig } from "./printService";
+import {
+  enqueuePrinterJob,
+  normalizePrintType,
+  resetPrinterQueuesForTests,
+  resolvePrinterTarget,
+  type PrinterConfig,
+} from "./printService";
 
 const cfg: PrinterConfig = {
   kitchenPrinterName: "Kitchen Printer",
@@ -27,5 +33,40 @@ describe("print service routing", () => {
     expect(isIpv4Address("192.168.1.50")).toBe(true);
     expect(isIpv4Address("999.168.1.50")).toBe(false);
     expect(isIpv4Address("Kitchen Printer")).toBe(false);
+  });
+});
+
+describe("printer FIFO queue", () => {
+  beforeEach(() => {
+    resetPrinterQueuesForTests();
+  });
+
+  it("runs jobs for the same printer strictly in order", async () => {
+    const order: number[] = [];
+    const slow = enqueuePrinterJob("Kitchen", async () => {
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      order.push(1);
+      return "a";
+    });
+    const fast = enqueuePrinterJob("Kitchen", async () => {
+      order.push(2);
+      return "b";
+    });
+    await expect(Promise.all([slow, fast])).resolves.toEqual(["a", "b"]);
+    expect(order).toEqual([1, 2]);
+  });
+
+  it("does not block a different printer behind a busy one", async () => {
+    const order: string[] = [];
+    const kitchen = enqueuePrinterJob("Kitchen", async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      order.push("kitchen");
+    });
+    const counter = enqueuePrinterJob("Counter", async () => {
+      order.push("counter");
+    });
+    await Promise.all([kitchen, counter]);
+    expect(order[0]).toBe("counter");
+    expect(order[1]).toBe("kitchen");
   });
 });

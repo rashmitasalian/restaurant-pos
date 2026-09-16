@@ -128,7 +128,9 @@ export function VendorsView() {
   };
 
   const confirmDeleteVendor = async () => {
-    if (!deleteTarget || saving) return;
+    if (!deleteTarget || saving) {
+      return;
+    }
     setSaving(true);
     try {
       await deleteVendor(deleteTarget.id);
@@ -172,9 +174,15 @@ export function VendorsView() {
   };
 
   const paymentTone = (statusValue: string): "neutral" | "attention" | "success" | "danger" => {
-    if (statusValue === "paid") return "success";
-    if (statusValue === "partial") return "attention";
-    if (statusValue === "voided") return "danger";
+    if (statusValue === "paid") {
+      return "success";
+    }
+    if (statusValue === "partial") {
+      return "attention";
+    }
+    if (statusValue === "voided") {
+      return "danger";
+    }
     return "neutral";
   };
 
@@ -264,7 +272,11 @@ export function VendorsView() {
             <Button variant="secondary" onClick={() => setModalOpen(false)}>
               Cancel
             </Button>
-            <Button variant="primary" onClick={() => void saveVendor()} disabled={saving || !form.name.trim()}>
+            <Button
+              variant="primary"
+              onClick={() => void saveVendor()}
+              disabled={saving || !form.name.trim()}
+            >
               {saving ? "Saving…" : form.editingId ? "Update Vendor" : "Add Vendor"}
             </Button>
           </div>
@@ -284,7 +296,10 @@ export function VendorsView() {
           <div className={styles.status}>Loading vendor activity…</div>
         ) : (
           <div className={styles.stack}>
-            <div className={styles.kpiGrid} style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
+            <div
+              className={styles.kpiGrid}
+              style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}
+            >
               <div className={styles.kpi}>
                 <div className={styles.kpiLabel}>Purchases</div>
                 <div className={styles.kpiValue}>{detail.purchaseCount}</div>
@@ -297,13 +312,18 @@ export function VendorsView() {
 
             {(selected.phone || selected.contactPerson || selected.notes) && (
               <div className={styles.hint}>
-                {[selected.contactPerson, selected.phone, selected.notes].filter(Boolean).join(" · ")}
+                {[selected.contactPerson, selected.phone, selected.notes]
+                  .filter(Boolean)
+                  .join(" · ")}
               </div>
             )}
 
             <div className="pos-sect-label">Recent purchases</div>
             {detail.purchases.length === 0 ? (
-              <EmptyState title="No purchases yet" text="Recorded purchases for this vendor will appear here." />
+              <EmptyState
+                title="No purchases yet"
+                text="Recorded purchases for this vendor will appear here."
+              />
             ) : (
               <DataTable
                 headers={["Date", "Total", "Payment", "Status"]}

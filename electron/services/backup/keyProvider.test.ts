@@ -33,7 +33,10 @@ describe("BackupKeyProvider", () => {
     expect(provider.getInstallationToken()).toBe(token);
 
     provider.clearSecrets();
-    const restored = unwrapBackupKey(recovery.wrappedBackupKey, normalizeRecoveryKey(recovery.recoveryKey));
+    const restored = unwrapBackupKey(
+      recovery.wrappedBackupKey,
+      normalizeRecoveryKey(recovery.recoveryKey),
+    );
     provider.restoreFromRecovery(recovery.wrappedBackupKey, recovery.recoveryKey);
     expect(provider.getBackupKey().equals(restored)).toBe(true);
   });
@@ -42,6 +45,8 @@ describe("BackupKeyProvider", () => {
     const material = createRecoveryMaterial();
     expect(material.verifierHash).not.toContain(material.recoveryKey);
     expect(material.wrappedBackupKey).not.toEqual(material.recoveryKey);
-    expect(createHash("sha256").update(material.recoveryKey).digest("hex")).not.toBe(material.verifierHash);
+    expect(createHash("sha256").update(material.recoveryKey).digest("hex")).not.toBe(
+      material.verifierHash,
+    );
   });
 });

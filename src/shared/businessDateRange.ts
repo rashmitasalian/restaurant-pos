@@ -47,7 +47,10 @@ export function formatTimeInput(date: Date): string {
  * - Selected day is today: last 4 hours through now.
  * - Any other single day: full day (00:00–23:59).
  */
-export function suggestInitialTimeWindow(referenceDay: Date, now = new Date()): { fromTime: string; toTime: string } {
+export function suggestInitialTimeWindow(
+  referenceDay: Date,
+  now = new Date(),
+): { fromTime: string; toTime: string } {
   const dayStart = startOfDay(referenceDay);
   const todayStart = startOfDay(now);
   if (dayStart.getTime() === todayStart.getTime()) {

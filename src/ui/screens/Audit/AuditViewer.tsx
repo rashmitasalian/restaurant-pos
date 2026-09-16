@@ -48,8 +48,12 @@ function getActionColor(action: string): { bg: string; color: string; icon: Luci
 }
 
 function detailText(detail: unknown): string {
-  if (detail == null) return "";
-  if (typeof detail === "string") return detail;
+  if (detail == null) {
+    return "";
+  }
+  if (typeof detail === "string") {
+    return detail;
+  }
   try {
     const s = JSON.stringify(detail);
     return s.length > 80 ? `${s.slice(0, 80)}…` : s;

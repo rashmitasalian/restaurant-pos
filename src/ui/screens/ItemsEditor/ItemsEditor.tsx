@@ -123,7 +123,9 @@ export default function ItemsEditor({
   const [modalSaving, setModalSaving] = React.useState(false);
 
   React.useEffect(() => {
-    if (!addItemRef) return;
+    if (!addItemRef) {
+      return;
+    }
     addItemRef.current = () => setModalOpen(true);
     return () => {
       addItemRef.current = null;
@@ -573,15 +575,15 @@ export default function ItemsEditor({
   return (
     <div className={embedded ? undefined : "pos-page"}>
       {!embedded && (
-      <PageHeader
-        title="Menu"
-        subtitle={`${items.length} item${items.length !== 1 ? "s" : ""} · edit prices inline, then Save All`}
-        actions={
-          <Button variant="primary" onClick={() => setModalOpen(true)}>
-            + Add Item
-          </Button>
-        }
-      />
+        <PageHeader
+          title="Menu"
+          subtitle={`${items.length} item${items.length !== 1 ? "s" : ""} · edit prices inline, then Save All`}
+          actions={
+            <Button variant="primary" onClick={() => setModalOpen(true)}>
+              + Add Item
+            </Button>
+          }
+        />
       )}
 
       {/* Search bar */}
@@ -708,7 +710,9 @@ export default function ItemsEditor({
             >
               {confirmBulkDelete ? (
                 <>
-                  <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: "var(--pos-danger)" }}>
+                  <span
+                    style={{ flex: 1, fontSize: 13, fontWeight: 600, color: "var(--pos-danger)" }}
+                  >
                     Delete {selectedIds.size} item{selectedIds.size !== 1 ? "s" : ""} permanently?
                   </span>
                   <button
@@ -750,7 +754,14 @@ export default function ItemsEditor({
                 </>
               ) : (
                 <>
-                  <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: "var(--pos-surface-hover)" }}>
+                  <span
+                    style={{
+                      flex: 1,
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: "var(--pos-surface-hover)",
+                    }}
+                  >
                     {selectedIds.size} item{selectedIds.size !== 1 ? "s" : ""} selected
                   </span>
                   <button
@@ -823,7 +834,7 @@ export default function ItemsEditor({
                       sortOrder: Number(variant.sortOrder ?? index),
                     }))
                   : []);
-                  const variantPriceLabel = getVariantPriceLabel(currentVariants);
+              const variantPriceLabel = getVariantPriceLabel(currentVariants);
               const isConfirmingDelete = confirmDeleteId === it._id;
               const isDeleting = deletingItemId === it._id;
               const isFavoriteUpdating = favoriteUpdatingId === it._id;
@@ -837,7 +848,11 @@ export default function ItemsEditor({
                     alignItems: "center",
                     padding: "10px 14px",
                     borderRadius: 10,
-                    background: isConfirmingDelete ? "var(--pos-danger-tint)" : edited ? "var(--pos-saffron-tint)" : "var(--pos-surface)",
+                    background: isConfirmingDelete
+                      ? "var(--pos-danger-tint)"
+                      : edited
+                        ? "var(--pos-saffron-tint)"
+                        : "var(--pos-surface)",
                     border: isConfirmingDelete
                       ? "1.5px solid var(--pos-danger-line)"
                       : edited
@@ -857,7 +872,14 @@ export default function ItemsEditor({
                         gap: 12,
                       }}
                     >
-                      <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: "var(--pos-danger)" }}>
+                      <span
+                        style={{
+                          flex: 1,
+                          fontSize: 13,
+                          fontWeight: 600,
+                          color: "var(--pos-danger)",
+                        }}
+                      >
                         Delete "{it.name}" permanently?
                       </span>
                       <button
@@ -931,7 +953,10 @@ export default function ItemsEditor({
                             fontSize: 14,
                             fontWeight: 700,
                             color: "var(--pos-tx)",
-                            background: editMap[it._id]?.name !== undefined ? "var(--pos-saffron-tint)" : "var(--pos-surface)",
+                            background:
+                              editMap[it._id]?.name !== undefined
+                                ? "var(--pos-saffron-tint)"
+                                : "var(--pos-surface)",
                             outline: "none",
                             fontFamily: "inherit",
                             boxSizing: "border-box",
@@ -961,7 +986,10 @@ export default function ItemsEditor({
                             fontSize: 12,
                             fontFamily: "'Courier New', monospace",
                             color: "var(--pos-tx-sub)",
-                            background: editMap[it._id]?.sku !== undefined ? "var(--pos-saffron-tint)" : "var(--pos-surface)",
+                            background:
+                              editMap[it._id]?.sku !== undefined
+                                ? "var(--pos-saffron-tint)"
+                                : "var(--pos-surface)",
                             outline: "none",
                             boxSizing: "border-box",
                           }}
@@ -989,7 +1017,9 @@ export default function ItemsEditor({
                                 : "1px solid var(--pos-line)",
                             fontSize: 13,
                             background:
-                              editMap[it._id]?.category !== undefined ? "var(--pos-saffron-tint)" : "var(--pos-surface)",
+                              editMap[it._id]?.category !== undefined
+                                ? "var(--pos-saffron-tint)"
+                                : "var(--pos-surface)",
                             color: "var(--pos-tx-sec)",
                             outline: "none",
                             fontFamily: "inherit",
@@ -1042,12 +1072,16 @@ export default function ItemsEditor({
                               width: "100%",
                               padding: "6px 8px",
                               borderRadius: 7,
-                              border: edited ? "1.5px solid var(--pos-saffron)" : "1px solid var(--pos-line)",
+                              border: edited
+                                ? "1.5px solid var(--pos-saffron)"
+                                : "1px solid var(--pos-line)",
                               fontSize: 12,
                               fontWeight: 700,
                               textAlign: "right",
                               color: "var(--pos-tx-sec)",
-                              background: edited ? "var(--pos-saffron-tint)" : "var(--pos-surface-hover)",
+                              background: edited
+                                ? "var(--pos-saffron-tint)"
+                                : "var(--pos-surface-hover)",
                               boxSizing: "border-box",
                             }}
                           >
@@ -1055,7 +1089,11 @@ export default function ItemsEditor({
                           </div>
                         ) : (
                           <>
-                            <span style={{ fontSize: 12, color: "var(--pos-tx-muted)", flexShrink: 0 }}>₹</span>
+                            <span
+                              style={{ fontSize: 12, color: "var(--pos-tx-muted)", flexShrink: 0 }}
+                            >
+                              ₹
+                            </span>
                             <input
                               type="number"
                               value={currentPrice}
@@ -1070,12 +1108,16 @@ export default function ItemsEditor({
                                 flex: 1,
                                 padding: "6px 8px",
                                 borderRadius: 7,
-                                border: edited ? "1.5px solid var(--pos-saffron)" : "1px solid var(--pos-line)",
+                                border: edited
+                                  ? "1.5px solid var(--pos-saffron)"
+                                  : "1px solid var(--pos-line)",
                                 fontSize: 13,
                                 fontWeight: 600,
                                 fontFamily: "inherit",
                                 textAlign: "right",
-                                background: edited ? "var(--pos-saffron-tint)" : "var(--pos-surface)",
+                                background: edited
+                                  ? "var(--pos-saffron-tint)"
+                                  : "var(--pos-surface)",
                                 outline: "none",
                                 boxSizing: "border-box",
                               }}
@@ -1116,7 +1158,9 @@ export default function ItemsEditor({
                             border: "none",
                             cursor: "pointer",
                             fontFamily: "inherit",
-                            background: currentAvailable ? "var(--pos-success-tint)" : "var(--pos-danger-tint)",
+                            background: currentAvailable
+                              ? "var(--pos-success-tint)"
+                              : "var(--pos-danger-tint)",
                             color: currentAvailable ? "var(--pos-success)" : "var(--pos-danger)",
                             transition: "background 120ms, color 120ms",
                             letterSpacing: "0.02em",
@@ -1148,12 +1192,16 @@ export default function ItemsEditor({
                               : "Unavailable items cannot be favorites"
                           }
                           style={{
-                            background: currentFavorite ? "var(--pos-saffron-tint)" : "var(--pos-surface-sunken)",
+                            background: currentFavorite
+                              ? "var(--pos-saffron-tint)"
+                              : "var(--pos-surface-sunken)",
                             border: `1px solid ${currentFavorite ? "var(--pos-saffron-line)" : "var(--pos-line)"}`,
                             cursor:
                               currentAvailable && !isFavoriteUpdating ? "pointer" : "not-allowed",
                             lineHeight: 1,
-                            color: currentFavorite ? "var(--pos-saffron-deep)" : "var(--pos-tx-muted)",
+                            color: currentFavorite
+                              ? "var(--pos-saffron-deep)"
+                              : "var(--pos-tx-muted)",
                             padding: 0,
                             width: 36,
                             height: 36,
@@ -1195,10 +1243,12 @@ export default function ItemsEditor({
                             transition: "background 120ms",
                           }}
                           onMouseEnter={(e) => {
-                            (e.currentTarget as HTMLButtonElement).style.background = "var(--pos-danger-tint)";
+                            (e.currentTarget as HTMLButtonElement).style.background =
+                              "var(--pos-danger-tint)";
                           }}
                           onMouseLeave={(e) => {
-                            (e.currentTarget as HTMLButtonElement).style.background = "var(--pos-danger-tint)";
+                            (e.currentTarget as HTMLButtonElement).style.background =
+                              "var(--pos-danger-tint)";
                           }}
                         >
                           <Icon icon={X} size="sm" />
@@ -1246,302 +1296,307 @@ export default function ItemsEditor({
       </div>
 
       <Modal open={modalOpen} title="New Menu Item" onClose={closeModal} large>
-            <div style={{ display: "grid", gap: 12 }}>
-              <div>
-                <label
-                  style={{
-                    fontSize: 12,
-                    fontWeight: 600,
-                    color: "var(--pos-tx-sec)",
-                    display: "block",
-                    marginBottom: 4,
-                  }}
-                >
-                  Item Name <span style={{ color: "var(--pos-danger)" }}>*</span>
-                </label>
-                <input
-                  placeholder="e.g. Paneer Tikka"
-                  value={modalName}
-                  onChange={(e) => setModalName(e.target.value)}
-                  autoFocus
-                  onKeyDown={(e) => e.key === "Enter" && !modalSaving && onModalSave()}
-                  style={{
-                    width: "100%",
-                    padding: "10px 12px",
-                    borderRadius: 8,
-                    border: "1.5px solid var(--pos-line-strong)",
-                    fontSize: 14,
-                    boxSizing: "border-box",
-                  }}
-                />
-              </div>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
-                  gap: 10,
-                }}
-              >
-                <div>
-                  <label
-                    style={{
-                      fontSize: 12,
-                      fontWeight: 600,
-                      color: "var(--pos-tx-sec)",
-                      display: "block",
-                      marginBottom: 4,
-                    }}
-                  >
-                    SKU / ID
-                  </label>
-                  <input
-                    placeholder="e.g. PT-01"
-                    value={modalSku}
-                    onChange={(e) => setModalSku(e.target.value)}
-                    style={{
-                      width: "100%",
-                      padding: "10px 12px",
-                      borderRadius: 8,
-                      border: "1.5px solid var(--pos-line-strong)",
-                      fontSize: 14,
-                      boxSizing: "border-box",
-                    }}
-                  />
-                </div>
-                <div>
-                  <label
-                    style={{
-                      fontSize: 12,
-                      fontWeight: 600,
-                      color: "var(--pos-tx-sec)",
-                      display: "block",
-                      marginBottom: 4,
-                    }}
-                  >
-                    Price (₹) <span style={{ color: "var(--pos-danger)" }}>*</span>
-                  </label>
-                  <input
-                    type="number"
-                    placeholder="100"
-                    value={modalPrice}
-                    onChange={(e) => setModalPrice(Number(e.target.value))}
-                    style={{
-                      width: "100%",
-                      padding: "10px 12px",
-                      borderRadius: 8,
-                      border: "1.5px solid var(--pos-line-strong)",
-                      fontSize: 14,
-                      boxSizing: "border-box",
-                    }}
-                  />
-                </div>
-              </div>
-              <div>
-                <label
-                  style={{
-                    fontSize: 12,
-                    fontWeight: 600,
-                    color: "var(--pos-tx-sec)",
-                    display: "block",
-                    marginBottom: 4,
-                  }}
-                >
-                  Category
-                </label>
-                <select
-                  value={modalCategory}
-                  onChange={(e) => setModalCategory(e.target.value)}
-                  style={{
-                    width: "100%",
-                    padding: "10px 12px",
-                    borderRadius: 8,
-                    border: "1.5px solid var(--pos-line-strong)",
-                    fontSize: 14,
-                    background: "var(--pos-surface)",
-                    color: modalCategory ? "var(--pos-tx)" : "var(--pos-tx-muted)",
-                    fontFamily: "inherit",
-                    outline: "none",
-                    cursor: "pointer",
-                    boxSizing: "border-box",
-                  }}
-                >
-                  <option value="">— None —</option>
-                  {categories.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    marginBottom: 8,
-                  }}
-                >
-                  <label
-                    style={{
-                      fontSize: 12,
-                      fontWeight: 600,
-                      color: "var(--pos-tx-sec)",
-                      display: "block",
-                    }}
-                  >
-                    Variants (optional)
-                  </label>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    style={{ padding: "4px 10px", fontSize: 12 }}
-                    onClick={() =>
-                      setModalVariants((prev) => [
-                        ...prev,
-                        {
-                          name: variantOptions[0] || "",
-                          price: modalPrice > 0 ? modalPrice : 100,
-                          sortOrder: prev.length,
-                        },
-                      ])
-                    }
-                  >
-                    + Add Variant
-                  </Button>
-                </div>
-                {variantOptions.length === 0 && (
-                  <div style={{ fontSize: 12, color: "var(--pos-saffron-text)", marginBottom: 8 }}>
-                    Configure variant options in Settings to use dropdown variants.
-                  </div>
-                )}
-                {modalVariants.length === 0 ? (
-                  <div style={{ fontSize: 12, color: "var(--pos-tx-muted)" }}>
-                    Example: Half / Full with different prices.
-                  </div>
-                ) : (
-                  <div style={{ display: "grid", gap: 8 }}>
-                    {modalVariants.map((variant, index) => (
-                      <div
-                        key={`${variant.id || "new"}-${index}`}
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "1fr 120px 40px",
-                          gap: 8,
-                          alignItems: "center",
-                        }}
-                      >
-                        <select
-                          value={variant.name}
-                          onChange={(e) =>
-                            setModalVariants((prev) =>
-                              prev.map((row, rowIndex) =>
-                                rowIndex === index ? { ...row, name: e.target.value } : row,
-                              ),
-                            )
-                          }
-                          style={{
-                            width: "100%",
-                            padding: "8px 10px",
-                            borderRadius: 8,
-                            border: "1.5px solid var(--pos-line-strong)",
-                            fontSize: 13,
-                            background: "var(--pos-surface)",
-                            color: variant.name ? "var(--pos-tx)" : "var(--pos-tx-muted)",
-                            fontFamily: "inherit",
-                            cursor: "pointer",
-                            boxSizing: "border-box",
-                          }}
-                        >
-                          <option value="">Select variant…</option>
-                          {variantNameOptions(variant.name).map((nameOption) => (
-                            <option key={nameOption} value={nameOption}>
-                              {nameOption}
-                            </option>
-                          ))}
-                        </select>
-                        <input
-                          type="number"
-                          placeholder="Price"
-                          value={variant.price}
-                          onChange={(e) =>
-                            setModalVariants((prev) =>
-                              prev.map((row, rowIndex) =>
-                                rowIndex === index ? { ...row, price: Number(e.target.value) } : row,
-                              ),
-                            )
-                          }
-                          style={{
-                            width: "100%",
-                            padding: "8px 10px",
-                            borderRadius: 8,
-                            border: "1.5px solid var(--pos-line-strong)",
-                            fontSize: 13,
-                            boxSizing: "border-box",
-                          }}
-                        />
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setModalVariants((prev) => prev.filter((_, rowIndex) => rowIndex !== index))
-                          }
-                          title="Remove variant"
-                          style={{
-                            width: 34,
-                            height: 34,
-                            borderRadius: 8,
-                            border: "none",
-                            background: "var(--pos-danger-tint)",
-                            color: "var(--pos-danger)",
-                            cursor: "pointer",
-                            fontSize: 18,
-                            lineHeight: 1,
-                          }}
-                        >
-                          <Icon icon={X} size="sm" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+        <div style={{ display: "grid", gap: 12 }}>
+          <div>
+            <label
+              style={{
+                fontSize: 12,
+                fontWeight: 600,
+                color: "var(--pos-tx-sec)",
+                display: "block",
+                marginBottom: 4,
+              }}
+            >
+              Item Name <span style={{ color: "var(--pos-danger)" }}>*</span>
+            </label>
+            <input
+              placeholder="e.g. Paneer Tikka"
+              value={modalName}
+              onChange={(e) => setModalName(e.target.value)}
+              autoFocus
+              onKeyDown={(e) => e.key === "Enter" && !modalSaving && onModalSave()}
+              style={{
+                width: "100%",
+                padding: "10px 12px",
+                borderRadius: 8,
+                border: "1.5px solid var(--pos-line-strong)",
+                fontSize: 14,
+                boxSizing: "border-box",
+              }}
+            />
+          </div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: 10,
+            }}
+          >
+            <div>
               <label
                 style={{
-                  display: "flex",
-                  gap: 10,
-                  alignItems: "center",
-                  fontSize: 13,
+                  fontSize: 12,
+                  fontWeight: 600,
                   color: "var(--pos-tx-sec)",
-                  cursor: "pointer",
+                  display: "block",
+                  marginBottom: 4,
                 }}
               >
-                <input
-                  type="checkbox"
-                  checked={modalAvailable}
-                  onChange={(e) => setModalAvailable(e.target.checked)}
-                  style={{ width: 16, height: 16, accentColor: "var(--pos-saffron-deep)" }}
-                />
-                Available on menu
+                SKU / ID
               </label>
+              <input
+                placeholder="e.g. PT-01"
+                value={modalSku}
+                onChange={(e) => setModalSku(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "10px 12px",
+                  borderRadius: 8,
+                  border: "1.5px solid var(--pos-line-strong)",
+                  fontSize: 14,
+                  boxSizing: "border-box",
+                }}
+              />
             </div>
-
-            <div className="ui-form-actions" style={{ marginTop: 18 }}>
-              <Button type="button" variant="secondary" onClick={closeModal} disabled={modalSaving}>
-                Cancel
-              </Button>
+            <div>
+              <label
+                style={{
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: "var(--pos-tx-sec)",
+                  display: "block",
+                  marginBottom: 4,
+                }}
+              >
+                Price (₹) <span style={{ color: "var(--pos-danger)" }}>*</span>
+              </label>
+              <input
+                type="number"
+                placeholder="100"
+                value={modalPrice}
+                onChange={(e) => setModalPrice(Number(e.target.value))}
+                style={{
+                  width: "100%",
+                  padding: "10px 12px",
+                  borderRadius: 8,
+                  border: "1.5px solid var(--pos-line-strong)",
+                  fontSize: 14,
+                  boxSizing: "border-box",
+                }}
+              />
+            </div>
+          </div>
+          <div>
+            <label
+              style={{
+                fontSize: 12,
+                fontWeight: 600,
+                color: "var(--pos-tx-sec)",
+                display: "block",
+                marginBottom: 4,
+              }}
+            >
+              Category
+            </label>
+            <select
+              value={modalCategory}
+              onChange={(e) => setModalCategory(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "10px 12px",
+                borderRadius: 8,
+                border: "1.5px solid var(--pos-line-strong)",
+                fontSize: 14,
+                background: "var(--pos-surface)",
+                color: modalCategory ? "var(--pos-tx)" : "var(--pos-tx-muted)",
+                fontFamily: "inherit",
+                outline: "none",
+                cursor: "pointer",
+                boxSizing: "border-box",
+              }}
+            >
+              <option value="">— None —</option>
+              {categories.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: 8,
+              }}
+            >
+              <label
+                style={{
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: "var(--pos-tx-sec)",
+                  display: "block",
+                }}
+              >
+                Variants (optional)
+              </label>
               <Button
                 type="button"
                 variant="secondary"
-                onClick={() => onModalSave(true)}
-                disabled={modalSaving}
+                size="sm"
+                style={{ padding: "4px 10px", fontSize: 12 }}
+                onClick={() =>
+                  setModalVariants((prev) => [
+                    ...prev,
+                    {
+                      name: variantOptions[0] || "",
+                      price: modalPrice > 0 ? modalPrice : 100,
+                      sortOrder: prev.length,
+                    },
+                  ])
+                }
               >
-                {modalSaving ? "Saving…" : "Save & Add Another"}
-              </Button>
-              <Button type="button" variant="primary" onClick={() => onModalSave(false)} disabled={modalSaving}>
-                {modalSaving ? "Saving…" : "Save Item"}
+                + Add Variant
               </Button>
             </div>
+            {variantOptions.length === 0 && (
+              <div style={{ fontSize: 12, color: "var(--pos-saffron-text)", marginBottom: 8 }}>
+                Configure variant options in Settings to use dropdown variants.
+              </div>
+            )}
+            {modalVariants.length === 0 ? (
+              <div style={{ fontSize: 12, color: "var(--pos-tx-muted)" }}>
+                Example: Half / Full with different prices.
+              </div>
+            ) : (
+              <div style={{ display: "grid", gap: 8 }}>
+                {modalVariants.map((variant, index) => (
+                  <div
+                    key={`${variant.id || "new"}-${index}`}
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 120px 40px",
+                      gap: 8,
+                      alignItems: "center",
+                    }}
+                  >
+                    <select
+                      value={variant.name}
+                      onChange={(e) =>
+                        setModalVariants((prev) =>
+                          prev.map((row, rowIndex) =>
+                            rowIndex === index ? { ...row, name: e.target.value } : row,
+                          ),
+                        )
+                      }
+                      style={{
+                        width: "100%",
+                        padding: "8px 10px",
+                        borderRadius: 8,
+                        border: "1.5px solid var(--pos-line-strong)",
+                        fontSize: 13,
+                        background: "var(--pos-surface)",
+                        color: variant.name ? "var(--pos-tx)" : "var(--pos-tx-muted)",
+                        fontFamily: "inherit",
+                        cursor: "pointer",
+                        boxSizing: "border-box",
+                      }}
+                    >
+                      <option value="">Select variant…</option>
+                      {variantNameOptions(variant.name).map((nameOption) => (
+                        <option key={nameOption} value={nameOption}>
+                          {nameOption}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="number"
+                      placeholder="Price"
+                      value={variant.price}
+                      onChange={(e) =>
+                        setModalVariants((prev) =>
+                          prev.map((row, rowIndex) =>
+                            rowIndex === index ? { ...row, price: Number(e.target.value) } : row,
+                          ),
+                        )
+                      }
+                      style={{
+                        width: "100%",
+                        padding: "8px 10px",
+                        borderRadius: 8,
+                        border: "1.5px solid var(--pos-line-strong)",
+                        fontSize: 13,
+                        boxSizing: "border-box",
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setModalVariants((prev) => prev.filter((_, rowIndex) => rowIndex !== index))
+                      }
+                      title="Remove variant"
+                      style={{
+                        width: 34,
+                        height: 34,
+                        borderRadius: 8,
+                        border: "none",
+                        background: "var(--pos-danger-tint)",
+                        color: "var(--pos-danger)",
+                        cursor: "pointer",
+                        fontSize: 18,
+                        lineHeight: 1,
+                      }}
+                    >
+                      <Icon icon={X} size="sm" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <label
+            style={{
+              display: "flex",
+              gap: 10,
+              alignItems: "center",
+              fontSize: 13,
+              color: "var(--pos-tx-sec)",
+              cursor: "pointer",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={modalAvailable}
+              onChange={(e) => setModalAvailable(e.target.checked)}
+              style={{ width: 16, height: 16, accentColor: "var(--pos-saffron-deep)" }}
+            />
+            Available on menu
+          </label>
+        </div>
+
+        <div className="ui-form-actions" style={{ marginTop: 18 }}>
+          <Button type="button" variant="secondary" onClick={closeModal} disabled={modalSaving}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => onModalSave(true)}
+            disabled={modalSaving}
+          >
+            {modalSaving ? "Saving…" : "Save & Add Another"}
+          </Button>
+          <Button
+            type="button"
+            variant="primary"
+            onClick={() => onModalSave(false)}
+            disabled={modalSaving}
+          >
+            {modalSaving ? "Saving…" : "Save Item"}
+          </Button>
+        </div>
       </Modal>
 
       {variantEditorItem && (
@@ -1556,135 +1611,139 @@ export default function ItemsEditor({
           </div>
 
           <div style={{ display: "grid", gap: 8 }}>
-              {variantOptions.length === 0 && (
-                <div style={{ fontSize: 12, color: "var(--pos-saffron-text)" }}>
-                  Configure variant options in Settings to use dropdown variants.
-                </div>
-              )}
-              {variantEditorDraft.length === 0 && (
-                <div style={{ fontSize: 12, color: "var(--pos-tx-muted)" }}>
-                  No variants yet. Use Add Variant to create one.
-                </div>
-              )}
-              {variantEditorDraft.map((variant, index) => (
-                <div
-                  key={`${variant.id || "new"}-${index}`}
+            {variantOptions.length === 0 && (
+              <div style={{ fontSize: 12, color: "var(--pos-saffron-text)" }}>
+                Configure variant options in Settings to use dropdown variants.
+              </div>
+            )}
+            {variantEditorDraft.length === 0 && (
+              <div style={{ fontSize: 12, color: "var(--pos-tx-muted)" }}>
+                No variants yet. Use Add Variant to create one.
+              </div>
+            )}
+            {variantEditorDraft.map((variant, index) => (
+              <div
+                key={`${variant.id || "new"}-${index}`}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 130px 40px",
+                  gap: 8,
+                  alignItems: "center",
+                }}
+              >
+                <select
+                  value={variant.name}
+                  onChange={(e) =>
+                    setVariantEditorDraft((prev) =>
+                      prev.map((row, rowIndex) =>
+                        rowIndex === index ? { ...row, name: e.target.value } : row,
+                      ),
+                    )
+                  }
                   style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 130px 40px",
-                    gap: 8,
-                    alignItems: "center",
+                    width: "100%",
+                    padding: "8px 10px",
+                    borderRadius: 8,
+                    border: "1.5px solid var(--pos-line-strong)",
+                    fontSize: 13,
+                    background: "var(--pos-surface)",
+                    color: variant.name ? "var(--pos-tx)" : "var(--pos-tx-muted)",
+                    fontFamily: "inherit",
+                    cursor: "pointer",
+                    boxSizing: "border-box",
                   }}
                 >
-                  <select
-                    value={variant.name}
-                    onChange={(e) =>
-                      setVariantEditorDraft((prev) =>
-                        prev.map((row, rowIndex) =>
-                          rowIndex === index ? { ...row, name: e.target.value } : row,
-                        ),
-                      )
-                    }
-                    style={{
-                      width: "100%",
-                      padding: "8px 10px",
-                      borderRadius: 8,
-                      border: "1.5px solid var(--pos-line-strong)",
-                      fontSize: 13,
-                      background: "var(--pos-surface)",
-                      color: variant.name ? "var(--pos-tx)" : "var(--pos-tx-muted)",
-                      fontFamily: "inherit",
-                      cursor: "pointer",
-                      boxSizing: "border-box",
-                    }}
-                  >
-                    <option value="">Select variant…</option>
-                    {variantNameOptions(variant.name).map((nameOption) => (
-                      <option key={nameOption} value={nameOption}>
-                        {nameOption}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    type="number"
-                    placeholder="Price"
-                    value={variant.price}
-                    onChange={(e) =>
-                      setVariantEditorDraft((prev) =>
-                        prev.map((row, rowIndex) =>
-                          rowIndex === index ? { ...row, price: Number(e.target.value) } : row,
-                        ),
-                      )
-                    }
-                    style={{
-                      width: "100%",
-                      padding: "8px 10px",
-                      borderRadius: 8,
-                      border: "1.5px solid var(--pos-line-strong)",
-                      fontSize: 13,
-                      boxSizing: "border-box",
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setVariantEditorDraft((prev) => prev.filter((_, rowIndex) => rowIndex !== index))
-                    }
-                    title="Remove variant"
-                    style={{
-                      width: 34,
-                      height: 34,
-                      borderRadius: 8,
-                      border: "none",
-                      background: "var(--pos-danger-tint)",
-                      color: "var(--pos-danger)",
-                      cursor: "pointer",
-                      fontSize: 18,
-                      lineHeight: 1,
-                    }}
-                  >
-                    <Icon icon={X} size="sm" />
-                  </button>
-                </div>
-              ))}
-            </div>
+                  <option value="">Select variant…</option>
+                  {variantNameOptions(variant.name).map((nameOption) => (
+                    <option key={nameOption} value={nameOption}>
+                      {nameOption}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="number"
+                  placeholder="Price"
+                  value={variant.price}
+                  onChange={(e) =>
+                    setVariantEditorDraft((prev) =>
+                      prev.map((row, rowIndex) =>
+                        rowIndex === index ? { ...row, price: Number(e.target.value) } : row,
+                      ),
+                    )
+                  }
+                  style={{
+                    width: "100%",
+                    padding: "8px 10px",
+                    borderRadius: 8,
+                    border: "1.5px solid var(--pos-line-strong)",
+                    fontSize: 13,
+                    boxSizing: "border-box",
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() =>
+                    setVariantEditorDraft((prev) =>
+                      prev.filter((_, rowIndex) => rowIndex !== index),
+                    )
+                  }
+                  title="Remove variant"
+                  style={{
+                    width: 34,
+                    height: 34,
+                    borderRadius: 8,
+                    border: "none",
+                    background: "var(--pos-danger-tint)",
+                    color: "var(--pos-danger)",
+                    cursor: "pointer",
+                    fontSize: 18,
+                    lineHeight: 1,
+                  }}
+                >
+                  <Icon icon={X} size="sm" />
+                </button>
+              </div>
+            ))}
+          </div>
 
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginTop: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginTop: 16 }}>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() =>
+                setVariantEditorDraft((prev) => [
+                  ...prev,
+                  {
+                    name: variantOptions[0] || "",
+                    price: Number(
+                      editMap[variantEditorItem._id]?.price ?? variantEditorItem.price ?? 0,
+                    ),
+                    sortOrder: prev.length,
+                  },
+                ])
+              }
+            >
+              + Add Variant
+            </Button>
+            <div style={{ display: "flex", gap: 8 }}>
               <Button
                 type="button"
                 variant="secondary"
-                onClick={() =>
-                  setVariantEditorDraft((prev) => [
-                    ...prev,
-                    {
-                      name: variantOptions[0] || "",
-                      price: Number(editMap[variantEditorItem._id]?.price ?? variantEditorItem.price ?? 0),
-                      sortOrder: prev.length,
-                    },
-                  ])
-                }
+                onClick={() => setVariantEditorItemId(null)}
+                disabled={variantEditorSaving}
               >
-                + Add Variant
+                Cancel
               </Button>
-              <div style={{ display: "flex", gap: 8 }}>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => setVariantEditorItemId(null)}
-                  disabled={variantEditorSaving}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="button"
-                  variant="primary"
-                  onClick={saveVariantEditor}
-                  disabled={variantEditorSaving}
-                >
-                  {variantEditorSaving ? "Saving..." : "Save Variants"}
-                </Button>
-              </div>
+              <Button
+                type="button"
+                variant="primary"
+                onClick={saveVariantEditor}
+                disabled={variantEditorSaving}
+              >
+                {variantEditorSaving ? "Saving..." : "Save Variants"}
+              </Button>
             </div>
+          </div>
         </Modal>
       )}
     </div>

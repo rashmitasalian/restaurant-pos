@@ -202,17 +202,19 @@ export function MenuScreen({
   const namedCategories = categories.filter(Boolean);
   const pinnedLimit = hasFavorites ? 1 : PINNED_NAMED_CATEGORIES;
   const showAllNamed = namedCategories.length <= PINNED_NAMED_CATEGORIES;
-  const pinnedCategories = showAllNamed
-    ? namedCategories
-    : namedCategories.slice(0, pinnedLimit);
+  const pinnedCategories = showAllNamed ? namedCategories : namedCategories.slice(0, pinnedLimit);
   const overflowCategories = showAllNamed ? [] : namedCategories.slice(pinnedLimit);
   const categoryInOverflow = overflowCategories.includes(category);
   const showGrouped = category === "all" && !query.trim();
-  const sections = showGrouped ? groupMenuItems(filtered, namedCategories) : [{ name: "", items: filtered }];
+  const sections = showGrouped
+    ? groupMenuItems(filtered, namedCategories)
+    : [{ name: "", items: filtered }];
   const showHeadings = showGrouped && sections.length > 1;
 
   const qtyForItem = (item: any) =>
-    items.filter((line) => lineMatchesItem(line, item)).reduce((sum, line) => sum + Number(line.qty || 0), 0);
+    items
+      .filter((line) => lineMatchesItem(line, item))
+      .reduce((sum, line) => sum + Number(line.qty || 0), 0);
 
   const primaryLineForItem = (item: any) => {
     const matches = items.filter((line) => lineMatchesItem(line, item));

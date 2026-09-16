@@ -119,9 +119,7 @@ export default function KOTQueue() {
           return {
             orderId: o._id,
             table: tableId,
-            tableLabel: tableId
-              ? formatTableTileLabel(tableId, nameById.get(tableId))
-              : "",
+            tableLabel: tableId ? formatTableTileLabel(tableId, nameById.get(tableId)) : "",
             status: o.kotStatus,
             order: o,
             sentItems: printedItems,
@@ -212,7 +210,13 @@ export default function KOTQueue() {
           /* fallback to timestamp */
         }
       }
-      const preview = buildPreview(k.order, itemsToPrint, currentUserLabel, kotSeqNum, k.tableLabel);
+      const preview = buildPreview(
+        k.order,
+        itemsToPrint,
+        currentUserLabel,
+        kotSeqNum,
+        k.tableLabel,
+      );
       const lines =
         k.pendingItems.length > 0
           ? buildKotLines(preview, { ...k.order, items: itemsToPrint }, k.table || null)
@@ -241,10 +245,7 @@ export default function KOTQueue() {
       console.error("Reprint failed:", e);
       if (k.pendingItems.length > 0) {
         try {
-          await markOrderKotFailed(
-            k.orderId,
-            validationMessage(e, "print-failed"),
-          );
+          await markOrderKotFailed(k.orderId, validationMessage(e, "print-failed"));
         } catch {}
       }
       setOrderErrors((prev) => ({
@@ -274,8 +275,8 @@ export default function KOTQueue() {
         title="KOT Queue"
         subtitle={
           <>
-            <span style={{ color: "var(--pos-teal)", fontWeight: 700 }}>{pending.length}</span> pending
-            orders
+            <span style={{ color: "var(--pos-teal)", fontWeight: 700 }}>{pending.length}</span>{" "}
+            pending orders
           </>
         }
       />
@@ -304,7 +305,11 @@ export default function KOTQueue() {
                   {hasPendingItems && k.status !== "failed" && (
                     <Badge tone="attention">Pending print</Badge>
                   )}
-                  <Badge tone={tone === "danger" ? "danger" : tone === "attention" ? "attention" : "neutral"}>
+                  <Badge
+                    tone={
+                      tone === "danger" ? "danger" : tone === "attention" ? "attention" : "neutral"
+                    }
+                  >
                     {formatKotAge(k.time)} ago
                   </Badge>
                 </div>

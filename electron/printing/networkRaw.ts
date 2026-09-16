@@ -5,7 +5,11 @@ export function isIpv4Address(value: string) {
   return isIpv4PrinterTarget(value);
 }
 
-export function printViaNetworkRaw(host: string, port: number, escPosBuffer: Buffer): Promise<void> {
+export function printViaNetworkRaw(
+  host: string,
+  port: number,
+  escPosBuffer: Buffer,
+): Promise<void> {
   return new Promise((resolve, reject) => {
     let settled = false;
     const socket = createConnection({ host, port, timeout: 7000 }, () => {

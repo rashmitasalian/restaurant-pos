@@ -35,12 +35,7 @@ export function Modal({
           <h3 id="ui-dialog-title" className="ui-dialog-title">
             {title}
           </h3>
-          <button
-            type="button"
-            className="ui-dialog-close"
-            onClick={onClose}
-            aria-label="Close"
-          >
+          <button type="button" className="ui-dialog-close" onClick={onClose} aria-label="Close">
             <Icon icon={X} size="md" />
           </button>
         </div>
