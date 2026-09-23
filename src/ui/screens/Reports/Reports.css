@@ -389,11 +389,10 @@
   line-height: 1.4;
 }
 .rpt-change-up {
-  color: var(--pos-danger, #b42318);
+  color: var(--pos-saffron-text);
   font-weight: 700;
 }
 .rpt-change-down {
-  color: var(--pos-teal, #0f6e56);
   font-weight: 700;
 }
 .rpt-muted {

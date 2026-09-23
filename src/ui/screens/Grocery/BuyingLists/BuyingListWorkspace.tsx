@@ -1,5 +1,6 @@
 import React from "react";
 import { createPortal } from "react-dom";
+import { Check, X } from "lucide-react";
 import {
   changeGroceryListLines,
   createGroceryList,
@@ -26,6 +27,7 @@ import type {
 import { normalizeText, validationMessage } from "../../../../shared/validation";
 import { Badge } from "../../../components/ui/Badge";
 import { Button } from "../../../components/ui/Button";
+import { Icon } from "../../../components/ui/Icon";
 import { ConfirmModal } from "../../../components/ui/ConfirmModal";
 import { Input } from "../../../components/ui/Input";
 import { PortalMenu, PortalMenuItem } from "../../../components/ui/PortalMenu";
@@ -865,7 +867,7 @@ export function BuyingListWorkspace({ listId, startCompose = false, onClose, onC
             aria-label={`Remove ${line.itemName}`}
             title="Remove"
           >
-            ✕
+            <Icon icon={X} size="sm" />
           </button>
         </>
       )}
@@ -896,7 +898,7 @@ export function BuyingListWorkspace({ listId, startCompose = false, onClose, onC
         title={bill ? "Open this bill to edit amounts" : undefined}
       >
         <span className={styles.ticketTick} aria-hidden="true">
-          ✓
+          <Icon icon={Check} size="sm" />
         </span>
         <span className={styles.ticketName}>{line.itemName}</span>
         <span className={styles.ticketQty}>
@@ -1067,9 +1069,9 @@ export function BuyingListWorkspace({ listId, startCompose = false, onClose, onC
 
         {billDetailFields}
 
-        <button type="button" className={styles.dangerLink} onClick={() => setVoidOpen(true)}>
+        <Button variant="danger-ghost" size="sm" className={styles.voidBill} onClick={() => setVoidOpen(true)}>
           Void this bill
-        </button>
+        </Button>
       </div>
       <div className={styles.composeFooter}>
         {editBlocker ? <div className={styles.composeReason}>{editBlocker}</div> : null}
@@ -1159,7 +1161,7 @@ export function BuyingListWorkspace({ listId, startCompose = false, onClose, onC
               aria-label="Close"
               title="Close (Esc)"
             >
-              ✕
+              <Icon icon={X} size="md" />
             </button>
           </div>
         </header>
