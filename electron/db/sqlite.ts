@@ -562,6 +562,7 @@ function runSchema(database: SqliteDatabase) {
       id TEXT PRIMARY KEY,
       purchase_id TEXT REFERENCES grocery_purchases(id) ON DELETE CASCADE,
       list_id TEXT REFERENCES grocery_lists(id) ON DELETE SET NULL,
+      list_line_id TEXT REFERENCES grocery_list_lines(id) ON DELETE SET NULL,
       grocery_item_id TEXT REFERENCES grocery_items(id) ON UPDATE CASCADE ON DELETE SET NULL,
       item_name TEXT NOT NULL,
       category TEXT,
@@ -1601,6 +1602,46 @@ function runSchema(database: SqliteDatabase) {
     }
   });
 
+  runMigration(database, 29, "Link grocery purchase lines to buying-list lines", () => {
+    ensureGroceryPurchaseListLineId(database);
+  });
+
+  runMigration(database, 30, "Single-item grocery bills: item amount equals bill total", () => {
+    if (
+      !tableExists(database, "grocery_purchases") ||
+      !tableExists(database, "grocery_purchase_lines") ||
+      !columnExists(database, "grocery_purchase_lines", "list_line_id")
+    ) {
+      return;
+    }
+    const at = Date.now();
+    database.exec(`
+      CREATE TEMP TABLE single_item_bills AS
+        SELECT p.total_paise, l.id AS line_id, l.list_line_id,
+               ROUND(p.total_paise * 1.0 / CASE WHEN l.quantity > 0 THEN l.quantity ELSE 1 END) AS unit_paise
+        FROM grocery_purchases p
+        JOIN grocery_purchase_lines l ON l.purchase_id = p.id
+        WHERE p.status = 'recorded'
+          AND l.total_paise != p.total_paise
+          AND (SELECT COUNT(*) FROM grocery_purchase_lines x WHERE x.purchase_id = p.id) = 1;
+
+      UPDATE grocery_purchase_lines
+      SET total_paise = (SELECT total_paise FROM single_item_bills s WHERE s.line_id = grocery_purchase_lines.id),
+          unit_price_paise = (SELECT unit_paise FROM single_item_bills s WHERE s.line_id = grocery_purchase_lines.id),
+          updated_at = ${at}
+      WHERE id IN (SELECT line_id FROM single_item_bills);
+
+      UPDATE grocery_list_lines
+      SET purchased_total_paise = (SELECT total_paise FROM single_item_bills s WHERE s.list_line_id = grocery_list_lines.id),
+          purchased_unit_price_paise = (SELECT unit_paise FROM single_item_bills s WHERE s.list_line_id = grocery_list_lines.id),
+          updated_at = ${at}
+      WHERE line_status = 'purchased'
+        AND id IN (SELECT list_line_id FROM single_item_bills WHERE list_line_id IS NOT NULL);
+
+      DROP TABLE single_item_bills;
+    `);
+  });
+
   // Startup self-healing for pre-existing/partially migrated databases:
   // ensure area_id exists even if migration 12 was marked applied while the column was missing.
   addColumnIfMissing(
@@ -1643,6 +1684,14 @@ function runSchema(database: SqliteDatabase) {
   if (tableExists(database, "grocery_purchase_lines")) {
     addColumnIfMissing(database, "grocery_purchase_lines", "vendor_id", "TEXT");
     addColumnIfMissing(database, "grocery_purchase_lines", "purchase_id", "TEXT");
+    ensureGroceryPurchaseListLineId(database);
+    createIndexIfColumnExists(
+      database,
+      "grocery_purchase_lines",
+      "purchase_id",
+      "idx_grocery_purchase_lines_purchase",
+      "ON grocery_purchase_lines(purchase_id)",
+    );
   }
   addColumnIfMissing(database, "grocery_items", "deleted_at", "INTEGER");
   addColumnIfMissing(database, "grocery_list_lines", "estimated_unit_price_paise", "INTEGER");
@@ -1656,15 +1705,6 @@ function runSchema(database: SqliteDatabase) {
     "line_status",
     "TEXT NOT NULL DEFAULT 'pending'",
   );
-  if (
-    tableExists(database, "grocery_purchase_lines") &&
-    columnExists(database, "grocery_purchase_lines", "purchase_id")
-  ) {
-    database.exec(`
-      CREATE INDEX IF NOT EXISTS idx_grocery_purchase_lines_purchase
-        ON grocery_purchase_lines(purchase_id);
-    `);
-  }
 }
 
 function runMigration(
@@ -1772,6 +1812,39 @@ function bootstrapLegacyGroceryColumns(database: SqliteDatabase) {
   }
   addColumnIfMissing(database, "grocery_purchase_lines", "vendor_id", "TEXT");
   addColumnIfMissing(database, "grocery_purchase_lines", "purchase_id", "TEXT");
+  ensureGroceryPurchaseListLineId(database);
+}
+
+function ensureGroceryPurchaseListLineId(database: SqliteDatabase) {
+  if (!tableExists(database, "grocery_purchase_lines")) {
+    return;
+  }
+  addColumnIfMissing(database, "grocery_purchase_lines", "list_line_id", "TEXT");
+  createIndexIfColumnExists(
+    database,
+    "grocery_purchase_lines",
+    "list_line_id",
+    "idx_grocery_purchase_lines_list_line",
+    "ON grocery_purchase_lines(list_line_id)",
+  );
+}
+
+/**
+ * CREATE INDEX in the initial schema blob must not name columns added later with
+ * ALTER TABLE. Existing restaurants skip CREATE TABLE IF NOT EXISTS, then the
+ * index fails with "no such column" before migrations can run.
+ */
+function createIndexIfColumnExists(
+  database: SqliteDatabase,
+  tableName: string,
+  columnName: string,
+  indexName: string,
+  indexSqlAfterName: string,
+) {
+  if (!tableExists(database, tableName) || !columnExists(database, tableName, columnName)) {
+    return;
+  }
+  database.exec(`CREATE INDEX IF NOT EXISTS ${indexName} ${indexSqlAfterName}`);
 }
 
 function addColumnIfMissing(

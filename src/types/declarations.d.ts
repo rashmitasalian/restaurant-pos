@@ -7,6 +7,7 @@ declare global {
       listPrinters?: () => Promise<{ ok: boolean; printers: string[]; error?: string }>;
       testPrint?: (printer: any) => Promise<any>;
       writeLog?: (level: string, message: string, context?: any) => Promise<void>;
+      copyText?: (text: string) => Promise<{ ok: boolean }>;
       exportReportPdf?: (
         html: string,
         defaultFileName: string,
@@ -156,6 +157,7 @@ declare global {
         orderHistory: (opts?: any) => Promise<any[]>;
         foodCostSummary: (opts?: any) => Promise<any>;
         profitability: (opts?: any) => Promise<any>;
+        groceryPurchases: (opts?: any) => Promise<any>;
       };
       review?: {
         summary: (opts?: any) => Promise<any>;
@@ -172,12 +174,15 @@ declare global {
         getList: (id: string) => Promise<any>;
         createList: (payload: any) => Promise<any>;
         updateList: (id: string, updates: any) => Promise<any>;
+        changeListLines: (id: string, change: any) => Promise<any>;
         deleteList: (id: string) => Promise<any>;
         listPurchases: (opts?: any) => Promise<any[]>;
         createPurchase: (payload: any) => Promise<any>;
         updatePurchase: (id: string, updates: any) => Promise<any>;
         deletePurchase: (id: string) => Promise<any>;
         listPurchaseHeaders: (opts?: any) => Promise<any[]>;
+        createPurchaseHeader: (payload: any) => Promise<any>;
+        updatePurchaseHeader: (id: string, updates: any) => Promise<any>;
         voidPurchaseHeader: (id: string) => Promise<any>;
         listTemplates: () => Promise<any[]>;
         createTemplate: (payload: any) => Promise<any>;

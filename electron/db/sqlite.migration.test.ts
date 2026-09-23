@@ -43,6 +43,52 @@ function createLegacyGroceryDatabase(dbPath: string) {
   legacy.close();
 }
 
+/** Current production grocery_purchase_lines: purchase_id/vendor_id exist, list_line_id does not. */
+function createPreListLineIdGroceryDatabase(dbPath: string) {
+  const BetterSqlite3 = require("better-sqlite3");
+  const legacy = new BetterSqlite3(dbPath);
+  legacy.exec(`
+    CREATE TABLE schema_migrations (
+      version INTEGER PRIMARY KEY,
+      name TEXT NOT NULL,
+      applied_at INTEGER NOT NULL
+    );
+    INSERT INTO schema_migrations (version, name, applied_at) VALUES
+      (1, 'Initial SQLite production schema', 1),
+      (16, 'Add grocery_purchases headers without merging uncertain rows', 1),
+      (28, 'Customer credit / receivables ledger', 1);
+
+    CREATE TABLE grocery_purchase_lines (
+      id TEXT PRIMARY KEY,
+      purchase_id TEXT,
+      list_id TEXT,
+      grocery_item_id TEXT,
+      item_name TEXT NOT NULL,
+      category TEXT,
+      quantity REAL NOT NULL,
+      unit TEXT NOT NULL,
+      unit_price_paise INTEGER,
+      total_paise INTEGER NOT NULL,
+      vendor TEXT,
+      vendor_id TEXT,
+      payment_method TEXT,
+      notes TEXT,
+      purchased_at INTEGER NOT NULL,
+      created_by TEXT,
+      active INTEGER NOT NULL DEFAULT 1,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    INSERT INTO grocery_purchase_lines (
+      id, item_name, quantity, unit, total_paise, purchased_at, created_at, updated_at
+    ) VALUES (
+      'grocery-purchase:legacy', 'Tomato', 2, 'kg', 185000, 1, 1, 1
+    );
+  `);
+  legacy.close();
+}
+
 /** Mimic a production DB that already has orders but never ran migration 26. */
 function createPreCancelColumnOrdersDatabase(dbPath: string) {
   const BetterSqlite3 = require("better-sqlite3");
@@ -167,6 +213,36 @@ describe("sqlite legacy grocery upgrades", () => {
 
     expect(columns.some((column) => column.name === "purchase_id")).toBe(true);
     expect(columns.some((column) => column.name === "vendor_id")).toBe(true);
+    expect(columns.some((column) => column.name === "list_line_id")).toBe(true);
+  });
+
+  it("adds list_line_id on a current production grocery_purchase_lines table without aborting", async () => {
+    createPreListLineIdGroceryDatabase(dbPath);
+
+    await expect(initializeDatabase()).resolves.toBeTruthy();
+
+    const BetterSqlite3 = require("better-sqlite3");
+    const db = new BetterSqlite3(dbPath, { readonly: true });
+    const columns = db.prepare("PRAGMA table_info(grocery_purchase_lines)").all() as Array<{
+      name: string;
+    }>;
+    const indexes = db
+      .prepare("PRAGMA index_list(grocery_purchase_lines)")
+      .all() as Array<{ name: string }>;
+    const migration = db
+      .prepare("SELECT version FROM schema_migrations WHERE version = 29")
+      .get() as { version: number } | undefined;
+    const preserved = db
+      .prepare("SELECT id, item_name, total_paise FROM grocery_purchase_lines WHERE id = ?")
+      .get("grocery-purchase:legacy") as { id: string; item_name: string; total_paise: number };
+    db.close();
+    closeDb();
+
+    expect(columns.some((column) => column.name === "list_line_id")).toBe(true);
+    expect(indexes.some((idx) => idx.name === "idx_grocery_purchase_lines_list_line")).toBe(true);
+    expect(migration?.version).toBe(29);
+    expect(preserved.item_name).toBe("Tomato");
+    expect(preserved.total_paise).toBe(185000);
   });
 });
 

@@ -4,11 +4,17 @@ import {
   getPaymentBreakdown,
   getProductSalesReport,
   getProfitabilitySummary,
+  getGroceryPurchaseAnalysis,
   getConfigGst,
   getConfigBranding,
 } from "../../../app/db/posRepository";
 import { ENV } from "../../../config/env";
-import type { ProductSalesReportDto, ProfitabilitySummaryDto } from "../../../shared/pos";
+import type {
+  GroceryPurchaseAnalysisDto,
+  ProductSalesReportDto,
+  ProfitabilitySummaryDto,
+} from "../../../shared/pos";
+import { PurchasesPricesReport } from "./PurchasesPricesReport";
 import { DEFAULT_GST_CONFIG, formatGstRate, normalizeGstConfig } from "../../../shared/gst";
 import { CATEGORY_CHART_COLORS } from "../../theme/external-brands";
 import { PRINT } from "../../theme/print-html";
@@ -24,13 +30,14 @@ import { BusinessRangeControls } from "../../components/BusinessRangeControls";
 import { useBusinessDateRange } from "../../hooks/useBusinessDateRange";
 import "./Reports.css";
 
-type ReportTab = "sales" | "profitability";
+type ReportTab = "sales" | "profitability" | "purchases";
 type CategoryMetric = "sales" | "units";
 type ItemSort = "units" | "sales" | "name";
 
 const REPORT_TABS = [
   { id: "sales", label: "Sales" },
   { id: "profitability", label: "Profitability" },
+  { id: "purchases", label: "Purchases & Prices" },
 ];
 
 const ITEM_PAGE_SIZE = 25;
@@ -124,6 +131,8 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
   const [reportTab, setReportTab] = React.useState<ReportTab>("sales");
   const [profitability, setProfitability] = React.useState<ProfitabilitySummaryDto | null>(null);
   const [profitLoading, setProfitLoading] = React.useState(false);
+  const [purchaseAnalysis, setPurchaseAnalysis] = React.useState<GroceryPurchaseAnalysisDto | null>(null);
+  const [purchaseLoading, setPurchaseLoading] = React.useState(false);
 
   React.useEffect(() => {
     setVisibleItemCount(ITEM_PAGE_SIZE);
@@ -252,6 +261,24 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
         setProfitability(null);
       } finally {
         setProfitLoading(false);
+      }
+    })();
+  }, [fromTs, toTs, reportTab]);
+
+  React.useEffect(() => {
+    if (reportTab !== "purchases") {
+      return;
+    }
+    (async () => {
+      try {
+        setPurchaseLoading(true);
+        const summary = await getGroceryPurchaseAnalysis({ from: fromTs, to: toTs });
+        setPurchaseAnalysis(summary);
+      } catch (e) {
+        console.error("Failed to load purchases:", e);
+        setPurchaseAnalysis(null);
+      } finally {
+        setPurchaseLoading(false);
       }
     })();
   }, [fromTs, toTs, reportTab]);
@@ -523,7 +550,7 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
       }}
     >
       <div className="rpt-wrap" style={embedded ? { padding: 0 } : undefined}>
-        {!embedded && <PageHeader title="Reports" subtitle="Sales and profitability" />}
+        {!embedded && <PageHeader title="Reports" subtitle="Sales, profitability and grocery purchases" />}
 
         {rangeControls}
 
@@ -917,6 +944,9 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
               </>
             )}
           </div>
+        )}
+        {reportTab === "purchases" && (
+          <PurchasesPricesReport report={purchaseAnalysis} loading={purchaseLoading} />
         )}
       </div>
     </div>

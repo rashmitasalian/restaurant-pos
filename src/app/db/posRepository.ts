@@ -7,6 +7,11 @@ import type {
   GstConfigDto,
   GroceryItemDto,
   GroceryListDto,
+  GroceryPurchaseDto,
+  GroceryPurchaseAnalysisDto,
+  GroceryPurchaseHeaderCreateInput,
+  GroceryPurchaseHeaderUpdateInput,
+  GroceryListLinesChange,
   GroceryPurchaseLineDto,
   MenuItemDto,
   OrderDto,
@@ -717,6 +722,13 @@ export async function getProfitabilitySummary(opts?: {
   return api().reports!.profitability(opts);
 }
 
+export async function getGroceryPurchaseAnalysis(opts?: {
+  from?: number;
+  to?: number;
+}): Promise<GroceryPurchaseAnalysisDto> {
+  return api().reports!.groceryPurchases(opts);
+}
+
 function groceryApi() {
   const grocery = api().grocery;
   if (!grocery) {
@@ -785,6 +797,13 @@ export async function updateGroceryList(
   return groceryApi().updateList(id, updates);
 }
 
+export async function changeGroceryListLines(
+  id: string,
+  change: GroceryListLinesChange,
+): Promise<GroceryListDoc> {
+  return groceryApi().changeListLines(id, change);
+}
+
 export async function deleteGroceryList(id: string): Promise<{ ok: boolean }> {
   return groceryApi().deleteList(id);
 }
@@ -826,8 +845,19 @@ export async function listGroceryPurchaseHeaders(opts?: {
   includeVoided?: boolean;
   limit?: number;
   offset?: number;
-}) {
+}): Promise<GroceryPurchaseDto[]> {
   return groceryApi().listPurchaseHeaders(opts);
+}
+
+export async function createGroceryPurchaseHeader(input: GroceryPurchaseHeaderCreateInput) {
+  return groceryApi().createPurchaseHeader(input) as Promise<GroceryPurchaseDto>;
+}
+
+export async function updateGroceryPurchaseHeader(
+  id: string,
+  updates: GroceryPurchaseHeaderUpdateInput,
+) {
+  return groceryApi().updatePurchaseHeader(id, updates) as Promise<GroceryPurchaseDto>;
 }
 
 export async function voidGroceryPurchaseHeader(id: string) {

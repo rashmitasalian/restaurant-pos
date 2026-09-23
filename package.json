@@ -16,7 +16,7 @@
     "build:public-menu": "npm --prefix apps/public-menu run build",
     "typecheck:public-menu": "npm --prefix apps/public-menu run typecheck",
     "generate:icon": "node scripts/generate-icon.cjs",
-    "build:renderer": "npm run generate:icon && vite build",
+    "build:renderer": "npm run generate:icon && cross-env NODE_ENV=production vite build",
     "build:electron": "npm run generate:icon && tsc --project tsconfig.electron.json && electron-builder",
     "rebuild:electron": "electron-rebuild -f -w better-sqlite3",
     "build:electron:system-ca": "cross-env NODE_OPTIONS=--use-system-ca npm run build:electron",
@@ -114,12 +114,16 @@
     ],
     "win": {
       "icon": "build/icon.ico",
-      "publisherName": "RestoNiti",
-      "signingHashAlgorithms": [
-        "sha256"
+      "signtoolOptions": {
+        "publisherName": "RestoNiti",
+        "signingHashAlgorithms": [
+          "sha256"
+        ],
+        "rfc3161TimeStampServer": "http://timestamp.digicert.com"
+      },
+      "signExts": [
+        ".dll"
       ],
-      "rfc3161TimeStampServer": "http://timestamp.digicert.com",
-      "signDlls": true,
       "target": [
         "nsis"
       ]

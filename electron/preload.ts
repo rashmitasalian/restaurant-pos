@@ -59,6 +59,8 @@ contextBridge.exposeInMainWorld("pos", {
     ipcRenderer
       .invoke("log:write", getSessionToken(), level, message, context)
       .catch(() => ({ ok: false })),
+  copyText: async (text: string) =>
+    ipcRenderer.invoke("clipboard:writeText", getSessionToken(), text),
   // Export report as PDF via native save dialog
   exportReportPdf: async (html: string, defaultFileName: string) =>
     ipcRenderer.invoke("report:exportPdf", getSessionToken(), html, defaultFileName),
@@ -207,6 +209,7 @@ contextBridge.exposeInMainWorld("pos", {
     orderHistory: (opts?: any) => authInvoke("pos:reports:order-history", opts),
     foodCostSummary: (opts?: any) => authInvoke("pos:reports:food-cost-summary", opts),
     profitability: (opts?: any) => authInvoke("pos:reports:profitability", opts),
+    groceryPurchases: (opts?: any) => authInvoke("pos:reports:grocery-purchases", opts),
   },
   review: {
     summary: (opts?: any) => authInvoke("pos:review:summary", opts),
@@ -223,6 +226,8 @@ contextBridge.exposeInMainWorld("pos", {
     getList: (id: string) => authInvoke("pos:grocery:lists:get", id),
     createList: (payload: any) => authInvoke("pos:grocery:lists:create", payload),
     updateList: (id: string, updates: any) => authInvoke("pos:grocery:lists:update", id, updates),
+    changeListLines: (id: string, change: any) =>
+      authInvoke("pos:grocery:lists:change-lines", id, change),
     deleteList: (id: string) => authInvoke("pos:grocery:lists:delete", id),
     listPurchases: (opts?: any) => authInvoke("pos:grocery:purchases:list", opts),
     createPurchase: (payload: any) => authInvoke("pos:grocery:purchases:create", payload),
@@ -230,6 +235,9 @@ contextBridge.exposeInMainWorld("pos", {
       authInvoke("pos:grocery:purchases:update", id, updates),
     deletePurchase: (id: string) => authInvoke("pos:grocery:purchases:delete", id),
     listPurchaseHeaders: (opts?: any) => authInvoke("pos:grocery:purchase-headers:list", opts),
+    createPurchaseHeader: (payload: any) => authInvoke("pos:grocery:purchase-headers:create", payload),
+    updatePurchaseHeader: (id: string, updates: any) =>
+      authInvoke("pos:grocery:purchase-headers:update", id, updates),
     voidPurchaseHeader: (id: string) => authInvoke("pos:grocery:purchase-headers:void", id),
     listTemplates: () => authInvoke("pos:grocery:templates:list"),
     createTemplate: (payload: any) => authInvoke("pos:grocery:templates:create", payload),

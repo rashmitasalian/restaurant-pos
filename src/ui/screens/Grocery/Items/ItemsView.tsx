@@ -19,7 +19,7 @@ import { EmptyState } from "../../../components/ui/EmptyState";
 import { Input } from "../../../components/ui/Input";
 import { Modal } from "../../../components/ui/Modal";
 import { Select } from "../../../components/ui/Select";
-import { formatCurrency } from "../groceryUtils";
+import { formatCurrency, groceryUnitLabel } from "../groceryUtils";
 import styles from "../Grocery.module.css";
 
 const UNITS: GroceryUnit[] = ["kg", "g", "L", "ml", "unit", "packet", "box", "dozen", "bunch"];
@@ -42,7 +42,11 @@ const EMPTY_ITEM_FORM: ItemForm = {
   vendorHint: "",
 };
 
-export function ItemsView() {
+export function ItemsView({
+  addItemRef,
+}: {
+  addItemRef?: React.MutableRefObject<(() => void) | null>;
+}) {
   const [items, setItems] = React.useState<GroceryItemDoc[]>([]);
   const [templates, setTemplates] = React.useState<BuyingListTemplateDto[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -79,6 +83,21 @@ export function ItemsView() {
     void load();
   }, [load]);
 
+  const openCreateItem = () => {
+    setItemForm(EMPTY_ITEM_FORM);
+    setItemModalOpen(true);
+  };
+
+  React.useEffect(() => {
+    if (!addItemRef) {
+      return;
+    }
+    addItemRef.current = openCreateItem;
+    return () => {
+      addItemRef.current = null;
+    };
+  }, [addItemRef]);
+
   const filtered = items.filter((item) => {
     if (!search.trim()) {
       return true;
@@ -90,11 +109,6 @@ export function ItemsView() {
       (item.vendorHint || "").toLowerCase().includes(q)
     );
   });
-
-  const openCreateItem = () => {
-    setItemForm(EMPTY_ITEM_FORM);
-    setItemModalOpen(true);
-  };
 
   const openEditItem = (item: GroceryItemDoc) => {
     setItemForm({
@@ -209,9 +223,6 @@ export function ItemsView() {
           onChange={(e) => setSearch(e.target.value)}
           style={{ maxWidth: 260 }}
         />
-        <Button variant="primary" onClick={openCreateItem}>
-          + Add Item
-        </Button>
       </div>
 
       {status && <div className={styles.status}>{status}</div>}
@@ -230,10 +241,10 @@ export function ItemsView() {
           headers={["Item", "Default", "Category", "Last price", ""]}
           rows={filtered.map((item) => [
             <strong key={`${item.id}-name`}>{item.name}</strong>,
-            `${item.defaultQuantity} ${item.defaultUnit}`,
+            `${item.defaultQuantity} ${groceryUnitLabel(item.defaultUnit)}`,
             item.category || "—",
             item.priceHint?.lastUnitPrice
-              ? `${formatCurrency(item.priceHint.lastUnitPrice)}/${item.priceHint.lastUnit || item.defaultUnit}`
+              ? `${formatCurrency(item.priceHint.lastUnitPrice)}/${groceryUnitLabel(item.priceHint.lastUnit || item.defaultUnit)}`
               : "—",
             <div key={`${item.id}-actions`} className={styles.actions}>
               <Button
@@ -343,7 +354,7 @@ export function ItemsView() {
             >
               {UNITS.map((unit) => (
                 <option key={unit} value={unit}>
-                  {unit}
+                  {groceryUnitLabel(unit)}
                 </option>
               ))}
             </Select>

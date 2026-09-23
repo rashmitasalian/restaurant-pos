@@ -9,10 +9,35 @@ import os from "os";
 import path from "path";
 import { closeDb, getDb, initializeDatabase } from "../db/sqlite";
 import { CREDIT_CONFIG_KEY } from "../../src/shared/customerCredit";
+import { createCredentialHash } from "./credentials";
 import { posService } from "./posService";
 
 describe("customer credit ledger", () => {
   let tempDir = "";
+
+  function seedStaffUsers(...usernames: string[]) {
+    const database = getDb();
+    const at = Date.now();
+    const insert = database.prepare(
+      `INSERT OR IGNORE INTO users (
+         username, display_name, role, password_hash, salt, hash_algo,
+         active, require_password_change, created_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, 1, 0, ?, ?)`,
+    );
+    for (const username of usernames) {
+      const credential = createCredentialHash("TestPass123!");
+      insert.run(
+        username,
+        username,
+        username === "manager" ? "manager" : "cashier",
+        credential.hash,
+        credential.salt,
+        credential.hashAlgo,
+        at,
+        at,
+      );
+    }
+  }
 
   beforeEach(async () => {
     closeDb();
@@ -20,6 +45,7 @@ describe("customer credit ledger", () => {
     process.env.POS_TEST_USER_DATA_DIR = tempDir;
     process.env.POS_DB_PATH_OVERRIDE = path.join(tempDir, "restaurant-pos.sqlite");
     await initializeDatabase();
+    seedStaffUsers("cashier", "manager");
     posService.setSetting(CREDIT_CONFIG_KEY, { enabled: true, defaultCreditDays: 7 });
   });
 

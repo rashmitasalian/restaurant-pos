@@ -43,6 +43,12 @@ export function NewBuyingListModal({ open, templates, recentLists, onClose, onCr
     setSaving(false);
   }, [open, templates, recentLists]);
 
+  const copySources = [
+    ...(templates.length ? ([["template", "Template"]] as Array<[StartFrom, string]>) : []),
+    ...(recentLists.length ? ([["previous", "Earlier list"]] as Array<[StartFrom, string]>) : []),
+  ];
+  const canCopy = copySources.length > 0;
+
   const create = async () => {
     if (saving) {
       return;
@@ -104,30 +110,36 @@ export function NewBuyingListModal({ open, templates, recentLists, onClose, onCr
           </Select>
         </div>
 
-        <div className={styles.modalStartFrom}>
-          <div className="ui-label">Start from</div>
-          <div className={styles.recordModeOptions} role="radiogroup" aria-label="Start from">
-            {(
-              [
-                ["blank", "Blank list"],
-                ["template", "Reusable template"],
-                ["previous", "Previous buying list"],
-              ] as Array<[StartFrom, string]>
-            ).map(([id, label]) => (
-              <button
-                key={id}
-                type="button"
-                className={`${styles.recordModeButton} ${
-                  startFrom === id ? styles.recordModeButtonActive : ""
-                }`}
-                aria-pressed={startFrom === id}
-                onClick={() => setStartFrom(id)}
-              >
-                {label}
-              </button>
-            ))}
+        {startFrom === "blank" ? (
+          canCopy ? (
+            <button
+              type="button"
+              className={styles.linkButton}
+              onClick={() => setStartFrom(templates.length ? "template" : "previous")}
+            >
+              Copy items from a template or an earlier list
+            </button>
+          ) : null
+        ) : (
+          <div className={styles.modalStartFrom}>
+            <div className="ui-label">Copy items from</div>
+            <div className={styles.recordModeOptions} role="radiogroup" aria-label="Copy items from">
+              {copySources.map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  className={`${styles.recordModeButton} ${
+                    startFrom === id ? styles.recordModeButtonActive : ""
+                  }`}
+                  aria-pressed={startFrom === id}
+                  onClick={() => setStartFrom(id)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {startFrom === "template" && (
           <Select
@@ -159,6 +171,12 @@ export function NewBuyingListModal({ open, templates, recentLists, onClose, onCr
             ))}
           </Select>
         )}
+
+        {startFrom !== "blank" ? (
+          <button type="button" className={styles.linkButton} onClick={() => setStartFrom("blank")}>
+            Start with a blank list instead
+          </button>
+        ) : null}
 
         {error && (
           <div className={styles.status} style={{ color: "var(--pos-danger)" }}>

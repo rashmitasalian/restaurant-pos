@@ -57,6 +57,7 @@ contextBridge.exposeInMainWorld("pos", {
     ipcRenderer
       .invoke("log:write", getSessionToken(), level, message, context)
       .catch(() => ({ ok: false })),
+  copyText: (text) => ipcRenderer.invoke("clipboard:writeText", getSessionToken(), text),
   exportReportPdf: (html, defaultFileName) =>
     ipcRenderer.invoke("report:exportPdf", getSessionToken(), html, defaultFileName),
   db: {
@@ -185,6 +186,7 @@ contextBridge.exposeInMainWorld("pos", {
     orderHistory: (opts) => authInvoke("pos:reports:order-history", opts),
     foodCostSummary: (opts) => authInvoke("pos:reports:food-cost-summary", opts),
     profitability: (opts) => authInvoke("pos:reports:profitability", opts),
+    groceryPurchases: (opts) => authInvoke("pos:reports:grocery-purchases", opts),
   },
   review: {
     summary: (opts) => authInvoke("pos:review:summary", opts),
@@ -201,12 +203,16 @@ contextBridge.exposeInMainWorld("pos", {
     getList: (id) => authInvoke("pos:grocery:lists:get", id),
     createList: (payload) => authInvoke("pos:grocery:lists:create", payload),
     updateList: (id, updates) => authInvoke("pos:grocery:lists:update", id, updates),
+    changeListLines: (id, change) => authInvoke("pos:grocery:lists:change-lines", id, change),
     deleteList: (id) => authInvoke("pos:grocery:lists:delete", id),
     listPurchases: (opts) => authInvoke("pos:grocery:purchases:list", opts),
     createPurchase: (payload) => authInvoke("pos:grocery:purchases:create", payload),
     updatePurchase: (id, updates) => authInvoke("pos:grocery:purchases:update", id, updates),
     deletePurchase: (id) => authInvoke("pos:grocery:purchases:delete", id),
     listPurchaseHeaders: (opts) => authInvoke("pos:grocery:purchase-headers:list", opts),
+    createPurchaseHeader: (payload) => authInvoke("pos:grocery:purchase-headers:create", payload),
+    updatePurchaseHeader: (id, updates) =>
+      authInvoke("pos:grocery:purchase-headers:update", id, updates),
     voidPurchaseHeader: (id) => authInvoke("pos:grocery:purchase-headers:void", id),
     listTemplates: () => authInvoke("pos:grocery:templates:list"),
     createTemplate: (payload) => authInvoke("pos:grocery:templates:create", payload),

@@ -34,6 +34,74 @@ export const GROCERY_UNITS = [
 ] as const;
 export const GROCERY_PAYMENT_METHODS = ["cash", "upi", "card", "online", "other"] as const;
 
+/** Piece counts are stored as "unit". Show them as "pcs". */
+export function groceryUnitLabel(unit: string) {
+  return unit === "unit" ? "pcs" : unit;
+}
+
+const UNIT_ALIASES: Record<string, (typeof GROCERY_UNITS)[number]> = {
+  kg: "kg",
+  kgs: "kg",
+  kilo: "kg",
+  kilos: "kg",
+  g: "g",
+  gm: "g",
+  gms: "g",
+  gram: "g",
+  grams: "g",
+  l: "L",
+  lt: "L",
+  ltr: "L",
+  ltrs: "L",
+  litre: "L",
+  litres: "L",
+  liter: "L",
+  liters: "L",
+  ml: "ml",
+  pc: "unit",
+  pcs: "unit",
+  piece: "unit",
+  pieces: "unit",
+  unit: "unit",
+  units: "unit",
+  nos: "unit",
+  packet: "packet",
+  packets: "packet",
+  pkt: "packet",
+  pkts: "packet",
+  box: "box",
+  boxes: "box",
+  dozen: "dozen",
+  dz: "dozen",
+  bunch: "bunch",
+  bunches: "bunch",
+};
+
+const QTY_UNIT = String.raw`(\d+(?:\.\d+)?)\s*([a-zA-Z]+)`;
+
+/** Parses "10 L oil", "oil 10L", "250g jeera powder" into name + quantity + unit. */
+export function parseItemEntry(text: string): {
+  name: string;
+  quantity?: number;
+  unit?: (typeof GROCERY_UNITS)[number];
+} {
+  const raw = text.trim().replace(/\s+/g, " ");
+  const leading = raw.match(new RegExp(`^${QTY_UNIT}\\s+(.+)$`));
+  const trailing = raw.match(new RegExp(`^(.+?)\\s+${QTY_UNIT}$`));
+  const pick = (qty: string, unitText: string, name: string) => {
+    const unit = UNIT_ALIASES[unitText.toLowerCase()];
+    const quantity = Number(qty);
+    if (!unit || !Number.isFinite(quantity) || quantity <= 0 || !name.trim()) {
+      return null;
+    }
+    return { name: name.trim(), quantity, unit };
+  };
+  return (
+    (leading && pick(leading[1], leading[2], leading[3])) ||
+    (trailing && pick(trailing[2], trailing[3], trailing[1])) || { name: raw }
+  );
+}
+
 export function groceryRecordKey(line: { groceryItemId?: string | null; itemName: string }) {
   return `${line.groceryItemId || ""}::${String(line.itemName || "")
     .trim()
@@ -199,7 +267,7 @@ export function statusLabel(status: GroceryListStatus | string) {
     case "open":
       return "Open";
     case "partial":
-      return "Partially Purchased";
+      return "In progress";
     case "completed":
       return "Completed";
     case "cancelled":
@@ -294,6 +362,49 @@ export function formatVariance(variance: number | null) {
   }
   const sign = variance > 0 ? "+" : "−";
   return `${sign}${formatCurrency(Math.abs(variance))}`;
+}
+
+export function listRegisterCopy(list: {
+  status: string;
+  itemCount?: number;
+  purchasedCount?: number;
+  pendingCount?: number;
+  spentTotal?: number;
+  lines?: Array<{ lineStatus?: string | null }>;
+}) {
+  const items = list.itemCount ?? list.lines?.length ?? 0;
+  const purchased =
+    list.purchasedCount ??
+    (list.lines || []).filter((line) => line.lineStatus === "purchased").length;
+  const plural = (n: number) => `${n} item${n === 1 ? "" : "s"}`;
+  if (list.status === "cancelled") {
+    return `Cancelled · ${plural(items)}`;
+  }
+  if (!items) {
+    return "Empty — open to add items";
+  }
+  if (list.status === "completed") {
+    return `All ${plural(purchased || items)} bought`;
+  }
+  if (purchased === 0) {
+    return `${plural(items)} to buy`;
+  }
+  return `${purchased} of ${items} bought · ${items - purchased} to buy`;
+}
+
+export function buyingListShareText(
+  list: {
+    title: string;
+    listDate: number;
+    lines: Array<{ itemName: string; quantity: number; unit: string }>;
+  },
+  restaurantName?: string,
+) {
+  const header = [restaurantName?.trim(), list.title, formatListDate(list.listDate)].filter(Boolean);
+  const items = list.lines.map(
+    (line) => `• ${line.itemName} — ${line.quantity} ${groceryUnitLabel(line.unit)}`,
+  );
+  return [...header, "", ...items].join("\n").trim();
 }
 
 export function itemsPendingCount(lines: Array<{ lineStatus?: string | null }>) {

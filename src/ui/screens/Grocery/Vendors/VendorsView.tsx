@@ -41,7 +41,11 @@ type VendorDetailStats = {
   totalSpend: number;
 };
 
-export function VendorsView() {
+export function VendorsView({
+  addVendorRef,
+}: {
+  addVendorRef?: React.MutableRefObject<(() => void) | null>;
+}) {
   const [vendors, setVendors] = React.useState<VendorDto[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
@@ -80,6 +84,16 @@ export function VendorsView() {
     setForm(EMPTY_FORM);
     setModalOpen(true);
   };
+
+  React.useEffect(() => {
+    if (!addVendorRef) {
+      return;
+    }
+    addVendorRef.current = openCreate;
+    return () => {
+      addVendorRef.current = null;
+    };
+  }, [addVendorRef]);
 
   const openEdit = (vendor: VendorDto) => {
     setForm({
@@ -195,9 +209,6 @@ export function VendorsView() {
           onChange={(e) => setSearch(e.target.value)}
           style={{ maxWidth: 280 }}
         />
-        <Button variant="primary" onClick={openCreate}>
-          + Add Vendor
-        </Button>
       </div>
 
       {status && <div className={styles.status}>{status}</div>}

@@ -223,7 +223,7 @@ function ManagerInner({
         {effectiveSection === "menu" && <MenuSection />}
         {effectiveSection === "people" && <People allowedPeopleTabs={allowedPeopleTabs} />}
         {effectiveSection === "reports" && (
-          <ManageShell title="Reports" description="Sales and profitability" width="full">
+          <ManageShell title="Reports" description="Sales, profitability and grocery purchases" width="full">
             <Reports embedded />
           </ManageShell>
         )}

@@ -4,6 +4,7 @@ import path from "path";
 import { randomUUID, createHash } from "crypto";
 import type Database from "better-sqlite3";
 import { backupDatabase, getDb, inTransaction, restoreDatabaseFromBackup } from "../db/sqlite";
+import { buildGroceryPurchaseAnalysis, loadRecordedGroceryBills } from "./groceryPurchaseAnalysis";
 import { destroySessionsForUser } from "./sessionManager";
 import {
   createCredentialHash,
@@ -30,6 +31,10 @@ import type {
   GroceryListStatus,
   GroceryListType,
   GroceryPurchaseDto,
+  GroceryPurchaseAnalysisDto,
+  GroceryPurchaseHeaderCreateInput,
+  GroceryPurchaseHeaderUpdateInput,
+  GroceryListLinesChange,
   GroceryPurchaseLineDto,
   GroceryPaymentStatus,
   GroceryPurchaseStatus,
@@ -394,6 +399,25 @@ function normalizeQuantity(value: unknown, errorCode = "grocery-quantity-invalid
   return Math.round(qty * 1000) / 1000;
 }
 
+function parseExplicitReceivedQuantity(value: unknown) {
+  const qty = typeof value === "string" ? Number(value.trim()) : Number(value);
+  if (!Number.isFinite(qty) || qty <= 0) {
+    throw new Error("grocery-received-quantity-invalid");
+  }
+  return Math.round(qty * 1000) / 1000;
+}
+
+function assertGroceryPurchaseDate(purchaseDate: number) {
+  if (!Number.isFinite(purchaseDate) || purchaseDate <= 0) {
+    throw new Error("grocery-date-invalid");
+  }
+  const endOfToday = new Date();
+  endOfToday.setHours(23, 59, 59, 999);
+  if (purchaseDate > endOfToday.getTime()) {
+    throw new Error("grocery-purchase-date-future");
+  }
+}
+
 function optionalGroceryText(value: unknown, limit: number, errorCode: string) {
   const text = normalizeText(value);
   if (text && text.length > limit) {
@@ -531,7 +555,7 @@ function normalizeGroceryListType(value: unknown): GroceryListType {
 }
 
 /**
- * Buying-list status is derived from purchase activity (except draft/open/cancelled).
+ * Buying-list status is derived from covered list lines (except cancelled).
  * Call inside the same transaction as purchase create/void/line updates.
  */
 function recalcGroceryListStatus(database: Database.Database, listId: string | null | undefined) {
@@ -546,55 +570,32 @@ function recalcGroceryListStatus(database: Database.Database, listId: string | n
   if (current === "cancelled") {
     return;
   }
-  // Draft stays draft until a purchase exists — then promote via derivation below.
-  if (current === "draft") {
-    const anyPurchase = database
-      .prepare(
-        `SELECT id FROM grocery_purchases
-         WHERE buying_list_id = ? AND status = 'recorded' LIMIT 1`,
-      )
-      .get(listId) as { id: string } | undefined;
-    if (!anyPurchase) {
-      return;
-    }
-  }
 
   const lines = database
     .prepare(`SELECT line_status FROM grocery_list_lines WHERE list_id = ? ORDER BY sort_order ASC`)
     .all(listId) as Array<{ line_status: string }>;
 
-  const wholeListPurchase = database
-    .prepare(
-      `SELECT p.id FROM grocery_purchases p
-       JOIN grocery_purchase_lines l ON l.purchase_id = p.id
-       WHERE p.buying_list_id = ? AND p.status = 'recorded'
-         AND lower(l.item_name) = lower(?) AND lower(coalesce(l.category, '')) = lower(?)
-       LIMIT 1`,
-    )
-    .get(listId, GROCERY_LIST_TOTAL_ITEM_NAME, GROCERY_LIST_TOTAL_CATEGORY) as
-    | { id: string }
-    | undefined;
-
   const actionable = lines.filter((line) => line.line_status !== "skipped");
-  const purchasedCount = actionable.filter((line) => line.line_status === "purchased").length;
-  const anyPurchaseHeader = database
-    .prepare(
-      `SELECT id FROM grocery_purchases
-       WHERE buying_list_id = ? AND status = 'recorded' LIMIT 1`,
-    )
-    .get(listId) as { id: string } | undefined;
+  const coveredCount = actionable.filter((line) => line.line_status === "purchased").length;
+  const pendingCount = actionable.length - coveredCount;
 
-  let next: GroceryListStatus = current === "completed" ? "completed" : "open";
-  if (wholeListPurchase || (actionable.length > 0 && purchasedCount === actionable.length)) {
-    next = "completed";
-  } else if (purchasedCount > 0 || anyPurchaseHeader) {
-    next = "partial";
-  } else if (current === "completed") {
-    // Voided everything — reopen
+  let next: GroceryListStatus;
+  if (actionable.length === 0) {
+    next = "draft";
+  } else if (coveredCount === 0) {
     next = "open";
+  } else if (pendingCount === 0) {
+    next = "completed";
+  } else {
+    next = "partial";
   }
 
   if (next === current) {
+    if (next === "completed" && !list.completed_at) {
+      database
+        .prepare(`UPDATE grocery_lists SET completed_at = ?, updated_at = ? WHERE id = ?`)
+        .run(now(), now(), listId);
+    }
     return;
   }
   const at = now();
@@ -606,6 +607,262 @@ function recalcGroceryListStatus(database: Database.Database, listId: string | n
     createAuditRow(database, "grocery.list.completed", "grocery-list", listId, null, {
       derived: true,
     });
+  }
+}
+
+function groceryLineCounts(lines: Array<{ lineStatus?: string | null }>) {
+  const actionable = lines.filter((line) => line.lineStatus !== "skipped");
+  const purchasedCount = actionable.filter((line) => line.lineStatus === "purchased").length;
+  return {
+    itemCount: lines.length,
+    purchasedCount,
+    pendingCount: Math.max(0, actionable.length - purchasedCount),
+  };
+}
+
+function groceryListSpendPaise(database: Database.Database, listId: string) {
+  const row = database
+    .prepare(
+      `SELECT COALESCE(SUM(total_paise), 0) AS total_paise
+       FROM grocery_purchases
+       WHERE buying_list_id = ? AND status = 'recorded'`,
+    )
+    .get(listId) as { total_paise: number };
+  return Number(row?.total_paise || 0);
+}
+
+function batchGroceryListSpend(
+  database: Database.Database,
+  listIds: string[],
+): Map<string, number> {
+  const spend = new Map<string, number>();
+  if (!listIds.length) {
+    return spend;
+  }
+  const placeholders = listIds.map(() => "?").join(",");
+  const rows = database
+    .prepare(
+      `SELECT buying_list_id AS list_id, COALESCE(SUM(total_paise), 0) AS total_paise
+       FROM grocery_purchases
+       WHERE buying_list_id IN (${placeholders}) AND status = 'recorded'
+       GROUP BY buying_list_id`,
+    )
+    .all(...listIds) as Array<{ list_id: string; total_paise: number }>;
+  for (const row of rows) {
+    spend.set(row.list_id, Number(row.total_paise || 0));
+  }
+  return spend;
+}
+
+function isCoveredGroceryListLine(line: { line_status?: string | null }) {
+  return line.line_status === "purchased";
+}
+
+function pendingGroceryListLines(database: Database.Database, listId: string) {
+  return database
+    .prepare(
+      `SELECT * FROM grocery_list_lines
+       WHERE list_id = ?
+         AND line_status != 'purchased'
+         AND line_status != 'skipped'
+       ORDER BY sort_order ASC, created_at ASC`,
+    )
+    .all(listId) as any[];
+}
+
+function coverGroceryListLine(
+  database: Database.Database,
+  line: any,
+  at: number,
+  purchased: { quantity: number; unitPricePaise: number | null; totalPaise: number },
+) {
+  database
+    .prepare(
+      `UPDATE grocery_list_lines
+       SET line_status = 'purchased',
+           purchased_quantity = ?,
+           purchased_unit_price_paise = ?,
+           purchased_total_paise = ?,
+           updated_at = ?
+       WHERE id = ?`,
+    )
+    .run(
+      purchased.quantity,
+      purchased.unitPricePaise,
+      purchased.totalPaise > 0 ? purchased.totalPaise : null,
+      at,
+      line.id,
+    );
+}
+
+function insertGroceryPurchaseLine(
+  database: Database.Database,
+  row: {
+    id: string;
+    purchaseId: string;
+    listId: string | null;
+    listLineId: string | null;
+    groceryItemId: string | null;
+    itemName: string;
+    category: string | null;
+    quantity: number;
+    unit: string;
+    unitPricePaise: number | null;
+    totalPaise: number;
+    vendor: string | null;
+    vendorId: string | null;
+    paymentMethod: string | null;
+    notes: string | null;
+    purchasedAt: number;
+    actor: string | null;
+    at: number;
+  },
+) {
+  database
+    .prepare(
+      `INSERT INTO grocery_purchase_lines (
+        id, purchase_id, list_id, list_line_id, grocery_item_id, item_name, category, quantity, unit,
+        unit_price_paise, total_paise, vendor, vendor_id, payment_method, notes, purchased_at,
+        created_by, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      row.id,
+      row.purchaseId,
+      row.listId,
+      row.listLineId,
+      row.groceryItemId,
+      row.itemName,
+      row.category,
+      row.quantity,
+      row.unit,
+      row.unitPricePaise,
+      row.totalPaise,
+      row.vendor,
+      row.vendorId,
+      row.paymentMethod,
+      row.notes,
+      row.purchasedAt,
+      row.actor,
+      row.at,
+      row.at,
+    );
+}
+
+function resolvePurchaseVendor(
+  database: Database.Database,
+  input: { vendorId?: string | null; vendorName?: string | null },
+  actor: string | null,
+  at: number,
+) {
+  const vendorId = normalizeText(input.vendorId);
+  const vendorName = normalizeText(input.vendorName);
+  if (vendorId && vendorName) {
+    throw new Error("grocery-vendor-id-and-name");
+  }
+  if (vendorId) {
+    const existing = database
+      .prepare(`SELECT id FROM vendors WHERE id = ? AND deleted_at IS NULL`)
+      .get(vendorId) as { id: string } | undefined;
+    if (!existing) {
+      throw new Error("grocery-vendor-not-found");
+    }
+    return vendorId;
+  }
+  if (vendorName) {
+    return ensureVendorId(database, vendorName, actor, at);
+  }
+  return null;
+}
+
+function mergeGroceryListLines(
+  database: Database.Database,
+  listId: string,
+  proposed: Partial<GroceryListLineDto>[],
+  at: number,
+) {
+  const existing = database
+    .prepare(`SELECT * FROM grocery_list_lines WHERE list_id = ?`)
+    .all(listId) as any[];
+  const existingById = new Map(existing.map((row) => [row.id as string, row]));
+  const seen = new Set<string>();
+
+  proposed.forEach((raw, index) => {
+    const prepared = prepareGroceryListLineInput(raw, index);
+    const current = existingById.get(prepared.id);
+    if (current && isCoveredGroceryListLine(current)) {
+      if (Number(current.quantity) !== Number(prepared.quantity) || current.unit !== prepared.unit) {
+        throw new Error("grocery-list-line-covered");
+      }
+      database
+        .prepare(`UPDATE grocery_list_lines SET sort_order = ?, updated_at = ? WHERE id = ?`)
+        .run(index, at, current.id);
+      seen.add(current.id);
+      return;
+    }
+    if (current) {
+      database
+        .prepare(
+          `UPDATE grocery_list_lines
+           SET grocery_item_id = ?, item_name = ?, category = ?, quantity = ?, unit = ?, vendor_hint = ?,
+               sort_order = ?, estimated_unit_price_paise = ?, estimated_total_paise = ?,
+               line_status = 'pending', updated_at = ?
+           WHERE id = ?`,
+        )
+        .run(
+          prepared.groceryItemId || null,
+          prepared.itemName,
+          prepared.category || null,
+          prepared.quantity,
+          prepared.unit,
+          prepared.vendorHint || null,
+          index,
+          prepared.estimatedUnitPrice == null ? null : rupeesToPaise(prepared.estimatedUnitPrice),
+          prepared.estimatedTotal == null ? null : rupeesToPaise(prepared.estimatedTotal),
+          at,
+          current.id,
+        );
+      seen.add(current.id);
+      return;
+    }
+    const id = prepared.id.startsWith("grocery-list-line:")
+      ? prepared.id
+      : `grocery-list-line:${randomUUID()}`;
+    database
+      .prepare(
+        `INSERT INTO grocery_list_lines (
+          id, list_id, grocery_item_id, item_name, category, quantity, unit, vendor_hint,
+          sort_order, estimated_unit_price_paise, estimated_total_paise,
+          purchased_quantity, purchased_unit_price_paise, purchased_total_paise, line_status,
+          created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, 'pending', ?, ?)`,
+      )
+      .run(
+        id,
+        listId,
+        prepared.groceryItemId || null,
+        prepared.itemName,
+        prepared.category || null,
+        prepared.quantity,
+        prepared.unit,
+        prepared.vendorHint || null,
+        index,
+        prepared.estimatedUnitPrice == null ? null : rupeesToPaise(prepared.estimatedUnitPrice),
+        prepared.estimatedTotal == null ? null : rupeesToPaise(prepared.estimatedTotal),
+        at,
+        at,
+      );
+    seen.add(id);
+  });
+
+  for (const row of existing) {
+    if (seen.has(row.id)) {
+      continue;
+    }
+    if (isCoveredGroceryListLine(row)) {
+      continue;
+    }
+    database.prepare(`DELETE FROM grocery_list_lines WHERE id = ?`).run(row.id);
   }
 }
 
@@ -719,58 +976,6 @@ function prepareGroceryPurchaseInput(
     notes: optionalGroceryText(input.notes, 500, "grocery-notes-too-long"),
     purchasedAt,
   };
-}
-
-function isWholeListGroceryPurchase(
-  input: Pick<GroceryPurchaseLineDto, "groceryItemId" | "itemName" | "category">,
-) {
-  return (
-    !input.groceryItemId &&
-    normalizeText(input.itemName).toLowerCase() === GROCERY_LIST_TOTAL_ITEM_NAME.toLowerCase() &&
-    normalizeText(input.category).toLowerCase() === GROCERY_LIST_TOTAL_CATEGORY.toLowerCase()
-  );
-}
-
-function assertGroceryPurchaseModeAvailable(
-  database: Database.Database,
-  purchase: Pick<GroceryPurchaseLineDto, "listId" | "groceryItemId" | "itemName" | "category">,
-  excludeId?: string,
-) {
-  if (!purchase.listId) {
-    return;
-  }
-  const excludeSql = excludeId ? " AND id <> ?" : "";
-  if (isWholeListGroceryPurchase(purchase)) {
-    const params = excludeId ? [purchase.listId, excludeId] : [purchase.listId];
-    const existing = database
-      .prepare(
-        `SELECT id FROM grocery_purchase_lines
-         WHERE list_id = ?${excludeSql}
-         LIMIT 1`,
-      )
-      .get(...params);
-    if (existing) {
-      throw new Error("grocery-list-purchase-mode-conflict");
-    }
-    return;
-  }
-  const params = excludeId
-    ? [purchase.listId, GROCERY_LIST_TOTAL_ITEM_NAME, GROCERY_LIST_TOTAL_CATEGORY, excludeId]
-    : [purchase.listId, GROCERY_LIST_TOTAL_ITEM_NAME, GROCERY_LIST_TOTAL_CATEGORY];
-  const existingTotal = database
-    .prepare(
-      `SELECT id FROM grocery_purchase_lines
-       WHERE list_id = ?
-         AND grocery_item_id IS NULL
-         AND lower(item_name) = lower(?)
-         AND lower(COALESCE(category, '')) = lower(?)
-         ${excludeSql}
-       LIMIT 1`,
-    )
-    .get(...params);
-  if (existingTotal) {
-    throw new Error("grocery-list-purchase-mode-conflict");
-  }
 }
 
 function parseJson<T>(value: string | null | undefined, defaultValue: T, label = "stored-json"): T {
@@ -5372,7 +5577,13 @@ export const posService = {
       database,
       rows.map((row) => row.id),
     );
-    return rows.map((row: any) => groceryListFromRow(database, row, linesByList.get(row.id)));
+    const spendByList = batchGroceryListSpend(
+      database,
+      rows.map((row) => row.id),
+    );
+    return rows.map((row: any) =>
+      groceryListFromRow(database, row, linesByList.get(row.id), spendByList.get(row.id) || 0),
+    );
   },
 
   getGroceryList(id: string): GroceryListDto | null {
@@ -5554,6 +5765,19 @@ export const posService = {
       if (!current) {
         throw new Error("grocery-list-not-found");
       }
+      const currentStatus = normalizeGroceryListStatus(current.status);
+      if (updates.status === "partial" || updates.status === "completed") {
+        throw new Error("grocery-list-status-derived");
+      }
+      if (
+        updates.status &&
+        updates.status !== "draft" &&
+        updates.status !== "open" &&
+        updates.status !== "cancelled" &&
+        updates.status !== ("printed" as any)
+      ) {
+        throw new Error("grocery-list-status-invalid");
+      }
       const title =
         updates.title === undefined ? current.title : normalizeText(updates.title) || current.title;
       const listDate =
@@ -5569,24 +5793,16 @@ export const posService = {
         updates.notes === undefined
           ? current.notes || null
           : optionalGroceryText(updates.notes, 500, "grocery-notes-too-long");
-      let status = normalizeGroceryListStatus(updates.status || current.status);
-      if (updates.status === "partial") {
-        throw new Error("grocery-list-status-derived");
-      }
-      if (
-        updates.status &&
-        !["draft", "open", "completed", "cancelled"].includes(updates.status) &&
-        updates.status !== ("printed" as any) &&
-        updates.status !== ("purchased" as any)
-      ) {
-        throw new Error("grocery-list-status-invalid");
-      }
-      // Legacy UI may still send printed/purchased — normalize.
-      if (updates.status === ("printed" as any)) {
-        status = "open";
-      }
-      if (updates.status === ("purchased" as any)) {
-        status = "completed";
+
+      let status = currentStatus;
+      if (updates.status === "cancelled") {
+        status = "cancelled";
+      } else if (currentStatus !== "cancelled") {
+        if (updates.status === "open" && currentStatus === "draft") {
+          status = "open";
+        } else if (updates.status === ("printed" as any)) {
+          status = currentStatus === "draft" ? "open" : currentStatus;
+        }
       }
 
       const at = now();
@@ -5604,7 +5820,7 @@ export const posService = {
           ? current.completed_at || at
           : status === "cancelled"
             ? current.completed_at || null
-            : null;
+            : current.completed_at;
 
       database
         .prepare(
@@ -5627,49 +5843,124 @@ export const posService = {
           id,
         );
 
-      if (updates.status === "cancelled" && current.status !== "cancelled") {
+      if (updates.status === "cancelled" && currentStatus !== "cancelled") {
         createAuditRow(database, "grocery.list.cancelled", "grocery-list", id, actor || null, {});
-      }
-      if (updates.status === "completed" && current.status !== "completed") {
-        createAuditRow(database, "grocery.list.completed", "grocery-list", id, actor || null, {});
       }
 
       if (updates.lines) {
-        database.prepare("DELETE FROM grocery_list_lines WHERE list_id = ?").run(id);
-        const insertLine = database.prepare(
-          `INSERT INTO grocery_list_lines (
-            id, list_id, grocery_item_id, item_name, category, quantity, unit, vendor_hint,
-            sort_order, estimated_unit_price_paise, estimated_total_paise,
-            purchased_quantity, purchased_unit_price_paise, purchased_total_paise, line_status,
-            created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        );
-        updates.lines
-          .map((line, index) => prepareGroceryListLineInput(line, index))
-          .forEach((line, index) => {
-            insertLine.run(
-              line.id,
-              id,
-              line.groceryItemId || null,
-              line.itemName,
-              line.category || null,
-              line.quantity,
-              line.unit,
-              line.vendorHint || null,
-              index,
-              line.estimatedUnitPrice == null ? null : rupeesToPaise(line.estimatedUnitPrice),
-              line.estimatedTotal == null ? null : rupeesToPaise(line.estimatedTotal),
-              line.purchasedQuantity == null ? null : line.purchasedQuantity,
-              line.purchasedUnitPrice == null ? null : rupeesToPaise(line.purchasedUnitPrice),
-              line.purchasedTotal == null ? null : rupeesToPaise(line.purchasedTotal),
-              line.lineStatus || "pending",
-              at,
-              at,
-            );
-          });
+        mergeGroceryListLines(database, id, updates.lines, at);
+      }
+
+      if (status !== "cancelled") {
+        recalcGroceryListStatus(database, id);
       }
       createAuditRow(database, "grocery.list.updated", "grocery-list", id, actor || null, {
         fields: Object.keys(updates || {}).sort(),
+      });
+      return groceryListFromRow(
+        database,
+        database.prepare("SELECT * FROM grocery_lists WHERE id = ?").get(id),
+      );
+    });
+  },
+
+  /** Applies only the changed lines; covered (purchased) lines cannot be edited or removed. */
+  changeGroceryListLines(id: string, change: GroceryListLinesChange, actor?: string | null) {
+    return inTransaction((database) => {
+      const current = database.prepare("SELECT * FROM grocery_lists WHERE id = ?").get(id) as any;
+      if (!current) {
+        throw new Error("grocery-list-not-found");
+      }
+      if (normalizeGroceryListStatus(current.status) === "cancelled") {
+        throw new Error("grocery-list-cancelled");
+      }
+      const at = now();
+      const lineById = (lineId: string) => {
+        const row = database
+          .prepare(`SELECT * FROM grocery_list_lines WHERE id = ? AND list_id = ?`)
+          .get(lineId, id) as any;
+        if (!row) {
+          throw new Error("grocery-list-line-not-found");
+        }
+        if (isCoveredGroceryListLine(row)) {
+          throw new Error("grocery-list-line-covered");
+        }
+        return row;
+      };
+
+      for (const lineId of change.remove || []) {
+        lineById(lineId);
+        database.prepare(`DELETE FROM grocery_list_lines WHERE id = ?`).run(lineId);
+      }
+
+      for (const patch of change.update || []) {
+        const row = lineById(patch.id);
+        const quantity = patch.quantity === undefined ? Number(row.quantity) : normalizeQuantity(patch.quantity);
+        const unit = patch.unit === undefined ? row.unit : normalizeGroceryUnit(patch.unit);
+        database
+          .prepare(`UPDATE grocery_list_lines SET quantity = ?, unit = ?, updated_at = ? WHERE id = ?`)
+          .run(quantity, unit, at, row.id);
+      }
+
+      if (change.add?.length) {
+        let sortOrder =
+          Number(
+            (
+              database
+                .prepare(`SELECT MAX(sort_order) AS max FROM grocery_list_lines WHERE list_id = ?`)
+                .get(id) as { max: number | null }
+            ).max ?? -1,
+          ) + 1;
+        const existingNames = new Set(
+          (
+            database
+              .prepare(`SELECT lower(item_name) AS name FROM grocery_list_lines WHERE list_id = ?`)
+              .all(id) as Array<{ name: string }>
+          ).map((row) => row.name),
+        );
+        for (const raw of change.add) {
+          const prepared = prepareGroceryListLineInput(raw, sortOrder);
+          if (existingNames.has(prepared.itemName.toLowerCase())) {
+            throw new Error("grocery-list-line-duplicate");
+          }
+          existingNames.add(prepared.itemName.toLowerCase());
+          const lineId = prepared.id.startsWith("grocery-list-line:")
+            ? prepared.id
+            : `grocery-list-line:${randomUUID()}`;
+          database
+            .prepare(
+              `INSERT INTO grocery_list_lines (
+                id, list_id, grocery_item_id, item_name, category, quantity, unit, vendor_hint,
+                sort_order, estimated_unit_price_paise, estimated_total_paise,
+                purchased_quantity, purchased_unit_price_paise, purchased_total_paise, line_status,
+                created_at, updated_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, 'pending', ?, ?)`,
+            )
+            .run(
+              lineId,
+              id,
+              prepared.groceryItemId || null,
+              prepared.itemName,
+              prepared.category || null,
+              prepared.quantity,
+              prepared.unit,
+              prepared.vendorHint || null,
+              sortOrder,
+              at,
+              at,
+            );
+          sortOrder += 1;
+        }
+      }
+
+      database
+        .prepare(`UPDATE grocery_lists SET updated_by = ?, updated_at = ? WHERE id = ?`)
+        .run(actor || null, at, id);
+      recalcGroceryListStatus(database, id);
+      createAuditRow(database, "grocery.list.lines-changed", "grocery-list", id, actor || null, {
+        added: change.add?.length || 0,
+        updated: change.update?.length || 0,
+        removed: change.remove?.length || 0,
       });
       return groceryListFromRow(
         database,
@@ -5754,12 +6045,339 @@ export const posService = {
       .map(groceryPurchaseFromRow);
   },
 
+  createGroceryPurchaseHeader(input: GroceryPurchaseHeaderCreateInput, actor?: string | null) {
+    const coverage = input.coverage;
+    if (coverage !== "pending" && coverage !== "selected" && coverage !== "none") {
+      throw new Error("grocery-purchase-empty-coverage");
+    }
+    const buyingListId = normalizeText(input.buyingListId) || null;
+    if (coverage === "none" && buyingListId) {
+      throw new Error("grocery-purchase-linked-none");
+    }
+    if ((coverage === "pending" || coverage === "selected") && !buyingListId) {
+      throw new Error("grocery-purchase-empty-coverage");
+    }
+    const total = parsePositiveMoney(input.total);
+    const totalPaise = rupeesToPaise(total);
+    const purchaseDate = Number(input.purchaseDate || now());
+    assertGroceryPurchaseDate(purchaseDate);
+    const paymentMethod =
+      optionalGroceryText(input.paymentMethod, 40, "grocery-payment-method-too-long") || "cash";
+    const invoiceNumber = optionalGroceryText(
+      input.invoiceNumber,
+      80,
+      "grocery-notes-too-long",
+    );
+    const notes = optionalGroceryText(input.notes, 500, "grocery-notes-too-long");
+    const at = now();
+    return inTransaction((database) => {
+      if (buyingListId) {
+        const list = database
+          .prepare("SELECT id FROM grocery_lists WHERE id = ?")
+          .get(buyingListId);
+        if (!list) {
+          throw new Error("grocery-list-not-found");
+        }
+      }
+      const vendorId = resolvePurchaseVendor(
+        database,
+        { vendorId: input.vendorId, vendorName: input.vendorName },
+        actor || null,
+        at,
+      );
+      const vendorName = vendorId
+        ? ((
+            database.prepare(`SELECT name FROM vendors WHERE id = ?`).get(vendorId) as
+              | { name: string }
+              | undefined
+          )?.name ?? null)
+        : null;
+
+      let coverRows: any[] = [];
+      const selectedById = new Map(
+        (input.lines || []).map((line) => [line.listLineId, line] as const),
+      );
+      if (coverage === "pending") {
+        coverRows = pendingGroceryListLines(database, buyingListId as string);
+        if (!coverRows.length) {
+          throw new Error("grocery-purchase-empty-coverage");
+        }
+      } else if (coverage === "selected") {
+        const ids = (input.lines || []).map((line) => line.listLineId).filter(Boolean);
+        if (!ids.length) {
+          throw new Error("grocery-purchase-empty-coverage");
+        }
+        for (const lineId of ids) {
+          const row = database
+            .prepare(`SELECT * FROM grocery_list_lines WHERE id = ?`)
+            .get(lineId) as any;
+          if (
+            !row ||
+            row.list_id !== buyingListId ||
+            row.line_status === "purchased" ||
+            row.line_status === "skipped"
+          ) {
+            throw new Error("grocery-purchase-selected-invalid");
+          }
+          coverRows.push(row);
+        }
+      }
+
+      assertAmountPaidValid(totalPaise, totalPaise);
+      const purchaseHeaderId = `grocery-purchase-hdr:${randomUUID()}`;
+      database
+        .prepare(
+          `INSERT INTO grocery_purchases (
+             id, buying_list_id, vendor_id, purchase_date, invoice_number, payment_method,
+             status, payment_status, amount_paid_paise, subtotal_paise, tax_paise, total_paise,
+             notes, migration_source, created_by, created_at, updated_at
+           ) VALUES (?, ?, ?, ?, ?, ?, 'recorded', 'paid', ?, ?, 0, ?, ?, NULL, ?, ?, ?)`,
+        )
+        .run(
+          purchaseHeaderId,
+          buyingListId,
+          vendorId,
+          purchaseDate,
+          invoiceNumber,
+          paymentMethod,
+          totalPaise,
+          totalPaise,
+          totalPaise,
+          notes,
+          actor || null,
+          at,
+          at,
+        );
+
+      let allocatedPaise = 0;
+      for (const row of coverRows) {
+        const extra = selectedById.get(row.id);
+        const quantity =
+          extra && extra.quantity !== undefined && extra.quantity !== null
+            ? parseExplicitReceivedQuantity(extra.quantity)
+            : Number(row.quantity) || 1;
+        const unit = extra?.unit ? normalizeGroceryUnit(extra.unit) : row.unit;
+        const unitPrice =
+          extra?.unitPrice == null || extra.unitPrice === undefined
+            ? null
+            : parseNonNegativeMoney(extra.unitPrice);
+        const explicitTotal =
+          extra?.lineTotal == null || extra.lineTotal === undefined
+            ? null
+            : parseNonNegativeMoney(extra.lineTotal);
+        const lineTotalPaise =
+          coverRows.length === 1
+            ? totalPaise
+            : explicitTotal != null
+              ? rupeesToPaise(explicitTotal)
+              : unitPrice != null
+                ? rupeesToPaise(+(unitPrice * quantity).toFixed(2))
+                : 0;
+        const unitPricePaise = unitPrice == null ? null : rupeesToPaise(unitPrice);
+        allocatedPaise += lineTotalPaise;
+        if (allocatedPaise > totalPaise) {
+          throw new Error("grocery-purchase-lines-exceed-total");
+        }
+        coverGroceryListLine(database, row, at, {
+          quantity,
+          unitPricePaise,
+          totalPaise: lineTotalPaise,
+        });
+        insertGroceryPurchaseLine(database, {
+          id: `grocery-purchase:${randomUUID()}`,
+          purchaseId: purchaseHeaderId,
+          listId: buyingListId,
+          listLineId: row.id,
+          groceryItemId: row.grocery_item_id || null,
+          itemName: row.item_name,
+          category: row.category || null,
+          quantity,
+          unit,
+          unitPricePaise,
+          totalPaise: lineTotalPaise,
+          vendor: vendorName,
+          vendorId,
+          paymentMethod,
+          notes,
+          purchasedAt: purchaseDate,
+          actor: actor || null,
+          at,
+        });
+      }
+
+      createAuditRow(
+        database,
+        "grocery.purchase.created",
+        "grocery-purchase",
+        purchaseHeaderId,
+        actor || null,
+        { coverage, lineCount: coverRows.length, total: paiseToRupees(totalPaise) },
+      );
+      if (buyingListId) {
+        recalcGroceryListStatus(database, buyingListId);
+      }
+      const header = database
+        .prepare(
+          `SELECT p.*, v.name AS vendor_name, gl.title AS buying_list_title
+           FROM grocery_purchases p
+           LEFT JOIN vendors v ON v.id = p.vendor_id
+           LEFT JOIN grocery_lists gl ON gl.id = p.buying_list_id
+           WHERE p.id = ?`,
+        )
+        .get(purchaseHeaderId);
+      return groceryPurchaseHeaderFromRow(database, header);
+    });
+  },
+
+  /** Edits money and bill details. Which items a bill covers is fixed; void and re-record to change it. */
+  updateGroceryPurchaseHeader(
+    id: string,
+    input: GroceryPurchaseHeaderUpdateInput,
+    actor?: string | null,
+  ) {
+    return inTransaction((database) => {
+      const current = database
+        .prepare("SELECT * FROM grocery_purchases WHERE id = ?")
+        .get(id) as any;
+      if (!current) {
+        throw new Error("grocery-purchase-not-found");
+      }
+      if (current.status !== "recorded") {
+        throw new Error("grocery-purchase-voided");
+      }
+      const at = now();
+      const totalPaise =
+        input.total === undefined ? Number(current.total_paise) : rupeesToPaise(parsePositiveMoney(input.total));
+      const purchaseDate =
+        input.purchaseDate === undefined ? Number(current.purchase_date) : Number(input.purchaseDate);
+      assertGroceryPurchaseDate(purchaseDate);
+      const paymentMethod =
+        input.paymentMethod === undefined
+          ? current.payment_method
+          : optionalGroceryText(input.paymentMethod, 40, "grocery-payment-method-too-long") || "cash";
+      const invoiceNumber =
+        input.invoiceNumber === undefined
+          ? current.invoice_number
+          : optionalGroceryText(input.invoiceNumber, 80, "grocery-notes-too-long");
+      const vendorId =
+        input.vendorId === undefined && input.vendorName === undefined
+          ? current.vendor_id
+          : resolvePurchaseVendor(
+              database,
+              { vendorId: input.vendorId, vendorName: input.vendorName },
+              actor || null,
+              at,
+            );
+      const vendorName = vendorId
+        ? ((
+            database.prepare(`SELECT name FROM vendors WHERE id = ?`).get(vendorId) as
+              | { name: string }
+              | undefined
+          )?.name ?? null)
+        : null;
+
+      const purchaseLines = database
+        .prepare(`SELECT * FROM grocery_purchase_lines WHERE purchase_id = ?`)
+        .all(id) as any[];
+      const edits = new Map((input.lines || []).map((line) => [line.purchaseLineId, line] as const));
+      for (const lineId of edits.keys()) {
+        if (!purchaseLines.some((line) => line.id === lineId)) {
+          throw new Error("grocery-purchase-selected-invalid");
+        }
+      }
+      const nextQuantities = purchaseLines.map((line) => {
+        const edit = edits.get(line.id);
+        if (edit && edit.quantity !== undefined && edit.quantity !== null) {
+          return parseExplicitReceivedQuantity(edit.quantity);
+        }
+        return Number(line.quantity) || 1;
+      });
+      const nextLineTotals = purchaseLines.map((line) => {
+        const edit = edits.get(line.id);
+        if (edit && edit.lineTotal !== undefined) {
+          return edit.lineTotal == null ? 0 : rupeesToPaise(parseNonNegativeMoney(edit.lineTotal));
+        }
+        return Number(line.total_paise) || 0;
+      });
+      if (nextLineTotals.length === 1) {
+        nextLineTotals[0] = totalPaise;
+      }
+      const allocated = nextLineTotals.reduce((sum, value) => sum + value, 0);
+      if (allocated > totalPaise) {
+        throw new Error("grocery-purchase-lines-exceed-total");
+      }
+
+      database
+        .prepare(
+          `UPDATE grocery_purchases
+           SET vendor_id = ?, purchase_date = ?, invoice_number = ?, payment_method = ?,
+               amount_paid_paise = ?, subtotal_paise = ?, total_paise = ?, updated_at = ?
+           WHERE id = ?`,
+        )
+        .run(vendorId, purchaseDate, invoiceNumber, paymentMethod, totalPaise, totalPaise, totalPaise, at, id);
+
+      purchaseLines.forEach((line, index) => {
+        const lineTotalPaise = nextLineTotals[index];
+        const quantity = nextQuantities[index];
+        const unitPricePaise =
+          lineTotalPaise > 0 ? Math.round(lineTotalPaise / quantity) : line.unit_price_paise ?? null;
+        database
+          .prepare(
+            `UPDATE grocery_purchase_lines
+             SET quantity = ?, total_paise = ?, unit_price_paise = ?, vendor = ?, vendor_id = ?,
+                 payment_method = ?, purchased_at = ?, updated_at = ?
+             WHERE id = ?`,
+          )
+          .run(
+            quantity,
+            lineTotalPaise,
+            lineTotalPaise > 0 ? unitPricePaise : null,
+            vendorName,
+            vendorId,
+            paymentMethod,
+            purchaseDate,
+            at,
+            line.id,
+          );
+        if (line.list_line_id) {
+          database
+            .prepare(
+              `UPDATE grocery_list_lines
+               SET purchased_quantity = ?, purchased_total_paise = ?, purchased_unit_price_paise = ?, updated_at = ?
+               WHERE id = ? AND line_status = 'purchased'`,
+            )
+            .run(
+              quantity,
+              lineTotalPaise > 0 ? lineTotalPaise : null,
+              lineTotalPaise > 0 ? unitPricePaise : null,
+              at,
+              line.list_line_id,
+            );
+        }
+      });
+
+      createAuditRow(database, "grocery.purchase.updated", "grocery-purchase", id, actor || null, {
+        oldTotalPaise: current.total_paise,
+        totalPaise,
+      });
+      const header = database
+        .prepare(
+          `SELECT p.*, v.name AS vendor_name, gl.title AS buying_list_title
+           FROM grocery_purchases p
+           LEFT JOIN vendors v ON v.id = p.vendor_id
+           LEFT JOIN grocery_lists gl ON gl.id = p.buying_list_id
+           WHERE p.id = ?`,
+        )
+        .get(id);
+      return groceryPurchaseHeaderFromRow(database, header);
+    });
+  },
+
   createGroceryPurchase(input: Partial<GroceryPurchaseLineDto>, actor?: string | null) {
     const prepared = prepareGroceryPurchaseInput(input);
     const id = `grocery-purchase:${randomUUID()}`;
     const at = now();
     return inTransaction((database) => {
-      assertGroceryPurchaseModeAvailable(database, prepared);
       const vendorId = ensureVendorId(database, prepared.vendor, actor || null, at);
       const totalPaise = rupeesToPaise(prepared.totalAmount);
       assertAmountPaidValid(totalPaise, totalPaise);
@@ -5785,78 +6403,57 @@ export const posService = {
           at,
           at,
         );
-      database
-        .prepare(
-          `INSERT INTO grocery_purchase_lines (
-            id, purchase_id, list_id, grocery_item_id, item_name, category, quantity, unit, unit_price_paise,
-            total_paise, vendor, vendor_id, payment_method, notes, purchased_at, created_by, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        )
-        .run(
-          id,
-          purchaseHeaderId,
-          prepared.listId,
-          prepared.groceryItemId,
-          prepared.itemName,
-          prepared.category,
-          prepared.quantity,
-          prepared.unit,
-          prepared.unitPrice === null ? null : rupeesToPaise(prepared.unitPrice),
-          totalPaise,
-          prepared.vendor,
-          vendorId,
-          prepared.paymentMethod,
-          prepared.notes,
-          prepared.purchasedAt,
-          actor || null,
-          at,
-          at,
-        );
+      const isWholeList =
+        !prepared.groceryItemId &&
+        normalizeText(prepared.itemName).toLowerCase() ===
+          GROCERY_LIST_TOTAL_ITEM_NAME.toLowerCase() &&
+        normalizeText(prepared.category).toLowerCase() === GROCERY_LIST_TOTAL_CATEGORY.toLowerCase();
+      const pending = prepared.listId ? pendingGroceryListLines(database, prepared.listId) : [];
+      let matched = pending.find(
+        (row) =>
+          (prepared.groceryItemId && row.grocery_item_id === prepared.groceryItemId) ||
+          normalizeText(row.item_name).toLowerCase() === prepared.itemName.toLowerCase(),
+      );
+      insertGroceryPurchaseLine(database, {
+        id,
+        purchaseId: purchaseHeaderId,
+        listId: prepared.listId,
+        listLineId: isWholeList ? null : matched?.id || null,
+        groceryItemId: prepared.groceryItemId,
+        itemName: prepared.itemName,
+        category: prepared.category,
+        quantity: prepared.quantity,
+        unit: prepared.unit,
+        unitPricePaise: prepared.unitPrice === null ? null : rupeesToPaise(prepared.unitPrice),
+        totalPaise,
+        vendor: prepared.vendor,
+        vendorId,
+        paymentMethod: prepared.paymentMethod,
+        notes: prepared.notes,
+        purchasedAt: prepared.purchasedAt,
+        actor: actor || null,
+        at,
+      });
       createAuditRow(database, "grocery.purchase.created", "grocery-purchase", id, actor || null, {
         itemName: prepared.itemName,
         totalAmount: prepared.totalAmount,
         purchaseId: purchaseHeaderId,
       });
       if (prepared.listId) {
-        const isWholeList =
-          normalizeText(prepared.itemName).toLowerCase() ===
-            GROCERY_LIST_TOTAL_ITEM_NAME.toLowerCase() &&
-          normalizeText(prepared.category).toLowerCase() ===
-            GROCERY_LIST_TOTAL_CATEGORY.toLowerCase();
         if (isWholeList) {
-          database
-            .prepare(
-              `UPDATE grocery_list_lines
-               SET line_status = 'purchased', updated_at = ?
-               WHERE list_id = ? AND line_status != 'skipped'`,
-            )
-            .run(at, prepared.listId);
-        } else if (prepared.groceryItemId || prepared.itemName) {
-          database
-            .prepare(
-              `UPDATE grocery_list_lines
-               SET line_status = 'purchased',
-                   purchased_quantity = ?,
-                   purchased_unit_price_paise = ?,
-                   purchased_total_paise = ?,
-                   updated_at = ?
-               WHERE list_id = ?
-                 AND (
-                   (? IS NOT NULL AND grocery_item_id = ?)
-                   OR lower(item_name) = lower(?)
-                 )
-                 AND line_status != 'skipped'`,
-            )
-            .run(
-              prepared.quantity,
-              prepared.unitPrice == null ? null : rupeesToPaise(prepared.unitPrice),
-              totalPaise,
-              at,
-              prepared.listId,
-              prepared.groceryItemId,
-              prepared.groceryItemId,
-              prepared.itemName,
-            );
+          for (const row of pending) {
+            coverGroceryListLine(database, row, at, {
+              quantity: Number(row.quantity) || 1,
+              unitPricePaise: null,
+              totalPaise: 0,
+            });
+          }
+        } else if (matched) {
+          coverGroceryListLine(database, matched, at, {
+            quantity: prepared.quantity,
+            unitPricePaise: prepared.unitPrice == null ? null : rupeesToPaise(prepared.unitPrice),
+            totalPaise,
+          });
         }
         recalcGroceryListStatus(database, prepared.listId);
       }
@@ -5902,7 +6499,6 @@ export const posService = {
         notes: updates.notes === undefined ? current.notes : updates.notes,
         purchasedAt: updates.purchasedAt === undefined ? current.purchased_at : updates.purchasedAt,
       });
-      assertGroceryPurchaseModeAvailable(database, prepared, id);
       database
         .prepare(
           `UPDATE grocery_purchase_lines
@@ -6180,21 +6776,16 @@ export const posService = {
       if (listId) {
         const purchaseLines = database
           .prepare(
-            `SELECT grocery_item_id, item_name, category FROM grocery_purchase_lines WHERE purchase_id = ?`,
+            `SELECT list_line_id, grocery_item_id, item_name, category
+             FROM grocery_purchase_lines WHERE purchase_id = ?`,
           )
           .all(id) as Array<{
+          list_line_id: string | null;
           grocery_item_id: string | null;
           item_name: string;
           category: string | null;
         }>;
-        const isWholeList = purchaseLines.some(
-          (line) =>
-            normalizeText(line.item_name).toLowerCase() ===
-              GROCERY_LIST_TOTAL_ITEM_NAME.toLowerCase() &&
-            normalizeText(line.category).toLowerCase() ===
-              GROCERY_LIST_TOTAL_CATEGORY.toLowerCase(),
-        );
-        if (isWholeList) {
+        const resetLine = (lineId: string) => {
           database
             .prepare(
               `UPDATE grocery_list_lines
@@ -6203,11 +6794,24 @@ export const posService = {
                    purchased_unit_price_paise = NULL,
                    purchased_total_paise = NULL,
                    updated_at = ?
-               WHERE list_id = ? AND line_status = 'purchased'`,
+               WHERE id = ?`,
             )
-            .run(at, listId);
+            .run(at, lineId);
+        };
+        const linkedIds = purchaseLines.map((line) => line.list_line_id).filter(Boolean) as string[];
+        if (linkedIds.length) {
+          for (const lineId of linkedIds) {
+            resetLine(lineId);
+          }
         } else {
-          for (const line of purchaseLines) {
+          const isWholeList = purchaseLines.some(
+            (line) =>
+              normalizeText(line.item_name).toLowerCase() ===
+                GROCERY_LIST_TOTAL_ITEM_NAME.toLowerCase() &&
+              normalizeText(line.category).toLowerCase() ===
+                GROCERY_LIST_TOTAL_CATEGORY.toLowerCase(),
+          );
+          if (isWholeList) {
             database
               .prepare(
                 `UPDATE grocery_list_lines
@@ -6216,13 +6820,27 @@ export const posService = {
                      purchased_unit_price_paise = NULL,
                      purchased_total_paise = NULL,
                      updated_at = ?
-                 WHERE list_id = ?
-                   AND (
-                     (? IS NOT NULL AND grocery_item_id = ?)
-                     OR lower(item_name) = lower(?)
-                   )`,
+                 WHERE list_id = ? AND line_status = 'purchased'`,
               )
-              .run(at, listId, line.grocery_item_id, line.grocery_item_id, line.item_name);
+              .run(at, listId);
+          } else {
+            for (const line of purchaseLines) {
+              database
+                .prepare(
+                  `UPDATE grocery_list_lines
+                   SET line_status = 'pending',
+                       purchased_quantity = NULL,
+                       purchased_unit_price_paise = NULL,
+                       purchased_total_paise = NULL,
+                       updated_at = ?
+                   WHERE list_id = ?
+                     AND (
+                       (? IS NOT NULL AND grocery_item_id = ?)
+                       OR lower(item_name) = lower(?)
+                     )`,
+                )
+                .run(at, listId, line.grocery_item_id, line.grocery_item_id, line.item_name);
+            }
           }
         }
         recalcGroceryListStatus(database, listId);
@@ -6659,16 +7277,9 @@ export const posService = {
       sales.subtotal ?? Math.max(0, (sales.total || 0) - (sales.taxTotal || 0)),
     );
     const database = getDb();
-    const purchaseRow = database
-      .prepare(
-        `SELECT COALESCE(SUM(total_paise), 0) AS total_paise
-         FROM grocery_purchases
-         WHERE status = 'recorded'
-           AND purchase_date >= ?
-           AND purchase_date <= ?`,
-      )
-      .get(from, to) as { total_paise: number };
-    const purchases = paiseToRupees(purchaseRow.total_paise);
+    const purchaseBills = loadRecordedGroceryBills(database, from, to);
+    const purchasePaise = purchaseBills.reduce((sum, bill) => sum + bill.totalPaise, 0);
+    const purchases = paiseToRupees(purchasePaise);
     const foodCostAmount = purchases;
     const expenseRows = database
       .prepare(
@@ -6716,6 +7327,17 @@ export const posService = {
         revenue > 0 ? +((estimatedOperatingProfit / revenue) * 100).toFixed(1) : null,
       disclaimer: "Estimate based on recorded sales, purchases and expenses.",
     };
+  },
+
+  getGroceryPurchaseAnalysis(opts: { from?: number; to?: number } = {}): GroceryPurchaseAnalysisDto {
+    const from = Number(opts.from ?? 0);
+    const to = Number(opts.to ?? now());
+    const duration = to - from;
+    const database = getDb();
+    const periodBills = loadRecordedGroceryBills(database, from, to);
+    const previousBills = loadRecordedGroceryBills(database, from - duration, from);
+    const historyBills = loadRecordedGroceryBills(database, 0, to);
+    return buildGroceryPurchaseAnalysis({ from, to, periodBills, previousBills, historyBills });
   },
 
   getFoodCostSummary(opts: { from?: number; to?: number } = {}): FoodCostSummaryDto {
@@ -8564,6 +9186,7 @@ function groceryPurchaseFromRow(row: any): GroceryPurchaseLineDto {
     type: "grocery-purchase",
     purchaseId: row.purchase_id || null,
     listId: row.list_id || null,
+    listLineId: row.list_line_id || null,
     groceryItemId: row.grocery_item_id || null,
     itemName: row.item_name,
     category: row.category || null,
@@ -8613,6 +9236,7 @@ function groceryListFromRow(
   database: Database.Database,
   row: any,
   lines?: GroceryListLineDto[],
+  spentPaise?: number,
 ): GroceryListDto {
   const resolvedLines =
     lines ??
@@ -8622,6 +9246,9 @@ function groceryListFromRow(
       )
       .all(row.id)
       .map(groceryListLineFromRow);
+  const counts = groceryLineCounts(resolvedLines);
+  const spendPaise =
+    spentPaise == null ? groceryListSpendPaise(database, row.id) : Number(spentPaise || 0);
   return {
     _id: row.id,
     id: row.id,
@@ -8632,6 +9259,10 @@ function groceryListFromRow(
     status: normalizeGroceryListStatus(row.status),
     notes: row.notes || null,
     lines: resolvedLines,
+    spentTotal: paiseToRupees(spendPaise),
+    pendingCount: counts.pendingCount,
+    purchasedCount: counts.purchasedCount,
+    itemCount: counts.itemCount,
     createdBy: row.created_by || null,
     updatedBy: row.updated_by || null,
     completedAt: row.completed_at || null,

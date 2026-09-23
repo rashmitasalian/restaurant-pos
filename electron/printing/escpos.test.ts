@@ -26,11 +26,13 @@ describe("ESC/POS buffer builder", () => {
   });
 
   it("prints void KOT items as a left-aligned raster with a mid-line strike", () => {
-    const item = "  Pizza                            1";
+    // Match kotTicket layout: PAD(2) + item(32) + qty(8).
+    const item = `  ${"Pizza".padEnd(32)}${"1".padStart(8)}`;
     const buffer = buildEscPosBuffer("kot", "", [`LEFTDHVOID:${item}`, "CUT"]);
     const bytes = [...buffer];
     const latin = buffer.toString("latin1");
 
+    expect(item.length).toBe(42);
     expect(latin).not.toContain("LEFTDHVOID:");
     expect(latin).not.toContain("Pizza");
     expect(bytes).toEqual(expect.arrayContaining([0x1d, 0x76, 0x30, 0x00]));

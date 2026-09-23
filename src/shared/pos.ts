@@ -323,6 +323,10 @@ export type GroceryListDto = {
   status: GroceryListStatus;
   notes?: string | null;
   lines: GroceryListLineDto[];
+  spentTotal: number;
+  pendingCount: number;
+  purchasedCount: number;
+  itemCount: number;
   createdBy?: string | null;
   updatedBy?: string | null;
   completedAt?: number | null;
@@ -332,6 +336,96 @@ export type GroceryListDto = {
   updatedAt: number;
 };
 
+export type GroceryPurchaseCoverage = "pending" | "selected" | "none";
+
+export type GroceryPurchaseHeaderCreateInput = {
+  buyingListId?: string | null;
+  vendorId?: string | null;
+  vendorName?: string | null;
+  total: number;
+  paymentMethod?: string | null;
+  purchaseDate?: number;
+  invoiceNumber?: string | null;
+  notes?: string | null;
+  coverage: GroceryPurchaseCoverage;
+  lines?: Array<{
+    listLineId: string;
+    quantity?: number;
+    unit?: GroceryUnit;
+    unitPrice?: number | null;
+    lineTotal?: number | null;
+  }>;
+};
+
+export type GroceryListLinesChange = {
+  add?: Array<Partial<GroceryListLineDto>>;
+  update?: Array<{ id: string; quantity?: number; unit?: GroceryUnit }>;
+  remove?: string[];
+};
+
+export type GroceryPurchaseHeaderUpdateInput = {
+  total?: number;
+  vendorId?: string | null;
+  vendorName?: string | null;
+  paymentMethod?: string | null;
+  purchaseDate?: number;
+  invoiceNumber?: string | null;
+  lines?: Array<{ purchaseLineId: string; lineTotal?: number | null; quantity?: number }>;
+};
+
+export type GroceryPurchasePricePoint = {
+  unitPrice: number;
+  date: number;
+  vendorName: string;
+};
+
+export type GroceryPurchaseAnalysisDto = {
+  from: number;
+  to: number;
+  summary: {
+    purchaseTotal: number;
+    billCount: number;
+    priceIncreaseCount: number;
+    unallocatedTotal: number;
+  };
+  purchaseRows: Array<{
+    key: string;
+    itemName: string;
+    unit: string;
+    purchasedQuantity: number;
+    previousQuantity: number;
+    quantityChangePct: number | null;
+    avgPurchasedPerDay: number;
+    purchaseValue: number;
+    billCount: number;
+  }>;
+  priceRows: Array<{
+    key: string;
+    itemName: string;
+    unit: string;
+    latest: GroceryPurchasePricePoint;
+    previous: GroceryPurchasePricePoint | null;
+    changePct: number | null;
+    periodLow: number;
+    periodHigh: number;
+  }>;
+  itemDetails: Record<
+    string,
+    {
+      avgRecordedPrice: number | null;
+      vendorPrices: Array<{ vendorName: string; unitPrice: number; date: number }>;
+      recentPurchases: Array<{
+        date: number;
+        quantity: number;
+        unit: string;
+        unitPrice: number | null;
+        vendorName: string;
+        billTotal: number;
+      }>;
+    }
+  >;
+};
+
 /** @deprecated Prefer GroceryPurchaseDto header + lines. Kept for line-level IPC compatibility. */
 export type GroceryPurchaseLineDto = {
   _id: string;
@@ -339,6 +433,7 @@ export type GroceryPurchaseLineDto = {
   type: "grocery-purchase";
   purchaseId?: string | null;
   listId?: string | null;
+  listLineId?: string | null;
   groceryItemId?: string | null;
   itemName: string;
   category?: string | null;

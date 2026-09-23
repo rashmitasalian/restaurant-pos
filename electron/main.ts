@@ -2,6 +2,7 @@ import "./env";
 import {
   app,
   BrowserWindow,
+  clipboard,
   ipcMain,
   dialog,
   session,
@@ -44,6 +45,11 @@ import {
   rendererFileFromRequestUrl,
   RENDERER_PROTOCOL,
 } from "./rendererProtocol";
+import {
+  BOOT_WINDOW_BACKGROUND,
+  closeBootSplash,
+  openBootSplash,
+} from "./bootSplash";
 import type { Role } from "../src/shared/pos";
 
 const startupHrStart = process.hrtime.bigint();
@@ -304,6 +310,8 @@ async function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
+    show: false,
+    backgroundColor: BOOT_WINDOW_BACKGROUND,
     autoHideMenuBar: true,
     ...(icon ? { icon } : {}),
     webPreferences: {
@@ -334,6 +342,14 @@ async function createWindow() {
   });
   mainWindow.once("ready-to-show", () => {
     logStartupStage("window:ready-to-show");
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.show();
+      if (mainWindow.isMinimized()) {
+        mainWindow.restore();
+      }
+      mainWindow.focus();
+    }
+    closeBootSplash();
   });
 
   denyPopupWindows(mainWindow.webContents);
@@ -445,27 +461,39 @@ app.whenReady().then(async () => {
   }
   configureStableUserDataPath();
   try {
+    openBootSplash(resolveAppIconPath());
     logStartupStage("db:init:start");
     await initializeDatabase();
     logStartupStage("db:init:done");
     logStartupStage("service:ensure-ready:start");
     posService.ensureReady();
     logStartupStage("service:ensure-ready:done");
-    logStartupStage("updates:startup-state:start");
-    updateService.processStartupState();
-    logStartupStage("updates:startup-state:done");
-    logStartupStage("backup:bootstrap:start");
-    bootstrapBackupManager((level, message, context) => writeLogToFile(level, message, context));
-    startBackupScheduler({
-      logger: (level, message, context) => writeLogToFile(level, `[backup] ${message}`, context),
-    });
-    logStartupStage("backup:bootstrap:done");
     logStartupStage("ipc:register:start");
     registerPosIpc(() => mainWindow);
     configureDomainEvents(() => mainWindow);
     logStartupStage("ipc:register:done");
-    await createWindow();
-    warmUpWindowsRawPrinter(app.getPath("userData"));
+
+    // Show UI as soon as DB/IPC are ready; defer non-critical work so first paint is faster.
+    const windowReady = createWindow();
+    void windowReady.then(() => {
+      logStartupStage("deferred:startup-services:start");
+      try {
+        updateService.processStartupState();
+      } catch (error: any) {
+        writeLogToFile("warn", `Update startup state failed: ${error?.stack || error}`);
+      }
+      try {
+        bootstrapBackupManager((level, message, context) => writeLogToFile(level, message, context));
+        startBackupScheduler({
+          logger: (level, message, context) => writeLogToFile(level, `[backup] ${message}`, context),
+        });
+      } catch (error: any) {
+        writeLogToFile("warn", `Backup bootstrap failed: ${error?.stack || error}`);
+      }
+      warmUpWindowsRawPrinter(app.getPath("userData"));
+      logStartupStage("deferred:startup-services:done");
+    });
+
     try {
       logStartupStage("gateway:start");
       await startLocalGateway();
@@ -476,8 +504,11 @@ app.whenReady().then(async () => {
         `Local gateway failed to start: ${gatewayError?.stack || gatewayError}`,
       );
     }
+
+    await windowReady;
     logStartupStage("createWindow:done");
   } catch (err: any) {
+    closeBootSplash();
     writeLogToFile("fatal", `Startup failed: ${err?.stack || err}`);
     dialog.showErrorBox(
       "Startup Error",
@@ -494,6 +525,7 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", () => {
+  closeBootSplash();
   stopBackupScheduler();
   destroyPdfExportWindow();
   shutdownWindowsRawPrinter();
@@ -656,6 +688,13 @@ async function loadHtmlIntoPdfWindow(pdfWin: BrowserWindow, htmlFile: string) {
     void pdfWin.loadFile(htmlFile);
   });
 }
+
+// navigator.clipboard loses user activation after awaits in the renderer; write from main.
+ipcMain.handle("clipboard:writeText", (event, token: string | null, text: string) => {
+  requireMainSession(event, token);
+  clipboard.writeText(String(text ?? ""));
+  return { ok: true };
+});
 
 // Report PDF export: render HTML to PDF via printToPDF and save via native save dialog
 ipcMain.handle(

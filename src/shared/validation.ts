@@ -98,13 +98,29 @@ export const VALIDATION_MESSAGES: Record<string, string> = {
   "grocery-unit-price-invalid": "Unit price must be zero or greater.",
   "grocery-total-invalid": "Total amount must be greater than zero.",
   "grocery-date-invalid": "Purchase date must be valid.",
+  "grocery-purchase-date-future": "Purchase date cannot be in the future.",
+  "grocery-received-quantity-invalid": "Received quantity must be greater than zero.",
   "grocery-payment-method-too-long": "Payment method must be 40 characters or fewer.",
   "grocery-notes-too-long": "Notes must be 500 characters or fewer.",
   "grocery-item-not-found": "Grocery item was not found.",
   "grocery-list-not-found": "Grocery list was not found.",
+  "grocery-list-cancelled": "This list was cancelled and can no longer be changed.",
+  "grocery-list-line-not-found": "That item is no longer on this list. Reopen the list.",
+  "grocery-list-line-duplicate": "That item is already on this list.",
   "grocery-purchase-not-found": "Purchase entry was not found.",
   "grocery-list-purchase-mode-conflict":
-    "Use either whole-list or item-wise purchase amounts for one buying list, not both.",
+    "This buying list already has a purchase recorded. Add pending items, then record another purchase.",
+  "grocery-list-status-derived": "List status is calculated automatically and cannot be set by hand.",
+  "grocery-list-line-covered": "Void the purchase to change this item.",
+  "grocery-purchase-empty-coverage": "Add an item before recording another purchase.",
+  "grocery-purchase-linked-none":
+    "A purchase linked to a list must cover at least one pending item.",
+  "grocery-purchase-selected-invalid":
+    "One or more selected items are missing, belong to another list, or are already purchased.",
+  "grocery-purchase-voided": "This bill was voided and can no longer be edited.",
+  "grocery-purchase-lines-exceed-total": "Item amounts add up to more than the bill total.",
+  "grocery-vendor-id-and-name": "Choose an existing vendor or type a new name, not both.",
+  "grocery-vendor-not-found": "Vendor was not found.",
 };
 
 export const SYSTEM_MESSAGES: Record<string, string> = {

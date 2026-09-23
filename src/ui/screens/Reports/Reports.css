@@ -380,3 +380,142 @@
     width: 100%;
   }
 }
+
+.rpt-footnote {
+  margin: 0;
+  padding: 10px 18px 14px;
+  color: var(--pos-tx-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.rpt-change-up {
+  color: var(--pos-danger, #b42318);
+  font-weight: 700;
+}
+.rpt-change-down {
+  color: var(--pos-teal, #0f6e56);
+  font-weight: 700;
+}
+.rpt-muted {
+  color: var(--pos-tx-muted);
+}
+.rpt-purchases-refreshing {
+  opacity: 0.6;
+  transition: opacity 0.15s ease;
+}
+.rpt-kpi-help {
+  cursor: help;
+}
+.rpt-purchases-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 18px;
+  font-size: 12px;
+  flex-wrap: wrap;
+}
+.rpt-purchases-card {
+  margin-top: 16px;
+  padding: 0;
+}
+.rpt-purchases-card:hover {
+  box-shadow: var(--pos-shadow-1);
+}
+.rpt-section-name {
+  color: var(--pos-tx);
+  font-size: 14px;
+  font-weight: 800;
+}
+.rpt-section-sub {
+  margin-top: 2px;
+  color: var(--pos-tx-muted);
+  font-size: 12px;
+}
+.rpt-item-name {
+  color: var(--pos-tx);
+  font-weight: 700;
+}
+.rpt-price-point {
+  display: inline-grid;
+  justify-items: end;
+  line-height: 1.2;
+}
+.rpt-price-point strong {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.rpt-price-point small {
+  color: var(--pos-tx-muted);
+  font-size: 11px;
+}
+.rpt-detail {
+  display: grid;
+  gap: 20px;
+}
+.rpt-detail-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.rpt-detail-stats > div {
+  padding: 12px;
+  border: 1px solid var(--pos-line);
+  border-radius: var(--pos-r-md);
+  background: var(--pos-surface-sunken);
+}
+.rpt-detail-stats span {
+  display: block;
+  color: var(--pos-tx-muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.rpt-detail-stats strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+.rpt-detail-block h3 {
+  margin: 0 0 8px;
+  color: var(--pos-tx);
+  font-size: 13px;
+  font-weight: 800;
+}
+.rpt-detail-block p {
+  margin: 0;
+  font-size: 13px;
+}
+.rpt-detail-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.rpt-detail-table th {
+  padding: 0 8px 6px;
+  color: var(--pos-tx-muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-align: left;
+  text-transform: uppercase;
+}
+.rpt-detail-table td {
+  padding: 8px;
+  border-top: 1px solid var(--pos-line);
+  color: var(--pos-tx-sec, var(--pos-tx));
+}
+.rpt-detail-table th:first-child,
+.rpt-detail-table td:first-child {
+  padding-left: 0;
+}
+.rpt-detail-table th:last-child,
+.rpt-detail-table td:last-child {
+  padding-right: 0;
+}
+.rpt-detail-table .rpt-num {
+  text-align: right;
+  white-space: nowrap;
+}

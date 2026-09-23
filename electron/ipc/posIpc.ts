@@ -717,6 +717,13 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
     const user = requirePermission(event, token, "manage:grocery");
     return posService.updateGroceryList(id, updates, user.username);
   });
+  ipcMain.handle(
+    "pos:grocery:lists:change-lines",
+    (event, token: string | null, id: string, change) => {
+      const user = requirePermission(event, token, "manage:grocery");
+      return posService.changeGroceryListLines(id, change || {}, user.username);
+    },
+  );
   ipcMain.handle("pos:grocery:lists:delete", (event, token: string | null, id: string) => {
     const user = requirePermission(event, token, "manage:grocery");
     return posService.deleteGroceryList(id, user.username);
@@ -745,6 +752,19 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
     requirePermission(event, token, "manage:grocery");
     return posService.listGroceryPurchaseHeaders(opts || {});
   });
+
+  ipcMain.handle("pos:grocery:purchase-headers:create", (event, token: string | null, payload) => {
+    const user = requirePermission(event, token, "manage:grocery");
+    return posService.createGroceryPurchaseHeader(payload, user.username);
+  });
+
+  ipcMain.handle(
+    "pos:grocery:purchase-headers:update",
+    (event, token: string | null, id: string, updates) => {
+      const user = requirePermission(event, token, "manage:grocery");
+      return posService.updateGroceryPurchaseHeader(id, updates, user.username);
+    },
+  );
 
   ipcMain.handle("pos:grocery:purchase-headers:void", (event, token: string | null, id: string) => {
     const user = requirePermission(event, token, "manage:grocery");
@@ -829,6 +849,11 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
   ipcMain.handle("pos:reports:profitability", (event, token: string | null, opts) => {
     requirePermission(event, token, "business:reports");
     return posService.getProfitabilitySummary(opts || {});
+  });
+
+  ipcMain.handle("pos:reports:grocery-purchases", (event, token: string | null, opts) => {
+    requirePermission(event, token, "business:reports");
+    return posService.getGroceryPurchaseAnalysis(opts || {});
   });
 
   ipcMain.handle(

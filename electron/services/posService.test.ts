@@ -36,6 +36,20 @@ function createMockDb() {
       return {
         all: (...params: unknown[]) => {
           calls.push({ sql, params });
+          if (sql.includes("FROM grocery_purchases") && sql.includes("status = 'recorded'")) {
+            if (!db.groceryPurchaseTotalPaise) {
+              return [];
+            }
+            return [
+              {
+                id: "grocery-purchase-hdr:mock",
+                purchase_date: 1500,
+                created_at: 1500,
+                total_paise: db.groceryPurchaseTotalPaise,
+                vendor_name: null,
+              },
+            ];
+          }
           if (sql.includes("JOIN order_lines")) {
             return db.productLineRows;
           }
@@ -444,9 +458,7 @@ describe("posService strict SQLite APIs", () => {
     expect(groceryQuery!.params).toEqual(["grocery-list:today"]);
   });
 
-  it("blocks a whole-list grocery purchase when item-wise purchases already exist", () => {
-    mockDb.groceryConflictRow = { id: "grocery-purchase:item" };
-
+  it("allows mixing lump-sum and item grocery purchases on one list", () => {
     expect(() =>
       posService.createGroceryPurchase({
         listId: "grocery-list:today",
@@ -457,16 +469,11 @@ describe("posService strict SQLite APIs", () => {
         unit: "unit",
         totalAmount: 500,
       }),
-    ).toThrow("grocery-list-purchase-mode-conflict");
-
-    expect(
-      mockDb.calls.some((call: any) => call.sql.includes("INSERT INTO grocery_purchase_lines")),
-    ).toBe(false);
+    ).not.toThrow("grocery-list-purchase-mode-conflict");
   });
 
-  it("blocks an item-wise grocery purchase when a whole-list purchase already exists", () => {
+  it("does not block item grocery purchases after a lump-sum exists", () => {
     mockDb.groceryConflictRow = { id: "grocery-purchase:total" };
-
     expect(() =>
       posService.createGroceryPurchase({
         listId: "grocery-list:today",
@@ -477,11 +484,7 @@ describe("posService strict SQLite APIs", () => {
         unit: "kg",
         totalAmount: 120,
       }),
-    ).toThrow("grocery-list-purchase-mode-conflict");
-
-    expect(
-      mockDb.calls.some((call: any) => call.sql.includes("INSERT INTO grocery_purchase_lines")),
-    ).toBe(false);
+    ).not.toThrow("grocery-list-purchase-mode-conflict");
   });
 
   it("rejects zero quantity for grocery purchases instead of defaulting to one", () => {
@@ -548,9 +551,12 @@ describe("posService strict SQLite APIs", () => {
       false,
     );
     const purchaseQuery = mockDb.calls.find(
-      (call: any) => call.sql.includes("FROM grocery_purchases") && call.sql.includes("SUM"),
+      (call: any) =>
+        call.sql.includes("FROM grocery_purchases") && call.sql.includes("status = 'recorded'"),
     );
-    expect(purchaseQuery!.sql).toContain("status = 'recorded'");
+    expect(purchaseQuery!.sql).toContain("purchase_date >= ?");
+    expect(purchaseQuery!.sql).toContain("purchase_date < ?");
+    expect(purchaseQuery!.sql).not.toContain("purchase_date <= ?");
     expect(purchaseQuery!.params).toEqual([1000, 2000]);
   });
 

@@ -462,11 +462,13 @@
 }
 
 .presetBtn {
-  border: 1px solid var(--pos-border, var(--pos-line));
+  box-sizing: border-box;
+  min-height: var(--pos-hit-dense);
+  border: 1px solid var(--pos-line-strong, var(--pos-line));
   background: var(--pos-surface);
   color: var(--pos-tx-sec, var(--pos-tx-sec));
-  border-radius: 8px;
-  padding: 7px 10px;
+  border-radius: var(--pos-r-btn, 8px);
+  padding: 0 12px;
   font: inherit;
   font-size: 12px;
   font-weight: 800;
@@ -671,13 +673,33 @@
 
 .filterBar {
   display: flex;
-  align-items: end;
-  gap: 10px;
+  align-items: center;
+  gap: 12px;
   flex-wrap: wrap;
+}
+
+.filterBar :global(.ui-field-error) {
+  display: none;
+}
+
+.filterTools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+
+.filterTools :global(.ui-input) {
+  width: 220px;
+}
+
+.filterTools :global(.ui-select) {
+  width: 148px;
 }
 
 .presetRow {
   display: flex;
+  align-items: center;
   gap: 6px;
   flex-wrap: wrap;
 }
@@ -935,10 +957,977 @@
   font-size: 15px;
 }
 
-.modeCard span {
+  .modeCard span {
   font-size: 13px;
   color: var(--pos-tx-sub);
   line-height: 1.45;
+}
+
+.registerStack {
+  display: grid;
+  padding: 4px;
+  border: 1px solid var(--pos-border-light, var(--pos-line));
+  border-radius: var(--pos-r-card, 10px);
+  background: var(--pos-surface);
+}
+
+.registerRowWrap + .registerRowWrap {
+  border-top: 1px solid var(--pos-border-light, var(--pos-surface-sunken));
+}
+
+.registerRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: var(--pos-r-sm, 8px);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: background 120ms ease;
+}
+
+.registerRow:hover,
+.registerRow:focus-visible {
+  background: var(--pos-surface-hover, var(--pos-saffron-tint));
+  outline: none;
+}
+
+.registerMain {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.registerTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.registerTitle {
+  color: var(--pos-tx);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.registerCopy {
+  color: var(--pos-tx-sub);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.registerSide {
+  flex-shrink: 0;
+  color: var(--pos-tx);
+  font-size: 14px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.workspacePane {
+  width: min(1120px, 100%);
+  height: 100%;
+  padding: 0;
+  background: var(--pos-surface-sunken, var(--pos-bg));
+}
+
+.workspaceHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--pos-border-light, var(--pos-line));
+  background: var(--pos-surface);
+  flex-shrink: 0;
+}
+
+.workspaceHeading {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.workspaceTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.workspaceTitleRow .editorTitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspaceActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.workspaceClose {
+  width: 34px;
+  height: 34px;
+  margin-left: 4px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--pos-tx-sub);
+  cursor: pointer;
+  font: inherit;
+  font-size: 16px;
+}
+
+.workspaceClose:hover {
+  background: var(--pos-surface-sunken);
+  color: var(--pos-tx);
+}
+
+.workspaceToast {
+  margin: 10px 18px 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--pos-tx, #1f2937);
+  color: var(--pos-surface, #fff);
+  font-size: 13px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.workspaceLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 16px;
+  flex: 1;
+  min-height: 0;
+  padding: 16px 18px 18px;
+  overflow: hidden;
+}
+
+.ticketCard,
+.railCard {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--pos-border-light, var(--pos-line));
+  border-radius: var(--pos-r-card, 10px);
+  background: var(--pos-surface);
+}
+
+.ticketCard {
+  overflow: hidden;
+}
+
+.railCard {
+  overflow: hidden;
+}
+
+.railBody {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+  min-height: 0;
+  padding: 16px;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.ticketAdd {
+  position: relative;
+  padding: 12px;
+  border-bottom: 1px solid var(--pos-border-light, var(--pos-surface-sunken));
+  flex-shrink: 0;
+}
+
+.ticketSuggest {
+  position: absolute;
+  top: calc(100% - 6px);
+  left: 12px;
+  right: 12px;
+  z-index: 5;
+  display: grid;
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid var(--pos-line);
+  border-radius: 8px;
+  background: var(--pos-surface);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.14);
+}
+
+.ticketSuggestItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--pos-tx);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: left;
+}
+
+.ticketSuggestActive {
+  background: var(--pos-saffron-tint);
+  color: var(--pos-saffron-text);
+}
+
+.pickBanner {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--pos-saffron-line);
+  background: var(--pos-saffron-tint);
+  color: var(--pos-saffron-text);
+  font-size: 13px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.ticketBody {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 4px 0 8px;
+}
+
+.ticketEmpty {
+  display: grid;
+  gap: 4px;
+  place-content: center;
+  min-height: 220px;
+  padding: 24px;
+  color: var(--pos-tx-sub);
+  font-size: 13px;
+  text-align: center;
+}
+
+.ticketEmpty strong {
+  color: var(--pos-tx);
+  font-size: 15px;
+}
+
+.ticketSection + .ticketSection {
+  margin-top: 8px;
+}
+
+.ticketSectionHead {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 14px 6px;
+  color: var(--pos-tx-muted, var(--pos-tx-sub));
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.railCard .ticketSectionHead {
+  padding: 0 0 4px;
+}
+
+.pickBanner {
+  display: grid;
+  gap: 2px;
+}
+
+.pickBannerSub {
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0.85;
+}
+
+.linePrice {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 116px;
+  flex-shrink: 0;
+  padding: 0 8px;
+  border: 1px solid var(--pos-line);
+  border-radius: 6px;
+  background: var(--pos-surface);
+  color: var(--pos-tx-sub);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: text;
+}
+
+.linePrice:focus-within {
+  border-color: var(--pos-saffron);
+  box-shadow: 0 0 0 2px var(--pos-saffron-tint);
+}
+
+.linePrice input {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--pos-tx);
+  font: inherit;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.ticketRowButton {
+  width: 100%;
+  border-left: 0;
+  border-right: 0;
+  border-bottom: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ticketRowButton:hover:not(:disabled) {
+  background: var(--pos-surface-sunken);
+}
+
+.ticketRowButton:disabled {
+  cursor: default;
+}
+
+.ticketMoneyMuted {
+  color: var(--pos-tx-muted, var(--pos-tx-sub));
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.billRowButton {
+  width: 100%;
+  padding: 8px 6px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.billRowButton + .billRowButton {
+  border-top: 1px solid var(--pos-border-light, var(--pos-surface-sunken));
+}
+
+.billRowButton:hover {
+  background: var(--pos-surface-sunken);
+}
+
+.billAmount {
+  display: grid;
+  justify-items: end;
+  gap: 1px;
+  flex-shrink: 0;
+}
+
+.billEdit {
+  color: var(--pos-saffron-text, var(--pos-saffron));
+  font-size: 11px;
+  font-weight: 800;
+  opacity: 0;
+}
+
+.billRowButton:hover .billEdit,
+.billRowButton:focus-visible .billEdit {
+  opacity: 1;
+}
+
+.editItems {
+  display: grid;
+  gap: 6px;
+}
+
+.editItemRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 84px 96px;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-top: 1px solid var(--pos-border-light, var(--pos-surface-sunken));
+}
+
+.editItemHead {
+  padding: 0 0 4px;
+  border-top: 0;
+  color: var(--pos-tx-muted, var(--pos-tx-sub));
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.editItemHead span:not(:first-child) {
+  text-align: right;
+}
+
+.editItemName {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.editItemTitle {
+  color: var(--pos-tx);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.editItemAmount {
+  color: var(--pos-tx);
+  font-size: 14px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.editItems .linePrice {
+  width: auto;
+}
+
+.editItems .qtyBox {
+  width: auto;
+}
+
+.dangerLink {
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--pos-danger);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.dangerLink:hover {
+  text-decoration: underline;
+}
+
+.qtyEditor {
+  display: flex;
+  align-items: stretch;
+  flex-shrink: 0;
+  height: 32px;
+  border: 1px solid var(--pos-line);
+  border-radius: 6px;
+  background: var(--pos-surface);
+  overflow: hidden;
+}
+
+.qtyEditor:focus-within {
+  border-color: var(--pos-saffron);
+  box-shadow: 0 0 0 2px var(--pos-saffron-tint);
+}
+
+.qtyEditor input {
+  width: 56px;
+  min-width: 0;
+  padding: 0 8px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--pos-tx);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.qtyEditor select {
+  width: 72px;
+  padding: 0 6px;
+  border: 0;
+  border-left: 1px solid var(--pos-line);
+  outline: none;
+  background: var(--pos-surface-sunken);
+  color: var(--pos-tx-sec, var(--pos-tx));
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.linePriceSpacer {
+  width: 116px;
+  flex-shrink: 0;
+}
+
+.amountHint {
+  color: var(--pos-tx-sub);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.ticketRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding: 6px 14px;
+  border-top: 1px solid var(--pos-border-light, var(--pos-surface-sunken));
+}
+
+.ticketRowPicking {
+  cursor: pointer;
+}
+
+.ticketRowPicking:hover {
+  background: var(--pos-surface-sunken);
+}
+
+.ticketRowPicked {
+  background: var(--pos-saffron-tint);
+}
+
+.ticketRowPurchased {
+  color: var(--pos-tx-sub);
+}
+
+.ticketRowPurchased .ticketName {
+  color: var(--pos-tx-sub);
+  font-weight: 700;
+}
+
+.ticketCheck {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  accent-color: var(--pos-saffron);
+}
+
+.ticketTick {
+  width: 18px;
+  flex-shrink: 0;
+  color: var(--pos-success-text, var(--pos-success));
+  font-weight: 900;
+  text-align: center;
+}
+
+.ticketName {
+  flex: 1;
+  min-width: 0;
+  color: var(--pos-tx);
+  font-size: 14px;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ticketQty {
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.lineItem {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.qtyBox {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 96px;
+  flex-shrink: 0;
+  padding: 0 8px;
+  border: 1px solid var(--pos-line);
+  border-radius: 6px;
+  background: var(--pos-surface);
+  color: var(--pos-tx-muted, var(--pos-tx-sub));
+  font-size: 12px;
+  font-weight: 700;
+  cursor: text;
+}
+
+.qtyBox:focus-within {
+  border-color: var(--pos-saffron);
+  box-shadow: 0 0 0 2px var(--pos-saffron-tint);
+}
+
+.qtyBoxInvalid,
+.qtyBoxInvalid:focus-within {
+  border-color: var(--pos-danger);
+  box-shadow: none;
+}
+
+.qtyBox input {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--pos-tx);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.qtyBox input::placeholder {
+  color: var(--pos-tx-muted, var(--pos-tx-sub));
+  font-weight: 500;
+  opacity: 0.6;
+}
+
+.qtyBoxSpacer {
+  width: 96px;
+  flex-shrink: 0;
+}
+
+.lineColumns {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 14px 6px;
+  color: var(--pos-tx-muted, var(--pos-tx-sub));
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.lineColumnsCheck {
+  width: 18px;
+  flex-shrink: 0;
+}
+
+.lineColumnsItem {
+  flex: 1;
+}
+
+.lineColumnsQty {
+  width: 96px;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.lineColumnsAmount {
+  width: 116px;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.ticketMoney {
+  min-width: 72px;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.ticketStepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ticketStepper button {
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--pos-line);
+  border-radius: 6px;
+  background: var(--pos-surface);
+  color: var(--pos-tx);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+}
+
+.ticketRemove {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--pos-tx-muted, var(--pos-tx-sub));
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  opacity: 0.55;
+}
+
+.ticketRow:hover .ticketRemove {
+  opacity: 1;
+}
+
+.ticketRemove:hover,
+.ticketRemove:focus-visible {
+  background: var(--pos-danger-tint, var(--pos-surface-sunken));
+  color: var(--pos-danger);
+  opacity: 1;
+}
+
+.railHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.railTitle {
+  color: var(--pos-tx);
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.composeForm {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.composeForm .railHead {
+  padding: 16px 16px 4px;
+  flex-shrink: 0;
+}
+
+.composeFields {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: 12px;
+  padding: 8px 16px 16px;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.composeFields > * {
+  min-width: 0;
+}
+
+.composeFields :global(.ui-input),
+.composeFields :global(select) {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.composeFields :global(.ui-field-error:empty) {
+  display: none;
+}
+
+.composeRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+}
+
+.amountField {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+}
+
+.amountInputWrap {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  border: 1px solid var(--pos-line);
+  border-radius: 8px;
+  background: var(--pos-surface);
+  color: var(--pos-tx-sub);
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.amountInputWrap:focus-within {
+  border-color: var(--pos-saffron);
+  box-shadow: 0 0 0 3px var(--pos-saffron-tint);
+}
+
+.amountInput {
+  flex: 1;
+  width: 0;
+  min-width: 0;
+  height: 48px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--pos-tx);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The wrapper draws the focus ring; beat the global input:focus-visible ring */
+.amountInput:focus-visible,
+.linePrice input:focus-visible,
+.qtyBox input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.coverageBlock {
+  display: grid;
+  gap: 6px;
+}
+
+.segmented {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  padding: 3px;
+  border-radius: 8px;
+  background: var(--pos-surface-sunken);
+}
+
+.segmented button {
+  padding: 8px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--pos-tx-sub);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.segmented .segmentedActive {
+  background: var(--pos-surface);
+  color: var(--pos-tx);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+}
+
+.linkButton {
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--pos-saffron-text, var(--pos-saffron));
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.linkButton:hover {
+  text-decoration: underline;
+}
+
+.composeFooter {
+  flex-shrink: 0;
+  display: grid;
+  gap: 8px;
+  padding: 12px 16px 16px;
+  border-top: 1px solid var(--pos-border-light, var(--pos-surface-sunken));
+  background: var(--pos-surface);
+}
+
+.composeReason {
+  color: var(--pos-tx-sub);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.composeActions {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px;
+}
+
+.spendStat {
+  display: grid;
+  gap: 4px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--pos-border-light, var(--pos-surface-sunken));
+}
+
+.spendValue {
+  color: var(--pos-tx);
+  font-size: 28px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+
+.spendMeta {
+  color: var(--pos-tx-sub);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.billStack {
+  display: grid;
+  gap: 2px;
+}
+
+.billRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 0;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.billRow + .billRow {
+  border-top: 1px solid var(--pos-border-light, var(--pos-surface-sunken));
+}
+
+.billMain {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.billVendor {
+  color: var(--pos-tx);
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.billMeta {
+  color: var(--pos-tx-sub);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+@media (max-width: 960px) {
+  .workspaceLayout {
+    grid-template-columns: 1fr;
+    overflow: auto;
+  }
+
+  .workspaceActions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
 }
 
 .purchaseSummaryBar {

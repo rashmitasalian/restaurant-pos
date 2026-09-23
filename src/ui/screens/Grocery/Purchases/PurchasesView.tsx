@@ -1,13 +1,15 @@
 import React from "react";
 import {
+  createGroceryPurchaseHeader,
   listGroceryLists,
   listGroceryPurchaseHeaders,
   listGroceryPurchases,
+  listVendors,
   voidGroceryPurchaseHeader,
   type GroceryListDoc,
   type GroceryPurchaseLineDoc,
 } from "../../../../app/db/posRepository";
-import type { GroceryPurchaseDto } from "../../../../shared/pos";
+import type { GroceryPurchaseDto, VendorDto } from "../../../../shared/pos";
 import { validationMessage } from "../../../../shared/validation";
 import { Badge } from "../../../components/ui/Badge";
 import { Button } from "../../../components/ui/Button";
@@ -23,11 +25,16 @@ import {
   formatListDate,
   fromInputDate,
   getHistoryRange,
+  GROCERY_PAYMENT_METHODS,
+  groceryUnitLabel,
+  parseMoney,
   toInputDate,
   type HistoryPreset,
 } from "../groceryUtils";
 import styles from "../Grocery.module.css";
-import { RecordPurchaseFlow } from "./RecordPurchaseFlow";
+import { BuyingListWorkspace } from "../BuyingLists/BuyingListWorkspace";
+
+const NO_LIST = "__none__";
 
 function formatLinkedList(header: GroceryPurchaseDto) {
   if (header.buyingListTitle) {
@@ -49,7 +56,18 @@ function paymentTone(status: string): "neutral" | "attention" | "success" | "dan
   return "neutral";
 }
 
-export function PurchasesView() {
+function formatLineAmount(amount?: number | null) {
+  if (!amount) {
+    return "—";
+  }
+  return formatCurrency(amount);
+}
+
+export function PurchasesView({
+  recordPurchaseRef,
+}: {
+  recordPurchaseRef?: React.MutableRefObject<(() => void) | null>;
+}) {
   const [headers, setHeaders] = React.useState<GroceryPurchaseDto[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
@@ -63,9 +81,18 @@ export function PurchasesView() {
   const [linesLoading, setLinesLoading] = React.useState(false);
   const [pickListOpen, setPickListOpen] = React.useState(false);
   const [openLists, setOpenLists] = React.useState<GroceryListDoc[]>([]);
-  const [pickedListId, setPickedListId] = React.useState("");
-  const [purchaseListId, setPurchaseListId] = React.useState<string | null>(null);
+  const [pickedListId, setPickedListId] = React.useState(NO_LIST);
+  const [workspace, setWorkspace] = React.useState<{ id: string; compose: boolean } | null>(null);
+  const [unlinkedOpen, setUnlinkedOpen] = React.useState(false);
   const [voidTarget, setVoidTarget] = React.useState<GroceryPurchaseDto | null>(null);
+  const [vendors, setVendors] = React.useState<VendorDto[]>([]);
+  const [amount, setAmount] = React.useState("");
+  const [vendorId, setVendorId] = React.useState("");
+  const [newVendor, setNewVendor] = React.useState("");
+  const [showNewVendor, setShowNewVendor] = React.useState(false);
+  const [paymentMethod, setPaymentMethod] = React.useState("cash");
+  const [purchaseDate, setPurchaseDate] = React.useState(toInputDate(Date.now()));
+  const [notes, setNotes] = React.useState("");
 
   const applyPreset = (next: HistoryPreset) => {
     setPreset(next);
@@ -98,18 +125,84 @@ export function PurchasesView() {
     void load();
   }, [load]);
 
-  const openRecordPurchase = async () => {
+  const openRecordPurchase = React.useCallback(async () => {
     try {
       const range = getHistoryRange("active");
-      const lists = await listGroceryLists({ from: range.from, to: range.to, limit: 80 });
-      const eligible = lists.filter(
-        (list) => list.status !== "cancelled" && list.status !== "completed",
-      );
+      const [lists, vendorRows] = await Promise.all([
+        listGroceryLists({ from: range.from, to: range.to, limit: 80 }),
+        listVendors({ includeInactive: false }),
+      ]);
+      const eligible = lists.filter((list) => list.status !== "cancelled");
       setOpenLists(eligible);
-      setPickedListId(eligible[0]?.id || "");
+      setVendors(vendorRows as VendorDto[]);
+      const firstPending = eligible.find((list) => (list.pendingCount || 0) > 0);
+      setPickedListId(firstPending?.id || NO_LIST);
       setPickListOpen(true);
     } catch (error) {
       setStatus(validationMessage(error, "Could not load buying lists"));
+    }
+  }, []);
+
+  React.useEffect(() => {
+    if (!recordPurchaseRef) {
+      return;
+    }
+    recordPurchaseRef.current = () => {
+      void openRecordPurchase();
+    };
+    return () => {
+      recordPurchaseRef.current = null;
+    };
+  }, [openRecordPurchase, recordPurchaseRef]);
+
+  const continueRecord = () => {
+    setPickListOpen(false);
+    if (pickedListId === NO_LIST) {
+      setAmount("");
+      setVendorId("");
+      setNewVendor("");
+      setShowNewVendor(false);
+      setPaymentMethod("cash");
+      setPurchaseDate(toInputDate(Date.now()));
+      setNotes("");
+      setUnlinkedOpen(true);
+      return;
+    }
+    const list = openLists.find((row) => row.id === pickedListId);
+    setWorkspace({
+      id: pickedListId,
+      compose: Boolean(list && (list.pendingCount || 0) > 0),
+    });
+  };
+
+  const saveUnlinked = async () => {
+    const total = parseMoney(amount);
+    if (total == null || total <= 0) {
+      setStatus("Enter the bill amount.");
+      return;
+    }
+    if (showNewVendor && vendorId) {
+      setStatus("Choose an existing vendor or type a new name, not both.");
+      return;
+    }
+    setSaving(true);
+    try {
+      await createGroceryPurchaseHeader({
+        total,
+        vendorId: showNewVendor ? null : vendorId || null,
+        vendorName: showNewVendor ? newVendor.trim() || null : null,
+        paymentMethod,
+        purchaseDate: new Date(`${purchaseDate}T12:00:00`).getTime(),
+        notes: notes.trim() || null,
+        coverage: "none",
+      });
+      setUnlinkedOpen(false);
+      setStatus("Purchase recorded");
+      await load();
+    } catch (error) {
+      setStatus(validationMessage(error, "Could not save purchase"));
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -177,20 +270,7 @@ export function PurchasesView() {
 
   return (
     <div className={styles.listPage}>
-      <div className={styles.toolbarRow}>
-        <div className={styles.todaySummary}>
-          <strong>Purchases</strong>
-          <span>
-            {headers.filter((h) => h.status !== "voided").length} recorded ·{" "}
-            {formatCurrency(recordedSpend)} spend in range
-          </span>
-        </div>
-        <Button variant="primary" onClick={() => void openRecordPurchase()}>
-          + Record Purchase
-        </Button>
-      </div>
-
-      {status && <div className={styles.status}>{status}</div>}
+      {status ? <div className={styles.status}>{status}</div> : null}
 
       <div className={styles.dateControls}>
         {(
@@ -210,7 +290,7 @@ export function PurchasesView() {
             {label}
           </button>
         ))}
-        {preset === "custom" && (
+        {preset === "custom" ? (
           <>
             <Input
               type="date"
@@ -225,7 +305,7 @@ export function PurchasesView() {
               aria-label="To date"
             />
           </>
-        )}
+        ) : null}
         <label
           className={styles.hint}
           style={{ display: "inline-flex", gap: 6, alignItems: "center" }}
@@ -237,6 +317,10 @@ export function PurchasesView() {
           />
           Include voided
         </label>
+        <span className={styles.hint}>
+          {headers.filter((h) => h.status !== "voided").length} recorded ·{" "}
+          {formatCurrency(recordedSpend)} spend in range
+        </span>
       </div>
 
       {loading ? (
@@ -244,7 +328,7 @@ export function PurchasesView() {
       ) : headers.length === 0 ? (
         <EmptyState
           title="No purchases in this range"
-          text="Record a purchase from an open buying list, or widen the date filter."
+          text="Record a purchase from a buying list, or save an amount without a list."
           actionLabel="+ Record Purchase"
           onAction={() => void openRecordPurchase()}
         />
@@ -364,8 +448,8 @@ export function PurchasesView() {
                 headers={["Item", "Qty", "Amount"]}
                 rows={lines.map((line) => [
                   line.itemName,
-                  `${line.quantity} ${line.unit}`,
-                  formatCurrency(line.totalAmount),
+                  `${line.quantity} ${groceryUnitLabel(line.unit)}`,
+                  formatLineAmount(line.totalAmount),
                 ])}
               />
             )}
@@ -390,58 +474,118 @@ export function PurchasesView() {
                 from <strong>{voidListLabel}</strong>
               </>
             ) : null}
-            . The linked buying list will be updated.
+            . The linked buying list will be updated. The purchase stays in history.
           </p>
         ) : null}
       </ConfirmModal>
 
       <Modal open={pickListOpen} title="Record Purchase" onClose={() => setPickListOpen(false)}>
         <div className="ui-form-stack">
-          {openLists.length === 0 ? (
-            <div className={styles.hint}>
-              No open buying lists in the active range. Create or reopen a list first.
-            </div>
-          ) : (
-            <Select
-              label="Buying list"
-              value={pickedListId}
-              onChange={(e) => setPickedListId(e.target.value)}
-            >
-              {openLists.map((list) => (
-                <option key={list.id} value={list.id}>
-                  {list.title} · {formatListDate(list.listDate)} · {list.status}
-                </option>
-              ))}
-            </Select>
-          )}
+          <Select
+            label="Buying list"
+            value={pickedListId}
+            onChange={(e) => setPickedListId(e.target.value)}
+          >
+            <option value={NO_LIST}>No list — amount only</option>
+            {openLists.map((list) => (
+              <option key={list.id} value={list.id}>
+                {list.title} · {formatListDate(list.listDate)} ·{" "}
+                {(list.pendingCount || 0) > 0
+                  ? `${list.pendingCount} pending`
+                  : "nothing pending"}
+              </option>
+            ))}
+          </Select>
           <div className="ui-form-actions">
             <Button variant="secondary" onClick={() => setPickListOpen(false)}>
               Cancel
             </Button>
-            <Button
-              variant="primary"
-              disabled={!pickedListId}
-              onClick={() => {
-                setPickListOpen(false);
-                setPurchaseListId(pickedListId);
-              }}
-            >
+            <Button variant="primary" onClick={continueRecord}>
               Continue
             </Button>
           </div>
         </div>
       </Modal>
 
-      {purchaseListId && (
-        <RecordPurchaseFlow
-          listId={purchaseListId}
-          onClose={() => setPurchaseListId(null)}
-          onChanged={async () => {
-            await load();
-            setStatus("Purchase recorded");
-          }}
+      <Modal open={unlinkedOpen} title="Record Purchase" onClose={() => setUnlinkedOpen(false)}>
+        <div className="ui-form-stack">
+          <Input
+            label="Amount *"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            inputMode="decimal"
+          />
+          <Select
+            label="Vendor"
+            value={showNewVendor ? "__new__" : vendorId}
+            onChange={(e) => {
+              if (e.target.value === "__new__") {
+                setShowNewVendor(true);
+                setVendorId("");
+              } else {
+                setShowNewVendor(false);
+                setVendorId(e.target.value);
+              }
+            }}
+          >
+            <option value="">Not specified</option>
+            {vendors.map((vendor) => (
+              <option key={vendor.id} value={vendor.id}>
+                {vendor.name}
+              </option>
+            ))}
+            <option value="__new__">New vendor…</option>
+          </Select>
+          {showNewVendor ? (
+            <Input
+              label="Vendor name"
+              value={newVendor}
+              onChange={(e) => setNewVendor(e.target.value)}
+              placeholder="Optional"
+            />
+          ) : null}
+          <Select
+            label="Payment"
+            value={paymentMethod}
+            onChange={(e) => setPaymentMethod(e.target.value)}
+          >
+            {GROCERY_PAYMENT_METHODS.map((method) => (
+              <option key={method} value={method}>
+                {method}
+              </option>
+            ))}
+          </Select>
+          <Input
+            label="Date"
+            type="date"
+            value={purchaseDate}
+            onChange={(e) => setPurchaseDate(e.target.value)}
+          />
+          <Input
+            label="Notes"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Optional"
+          />
+          <div className="ui-form-actions">
+            <Button variant="secondary" onClick={() => setUnlinkedOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={() => void saveUnlinked()} loading={saving}>
+              Save Purchase
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {workspace ? (
+        <BuyingListWorkspace
+          listId={workspace.id}
+          startCompose={workspace.compose}
+          onClose={() => setWorkspace(null)}
+          onChanged={load}
         />
-      )}
+      ) : null}
     </div>
   );
 }

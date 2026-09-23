@@ -1,6 +1,6 @@
 import type { GroceryListDoc } from "../../../app/db/posRepository";
 import { PRINT } from "../../theme/print-html";
-import { formatListDate } from "./groceryUtils";
+import { formatListDate, groceryUnitLabel } from "./groceryUtils";
 
 export function buyingListPrintLines(list: GroceryListDoc, withPurchaseDetails = false) {
   const lines = [
@@ -9,12 +9,13 @@ export function buyingListPrintLines(list: GroceryListDoc, withPurchaseDetails =
     `CENTER:${formatListDate(list.listDate)}`,
     "SEP",
     ...list.lines.map((line) => {
-      const base = `LEFT:${line.itemName} - ${line.quantity} ${line.unit}`;
+      const unit = groceryUnitLabel(line.unit);
+      const base = `LEFT:${line.itemName} - ${line.quantity} ${unit}`;
       if (!withPurchaseDetails) {
         return base;
       }
       const purchased =
-        line.purchasedQuantity != null ? ` purchased ${line.purchasedQuantity} ${line.unit}` : "";
+        line.purchasedQuantity != null ? ` purchased ${line.purchasedQuantity} ${unit}` : "";
       return `${base}${purchased}`;
     }),
     "SEP",
@@ -32,7 +33,7 @@ export function buyingListHtml(list: GroceryListDoc) {
     .map(
       (line) =>
         `<tr><td><span class="box"></span>${escapeHtml(line.itemName)}</td><td>${line.quantity} ${escapeHtml(
-          line.unit,
+          groceryUnitLabel(line.unit),
         )}</td></tr>`,
     )
     .join("");
