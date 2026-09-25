@@ -149,6 +149,7 @@ declare global {
         pruneHistory: () => Promise<number>;
       };
       reports?: {
+        salesFacts: (opts?: any) => Promise<any>;
         salesSummary: (opts?: any) => Promise<any>;
         paymentBreakdown: (opts?: any) => Promise<Record<string, number>>;
         creditCollections: (opts?: any) => Promise<Record<string, number>>;

@@ -656,6 +656,10 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
     return posService.pruneOrderHistory();
   });
 
+  ipcMain.handle("pos:reports:sales-facts", (event, token: string | null, opts) => {
+    requirePermission(event, token, "business:reports");
+    return posService.getSalesFacts(opts || {});
+  });
   ipcMain.handle("pos:reports:sales-summary", (event, token: string | null, opts) => {
     requirePermission(event, token, "business:reports");
     return posService.getSalesSummary(opts);

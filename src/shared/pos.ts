@@ -638,10 +638,63 @@ export type FoodCostSummaryDto = {
   }>;
 };
 
+export type SalesFactsDto = {
+  from: number;
+  to: number;
+  /** True when any qualifying bill has stored tax. Amounts stay present when false. */
+  hasTax: boolean;
+  netSales: number;
+  billCount: number;
+  averageBill: number;
+  discountTotal: number;
+  /** Weighted discounts / pre-discount bases. Null when the base is zero. */
+  discountPercent: number | null;
+  billTotal: number;
+  amountCollected: number;
+  /** Open credit across all dates. Not Bill Total minus Amount Collected. */
+  outstandingCredit: number;
+  /** total_paise - (subtotal_paise + tax_total_paise), summed. */
+  inclusiveResidual: number;
+  untaxedNetSales: number;
+  daily: Array<{ date: string; netSales: number; bills: number; averageBill: number }>;
+  categories: Array<{ category: string; netSales: number; units: number }>;
+  items: Array<{ itemName: string; category: string; netSales: number; units: number }>;
+  serviceModes: Array<{ modeId: string; label: string; bills: number; netSales: number; averageBill: number }>;
+  tenders: Array<{ method: string; label: string; amount: number; percent: number }>;
+  gst: {
+    cgst: number;
+    sgst: number;
+    totalTax: number;
+    rates: Array<{
+      rateBps: number;
+      rateLabel: string;
+      taxable: number;
+      cgst: number;
+      sgst: number;
+      totalTax: number;
+    }>;
+    invoices: Array<{
+      invoiceNumber: string | null;
+      date: string;
+      customerName: string | null;
+      taxable: number;
+      cgst: number;
+      sgst: number;
+      total: number;
+      /** Blank when no GST was recorded on the bill. Not a 0% rate. */
+      rateLabel: string | null;
+    }>;
+  };
+};
+
 export type ProfitabilitySummaryDto = {
   from: number;
   to: number;
   revenue: number;
+  /** Grocery purchases / Net Sales. Null when Net Sales is zero. */
+  recordedPurchaseCostPercent: number | null;
+  /** False unless a Staff expense was recorded for the period. */
+  staffCostRecorded: boolean;
   foodCost: {
     openingInventory: number | null;
     purchases: number;

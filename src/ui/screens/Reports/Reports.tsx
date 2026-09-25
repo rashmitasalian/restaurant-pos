@@ -1,20 +1,21 @@
 import React from "react";
 import {
-  getSalesSummary,
-  getPaymentBreakdown,
-  getProductSalesReport,
+  getSalesFacts,
   getProfitabilitySummary,
   getGroceryPurchaseAnalysis,
-  getConfigGst,
   getConfigBranding,
+  getConfigGst,
 } from "../../../app/db/posRepository";
 import { ENV } from "../../../config/env";
 import type {
   GroceryPurchaseAnalysisDto,
   ProductSalesReportDto,
   ProfitabilitySummaryDto,
+  SalesFactsDto,
 } from "../../../shared/pos";
 import { PurchasesPricesReport } from "./PurchasesPricesReport";
+import { SalesFactsView } from "./SalesFactsView";
+import { GstTaxReport } from "./GstTaxReport";
 import { DEFAULT_GST_CONFIG, formatGstRate, normalizeGstConfig } from "../../../shared/gst";
 import { CATEGORY_CHART_COLORS } from "../../theme/external-brands";
 import { PRINT } from "../../theme/print-html";
@@ -30,7 +31,7 @@ import { BusinessRangeControls } from "../../components/BusinessRangeControls";
 import { useBusinessDateRange } from "../../hooks/useBusinessDateRange";
 import "./Reports.css";
 
-type ReportTab = "sales" | "profitability" | "purchases";
+type ReportTab = "sales" | "profitability" | "purchases" | "gst";
 type CategoryMetric = "sales" | "units";
 type ItemSort = "units" | "sales" | "name";
 
@@ -129,6 +130,8 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
   const rangeState = useBusinessDateRange();
   const { fromTs, toTs, label: rangeLabel } = rangeState;
   const [reportTab, setReportTab] = React.useState<ReportTab>("sales");
+  const [salesFacts, setSalesFacts] = React.useState<SalesFactsDto | null>(null);
+  const [gstEnabled, setGstEnabled] = React.useState<boolean | null>(null);
   const [profitability, setProfitability] = React.useState<ProfitabilitySummaryDto | null>(null);
   const [profitLoading, setProfitLoading] = React.useState(false);
   const [purchaseAnalysis, setPurchaseAnalysis] = React.useState<GroceryPurchaseAnalysisDto | null>(null);
@@ -137,6 +140,25 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
   React.useEffect(() => {
     setVisibleItemCount(ITEM_PAGE_SIZE);
   }, [fromTs, toTs, itemSearch, itemSort]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const cfg = await getConfigGst();
+        if (!cancelled) {
+          setGstEnabled(Boolean(cfg.enabled));
+        }
+      } catch {
+        if (!cancelled) {
+          setGstEnabled(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   React.useEffect(() => {
     const loadBranding = async () => {
@@ -163,89 +185,39 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
     }
   };
 
+  const showGstTab = gstEnabled === true || salesFacts?.hasTax === true;
+  const reportTabs = showGstTab ? [...REPORT_TABS, { id: "gst", label: "GST & Tax" }] : REPORT_TABS;
+
   React.useEffect(() => {
-    if (reportTab !== "sales") {
-      return;
+    if (reportTab === "gst" && !showGstTab) {
+      setReportTab("sales");
     }
+  }, [reportTab, showGstTab]);
+
+  React.useEffect(() => {
+    let cancelled = false;
     (async () => {
       try {
         setLoading(true);
-
-        const summary = await getSalesSummary({ from: fromTs, to: toTs });
-        const breakdown = await getPaymentBreakdown({ from: fromTs, to: toTs });
-        let creditCollections: Record<string, number> = {};
-        try {
-          creditCollections =
-            (await window.pos?.reports?.creditCollections?.({
-              from: fromTs,
-              to: toTs,
-            })) || {};
-        } catch {
-          creditCollections = {};
+        const facts = await getSalesFacts({ from: fromTs, to: toTs });
+        if (!cancelled) {
+          setSalesFacts(facts);
         }
-        let creditTotals = { outstanding: 0, overdue: 0 };
-        try {
-          creditTotals = (await window.pos?.reports?.creditTotals?.()) || creditTotals;
-        } catch {
-          creditTotals = { outstanding: 0, overdue: 0 };
-        }
-        let productReport = EMPTY_PRODUCT_SALES_REPORT;
-        try {
-          productReport = await getProductSalesReport({ from: fromTs, to: toTs });
-        } catch (e) {
-          console.error("Failed to load product sales report:", e);
-        }
-
-        const totalSales = summary.total || 0;
-        const ordersCount = summary.orders || 0;
-        const gstAmount = Number(summary.taxTotal || 0);
-        const subtotal = Number(
-          summary.subtotal !== undefined ? summary.subtotal : +(totalSales - gstAmount).toFixed(2),
-        );
-        try {
-          const gstCfg = normalizeGstConfig(await getConfigGst());
-          setGstRateLabel(formatGstRate(gstCfg.gstRateBps));
-          setGstHalfRateLabel(formatGstRate(gstCfg.gstRateBps / 2));
-        } catch {
-          setGstRateLabel(formatGstRate(DEFAULT_GST_CONFIG.gstRateBps));
-          setGstHalfRateLabel(formatGstRate(DEFAULT_GST_CONFIG.gstRateBps / 2));
-        }
-        const cash = breakdown.cash || 0;
-        const upi = breakdown.upi || 0;
-        const card = breakdown.card || 0;
-        const online = breakdown.online || 0;
-        const other = (breakdown.voucher || 0) + (breakdown.other || 0);
-        const creditSales = breakdown.credit || 0;
-        const creditCollected = Object.values(creditCollections).reduce(
-          (sum, value) => sum + Number(value || 0),
-          0,
-        );
-
-        setSales(totalSales);
-        setSubtotalSales(subtotal);
-        setDiscountTotal(Number(summary.discountTotal || 0));
-        setOrders(ordersCount);
-        setGst(gstAmount);
-        setCashAmount(cash);
-        setUpiAmount(upi);
-        setCardAmount(card);
-        setOnlineAmount(online);
-        setOtherAmount(other);
-        setCreditSalesAmount(creditSales);
-        setCreditCollectedAmount(creditCollected);
-        setCreditOutstandingTotal(Number(creditTotals.outstanding || 0));
-        setCreditOverdueTotal(Number(creditTotals.overdue || 0));
-        setProductSales(productReport);
       } catch (e) {
         console.error("Failed to load reports:", e);
-        setProductSales(EMPTY_PRODUCT_SALES_REPORT);
-        setCreditOutstandingTotal(0);
-        setCreditOverdueTotal(0);
+        if (!cancelled) {
+          setSalesFacts(null);
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     })();
-  }, [fromTs, toTs, reportTab]);
+    return () => {
+      cancelled = true;
+    };
+  }, [fromTs, toTs]);
 
   React.useEffect(() => {
     if (reportTab !== "profitability") {
@@ -413,19 +385,19 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
       .filter(Boolean)
       .map((value) => escapeHtml(value))
       .join(" | ");
-    const categoryRowsHtml = productSales.categorySales.length
-      ? productSales.categorySales
+    const categoryRowsHtml = salesFacts?.categories.length
+      ? salesFacts.categories
           .map(
             (row) =>
-              `<tr><td>${escapeHtml(row.category)}</td><td>${formatUnits(row.units)}</td><td>${formatCurrency(row.sales)}</td></tr>`,
+              `<tr><td>${escapeHtml(row.category)}</td><td>${formatUnits(row.units)}</td><td>${formatCurrency(row.netSales)}</td></tr>`,
           )
           .join("")
       : `<tr><td colspan="3">No category sales for this range</td></tr>`;
-    const itemRowsHtml = productSales.itemSales.length
-      ? productSales.itemSales
+    const itemRowsHtml = salesFacts?.items.length
+      ? salesFacts.items
           .map(
             (row) =>
-              `<tr><td>${escapeHtml(row.itemName)}</td><td>${escapeHtml(row.category)}</td><td>${formatUnits(row.units)}</td><td>${formatCurrency(row.sales)}</td></tr>`,
+              `<tr><td>${escapeHtml(row.itemName)}</td><td>${escapeHtml(row.category)}</td><td>${formatUnits(row.units)}</td><td>${formatCurrency(row.netSales)}</td></tr>`,
           )
           .join("")
       : `<tr><td colspan="4">No menu items sold for this range</td></tr>`;
@@ -473,32 +445,24 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
     </div>
   </div>
   <div class="grid">
-    <div class="card"><div class="card-label">Total Sales · ${dateStr}</div><div class="card-value">${formatCurrency(sales)}</div><div class="card-sub">${orders} orders</div></div>
-    <div class="card"><div class="card-label">Avg. Order Value</div><div class="card-value">${formatCurrency(avgOrder)}</div><div class="card-sub">Per completed order</div></div>
-    ${
-      hasGst
-        ? `<div class="card"><div class="card-label">GST Collected</div><div class="card-value">${formatCurrency(displayedGst)}</div><div class="card-sub">CGST: ${formatCurrency(cgst)} + SGST: ${formatCurrency(sgst)}</div></div>`
-        : ""
-    }
-    ${
-      discountTotal > 0
-        ? `<div class="card" style="border-color:var(--pos-danger-line)"><div class="card-label">Discounts Given</div><div class="card-value" style="color:var(--pos-danger)">${formatCurrency(discountTotal)}</div><div class="card-sub">Total discount deducted</div></div>`
-        : ""
-    }
-    <div class="card"><div class="card-label">Cash</div><div class="card-value">${formatCurrency(cashAmount)}</div><div class="card-sub">${cashPercent}% of sales</div></div>
-    <div class="card"><div class="card-label">UPI</div><div class="card-value">${formatCurrency(upiAmount)}</div><div class="card-sub">${upiPercent}% of sales</div></div>
-    <div class="card"><div class="card-label">Card</div><div class="card-value">${formatCurrency(cardAmount)}</div><div class="card-sub">${cardPercent}% of sales</div></div>
-    <div class="card"><div class="card-label">Online</div><div class="card-value">${formatCurrency(onlineAmount)}</div><div class="card-sub">${onlinePercent}% of sales</div></div>
-    <div class="card"><div class="card-label">Other</div><div class="card-value">${formatCurrency(otherAmount)}</div><div class="card-sub">${otherPercent}% of sales</div></div>
+    <div class="card"><div class="card-label">Net Sales · ${dateStr}</div><div class="card-value">${formatCurrency(salesFacts?.netSales || 0)}</div><div class="card-sub">${salesFacts?.billCount || 0} bills</div></div>
+    <div class="card"><div class="card-label">Avg. Bill</div><div class="card-value">${formatCurrency(salesFacts?.averageBill || 0)}</div><div class="card-sub">Net Sales / Bills</div></div>
+    <div class="card"><div class="card-label">Discounts</div><div class="card-value">${formatCurrency(salesFacts?.discountTotal || 0)}</div><div class="card-sub">${salesFacts?.discountPercent != null ? `${salesFacts.discountPercent}% of pre-discount sales` : ""}</div></div>
+    ${(salesFacts?.tenders || [])
+      .map(
+        (row) =>
+          `<div class="card"><div class="card-label">${escapeHtml(row.label)}</div><div class="card-value">${formatCurrency(row.amount)}</div><div class="card-sub">${row.percent}% of bill total</div></div>`,
+      )
+      .join("")}
   </div>
   ${
-    hasGst
+    salesFacts?.hasTax
       ? `<table>
-    <thead><tr><th>Tax Type</th><th>Rate</th><th>Taxable Amount</th><th>Tax Amount</th></tr></thead>
+    <thead><tr><th>Tax Type</th><th>Tax Amount</th></tr></thead>
     <tbody>
-      <tr><td>CGST</td><td>${gstHalfRateLabel}</td><td>${formatCurrency(subtotalSales)}</td><td>${formatCurrency(cgst)}</td></tr>
-      <tr><td>SGST</td><td>${gstHalfRateLabel}</td><td>${formatCurrency(subtotalSales)}</td><td>${formatCurrency(sgst)}</td></tr>
-      <tr class="total-row"><td colspan="3">Total GST</td><td>${formatCurrency(displayedGst)}</td></tr>
+      <tr><td>CGST</td><td>${formatCurrency(salesFacts.gst.cgst)}</td></tr>
+      <tr><td>SGST</td><td>${formatCurrency(salesFacts.gst.sgst)}</td></tr>
+      <tr class="total-row"><td>Total GST</td><td>${formatCurrency(salesFacts.gst.totalTax)}</td></tr>
     </tbody>
   </table>`
       : ""
@@ -508,7 +472,7 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
     <thead><tr><th>Category</th><th>Units Sold</th><th>Sales Amount</th></tr></thead>
     <tbody>
       ${categoryRowsHtml}
-      <tr class="total-row"><td>Total</td><td>${formatUnits(productSales.totals.totalUnits)}</td><td>${formatCurrency(productSales.totals.totalSales)}</td></tr>
+      <tr class="total-row"><td>Total</td><td>${formatUnits((salesFacts?.categories || []).reduce((sum, row) => sum + row.units, 0))}</td><td>${formatCurrency(salesFacts?.netSales || 0)}</td></tr>
     </tbody>
   </table>
   <h2>Menu Item Summary</h2>
@@ -550,7 +514,16 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
       }}
     >
       <div className="rpt-wrap" style={embedded ? { padding: 0 } : undefined}>
-        {!embedded && <PageHeader title="Reports" subtitle="Sales, profitability and grocery purchases" />}
+        {!embedded && (
+          <PageHeader
+            title="Reports"
+            subtitle={
+              showGstTab
+                ? "Sales, profitability, purchases, and GST"
+                : "Sales, profitability, and purchases"
+            }
+          />
+        )}
 
         {rangeControls}
 
@@ -566,7 +539,7 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
         >
           <SegmentedControl
             ariaLabel="Report sections"
-            options={REPORT_TABS}
+            options={reportTabs}
             value={reportTab}
             onChange={(id) => setReportTab(id as ReportTab)}
           />
@@ -584,295 +557,11 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
         </div>
 
         {reportTab === "sales" && (
-          <>
-            <div className="rpt-kpi-grid">
-              <Stat
-                primary
-                label="Total Sales"
-                value={loading ? "———" : formatCurrency(sales)}
-                sub={loading ? "Loading…" : `${orders} paid bills`}
-              />
-              <Stat
-                label="Collected"
-                value={loading ? "———" : formatCurrency(collectedAmount)}
-                sub={
-                  loading
-                    ? "Loading…"
-                    : creditCollectedAmount > 0
-                      ? `Includes ${formatCurrency(creditCollectedAmount)} credit receipts`
-                      : "Cash / UPI / card in range (excludes new credit sales)"
-                }
-              />
-              <Stat
-                label="Paid Bills"
-                value={loading ? "——" : orders}
-                sub={loading ? "Loading…" : BUSINESS_RANGE_SEMANTICS.reports.shortLabel}
-              />
-              <Stat
-                label="Avg. Order Value"
-                value={loading ? "———" : formatCurrency(avgOrder)}
-                sub={loading ? "Loading…" : orders > 0 ? "Per completed order" : "No orders yet"}
-              />
-              {(loading || hasGst) && (
-                <Stat
-                  label="GST Collected"
-                  value={loading ? "———" : formatCurrency(displayedGst)}
-                  sub={
-                    loading
-                      ? "Loading…"
-                      : `${gstRateLabel} GST · CGST ${formatCurrency(cgst)} + SGST ${formatCurrency(sgst)}`
-                  }
-                />
-              )}
-              {(loading || discountTotal > 0) && (
-                <Stat
-                  label="Discounts Given"
-                  value={loading ? "———" : formatCurrency(discountTotal)}
-                  sub={loading ? "Loading…" : "Total discount deducted from orders"}
-                />
-              )}
-              {(loading ||
-                creditOutstandingTotal > 0 ||
-                creditOverdueTotal > 0 ||
-                creditSalesAmount > 0) && (
-                <Stat
-                  label="Credit Outstanding"
-                  value={loading ? "———" : formatCurrency(creditOutstandingTotal)}
-                  sub={
-                    loading
-                      ? "Loading…"
-                      : creditOverdueTotal > 0
-                        ? `${formatCurrency(creditOverdueTotal)} overdue across open bills`
-                        : "Open customer credit across all dates"
-                  }
-                />
-              )}
-            </div>
-
-            {/* ── Bottom Row ── */}
-            <div className="rpt-bottom">
-              {/* Payment Methods */}
-              <div className="rpt-card" style={{ padding: 0 }}>
-                <div className="rpt-section-title">Payment Methods</div>
-                <div style={{ padding: "18px 20px" }}>
-                  {payMethods.map((m) => (
-                    <div key={m.label} className="rpt-pay-row">
-                      <div className="rpt-pay-meta">
-                        <span style={{ fontSize: 13, fontWeight: 600, color: "var(--pos-tx-sec)" }}>
-                          {m.label}
-                        </span>
-                        <div>
-                          <span
-                            style={{
-                              fontSize: 15,
-                              fontWeight: 700,
-                              color: m.color,
-                              fontVariantNumeric: "tabular-nums",
-                            }}
-                          >
-                            {loading ? "—" : formatCurrency(m.amount)}
-                          </span>
-                          <span
-                            style={{ fontSize: 11, color: "var(--pos-tx-muted)", marginLeft: 7 }}
-                          >
-                            {loading ? "" : `${m.pct}%`}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="rpt-pay-bar-bg">
-                        <div
-                          className="rpt-pay-bar-fill"
-                          style={{
-                            width: loading ? "0%" : `${m.pct}%`,
-                            background: "var(--pos-teal)",
-                          }}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* GST Breakdown */}
-              {hasGst && (
-                <div className="rpt-card" style={{ padding: 0 }}>
-                  <div className="rpt-section-title">GST Breakdown</div>
-                  <DataTable
-                    headers={["Tax Type", "Rate", "Taxable Amount", "Tax Amount"]}
-                    rows={[
-                      [
-                        "CGST",
-                        gstHalfRateLabel,
-                        formatCurrency(subtotalSales),
-                        formatCurrency(cgst),
-                      ],
-                      [
-                        "SGST",
-                        gstHalfRateLabel,
-                        formatCurrency(subtotalSales),
-                        formatCurrency(sgst),
-                      ],
-                      ["Total GST", "", "", formatCurrency(displayedGst)],
-                    ]}
-                  />
-                </div>
-              )}
-            </div>
-
-            <div className="rpt-product-grid">
-              <div className="rpt-card" style={{ padding: 0 }}>
-                <div className="rpt-section-head">
-                  <div>
-                    <div className="rpt-section-title" style={{ padding: 0, borderBottom: "none" }}>
-                      Category Sales
-                    </div>
-                    <div style={{ marginTop: 6, fontSize: 12, color: "var(--pos-tx-muted)" }}>
-                      {formatCurrency(productSales.totals.totalSales)} sales -{" "}
-                      {formatUnits(productSales.totals.totalUnits)} units
-                    </div>
-                  </div>
-                  <div className="rpt-metric-toggle" aria-label="Category metric">
-                    <button
-                      type="button"
-                      className={categoryMetric === "sales" ? "active" : ""}
-                      onClick={() => setCategoryMetric("sales")}
-                    >
-                      Sales Amount
-                    </button>
-                    <button
-                      type="button"
-                      className={categoryMetric === "units" ? "active" : ""}
-                      onClick={() => setCategoryMetric("units")}
-                    >
-                      Units Sold
-                    </button>
-                  </div>
-                </div>
-
-                {loading ? (
-                  <div className="rpt-empty-state">Loading...</div>
-                ) : hasCategorySales ? (
-                  <div className="rpt-chart-wrap">
-                    <svg
-                      className="rpt-chart-svg"
-                      viewBox="0 0 120 120"
-                      role="img"
-                      aria-label="Category sales chart"
-                    >
-                      <circle className="rpt-chart-empty" cx="60" cy="60" r="42" />
-                      <g transform="rotate(-90 60 60)">
-                        {categoryChartSegments.map((segment) => (
-                          <circle
-                            key={segment.category}
-                            className="rpt-chart-segment"
-                            cx="60"
-                            cy="60"
-                            r="42"
-                            stroke={segment.color}
-                            strokeDasharray={segment.dash}
-                            strokeDashoffset={segment.offset}
-                          />
-                        ))}
-                      </g>
-                      <text x="60" y="58" className="rpt-chart-center">
-                        {categoryMetric === "sales" ? "Sales" : "Units"}
-                      </text>
-                      <text x="60" y="73" className="rpt-chart-total">
-                        {categoryRows.length} groups
-                      </text>
-                    </svg>
-                    <div style={{ width: "100%" }}>
-                      {categoryChartSegments.map((segment) => {
-                        const percent = pct(segment.value, categoryMetricTotal);
-                        return (
-                          <div key={segment.category} className="rpt-legend-row">
-                            <span
-                              className="rpt-legend-swatch"
-                              style={{ background: segment.color }}
-                            />
-                            <span className="rpt-legend-name">{segment.category}</span>
-                            <span className="rpt-legend-value">
-                              {categoryMetric === "sales"
-                                ? formatCurrency(segment.sales)
-                                : formatUnits(segment.units)}{" "}
-                              ({percent}%)
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="rpt-empty-state">No category sales for this range</div>
-                )}
-              </div>
-
-              <div className="rpt-card" style={{ padding: 0 }}>
-                <div className="rpt-section-title">Menu Items Sold</div>
-                {hasItemSales && (
-                  <div className="rpt-table-toolbar">
-                    <input
-                      className="rpt-search-input"
-                      value={itemSearch}
-                      onChange={(e) => setItemSearch(e.target.value)}
-                      placeholder="Search item or category"
-                      aria-label="Search menu items sold"
-                    />
-                    <select
-                      className="rpt-sort-select"
-                      value={itemSort}
-                      onChange={(e) => setItemSort(e.target.value as ItemSort)}
-                      aria-label="Sort menu items sold"
-                    >
-                      <option value="units">Sort by Units Sold</option>
-                      <option value="sales">Sort by Sales Amount</option>
-                      <option value="name">Sort by Item Name</option>
-                    </select>
-                  </div>
-                )}
-                {loading ? (
-                  <div className="rpt-empty-state">Loading...</div>
-                ) : hasItemSales ? (
-                  hasVisibleItemSales ? (
-                    <>
-                      <DataTable
-                        headers={["Item", "Category", "Units Sold", "Sales Amount"]}
-                        rows={visibleItemSales.map((item) => [
-                          item.itemName,
-                          item.category,
-                          formatUnits(item.units),
-                          formatCurrency(item.sales),
-                        ])}
-                      />
-                      <div className="rpt-table-foot">
-                        <span>
-                          Showing {visibleItemSales.length} of {filteredItemSales.length} items
-                          {productSales.itemSales.length !== filteredItemSales.length
-                            ? ` matching ${productSales.itemSales.length} total`
-                            : ""}
-                        </span>
-                        {canShowMoreItems && (
-                          <button
-                            type="button"
-                            className="rpt-show-more"
-                            onClick={() => setVisibleItemCount((count) => count + ITEM_PAGE_SIZE)}
-                          >
-                            Show more
-                          </button>
-                        )}
-                      </div>
-                    </>
-                  ) : (
-                    <div className="rpt-empty-state">No menu items match this search</div>
-                  )
-                ) : (
-                  <div className="rpt-empty-state">No menu items sold for this range</div>
-                )}
-              </div>
-            </div>
-          </>
+          <SalesFactsView facts={salesFacts} loading={loading} formatCurrency={formatCurrency} />
         )}
-
+        {showGstTab && reportTab === "gst" && (
+          <GstTaxReport facts={salesFacts} loading={loading} periodLabel={rangeLabel} formatCurrency={formatCurrency} />
+        )}
         {reportTab === "profitability" && (
           <div className="rpt-profit">
             {profitLoading ? (
@@ -884,23 +573,23 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
                 <div className="rpt-kpi-grid rpt-profit-kpi">
                   <Stat
                     primary
-                    label="Revenue"
+                    label="Net Sales"
                     value={formatCurrency(profitability.revenue)}
                     sub={rangeLabel}
                   />
                   <Stat
-                    label="Food Cost"
+                    label="Recorded Grocery Purchases"
                     value={formatCurrency(profitability.foodCost.amount)}
                     sub={
-                      profitability.foodCost.basis === "purchases"
-                        ? "Based on recorded purchases. Inventory adjustment unavailable."
-                        : "Inventory-adjusted food cost"
+                      profitability.recordedPurchaseCostPercent != null
+                        ? `${profitability.recordedPurchaseCostPercent}% of Net Sales`
+                        : "Recorded purchase cost"
                     }
                   />
                   <Stat
                     label="Gross Contribution"
                     value={formatCurrency(profitability.grossContribution)}
-                    sub="Revenue − Food Cost"
+                    sub="Net Sales − Recorded Grocery Purchases"
                   />
                   <Stat
                     label="Operating Expenses"
@@ -919,6 +608,9 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
                   />
                 </div>
 
+                {!profitability.staffCostRecorded && (
+                  <p className="rpt-note">No Staff expense was recorded for this period.</p>
+                )}
                 <p className="rpt-profit-disclaimer">{profitability.disclaimer}</p>
 
                 <div className="rpt-card" style={{ padding: 0 }}>
@@ -933,7 +625,7 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
                           <span className="rpt-profit-amt">{formatCurrency(row.amount)}</span>
                           <span className="rpt-profit-pct">
                             {row.percentOfRevenue != null
-                              ? `${row.percentOfRevenue}% of revenue`
+                              ? `${row.percentOfRevenue}% of Net Sales`
                               : "—"}
                           </span>
                         </div>

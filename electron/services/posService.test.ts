@@ -36,6 +36,29 @@ function createMockDb() {
       return {
         all: (...params: unknown[]) => {
           calls.push({ sql, params });
+          if (sql.includes("sales-facts-bills")) {
+            return db.payments.map((payment: any) => {
+              const summary = db.orderSummaryRows.get(String(payment.order_id)) || {};
+              return {
+                id: payment.order_id,
+                created_at: payment.received_at || 1500,
+                invoice_number: payment.order_id,
+                subtotal_paise: summary.subtotal_paise ?? payment.amount_paise,
+                tax_total_paise: summary.tax_total_paise ?? 0,
+                discount_total_paise: summary.discount_total_paise ?? 0,
+                total_paise: summary.total_paise ?? payment.amount_paise,
+                order_type: "table",
+                meta_json: "{}",
+                customer_name: null,
+                method: payment.method,
+                amount_paise: payment.amount_paise,
+                amount_paid_paise: payment.amount_paise,
+                change_paise: 0,
+                split_json: payment.split_json,
+                received_at: payment.received_at || 1500,
+              };
+            });
+          }
           if (sql.includes("FROM grocery_purchases") && sql.includes("status = 'recorded'")) {
             if (!db.groceryPurchaseTotalPaise) {
               return [];
@@ -531,7 +554,10 @@ describe("posService strict SQLite APIs", () => {
       operatingExpenses: 400,
       estimatedOperatingProfit: 350,
       operatingMarginPercent: 35,
-      disclaimer: "Estimate based on recorded sales, purchases and expenses.",
+      recordedPurchaseCostPercent: 25,
+      staffCostRecorded: false,
+      disclaimer:
+        "Estimate based on recorded sales, purchases and expenses. Purchase cost is based on purchases recorded during the selected period and is not inventory-adjusted food consumption.",
     });
     expect(summary.expenseBreakdown).toEqual([
       {

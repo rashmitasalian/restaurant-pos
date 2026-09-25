@@ -683,6 +683,13 @@ export async function exportDiagnostics(): Promise<any> {
   return api().support!.exportDiagnostics();
 }
 
+export async function getSalesFacts(opts?: {
+  from?: number;
+  to?: number;
+}): Promise<import("../../shared/pos").SalesFactsDto> {
+  return api().reports!.salesFacts!(opts);
+}
+
 export async function getSalesSummary(opts?: { from?: number; to?: number }): Promise<{
   total: number;
   subtotal?: number;

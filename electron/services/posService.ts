@@ -5,6 +5,7 @@ import { randomUUID, createHash } from "crypto";
 import type Database from "better-sqlite3";
 import { backupDatabase, getDb, inTransaction, restoreDatabaseFromBackup } from "../db/sqlite";
 import { buildGroceryPurchaseAnalysis, loadRecordedGroceryBills } from "./groceryPurchaseAnalysis";
+import { buildSalesFacts, type SalesBillInput } from "./salesReport";
 import { destroySessionsForUser } from "./sessionManager";
 import {
   createCredentialHash,
@@ -50,6 +51,7 @@ import type {
   PrintJobDto,
   ProductSalesReportDto,
   ProfitabilitySummaryDto,
+  SalesFactsDto,
   Role,
   SalesSummaryDto,
   SalaryAdvanceDto,
@@ -129,9 +131,11 @@ import {
 import {
   SERVICE_MODE_CONFIG_KEY,
   findServiceModeById,
+  normalizeServiceModes,
   toLegacyOrderType,
   toServiceModeConfigDoc,
 } from "../../src/shared/serviceModes";
+import { resolveBusinessTimezone } from "../../src/shared/businessDateRange";
 import { RECOVERY_CODE_COUNT } from "../../src/shared/auth";
 
 const TAX_RATE_BPS = 1800;
@@ -4754,6 +4758,135 @@ export const posService = {
       .map((row: any) => String(row.id));
   },
 
+  getSalesFacts(opts: { from?: number; to?: number } = {}): SalesFactsDto {
+    const from = Number(opts.from || 0);
+    const to = Number(opts.to ?? now());
+    const database = getDb();
+    const paymentRows = database
+      .prepare(
+        `SELECT /* sales-facts-bills */
+           o.id, o.created_at, o.invoice_number, o.subtotal_paise, o.tax_total_paise,
+           o.discount_total_paise, o.total_paise, o.order_type, o.meta_json,
+           c.name AS customer_name,
+           p.method, p.amount_paise, p.amount_paid_paise, p.change_paise, p.split_json, p.received_at
+         FROM payments p
+         JOIN orders o ON o.id = p.order_id
+         LEFT JOIN customers c ON c.id = o.customer_id
+         WHERE p.status = 'completed' AND o.status = 'paid'
+           AND p.received_at >= ? AND p.received_at < ?`,
+      )
+      .all(from, to) as any[];
+    const orderIds = Array.from(new Set(paymentRows.map((row) => String(row.id))));
+    const lineRows = orderIds.length
+      ? (database
+          .prepare(
+            `SELECT /* sales-facts-lines */ order_id, item_name, category_name, quantity, line_total_paise, rate_paise
+             FROM order_lines
+             WHERE order_id IN (${orderIds.map(() => "?").join(",")})
+             ORDER BY order_id, sort_order ASC, created_at ASC`,
+          )
+          .all(...orderIds) as any[])
+      : [];
+    const linesByOrder = new Map<string, SalesBillInput["lines"]>();
+    for (const line of lineRows) {
+      const orderId = String(line.order_id);
+      const stored = Number(line.line_total_paise);
+      const lineValuePaise =
+        Number.isFinite(stored) && stored >= 0
+          ? stored
+          : Math.max(0, Number(line.quantity || 0) * Number(line.rate_paise || 0));
+      const bucket = linesByOrder.get(orderId) || [];
+      bucket.push({
+        itemName: String(line.item_name || ""),
+        category: String(line.category_name || ""),
+        units: Math.max(0, Number(line.quantity || 0)),
+        lineValuePaise,
+      });
+      linesByOrder.set(orderId, bucket);
+    }
+    const billsById = new Map<string, SalesBillInput>();
+    for (const row of paymentRows) {
+      const id = String(row.id);
+      const meta = parseJson<Record<string, unknown>>(row.meta_json, {});
+      const snapshot = normalizeGstConfig(
+        meta.gstSnapshot && typeof meta.gstSnapshot === "object" ? (meta.gstSnapshot as any) : { enabled: false },
+      );
+      const modeId = String((meta as any).serviceModeId || row.order_type || "unknown");
+      let bill = billsById.get(id);
+      if (!bill) {
+        bill = {
+          id,
+          createdAt: Number(row.created_at || 0),
+          settledAt: Number(row.received_at || 0),
+          invoiceNumber: row.invoice_number ? String(row.invoice_number) : null,
+          customerName: row.customer_name ? String(row.customer_name) : null,
+          netSalesPaise: Number(row.subtotal_paise || 0),
+          taxPaise: Number(row.tax_total_paise || 0),
+          discountPaise: Number(row.discount_total_paise || 0),
+          billTotalPaise: Number(row.total_paise || 0),
+          gstEnabled: snapshot.enabled,
+          priceIncludesTax: snapshot.priceIncludesTax,
+          gstRateBps: snapshot.enabled ? snapshot.gstRateBps : 0,
+          serviceModeId: modeId,
+          lines: linesByOrder.get(id) || [],
+          tenders: [],
+        };
+        billsById.set(id, bill);
+      }
+      bill.settledAt = Math.min(bill.settledAt, Number(row.received_at || bill.settledAt));
+      const receivedAt = Number(row.received_at || 0);
+      const method = String(row.method || "other");
+      if (method === "split") {
+        const split = parseJson<any[]>(row.split_json, []);
+        if (Array.isArray(split) && split.length) {
+          for (const entry of split) {
+            const amountPaise =
+              entry?.amountPaise !== undefined ? Number(entry.amountPaise) : rupeesToPaise(entry?.amount);
+            if (Number.isFinite(amountPaise) && amountPaise > 0) {
+              bill.tenders.push({
+                method: String(entry.method || "other"),
+                amountPaise,
+                receivedAt,
+                amountPaidPaise: Number(row.amount_paid_paise || 0),
+              });
+            }
+          }
+          continue;
+        }
+      }
+      bill.tenders.push({
+        method,
+        amountPaise: Number(row.amount_paise || 0),
+        receivedAt,
+        amountPaidPaise: Number(row.amount_paid_paise || 0),
+      });
+    }
+    const collections = database
+      .prepare(
+        `SELECT amount_paise, created_at
+         FROM customer_account_entries
+         WHERE entry_type = 'payment_received' AND created_at >= ? AND created_at < ?`,
+      )
+      .all(from, to) as Array<{ amount_paise: number; created_at: number }>;
+    const credit = this.getCustomerCreditTotals();
+    const labels: Record<string, string> = {};
+    for (const mode of normalizeServiceModes(this.getSetting(SERVICE_MODE_CONFIG_KEY))) {
+      labels[mode.id] = mode.name;
+    }
+    return buildSalesFacts({
+      from,
+      to,
+      timeZone: resolveBusinessTimezone(),
+      bills: Array.from(billsById.values()),
+      creditCollections: collections.map((row) => ({
+        amountPaise: Number(row.amount_paise || 0),
+        collectedAt: Number(row.created_at || 0),
+      })),
+      outstandingCreditPaise: rupeesToPaise(credit.outstanding),
+      serviceModeLabels: labels,
+    });
+  },
+
   getSalesSummary(opts: { from?: number; to?: number } = {}): SalesSummaryDto {
     const payments = this.getPaymentsInRange(opts);
     const orderIds = new Set(payments.map((payment: any) => payment.order_id));
@@ -7272,14 +7405,10 @@ export const posService = {
   getProfitabilitySummary(opts: { from?: number; to?: number } = {}): ProfitabilitySummaryDto {
     const from = Number(opts.from || 0);
     const to = Number(opts.to || now());
-    const sales = this.getSalesSummary({ from, to });
-    const revenue = Number(
-      sales.subtotal ?? Math.max(0, (sales.total || 0) - (sales.taxTotal || 0)),
-    );
+    const sales = this.getSalesFacts({ from, to });
+    const revenue = sales.netSales;
     const database = getDb();
-    const purchaseBills = loadRecordedGroceryBills(database, from, to);
-    const purchasePaise = purchaseBills.reduce((sum, bill) => sum + bill.totalPaise, 0);
-    const purchases = paiseToRupees(purchasePaise);
+    const purchases = this.getGroceryPurchaseAnalysis({ from, to }).summary.purchaseTotal;
     const foodCostAmount = purchases;
     const expenseRows = database
       .prepare(
@@ -7308,10 +7437,16 @@ export const posService = {
         percentOfRevenue: revenue > 0 ? +((amount / revenue) * 100).toFixed(1) : null,
       };
     });
+    const staffCostRecorded = expenseBreakdown.some(
+      (row) => row.categoryId === "expense-category:staff" || row.categoryName.trim().toLowerCase() === "staff",
+    );
     return {
       from,
       to,
       revenue: +revenue.toFixed(2),
+      recordedPurchaseCostPercent:
+        revenue > 0 ? +((foodCostAmount / revenue) * 100).toFixed(1) : null,
+      staffCostRecorded,
       foodCost: {
         openingInventory: null,
         purchases: +purchases.toFixed(2),
@@ -7321,11 +7456,12 @@ export const posService = {
       },
       grossContribution,
       operatingExpenses: +operatingExpenses.toFixed(2),
-      expenseBreakdown,
+      expenseBreakdown: expenseBreakdown.filter((row) => row.amount !== 0),
       estimatedOperatingProfit,
       operatingMarginPercent:
         revenue > 0 ? +((estimatedOperatingProfit / revenue) * 100).toFixed(1) : null,
-      disclaimer: "Estimate based on recorded sales, purchases and expenses.",
+      disclaimer:
+        "Estimate based on recorded sales, purchases and expenses. Purchase cost is based on purchases recorded during the selected period and is not inventory-adjusted food consumption.",
     };
   },
 

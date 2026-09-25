@@ -178,6 +178,7 @@ contextBridge.exposeInMainWorld("pos", {
     pruneHistory: () => authInvoke("pos:settings:prune-history"),
   },
   reports: {
+    salesFacts: (opts) => authInvoke("pos:reports:sales-facts", opts),
     salesSummary: (opts) => authInvoke("pos:reports:sales-summary", opts),
     paymentBreakdown: (opts) => authInvoke("pos:reports:payment-breakdown", opts),
     creditCollections: (opts) => authInvoke("pos:reports:credit-collections", opts),
