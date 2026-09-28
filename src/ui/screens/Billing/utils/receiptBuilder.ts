@@ -7,6 +7,8 @@ import {
   type GstConfig,
   type GstTotals,
 } from "../../../../shared/gst";
+import { buildReceiptQrFooterLines, type ReceiptQrConfig } from "./receiptQr";
+import { RECEIPT_TEXT_WIDTH, wrapText } from "./receiptWrap";
 
 export type ReceiptBranding = {
   hotelName?: string;
@@ -20,12 +22,13 @@ export type ReceiptBranding = {
     height: number;
     dataBase64: string;
   } | null;
+  receiptQr?: ReceiptQrConfig | null;
 };
 
 const rpad = (s: string, w: number) => (s.length >= w ? s.slice(0, w) : s.padEnd(w));
 const lpad = (s: string, w: number) => (s.length >= w ? s.slice(0, w) : s.padStart(w));
 const fmtAmt = (n: number) => `${Math.round(n * 100) / 100}`;
-const RECEIPT_WIDTH = 42;
+const RECEIPT_WIDTH = RECEIPT_TEXT_WIDTH;
 const TOTAL_AMOUNT_WIDTH = 12;
 
 function formatReceiptMoney(amount: number) {
@@ -43,28 +46,6 @@ function totalRow(label: string, amount: number) {
   const labelWidth = Math.max(0, RECEIPT_WIDTH - 2 - Math.max(TOTAL_AMOUNT_WIDTH, money.length));
   return `LEFTB:${"  "}${rpad(label, labelWidth)}${lpad(money, Math.max(TOTAL_AMOUNT_WIDTH, money.length))}`;
 }
-const wrapText = (value: string, width: number) => {
-  const words = String(value || "")
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
-  const lines: string[] = [];
-  let current = "";
-  words.forEach((word) => {
-    const next = current ? `${current} ${word}` : word;
-    if (next.length > width && current) {
-      lines.push(current);
-      current = word;
-    } else {
-      current = next;
-    }
-  });
-  if (current) {
-    lines.push(current);
-  }
-  return lines;
-};
-
 const formatGstStateLine = (stateName: string, stateCode: string) => {
   const name = String(stateName || "").trim();
   const code = String(stateCode || "").trim();
@@ -275,6 +256,12 @@ export function buildReceiptLines(
     `LEFTB:${PAD}Printed On: ${printedAtStr}`,
     "BLANK",
     "CENTERB:Thank you! Visit again.",
+    ...buildReceiptQrFooterLines({
+      receiptQr: brandingInput?.receiptQr,
+      grandTotal,
+      reference: invoiceNumber || (orderNum ? String(orderNum) : ""),
+      hotelName: branding.hotelName,
+    }),
     "CUT",
   ];
 }

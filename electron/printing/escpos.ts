@@ -282,7 +282,7 @@ export function buildEscPosBuffer(
         cmds.push(ESC, 0x4d, 0x00);
         cmds.push(ESC, 0x61, 0x00);
         pushLine(cmds, separator);
-      } else if (directive.startsWith("IMAGE_MONO:")) {
+      } else if (directive.startsWith("IMAGE_MONO:") || directive.startsWith("QR_MONO:")) {
         pushMonoImage(cmds, directive);
       } else if (directive === "BLANK") {
         cmds.push(LF);
@@ -343,7 +343,7 @@ export function buildEscPosBuffer(
         cmds.push(ESC, 0x4d, 0x00);
         cmds.push(ESC, 0x61, 0x00);
         pushLine(cmds, separator);
-      } else if (directive.startsWith("IMAGE_MONO:")) {
+      } else if (directive.startsWith("IMAGE_MONO:") || directive.startsWith("QR_MONO:")) {
         pushMonoImage(cmds, directive);
       } else if (directive === "BLANK") {
         cmds.push(LF);

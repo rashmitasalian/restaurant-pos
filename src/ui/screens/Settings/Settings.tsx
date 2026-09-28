@@ -81,6 +81,16 @@ import {
   printerDropdownValue,
 } from "../../../shared/printerConfig";
 import { processRestaurantLogoFile, type ReceiptLogoRaster } from "../../utils/logoProcessing";
+import { ReceiptQrPreview } from "./ReceiptQrPreview";
+import {
+  buildReceiptQrPayload,
+  receiptQrConfigForSave,
+  receiptQrSettingsError,
+  RECEIPT_QR_NOTE_LIMIT,
+  RECEIPT_QR_SAMPLE_AMOUNT,
+  RECEIPT_QR_SAMPLE_REFERENCE,
+  type ReceiptQrMode,
+} from "../Billing/utils/receiptQr";
 import { BackupSettingsSection } from "./BackupSettingsSection";
 import {
   addSeatingAreaDraft,
@@ -195,6 +205,12 @@ export default function Settings({
   const [brandingStatus, setBrandingStatus] = React.useState<string | null>(null);
   const [savingBranding, setSavingBranding] = React.useState(false);
   const [processingLogo, setProcessingLogo] = React.useState(false);
+  const [receiptQrMode, setReceiptQrMode] = React.useState<ReceiptQrMode>("off");
+  const [feedbackUrl, setFeedbackUrl] = React.useState("");
+  const [upiId, setUpiId] = React.useState("");
+  const [payeeName, setPayeeName] = React.useState("");
+  const [includeBillAmount, setIncludeBillAmount] = React.useState(true);
+  const [receiptQrNote, setReceiptQrNote] = React.useState("");
 
   // GST / business registration config
   const [gstEnabled, setGstEnabled] = React.useState(DEFAULT_GST_CONFIG.enabled);
@@ -367,6 +383,20 @@ export default function Settings({
         setHotelEmail(branding.email || ENV.HOTEL_EMAIL);
         setHotelLogoDataUrl(typeof branding.logoDataUrl === "string" ? branding.logoDataUrl : null);
         setReceiptLogoRaster((branding.receiptLogoRaster as ReceiptLogoRaster | null) || null);
+        const receiptQr = branding.receiptQr;
+        const nextMode =
+          receiptQr?.mode === "feedback" || receiptQr?.mode === "pay" ? receiptQr.mode : "off";
+        const loadedPayee = typeof receiptQr?.payeeName === "string" ? receiptQr.payeeName : "";
+        setReceiptQrMode(nextMode);
+        setFeedbackUrl(typeof receiptQr?.feedbackUrl === "string" ? receiptQr.feedbackUrl : "");
+        setUpiId(typeof receiptQr?.upiId === "string" ? receiptQr.upiId : "");
+        setPayeeName(
+          nextMode === "pay" && !loadedPayee.trim()
+            ? String(branding.hotelName || ENV.HOTEL_NAME || "").trim()
+            : loadedPayee,
+        );
+        setIncludeBillAmount(receiptQr?.includeAmount !== false);
+        setReceiptQrNote(typeof receiptQr?.note === "string" ? receiptQr.note : "");
       } catch (e) {}
       try {
         const gstCfg = normalizeGstConfig(await getConfigGst());
@@ -640,6 +670,24 @@ export default function Settings({
       setBrandingStatus("Hotel name is required");
       return;
     }
+    const qrError = receiptQrSettingsError({
+      mode: receiptQrMode,
+      feedbackUrl,
+      upiId,
+    });
+    if (qrError) {
+      endAction("branding.save");
+      setBrandingStatus(qrError);
+      return;
+    }
+    const receiptQr = receiptQrConfigForSave({
+      mode: receiptQrMode,
+      feedbackUrl,
+      upiId,
+      payeeName,
+      includeAmount: includeBillAmount,
+      note: receiptQrNote,
+    });
     setSavingBranding(true);
     setBrandingStatus(null);
     try {
@@ -660,6 +708,7 @@ export default function Settings({
         logoDataUrl: hotelLogoDataUrl,
         receiptLogoRaster,
         logoUpdatedAt: hotelLogoDataUrl ? Date.now() : 0,
+        receiptQr,
       });
       setHotelName(saved.hotelName || name);
       setHotelInitials(saved.hotelInitials || initials);
@@ -668,6 +717,18 @@ export default function Settings({
       setHotelEmail(saved.email || "");
       setHotelLogoDataUrl(typeof saved.logoDataUrl === "string" ? saved.logoDataUrl : null);
       setReceiptLogoRaster((saved.receiptLogoRaster as ReceiptLogoRaster | null) || null);
+      if (saved.receiptQr) {
+        const savedMode =
+          saved.receiptQr.mode === "feedback" || saved.receiptQr.mode === "pay"
+            ? saved.receiptQr.mode
+            : "off";
+        setReceiptQrMode(savedMode);
+        setFeedbackUrl(saved.receiptQr.feedbackUrl || "");
+        setUpiId(saved.receiptQr.upiId || "");
+        setPayeeName(saved.receiptQr.payeeName || "");
+        setIncludeBillAmount(saved.receiptQr.includeAmount !== false);
+        setReceiptQrNote(saved.receiptQr.note || "");
+      }
       window.dispatchEvent(new Event("branding-changed"));
       setBrandingStatus("Business identity saved");
       setTimeout(() => setBrandingStatus(null), 3000);
@@ -1946,6 +2007,138 @@ export default function Settings({
                     </div>
                   </div>
                 </div>
+              </div>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <div className="pos-label">Receipt QR</div>
+                <div style={{ display: "flex", gap: 16, marginTop: 8, flexWrap: "wrap" }}>
+                  {(
+                    [
+                      ["off", "Off"],
+                      ["feedback", "Feedback"],
+                      ["pay", "Pay"],
+                    ] as const
+                  ).map(([mode, label]) => (
+                    <label
+                      key={mode}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        fontSize: 14,
+                        cursor: "pointer",
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        name="receipt-qr-mode"
+                        checked={receiptQrMode === mode}
+                        onChange={() => {
+                          setReceiptQrMode(mode);
+                          if (mode === "pay" && !payeeName.trim()) {
+                            setPayeeName(hotelName.trim());
+                          }
+                        }}
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+                <div style={{ fontSize: 12, color: "var(--pos-tx-sub)", marginTop: 8, lineHeight: 1.5 }}>
+                  Prints one code at the end of every customer bill. Off leaves the bill unchanged.
+                </div>
+                {receiptQrMode === "feedback" && (
+                  <div style={{ marginTop: 14 }}>
+                    <Input
+                      label="Feedback URL"
+                      value={feedbackUrl}
+                      onChange={(event) => setFeedbackUrl(event.target.value)}
+                      placeholder="https://example.com/feedback"
+                    />
+                  </div>
+                )}
+                {receiptQrMode === "pay" && (
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      gap: 14,
+                      marginTop: 14,
+                    }}
+                  >
+                    <Input
+                      label="UPI ID"
+                      value={upiId}
+                      onChange={(event) => setUpiId(event.target.value.trim())}
+                      placeholder="name@bank"
+                    />
+                    <Input
+                      label="Payee name"
+                      value={payeeName}
+                      onChange={(event) => setPayeeName(event.target.value)}
+                      placeholder={hotelName || "Restaurant"}
+                    />
+                    <label
+                      style={{
+                        gridColumn: "1 / -1",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 10,
+                        fontSize: 14,
+                        cursor: "pointer",
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={includeBillAmount}
+                        onChange={(event) => setIncludeBillAmount(event.target.checked)}
+                        style={{
+                          width: 18,
+                          height: 18,
+                          accentColor: "var(--pos-success)",
+                          flexShrink: 0,
+                        }}
+                      />
+                      Include this bill&apos;s amount
+                    </label>
+                  </div>
+                )}
+                {receiptQrMode !== "off" && (
+                  <>
+                    <div style={{ marginTop: 14 }}>
+                      <Input
+                        label="Footer note"
+                        value={receiptQrNote}
+                        maxLength={RECEIPT_QR_NOTE_LIMIT}
+                        onChange={(event) =>
+                          setReceiptQrNote(event.target.value.slice(0, RECEIPT_QR_NOTE_LIMIT))
+                        }
+                        placeholder={
+                          receiptQrMode === "pay" ? "Scan to pay" : "Scan to share feedback"
+                        }
+                      />
+                      <div style={{ fontSize: 12, color: "var(--pos-tx-sub)", marginTop: 6 }}>
+                        Optional. Printed above the QR. {receiptQrNote.length}/{RECEIPT_QR_NOTE_LIMIT}
+                      </div>
+                    </div>
+                    <ReceiptQrPreview
+                      mode={receiptQrMode}
+                      note={receiptQrNote}
+                      payload={buildReceiptQrPayload({
+                        receiptQr: receiptQrConfigForSave({
+                          mode: receiptQrMode,
+                          feedbackUrl,
+                          upiId,
+                          payeeName,
+                          includeAmount: includeBillAmount,
+                          note: receiptQrNote,
+                        }),
+                        grandTotal: RECEIPT_QR_SAMPLE_AMOUNT,
+                        reference: RECEIPT_QR_SAMPLE_REFERENCE,
+                        hotelName,
+                      })}
+                    />
+                  </>
+                )}
               </div>
             </div>
 

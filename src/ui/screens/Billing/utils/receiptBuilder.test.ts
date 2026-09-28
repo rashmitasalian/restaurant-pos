@@ -7,6 +7,7 @@ jest.mock("../../../../config/env", () => ({
 }));
 
 import { buildReceiptLines } from "./receiptBuilder";
+import { buildReceiptQrBitmap, buildReceiptQrPayload } from "./receiptQr";
 
 const gstIdentity = {
   enabled: true,
@@ -78,5 +79,124 @@ describe("receipt GST layout", () => {
     expect(lines).toContain("CENTER:SAC 996331");
     expect(lines.join("\n")).toContain("Taxable Value");
     expect(lines.join("\n")).toContain("CGST 2.5% incl.");
+  });
+});
+
+function sampleBill(
+  receiptQr?: {
+    mode?: "off" | "feedback" | "pay";
+    feedbackUrl?: string;
+    upiId?: string;
+    payeeName?: string;
+    includeAmount?: boolean;
+    note?: string;
+  },
+  total = 842,
+) {
+  return buildReceiptLines(
+    {
+      items: [{ name: "Tea", qty: 1, rate: total }],
+      orderType: "takeaway",
+      invoiceNumber: "INV 12/3",
+      meta: { orderSeq: 7 },
+    },
+    null,
+    0,
+    { total, subtotal: total },
+    null,
+    { hotelName: "The Coastal Kitchen", receiptQr },
+  );
+}
+
+function footer(lines: string[]) {
+  return lines.slice(lines.lastIndexOf("CENTERB:Thank you! Visit again."));
+}
+
+describe("receipt QR footer", () => {
+  it("prints thank you then cut when the QR is off, missing, or stale", () => {
+    for (const lines of [
+      sampleBill(undefined),
+      sampleBill({ mode: "off", feedbackUrl: "https://example.com/f", note: "Scan", upiId: "a@b" }),
+    ]) {
+      expect(footer(lines)).toEqual(["CENTERB:Thank you! Visit again.", "CUT"]);
+    }
+  });
+
+  it("prints a feedback QR after the thank-you line and before the cut", () => {
+    const receiptQr = { mode: "feedback" as const, feedbackUrl: "https://example.com/feedback" };
+    const lines = sampleBill(receiptQr);
+    const payload = buildReceiptQrPayload({
+      receiptQr,
+      grandTotal: 842,
+      reference: "INV 12/3",
+      hotelName: "The Coastal Kitchen",
+    });
+    const raster = buildReceiptQrBitmap(payload!);
+    expect(footer(lines)).toEqual([
+      "CENTERB:Thank you! Visit again.",
+      "BLANK",
+      `QR_MONO:${raster!.width}:${raster!.height}:${raster!.dataBase64}`,
+      "CUT",
+    ]);
+  });
+
+  it("prints the note and then the QR, with nothing after the QR except the cut", () => {
+    const lines = sampleBill({
+      mode: "pay",
+      upiId: "restaurant@upi",
+      payeeName: "Hotel & Restaurant",
+      includeAmount: true,
+      note: "Scan to pay",
+    });
+    const tail = footer(lines);
+    expect(tail[0]).toBe("CENTERB:Thank you! Visit again.");
+    expect(tail[1]).toBe("BLANK");
+    expect(tail[2]).toBe("CENTER:Scan to pay");
+    expect(tail[3].startsWith("QR_MONO:240:240:")).toBe(true);
+    expect(tail[4]).toBe("CUT");
+    expect(lines[lines.length - 1]).toBe("CUT");
+  });
+
+  it("embeds the bill grand total in a pay QR and omits it when amount is off", () => {
+    const withAmount = {
+      mode: "pay" as const,
+      upiId: "restaurant@upi",
+      payeeName: "Hotel & Restaurant",
+      includeAmount: true,
+    };
+    const withoutAmount = { ...withAmount, includeAmount: false };
+    const amountPayload = buildReceiptQrPayload({
+      receiptQr: withAmount,
+      grandTotal: 842,
+      reference: "INV 12/3",
+      hotelName: "The Coastal Kitchen",
+    });
+    const plainPayload = buildReceiptQrPayload({
+      receiptQr: withoutAmount,
+      grandTotal: 842,
+      reference: "INV 12/3",
+      hotelName: "The Coastal Kitchen",
+    });
+    expect(amountPayload).toContain("am=842");
+    expect(plainPayload).not.toMatch(/(?:^|[?&])am=/);
+    const amountRaster = buildReceiptQrBitmap(amountPayload!);
+    const plainRaster = buildReceiptQrBitmap(plainPayload!);
+    expect(sampleBill(withAmount).join("\n")).toContain(amountRaster!.dataBase64);
+    expect(sampleBill(withoutAmount).join("\n")).toContain(plainRaster!.dataBase64);
+    expect(sampleBill(withoutAmount).join("\n")).not.toContain(amountRaster!.dataBase64);
+  });
+
+  it("still prints the note when the QR config cannot be used", () => {
+    const lines = sampleBill({
+      mode: "pay",
+      upiId: "bad id",
+      note: "Visit again soon",
+    });
+    expect(footer(lines)).toEqual([
+      "CENTERB:Thank you! Visit again.",
+      "BLANK",
+      "CENTER:Visit again soon",
+      "CUT",
+    ]);
   });
 });

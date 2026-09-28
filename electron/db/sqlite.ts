@@ -2031,6 +2031,7 @@ function seedDatabase(database: SqliteDatabase) {
       logoDataUrl: null,
       receiptLogoRaster: null,
       logoUpdatedAt: 0,
+      receiptQr: { mode: "off" },
     }),
     now,
   );

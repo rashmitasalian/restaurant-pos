@@ -1061,6 +1061,14 @@ export type ConfigBrandingDoc = ConfigDto & {
     dataBase64: string;
   } | null;
   logoUpdatedAt?: number;
+  receiptQr?: {
+    mode?: "off" | "feedback" | "pay";
+    feedbackUrl?: string;
+    upiId?: string;
+    payeeName?: string;
+    includeAmount?: boolean;
+    note?: string;
+  };
   updatedAt?: number;
 };
 
@@ -1077,6 +1085,7 @@ export async function getConfigBranding(): Promise<ConfigBrandingDoc> {
       logoDataUrl: null,
       receiptLogoRaster: null,
       logoUpdatedAt: 0,
+      receiptQr: { mode: "off" },
     }
   );
 }
@@ -1094,6 +1103,14 @@ export async function setConfigBranding(cfg: {
     dataBase64: string;
   } | null;
   logoUpdatedAt?: number;
+  receiptQr?: {
+    mode?: "off" | "feedback" | "pay";
+    feedbackUrl?: string;
+    upiId?: string;
+    payeeName?: string;
+    includeAmount?: boolean;
+    note?: string;
+  };
 }) {
   return api().settings!.set("config:branding", cfg);
 }

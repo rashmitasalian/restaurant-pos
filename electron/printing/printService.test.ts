@@ -1,11 +1,19 @@
+jest.mock("./windowsRaw", () => ({
+  printViaWindowsRaw: jest.fn(),
+}));
+
 import { isIpv4Address } from "./networkRaw";
 import {
   enqueuePrinterJob,
   normalizePrintType,
+  printPayload,
   resetPrinterQueuesForTests,
   resolvePrinterTarget,
   type PrinterConfig,
 } from "./printService";
+import { printViaWindowsRaw } from "./windowsRaw";
+
+const printRaw = printViaWindowsRaw as jest.Mock;
 
 const cfg: PrinterConfig = {
   kitchenPrinterName: "Kitchen Printer",
@@ -68,5 +76,69 @@ describe("printer FIFO queue", () => {
     await Promise.all([kitchen, counter]);
     expect(order[0]).toBe("counter");
     expect(order[1]).toBe("kitchen");
+  });
+});
+
+describe("receipt print fallback", () => {
+  const logo = `IMAGE_MONO:16:1:${Buffer.from([0x11, 0x22]).toString("base64")}`;
+  const qr = `QR_MONO:16:1:${Buffer.from([0x33, 0x44]).toString("base64")}`;
+  const lines = ["CENTERB:Thank you! Visit again.", "CENTER:Scan to pay", logo, qr, "CUT"];
+
+  beforeEach(() => {
+    resetPrinterQueuesForTests();
+    printRaw.mockReset();
+  });
+
+  function sentBuffers() {
+    return printRaw.mock.calls.map((call) => call[1] as Buffer);
+  }
+
+  it("retries without the logo, then as text only, and reports text success", async () => {
+    printRaw
+      .mockRejectedValueOnce(new Error("full failed"))
+      .mockRejectedValueOnce(new Error("no logo failed"))
+      .mockResolvedValueOnce(undefined);
+
+    await expect(
+      printPayload({ type: "receipt", data: { lines } }, cfg),
+    ).resolves.toMatchObject({ type: "receipt", transport: "windows-raw" });
+
+    const buffers = sentBuffers();
+    expect(buffers).toHaveLength(3);
+    expect(buffers[0].includes(Buffer.from([0x11, 0x22]))).toBe(true);
+    expect(buffers[0].includes(Buffer.from([0x33, 0x44]))).toBe(true);
+    expect(buffers[1].includes(Buffer.from([0x11, 0x22]))).toBe(false);
+    expect(buffers[1].includes(Buffer.from([0x33, 0x44]))).toBe(true);
+    expect(buffers[2].includes(Buffer.from([0x11, 0x22]))).toBe(false);
+    expect(buffers[2].includes(Buffer.from([0x33, 0x44]))).toBe(false);
+    for (const buffer of buffers) {
+      const text = buffer.toString("latin1");
+      expect(text).toContain("Thank you! Visit again.");
+      expect(text).toContain("Scan to pay");
+    }
+  });
+
+  it("keeps the QR when dropping only the logo succeeds", async () => {
+    printRaw.mockRejectedValueOnce(new Error("full failed")).mockResolvedValueOnce(undefined);
+
+    await expect(printPayload({ type: "receipt", data: { lines } }, cfg)).resolves.toMatchObject({
+      transport: "windows-raw",
+    });
+
+    const buffers = sentBuffers();
+    expect(buffers).toHaveLength(2);
+    expect(buffers[1].includes(Buffer.from([0x33, 0x44]))).toBe(true);
+    expect(buffers[1].toString("latin1")).toContain("Thank you! Visit again.");
+  });
+
+  it("does not retry a text receipt that has no logo or QR", async () => {
+    printRaw.mockRejectedValueOnce(new Error("offline"));
+    await expect(
+      printPayload(
+        { type: "receipt", data: { lines: ["CENTERB:Thank you! Visit again.", "CUT"] } },
+        cfg,
+      ),
+    ).rejects.toThrow("offline");
+    expect(printRaw).toHaveBeenCalledTimes(1);
   });
 });

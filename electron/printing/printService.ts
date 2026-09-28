@@ -70,7 +70,6 @@ export async function printPayload(
   }
   const text = typeof data?.text === "string" ? data.text : "";
   const lines: string[] = data.lines.map((line: unknown) => String(line));
-  const escPosBuffer = buildEscPosBuffer(type, text, lines, options.hotelName || "");
   const sendBuffer = async (buffer: Buffer): Promise<PrintResult> => {
     if (isIpv4Address(printerName)) {
       await printViaNetworkRaw(printerName, cfg.printerPort || 9100, buffer);
@@ -81,18 +80,38 @@ export async function printPayload(
     return { type, printerName, transport: "windows-raw" };
   };
 
+  const sendLines = (jobLines: string[]) => {
+    const buffer = buildEscPosBuffer(type, text, jobLines, options.hotelName || "");
+    return sendBuffer(buffer);
+  };
+
   return enqueuePrinterJob(printerName, async () => {
+    if (type !== "receipt") {
+      return sendLines(lines);
+    }
+
+    const hasLogo = lines.some((line) => line.startsWith("IMAGE_MONO:"));
+    const hasQr = lines.some((line) => line.startsWith("QR_MONO:"));
     try {
-      return await sendBuffer(escPosBuffer);
+      return await sendLines(lines);
     } catch (error) {
-      const hasReceiptLogo =
-        type === "receipt" && lines.some((line) => line.startsWith("IMAGE_MONO:"));
-      if (!hasReceiptLogo) {
+      if (!hasLogo && !hasQr) {
         throw error;
       }
-      const textOnlyLines = lines.filter((line) => !line.startsWith("IMAGE_MONO:"));
-      const fallbackBuffer = buildEscPosBuffer(type, text, textOnlyLines, options.hotelName || "");
-      return sendBuffer(fallbackBuffer);
+      const withoutLogo = hasLogo
+        ? lines.filter((line) => !line.startsWith("IMAGE_MONO:"))
+        : lines;
+      if (hasLogo) {
+        try {
+          return await sendLines(withoutLogo);
+        } catch (noLogoError) {
+          if (!hasQr) {
+            throw noLogoError;
+          }
+          return sendLines(withoutLogo.filter((line) => !line.startsWith("QR_MONO:")));
+        }
+      }
+      return sendLines(lines.filter((line) => !line.startsWith("QR_MONO:")));
     }
   });
 }
