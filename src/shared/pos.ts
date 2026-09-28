@@ -57,6 +57,8 @@ export type MenuItemDto = {
   available?: boolean;
   favorite?: boolean;
   taxRateBps?: number;
+  sortOrder?: number;
+  diet?: "veg" | "non-veg" | "egg" | null;
   variants?: MenuItemVariantDto[];
 };
 
@@ -74,7 +76,7 @@ export type OrderLineDto = {
   name: string;
   qty: number;
   rate: number;
-  taxRateBps?: number;
+  taxRateBps?: number | null;
   kotPrintedQty?: number;
 };
 

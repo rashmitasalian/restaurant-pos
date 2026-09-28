@@ -25,6 +25,24 @@ export type ReceiptBranding = {
 const rpad = (s: string, w: number) => (s.length >= w ? s.slice(0, w) : s.padEnd(w));
 const lpad = (s: string, w: number) => (s.length >= w ? s.slice(0, w) : s.padStart(w));
 const fmtAmt = (n: number) => `${Math.round(n * 100) / 100}`;
+const RECEIPT_WIDTH = 42;
+const TOTAL_AMOUNT_WIDTH = 12;
+
+function formatReceiptMoney(amount: number) {
+  const paise = Math.round((Number(amount) || 0) * 100);
+  const sign = paise < 0 ? "-" : "";
+  const abs = Math.abs(paise);
+  const rupees = Math.floor(abs / 100);
+  const frac = String(abs % 100).padStart(2, "0");
+  const grouped = String(rupees).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return `${sign}Rs ${grouped}.${frac}`;
+}
+
+function totalRow(label: string, amount: number) {
+  const money = formatReceiptMoney(amount);
+  const labelWidth = Math.max(0, RECEIPT_WIDTH - 2 - Math.max(TOTAL_AMOUNT_WIDTH, money.length));
+  return `LEFTB:${"  "}${rpad(label, labelWidth)}${lpad(money, Math.max(TOTAL_AMOUNT_WIDTH, money.length))}`;
+}
 const wrapText = (value: string, width: number) => {
   const words = String(value || "")
     .trim()
@@ -117,6 +135,7 @@ export function buildReceiptLines(
       ? Number(totals.discountTotal || 0)
       : +(((totals.preDiscountTotal ?? totals.total) * discPct) / 100).toFixed(2);
   const grandTotal = Number(totals.total || 0);
+  const roundOff = Number(totals.roundOff || 0);
   const gstEnabled = taxTotal > 0 && Boolean(totals.gstEnabled ?? gstConfig.gstRateBps > 0);
   const showGstDetails = gstConfig.enabled && Boolean(gstConfig.gstin);
   const gstHalfRate = totals.gstHalfRateBps ?? Math.round((gstConfig.gstRateBps || 0) / 2);
@@ -162,7 +181,7 @@ export function buildReceiptLines(
     ...(showGstDetails && gstConfig.legalName && gstConfig.legalName !== branding.hotelName
       ? [`CENTER:${gstConfig.legalName}`]
       : []),
-    ...(showGstDetails ? [`CENTER:GSTIN: ${gstConfig.gstin}`] : []),
+    ...(showGstDetails ? [`CENTER:GSTIN: ${gstConfig.gstin}`, "CENTER:SAC 996331"] : []),
     ...(showGstDetails && gstConfig.registeredAddress
       ? wrapText(gstConfig.registeredAddress, 42)
           .slice(0, 3)
@@ -201,21 +220,18 @@ export function buildReceiptLines(
       return `LEFTB:${PAD}${name}${qty}${rate}${amt}`;
     }),
     "SEP",
-    `LEFTB:${PAD}${rpad("Sub Total", COL_ITEM + COL_QTY + COL_RATE)}${lpad(`Rs ${fmtAmt(itemSubtotal)}`, COL_AMT)}`,
-    ...(discAmt > 0
-      ? [
-          `LEFTB:${PAD}${rpad(`Discount ${discPct}%`, COL_ITEM + COL_QTY + COL_RATE)}${lpad(`-Rs ${fmtAmt(discAmt)}`, COL_AMT)}`,
-        ]
-      : []),
+    totalRow("Sub Total", itemSubtotal),
+    ...(discAmt > 0 ? [totalRow(`Discount ${discPct}%`, -discAmt)] : []),
     ...(gstEnabled
       ? [
-          `LEFTB:${PAD}${rpad("Taxable Value", COL_ITEM + COL_QTY + COL_RATE)}${lpad(`Rs ${fmtAmt(taxableSubtotal)}`, COL_AMT)}`,
-          `LEFTB:${PAD}${rpad(`CGST ${formatGstRate(gstHalfRate)}${taxLabelSuffix}`, COL_ITEM + COL_QTY + COL_RATE)}${lpad(`Rs ${fmtAmt(cgst)}`, COL_AMT)}`,
-          `LEFTB:${PAD}${rpad(`SGST ${formatGstRate(gstHalfRate)}${taxLabelSuffix}`, COL_ITEM + COL_QTY + COL_RATE)}${lpad(`Rs ${fmtAmt(sgst)}`, COL_AMT)}`,
+          ...(gstConfig.priceIncludesTax ? [totalRow("Taxable Value", taxableSubtotal)] : []),
+          totalRow(`CGST ${formatGstRate(gstHalfRate)}${taxLabelSuffix}`, cgst),
+          totalRow(`SGST ${formatGstRate(gstHalfRate)}${taxLabelSuffix}`, sgst),
+          ...(roundOff !== 0 ? [totalRow("Round off", roundOff)] : []),
         ]
       : []),
     "SEP",
-    `BOLDLEFT:${PAD}${rpad("Grand Total", COL_ITEM + COL_QTY + COL_RATE)}${lpad(`Rs ${fmtAmt(grandTotal)}`, COL_AMT)}`,
+    totalRow("Grand Total", grandTotal).replace("LEFTB:", "BOLDLEFT:"),
     "SEP",
     ...(() => {
       const payments = Array.isArray(ord?.payments) ? ord.payments : [];

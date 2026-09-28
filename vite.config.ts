@@ -41,6 +41,8 @@ export default defineConfig(({ mode }) => {
         events: path.resolve(__dirname, "node_modules/events"),
         inherits: path.resolve(__dirname, "node_modules/inherits"),
         util: path.resolve(__dirname, "node_modules/util/"),
+        // The Node build of csv-parse/sync reads Buffer and crashes the Electron window.
+        "csv-parse/sync": path.resolve(__dirname, "node_modules/csv-parse/dist/esm/sync.js"),
       },
     },
     optimizeDeps: {

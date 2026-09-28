@@ -331,6 +331,10 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
     const user = requirePermission(event, token, "manage:menu");
     return posService.updateItem(payload, user.username);
   });
+  ipcMain.handle("pos:menu:reorder-items", (event, token: string | null, ids: string[]) => {
+    const user = requirePermission(event, token, "manage:menu");
+    return posService.reorderItems(ids, user.username);
+  });
   ipcMain.handle("pos:menu:delete-item", (event, token: string | null, id: string) => {
     const user = requirePermission(event, token, "manage:menu");
     return posService.deleteItem(id, user.username);
@@ -339,6 +343,17 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
     requireSession(event, token);
     return posService.getCategories();
   });
+  ipcMain.handle(
+    "pos:menu:import",
+    (
+      event,
+      token: string | null,
+      payload: { csv: string; fileName?: string; mode?: "upsert" | "replace" },
+    ) => {
+      const user = requirePermission(event, token, "manage:menu");
+      return posService.importMenu(payload, user.username);
+    },
+  );
   ipcMain.handle("pos:menu:set-categories", (event, token: string | null, categories: string[]) => {
     const user = requirePermission(event, token, "manage:menu");
     return posService.setCategories(categories, user.username);

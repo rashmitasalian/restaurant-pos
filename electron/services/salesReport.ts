@@ -158,8 +158,9 @@ function rateLabel(rateBps: number) {
 }
 
 function splitTax(taxPaise: number) {
-  const cgstPaise = Math.round(taxPaise / 2);
-  return { cgstPaise, sgstPaise: taxPaise - cgstPaise };
+  const tax = Math.max(0, Math.trunc(taxPaise));
+  const cgstPaise = Math.floor(tax / 2);
+  return { cgstPaise, sgstPaise: tax - cgstPaise };
 }
 
 function preDiscountBasePaise(bill: SalesBillInput) {

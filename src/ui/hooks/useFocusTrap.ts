@@ -27,6 +27,9 @@ function getFocusableElements(container: HTMLElement | null) {
   );
 }
 
+/** Open traps, innermost last. Only the innermost one handles Escape and Tab. */
+const trapStack: symbol[] = [];
+
 export function useFocusTrap<T extends HTMLElement>(active: boolean, onEscape?: () => void) {
   const ref = React.useRef<T | null>(null);
   const previouslyFocusedRef = React.useRef<HTMLElement | null>(null);
@@ -40,6 +43,8 @@ export function useFocusTrap<T extends HTMLElement>(active: boolean, onEscape?: 
 
     previouslyFocusedRef.current =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const token = Symbol("focus-trap");
+    trapStack.push(token);
 
     const focusFirst = window.setTimeout(() => {
       const first = getFocusableElements(ref.current)[0] || ref.current;
@@ -47,6 +52,9 @@ export function useFocusTrap<T extends HTMLElement>(active: boolean, onEscape?: 
     }, 0);
 
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (trapStack[trapStack.length - 1] !== token) {
+        return;
+      }
       if (event.key === "Escape") {
         if (onEscapeRef.current) {
           event.preventDefault();
@@ -78,6 +86,10 @@ export function useFocusTrap<T extends HTMLElement>(active: boolean, onEscape?: 
     return () => {
       window.clearTimeout(focusFirst);
       document.removeEventListener("keydown", handleKeyDown);
+      const index = trapStack.indexOf(token);
+      if (index >= 0) {
+        trapStack.splice(index, 1);
+      }
       if (previouslyFocusedRef.current && document.contains(previouslyFocusedRef.current)) {
         previouslyFocusedRef.current.focus();
       }

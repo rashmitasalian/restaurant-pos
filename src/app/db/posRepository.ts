@@ -341,6 +341,8 @@ export async function createItem(item: {
   price: number;
   category?: string;
   available?: boolean;
+  favorite?: boolean;
+  diet?: "veg" | "non-veg" | "egg" | null;
   variants?: Array<{ id?: string; name: string; price: number; sortOrder?: number }>;
 }) {
   return api().menu!.createItem(item);
@@ -352,6 +354,18 @@ export async function updateItem(item: ItemDoc) {
 
 export async function deleteItem(id: string): Promise<void> {
   await api().menu!.deleteItem(id);
+}
+
+export async function reorderItems(ids: string[]) {
+  return api().menu!.reorderItems(ids);
+}
+
+export async function importMenu(payload: {
+  csv: string;
+  fileName?: string;
+  mode?: "upsert" | "replace";
+}) {
+  return api().menu!.importMenu!(payload);
 }
 
 export async function listStaff(opts?: {

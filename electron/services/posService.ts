@@ -122,12 +122,17 @@ import {
   serializeWeeklyOffDays,
 } from "../../src/shared/attendanceSchedule";
 import {
-  DEFAULT_GST_CONFIG,
   calculateGstTotalsPaise,
   isValidGstin,
   normalizeGstConfig,
   type GstConfig,
 } from "../../src/shared/gst";
+import {
+  menuMatchKey,
+  normalizeMenuImportMode,
+  validateMenuCsv,
+  type MenuImportMode,
+} from "../../src/shared/menuImport";
 import {
   SERVICE_MODE_CONFIG_KEY,
   findServiceModeById,
@@ -138,7 +143,6 @@ import {
 import { resolveBusinessTimezone } from "../../src/shared/businessDateRange";
 import { RECOVERY_CODE_COUNT } from "../../src/shared/auth";
 
-const TAX_RATE_BPS = 1800;
 const MAX_ATTEMPTS = Number(process.env.VITE_AUTH_MAX_ATTEMPTS || 5);
 const LOCKOUT_MS = Number(process.env.VITE_AUTH_LOCKOUT_MS || 900_000);
 const INVOICE_CONFIG_KEY = "config:invoice";
@@ -1079,6 +1083,37 @@ function seatingAreaFromRow(row: any): SeatingAreaDto {
   };
 }
 
+function normalizeMenuDiet(value: unknown, whenMissing: string | null) {
+  if (value === undefined) {
+    return whenMissing;
+  }
+  const diet = String(value ?? "")
+    .trim()
+    .toLowerCase();
+  if (!diet) {
+    return null;
+  }
+  if (diet === "veg" || diet === "non-veg" || diet === "egg") {
+    return diet;
+  }
+  throw new Error("item-diet-invalid");
+}
+
+function nextItemSortOrder(database: Database.Database, categoryId: string | null) {
+  const row = (
+    categoryId
+      ? database
+          .prepare("SELECT COALESCE(MAX(sort_order), 0) AS sort_order FROM menu_items WHERE category_id = ?")
+          .get(categoryId)
+      : database
+          .prepare(
+            "SELECT COALESCE(MAX(sort_order), 0) AS sort_order FROM menu_items WHERE category_id IS NULL",
+          )
+          .get()
+  ) as { sort_order?: number } | undefined;
+  return Number(row?.sort_order || 0) + 1;
+}
+
 function itemFromRow(row: any, variants: MenuItemVariantDto[] = []): MenuItemDto {
   return {
     _id: row.id,
@@ -1089,7 +1124,9 @@ function itemFromRow(row: any, variants: MenuItemVariantDto[] = []): MenuItemDto
     price: paiseToRupees(row.price_paise),
     available: Boolean(row.available),
     favorite: Boolean(row.favorite),
-    taxRateBps: row.tax_rate_bps,
+    taxRateBps: row.tax_rate_bps == null ? undefined : Number(row.tax_rate_bps),
+    sortOrder: Number(row.sort_order || 0),
+    diet: row.diet || null,
     variants,
   };
 }
@@ -1102,7 +1139,7 @@ function lineFromRow(row: any): OrderLineDto {
     name: row.item_name,
     qty: Number(row.quantity),
     rate: paiseToRupees(row.rate_paise),
-    taxRateBps: row.tax_rate_bps,
+    taxRateBps: row.tax_rate_bps == null ? undefined : Number(row.tax_rate_bps),
     kotPrintedQty: Number(row.kot_printed_qty || 0),
   };
 }
@@ -1132,7 +1169,7 @@ function getGstSettingFromDb(database: Database.Database = getDb()): GstConfig {
   const row = database
     .prepare("SELECT value_json FROM settings WHERE key = ?")
     .get("config:gst") as { value_json?: string } | undefined;
-  return normalizeGstConfig(parseJson(row?.value_json, DEFAULT_GST_CONFIG));
+  return normalizeGstConfig(row?.value_json ? parseJson(row.value_json, null) : null);
 }
 
 function assertGstConfig(input: Partial<GstConfig>) {
@@ -2263,7 +2300,7 @@ function upsertOrderLines(database: Database.Database, orderId: string, lines: O
       normalizeCategoryName(line.categoryName) || null,
       qty,
       ratePaise,
-      line.taxRateBps ?? TAX_RATE_BPS,
+      line.taxRateBps ?? null,
       Math.round(qty * ratePaise),
       Number(line.kotPrintedQty || 0),
       index,
@@ -2493,7 +2530,7 @@ function sanitizeOrderLines(lines: OrderLineDto[]) {
         name: String(line.name || "").trim(),
         qty,
         rate: Math.max(0, Number(line.rate) || 0),
-        taxRateBps: line.taxRateBps ?? TAX_RATE_BPS,
+        taxRateBps: line.taxRateBps ?? null,
         kotPrintedQty: printedQty,
       };
     })
@@ -3604,7 +3641,14 @@ export const posService = {
          FROM menu_items mi
          LEFT JOIN menu_categories mc ON mc.id = mi.category_id
          WHERE mi.active = 1
-         ORDER BY mi.name COLLATE NOCASE ASC`,
+         ORDER BY
+           CASE WHEN mc.id IS NULL THEN 1 ELSE 0 END,
+           mc.sort_order,
+           mc.name COLLATE NOCASE,
+           mc.id,
+           mi.sort_order,
+           mi.name COLLATE NOCASE,
+           mi.id`,
       )
       .all() as any[];
     const variantsByItem = getItemVariantsMap(
@@ -3640,15 +3684,19 @@ export const posService = {
       available?: boolean;
       favorite?: boolean;
       taxRateBps?: number;
+      sortOrder?: number;
+      diet?: string | null;
       variants?: unknown;
     },
     actor?: string | null,
   ) {
     const name = normalizeText(input.name);
     const sku = normalizeSku(input.sku);
-    const price = parsePositiveMoney(input.price);
     const category = normalizeCategoryName(input.category);
     const variants = normalizeMenuVariants(input.variants);
+    const diet = normalizeMenuDiet(input.diet, null);
+    const variantFloor = variants.length ? Math.min(...variants.map((variant) => variant.price)) : null;
+    const price = variantFloor ?? parsePositiveMoney(input.price);
     if (!name) {
       throw new Error("item-name-required");
     }
@@ -3660,11 +3708,15 @@ export const posService = {
     return inTransaction((database) => {
       assertUniqueActiveSku(database, sku);
       const categoryId = ensureCategory(database, category);
+      const sortOrder = Number.isFinite(Number(input.sortOrder))
+        ? Math.trunc(Number(input.sortOrder))
+        : nextItemSortOrder(database, categoryId);
       database
         .prepare(
           `INSERT INTO menu_items (
-            id, sku, name, category_id, price_paise, available, favorite, tax_rate_bps, active, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+            id, sku, name, category_id, price_paise, available, favorite, tax_rate_bps,
+            sort_order, diet, active, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, 1, ?, ?)`,
         )
         .run(
           id,
@@ -3674,7 +3726,8 @@ export const posService = {
           rupeesToPaise(price),
           input.available === false ? 0 : 1,
           input.available === false ? 0 : input.favorite ? 1 : 0,
-          input.taxRateBps ?? TAX_RATE_BPS,
+          sortOrder,
+          diet,
           at,
           at,
         );
@@ -3690,10 +3743,14 @@ export const posService = {
     const price = parsePositiveMoney(item.price);
     const category = normalizeCategoryName(item.category);
     const variants = normalizeMenuVariants((item as any).variants);
+    const variantFloor = variants.length
+      ? Math.min(...variants.map((variant) => variant.price))
+      : null;
+    const storedPrice = variantFloor ?? price;
     if (!name) {
       throw new Error("item-name-required");
     }
-    if (price === null) {
+    if (storedPrice === null) {
       throw new Error("item-price-invalid");
     }
     return inTransaction((database) => {
@@ -3703,27 +3760,52 @@ export const posService = {
       }
       assertUniqueActiveSku(database, sku, item._id);
       const categoryId = ensureCategory(database, category);
+      const sortOrder = Number.isFinite(Number(item.sortOrder))
+        ? Math.trunc(Number(item.sortOrder))
+        : Number(current.sort_order || 0);
+      const diet = normalizeMenuDiet((item as any).diet, current.diet || null);
       database
         .prepare(
           `UPDATE menu_items
            SET sku = ?, name = ?, category_id = ?, price_paise = ?, available = ?,
-               favorite = ?, tax_rate_bps = ?, updated_at = ?
+               favorite = ?, sort_order = ?, diet = ?, updated_at = ?
            WHERE id = ?`,
         )
         .run(
           sku || null,
           name,
           categoryId,
-          rupeesToPaise(price),
+          rupeesToPaise(storedPrice),
           item.available === false ? 0 : 1,
           item.available === false ? 0 : item.favorite ? 1 : 0,
-          item.taxRateBps ?? TAX_RATE_BPS,
+          sortOrder,
+          diet,
           now(),
           item._id,
         );
       writeItemVariants(database, item._id, variants);
       createAuditRow(database, "menu.item.updated", "item", item._id, actor || null, {});
       return this.getItemById(item._id)!;
+    });
+  },
+
+  reorderItems(ids: string[], actor?: string | null) {
+    const orderedIds = Array.from(
+      new Set((Array.isArray(ids) ? ids : []).map((id) => String(id || "")).filter(Boolean)),
+    );
+    if (!orderedIds.length) {
+      return { ok: true, count: 0 };
+    }
+    return inTransaction((database) => {
+      const ts = now();
+      const update = database.prepare(
+        "UPDATE menu_items SET sort_order = ?, updated_at = ? WHERE id = ?",
+      );
+      orderedIds.forEach((id, index) => update.run(index + 1, ts, id));
+      createAuditRow(database, "menu.items.reordered", "menu", "menu", actor || null, {
+        count: orderedIds.length,
+      });
+      return { ok: true, count: orderedIds.length };
     });
   },
 
@@ -3736,7 +3818,7 @@ export const posService = {
   getCategories(): string[] {
     return getDb()
       .prepare(
-        "SELECT name FROM menu_categories WHERE active = 1 ORDER BY sort_order ASC, name ASC",
+        "SELECT name FROM menu_categories WHERE active = 1 ORDER BY sort_order ASC, name COLLATE NOCASE ASC, id ASC",
       )
       .all()
       .map((row: any) => row.name);
@@ -3818,6 +3900,238 @@ export const posService = {
       { count: normalized.length },
     );
     return { ok: true };
+  },
+
+  importMenu(
+    input: { csv: string; fileName?: string; mode?: MenuImportMode },
+    actor?: string | null,
+  ) {
+    const mode = normalizeMenuImportMode(input?.mode);
+    const replacing = mode === "replace";
+    const existingRows = getDb()
+      .prepare(
+        `SELECT mi.id, mi.name, mi.sku, mi.active, mi.category_id, mi.sort_order,
+                mc.name AS category_name
+         FROM menu_items mi
+         LEFT JOIN menu_categories mc ON mc.id = mi.category_id`,
+      )
+      .all() as Array<{
+      id: string;
+      name: string;
+      sku?: string | null;
+      active?: number;
+      category_id?: string | null;
+      sort_order?: number | null;
+      category_name?: string | null;
+    }>;
+    const existing = existingRows.map((item) => ({
+      id: item.id,
+      name: item.name,
+      category: item.category_name || null,
+      sku: item.sku || null,
+      active: item.active !== 0,
+    }));
+    const existingById = new Map(existingRows.map((row) => [row.id, row]));
+    const currentCategories = this.getCategories();
+    const preview = validateMenuCsv(
+      String(input?.csv || ""),
+      existing,
+      currentCategories,
+      mode,
+    );
+    if (preview.errors.length) {
+      const error = new Error("menu-import-invalid");
+      (error as Error & { details?: string[] }).details = preview.errors;
+      throw error;
+    }
+    const categoryNames: string[] = [];
+    const seenCategories = new Set<string>();
+    const addCategory = (name: string) => {
+      const key = menuMatchKey(name);
+      if (!key || seenCategories.has(key)) {
+        return;
+      }
+      seenCategories.add(key);
+      categoryNames.push(name);
+    };
+    if (!replacing) {
+      currentCategories.forEach(addCategory);
+    }
+    [...preview.items]
+      .sort(
+        (left, right) =>
+          left.categoryOrder - right.categoryOrder ||
+          left.category.localeCompare(right.category),
+      )
+      .forEach((item) => addCategory(item.category));
+    const variantNames: string[] = [];
+    const seenVariants = new Set<string>();
+    if (!replacing) {
+      for (const name of this.getVariantOptions()) {
+        const key = menuMatchKey(name);
+        if (!seenVariants.has(key)) {
+          seenVariants.add(key);
+          variantNames.push(name);
+        }
+      }
+    }
+    for (const item of preview.items) {
+      for (const variant of item.variants) {
+        const key = menuMatchKey(variant.name);
+        if (!seenVariants.has(key)) {
+          seenVariants.add(key);
+          variantNames.push(variant.name);
+        }
+      }
+    }
+
+    return inTransaction((database) => {
+      const ts = now();
+      if (replacing) {
+        database.prepare("UPDATE menu_categories SET active = 0, updated_at = ?").run(ts);
+      }
+      const findByName = database.prepare(
+        "SELECT id FROM menu_categories WHERE lower(name) = lower(?) LIMIT 1",
+      );
+      const reactivate = database.prepare(`
+        UPDATE menu_categories
+        SET name = ?, sort_order = ?, active = 1, updated_at = ?
+        WHERE id = ?
+      `);
+      const insertCategory = database.prepare(`
+        INSERT INTO menu_categories (id, name, sort_order, active, created_at, updated_at)
+        VALUES (?, ?, ?, 1, ?, ?)
+      `);
+      categoryNames.forEach((category, index) => {
+        const existingCategory = findByName.get(category) as { id?: string } | undefined;
+        if (existingCategory?.id) {
+          reactivate.run(category, index + 1, ts, existingCategory.id);
+          return;
+        }
+        insertCategory.run(slugId("cat", category), category, index + 1, ts, ts);
+      });
+      database
+        .prepare(
+          `INSERT INTO settings (key, value_json, updated_at)
+           VALUES ('config:categories', ?, ?)
+           ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, updated_at = excluded.updated_at`,
+        )
+        .run(JSON.stringify({ categories: categoryNames }), ts);
+
+      const keptIds: string[] = [];
+      const lastSortOrder = database.prepare(
+        "SELECT MAX(sort_order) AS value FROM menu_items WHERE active = 1 AND category_id IS ?",
+      );
+      const nextPosition = new Map<string | null, number>();
+      const sortOrderFor = (
+        item: (typeof preview.items)[number],
+        categoryId: string | null,
+      ) => {
+        if (replacing) {
+          return item.itemOrder;
+        }
+        const current = item.existingId ? existingById.get(item.existingId) : undefined;
+        if (current && current.active !== 0 && current.category_id === categoryId) {
+          return Number(current.sort_order) || 0;
+        }
+        let next = nextPosition.get(categoryId);
+        if (next === undefined) {
+          const row = lastSortOrder.get(categoryId) as { value?: number | null } | undefined;
+          next = (Number(row?.value) || 0) + 1;
+        }
+        nextPosition.set(categoryId, next + 1);
+        return next;
+      };
+      for (const item of preview.items) {
+        const categoryId = ensureCategory(database, item.category);
+        const id = item.existingId || slugId("item", item.sku || item.name);
+        const price = item.price;
+        if (price === null) {
+          throw new Error("item-price-invalid");
+        }
+        const sortOrder = sortOrderFor(item, categoryId);
+        if (item.existingId) {
+          database
+            .prepare(
+              `UPDATE menu_items
+               SET sku = ?, name = ?, category_id = ?, price_paise = ?, available = ?,
+                   favorite = ?, sort_order = ?, diet = ?, active = 1, updated_at = ?
+               WHERE id = ?`,
+            )
+            .run(
+              item.sku,
+              item.name,
+              categoryId,
+              rupeesToPaise(price),
+              item.available ? 1 : 0,
+              item.favorite ? 1 : 0,
+              sortOrder,
+              item.diet,
+              ts,
+              id,
+            );
+        } else {
+          database
+            .prepare(
+              `INSERT INTO menu_items (
+                id, sku, name, category_id, price_paise, available, favorite, tax_rate_bps,
+                sort_order, diet, active, created_at, updated_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, 1, ?, ?)`,
+            )
+            .run(
+              id,
+              item.sku,
+              item.name,
+              categoryId,
+              rupeesToPaise(price),
+              item.available ? 1 : 0,
+              item.favorite ? 1 : 0,
+              sortOrder,
+              item.diet,
+              ts,
+              ts,
+            );
+        }
+        writeItemVariants(
+          database,
+          id,
+          item.variants.map((variant, index) => ({
+            id: `item-variant:${randomUUID()}`,
+            name: variant.name,
+            price: variant.price,
+            sortOrder: variant.sortOrder ?? index,
+          })),
+        );
+        keptIds.push(id);
+      }
+
+      if (replacing && keptIds.length) {
+        database
+          .prepare(
+            `UPDATE menu_items SET active = 0, updated_at = ?
+             WHERE active = 1 AND id NOT IN (${keptIds.map(() => "?").join(",")})`,
+          )
+          .run(ts, ...keptIds);
+      }
+      database
+        .prepare(
+          `INSERT INTO settings (key, value_json, updated_at)
+           VALUES ('config:menu-variant-options', ?, ?)
+           ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, updated_at = excluded.updated_at`,
+        )
+        .run(JSON.stringify({ options: variantNames }), ts);
+      const result = {
+        mode,
+        created: preview.created,
+        updated: preview.updated,
+        deactivatedItems: preview.deactivatedItems,
+        deactivatedCategories: preview.deactivatedCategories,
+        variantChanges: preview.variantsReplaced,
+        fileName: String(input?.fileName || "").slice(0, 180),
+      };
+      createAuditRow(database, "menu.imported", "menu", "menu", actor || null, result);
+      return result;
+    });
   },
 
   createOrder(
@@ -4000,7 +4314,7 @@ export const posService = {
           name: item.name,
           qty: Number(item.qty || 1),
           rate: Number(item.rate || 0),
-          taxRateBps: TAX_RATE_BPS,
+          taxRateBps: null,
           kotPrintedQty: 0,
         });
       }

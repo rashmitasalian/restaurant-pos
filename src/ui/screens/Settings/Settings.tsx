@@ -54,7 +54,13 @@ import {
   type AttendanceShiftConfig,
   type PrintJobDoc,
 } from "../../../app/db/posRepository";
-import { DEFAULT_GST_CONFIG, isValidGstin, normalizeGstConfig } from "../../../shared/gst";
+import {
+  DEFAULT_GST_CONFIG,
+  gstRateBpsForChoice,
+  gstRateSelection,
+  isValidGstin,
+  normalizeGstConfig,
+} from "../../../shared/gst";
 import { RECOVERY_CODE_COUNT } from "../../../shared/auth";
 import { normalizeCategoryName, validationMessage } from "../../../shared/validation";
 import { reportClientError } from "../../../app/utils/clientError";
@@ -199,7 +205,8 @@ export default function Settings({
   );
   const [gstStateCode, setGstStateCode] = React.useState(DEFAULT_GST_CONFIG.stateCode);
   const [gstStateName, setGstStateName] = React.useState(DEFAULT_GST_CONFIG.stateName);
-  const [gstRate, setGstRate] = React.useState(DEFAULT_GST_CONFIG.gstRateBps / 100);
+  const [gstRateChoice, setGstRateChoice] = React.useState<5 | 18 | null>(5);
+  const [legacyGstPercent, setLegacyGstPercent] = React.useState<number | null>(null);
   const [gstPriceIncludesTax, setGstPriceIncludesTax] = React.useState(
     DEFAULT_GST_CONFIG.priceIncludesTax,
   );
@@ -369,7 +376,9 @@ export default function Settings({
         setGstRegisteredAddress(gstCfg.registeredAddress);
         setGstStateCode(gstCfg.stateCode);
         setGstStateName(gstCfg.stateName);
-        setGstRate(gstCfg.gstRateBps / 100);
+        const selection = gstRateSelection(gstCfg.gstRateBps);
+        setGstRateChoice(selection.choice);
+        setLegacyGstPercent(selection.legacyPercent);
         setGstPriceIncludesTax(gstCfg.priceIncludesTax);
       } catch (e) {}
       try {
@@ -677,7 +686,7 @@ export default function Settings({
     const normalizedGstin = gstin.trim().toUpperCase();
     if (gstEnabled && !normalizedGstin) {
       endAction("gst.save");
-      setGstStatus("GSTIN is required to print GST registration details");
+      setGstStatus("GSTIN is required when GST is charged on bills");
       return;
     }
     if (normalizedGstin && !isValidGstin(normalizedGstin)) {
@@ -685,11 +694,7 @@ export default function Settings({
       setGstStatus("Enter a valid 15-character GSTIN");
       return;
     }
-    if (gstRate < 0 || gstRate > 28) {
-      endAction("gst.save");
-      setGstStatus("GST rate must be between 0 and 28");
-      return;
-    }
+    const gstRateBps = gstRateBpsForChoice(gstRateChoice, legacyGstPercent);
 
     setSavingGst(true);
     setGstStatus(null);
@@ -701,17 +706,19 @@ export default function Settings({
         registeredAddress: gstRegisteredAddress,
         stateCode: gstStateCode,
         stateName: gstStateName,
-        gstRateBps: Math.round(Number(gstRate || 0) * 100),
+        gstRateBps,
         priceIncludesTax: gstPriceIncludesTax,
       });
       const cfg = normalizeGstConfig(saved);
+      const selection = gstRateSelection(cfg.gstRateBps);
       setGstEnabled(cfg.enabled);
       setGstin(cfg.gstin);
       setGstLegalName(cfg.legalName);
       setGstRegisteredAddress(cfg.registeredAddress);
       setGstStateCode(cfg.stateCode);
       setGstStateName(cfg.stateName);
-      setGstRate(cfg.gstRateBps / 100);
+      setGstRateChoice(selection.choice);
+      setLegacyGstPercent(selection.legacyPercent);
       setGstPriceIncludesTax(cfg.priceIncludesTax);
       window.dispatchEvent(new Event("orders-changed"));
       setGstStatus("GST details saved");
@@ -2034,7 +2041,7 @@ export default function Settings({
                     color: "var(--pos-tx)",
                   }}
                 >
-                  Print GST registration details on bills
+                  Charge GST on bills
                 </span>
                 <span
                   style={{
@@ -2044,7 +2051,9 @@ export default function Settings({
                     marginTop: 2,
                   }}
                 >
-                  GST is still calculated when this is off; only GSTIN/legal details are hidden.
+                  When this is on, the rate below is added to the bill or broken out of menu
+                  prices, and GSTIN is printed when it is filled in. When it is off, bills have no
+                  GST.
                 </span>
               </span>
               <input
@@ -2064,16 +2073,41 @@ export default function Settings({
                 maxLength={15}
                 style={{ fontFamily: "monospace", textTransform: "uppercase" }}
               />
-              <Input
-                label="GST Rate (%)"
-                type="number"
-                min={0}
-                max={28}
-                step={0.01}
-                value={gstRate}
-                onChange={(event) => setGstRate(Number(event.target.value))}
-                style={{ width: 140 }}
-              />
+              <div>
+                <div className="pos-label">GST rate</div>
+                {legacyGstPercent != null && gstRateChoice == null ? (
+                  <p style={{ margin: "6px 0 8px", fontSize: 13, color: "var(--pos-tx-sec)" }}>
+                    Current saved rate: {legacyGstPercent}%. Choose 5% or 18% to change it.
+                  </p>
+                ) : null}
+                <div style={{ display: "flex", gap: 16, marginTop: 8 }}>
+                  {[5, 18].map((rate) => (
+                    <label
+                      key={rate}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        fontSize: 14,
+                        cursor: "pointer",
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        name="gst-rate"
+                        checked={gstRateChoice === rate}
+                        onChange={() => setGstRateChoice(rate as 5 | 18)}
+                      />
+                      {rate}%
+                    </label>
+                  ))}
+                </div>
+                <p style={{ margin: "8px 0 0", fontSize: 12, color: "var(--pos-tx-sub)" }}>
+                  5% is the applicable rate for restaurant service other than at specified premises.
+                  18% may apply to restaurant service at specified premises. Confirm your applicable
+                  GST rate with your tax adviser.
+                </p>
+              </div>
               <div style={{ gridColumn: "1 / -1" }}>
                 <Input
                   label="Legal Business Name"
@@ -2127,7 +2161,7 @@ export default function Settings({
                 style={{ width: 16, height: 16, accentColor: "var(--pos-teal)" }}
               />
               <span>
-                Menu prices include GST
+                Menu prices already include GST
                 <span
                   style={{
                     display: "block",
@@ -2137,9 +2171,8 @@ export default function Settings({
                     marginTop: 2,
                   }}
                 >
-                  Recommended for Indian restaurants: menu shows the amount guests pay; the bill
-                  breaks out taxable value + CGST/SGST. Turn off only if menu rates are
-                  tax-exclusive and GST should be added on top.
+                  When this is on, the price you enter is what the guest pays and the bill breaks
+                  GST out of that total. When it is off, GST is added on the bill.
                 </span>
               </span>
             </label>
@@ -2168,7 +2201,8 @@ export default function Settings({
                   setGstRegisteredAddress(DEFAULT_GST_CONFIG.registeredAddress);
                   setGstStateCode(DEFAULT_GST_CONFIG.stateCode);
                   setGstStateName(DEFAULT_GST_CONFIG.stateName);
-                  setGstRate(DEFAULT_GST_CONFIG.gstRateBps / 100);
+                  setGstRateChoice(5);
+                  setLegacyGstPercent(null);
                   setGstPriceIncludesTax(DEFAULT_GST_CONFIG.priceIncludesTax);
                   setGstStatus(null);
                 }}

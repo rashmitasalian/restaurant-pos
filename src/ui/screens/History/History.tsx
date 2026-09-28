@@ -19,6 +19,7 @@ import type { ReceiptBranding } from "../Billing/utils/receiptBuilder";
 import {
   DEFAULT_GST_CONFIG,
   calculateGstTotals,
+  splitGstPaise,
   formatGstRate,
   getOrderGstConfig,
   normalizeGstConfig,
@@ -604,6 +605,31 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
     );
     const cfg = getOrderGstConfig(ord, gstConfig);
     const calculated = calculateGstTotals(ord?.items || [], Number(ord?.discountPercent || 0), cfg);
+    const paid = ord?.status === "paid" || Number(ord?.paidAt) > 0;
+    if (paid && typeof ord?.total === "number" && typeof ord?.taxTotal === "number") {
+      const taxPaise = Math.round(Number(ord.taxTotal) * 100);
+      const split = splitGstPaise(taxPaise);
+      const taxable =
+        typeof ord?.subtotal === "number" ? Number(ord.subtotal) : calculated.taxableSubtotal;
+      const roundOff = Math.round((Number(ord.total) - (taxable + Number(ord.taxTotal))) * 100) / 100;
+      return {
+        ...calculated,
+        itemSubtotal,
+        subtotal: itemSubtotal,
+        taxableSubtotal: taxable,
+        taxTotal: Number(ord.taxTotal),
+        cgst: split.cgstPaise / 100,
+        sgst: split.sgstPaise / 100,
+        roundOff,
+        discountTotal:
+          typeof ord?.discountTotal === "number" ? ord.discountTotal : calculated.discountTotal,
+        total: Number(ord.total),
+        gstEnabled: Number(ord.taxTotal) > 0 && cfg.gstRateBps > 0,
+        gstRateBps: Number(ord.taxTotal) > 0 ? cfg.gstRateBps : 0,
+        gstHalfRateBps: Number(ord.taxTotal) > 0 ? Math.floor(cfg.gstRateBps / 2) : 0,
+        priceIncludesTax: cfg.priceIncludesTax,
+      };
+    }
     const paymentsArr = (ord?.payments || []) as any[];
     const paidTotal = paymentsArr.reduce((s: number, p: any) => s + (Number(p?.amount) || 0), 0);
     const total =
@@ -624,7 +650,7 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
       total,
       gstEnabled: taxTotal > 0 && cfg.gstRateBps > 0,
       gstRateBps: taxTotal > 0 ? cfg.gstRateBps : 0,
-      gstHalfRateBps: taxTotal > 0 ? Math.round(cfg.gstRateBps / 2) : 0,
+      gstHalfRateBps: taxTotal > 0 ? Math.floor(cfg.gstRateBps / 2) : 0,
     };
   };
 

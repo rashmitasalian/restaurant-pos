@@ -10,6 +10,7 @@ import {
   setOrderPaid,
   cancelOrder,
   getItems,
+  getConfigCategories,
   seedItems,
   updateOrderLines,
   setOrderDiscount,
@@ -527,19 +528,25 @@ export default function Billing() {
     () => (items || []).filter((it) => it.favorite === true && it.available !== false),
     [items],
   );
+  const [categoryOrder, setCategoryOrder] = React.useState<string[]>([]);
   const menuCategories = React.useMemo(() => {
-    const cats = new Set<string>();
+    const present = new Set<string>();
     for (const it of items || []) {
       if (it.available === false) {
         continue;
       }
       const category = String(it.category || "").trim();
       if (category) {
-        cats.add(category);
+        present.add(category);
       }
     }
-    return Array.from(cats).sort((a, b) => a.localeCompare(b));
-  }, [items]);
+    const ordered = categoryOrder.filter((name) => present.has(name));
+    const known = new Set(ordered);
+    const extras = [...present]
+      .filter((name) => !known.has(name))
+      .sort((a, b) => a.localeCompare(b));
+    return [...ordered, ...extras];
+  }, [items, categoryOrder]);
   const visibleMenuItems = React.useMemo(() => {
     const available = (items || []).filter((it) => it.available !== false);
     if (menuCategory === "favorites") {
@@ -806,6 +813,7 @@ export default function Billing() {
         // Load items first so favorites render immediately alongside the order
         await seedItems();
         setItems(await getItems());
+        setCategoryOrder(await getConfigCategories());
         await loadTableSnapshot();
       } catch (e) {
         logger.error("Billing: failed to load items/config on mount", e as Error);
@@ -2231,9 +2239,20 @@ export default function Billing() {
                         name={f.name}
                         priceLabel={itemPriceSummary(f, formatCurrency)}
                         meta={
-                          Array.isArray(f.variants) && f.variants.length > 0
-                            ? `${f.variants.length} option${f.variants.length !== 1 ? "s" : ""}`
-                            : String(f.category || "").trim() || undefined
+                          [
+                            f.diet === "veg"
+                              ? "Veg"
+                              : f.diet === "non-veg"
+                                ? "Non-veg"
+                                : f.diet === "egg"
+                                  ? "Egg"
+                                  : "",
+                            Array.isArray(f.variants) && f.variants.length > 0
+                              ? `${f.variants.length} option${f.variants.length !== 1 ? "s" : ""}`
+                              : String(f.category || "").trim(),
+                          ]
+                            .filter(Boolean)
+                            .join(" · ") || undefined
                         }
                         onClick={() => addToOrder(f, qty)}
                       />
@@ -2389,6 +2408,12 @@ export default function Billing() {
                       </span>
                       <span>{formatCurrency(sgst)}</span>
                     </div>
+                    {totals.roundOff ? (
+                      <div className={styles.ticketSummaryRow}>
+                        <span>Round off</span>
+                        <span>{formatCurrency(totals.roundOff)}</span>
+                      </div>
+                    ) : null}
                   </>
                 ) : null}
                 {discountAmt > 0 ? (

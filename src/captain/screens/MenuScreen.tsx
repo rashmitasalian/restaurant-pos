@@ -78,6 +78,13 @@ function MenuItemRow({
       <div className="cap-menu-row-copy">
         <p className="cap-menu-row-name">{item.name}</p>
         <span className="cap-menu-row-meta">
+          {item.diet === "veg"
+            ? "Veg · "
+            : item.diet === "non-veg"
+              ? "Non-veg · "
+              : item.diet === "egg"
+                ? "Egg · "
+                : ""}
           {money(Number(item.price || 0))}
           {hasVariants ? ` · ${item.variants.length} options` : ""}
         </span>

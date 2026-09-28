@@ -30,6 +30,7 @@ export function ConfirmModal({
   return (
     <Modal
       open={open}
+      front
       title={title}
       onClose={() => {
         if (!loading) {

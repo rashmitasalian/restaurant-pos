@@ -5,9 +5,21 @@ import {
   createItem,
   updateItem,
   deleteItem,
+  reorderItems,
   getConfigCategories,
+  setConfigCategories,
   getConfigMenuVariantOptions,
+  importMenu,
+  type ItemDoc,
 } from "../../../app/db/posRepository";
+import {
+  menuExportCsv,
+  menuImportTemplate,
+  menuMatchKey,
+  validateMenuCsv,
+  type MenuDiet,
+  type MenuImportMode,
+} from "../../../shared/menuImport";
 import {
   normalizeCategoryName,
   normalizeSku,
@@ -19,19 +31,57 @@ import { useToast } from "../../context/ToastContext";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { Button } from "../../components/ui/Button";
 import { Modal } from "../../components/ui/Modal";
+import { Drawer } from "../../components/ui/Drawer";
+import { ConfirmModal } from "../../components/ui/ConfirmModal";
+import { SegmentedControl } from "../../components/ui/SegmentedControl";
+import { PortalMenu, PortalMenuItem } from "../../components/ui/PortalMenu";
 import { Icon } from "../../components/ui/Icon";
-import { Star, X } from "lucide-react";
-
-const MENU_PAGE_SIZE = 50;
+import { ChevronDown, ChevronUp, Pencil, Star, X } from "lucide-react";
 
 type VariantDraft = {
+  id?: string;
+  name: string;
+  price: number | string;
+  sortOrder?: number;
+};
+
+type NormalizedVariant = {
   id?: string;
   name: string;
   price: number;
   sortOrder?: number;
 };
 
-function normalizeVariantDrafts(input: VariantDraft[]) {
+type ItemDraft = {
+  name: string;
+  sku: string;
+  category: string;
+  diet: string;
+  price: string;
+  available: boolean;
+  favorite: boolean;
+  variants: VariantDraft[];
+};
+
+type EditorState = { mode: "create" } | { mode: "edit"; itemId: string };
+
+type StatusFilter = "all" | "on" | "off";
+type DietFilter = "all" | "veg" | "non-veg" | "egg" | "none";
+
+const NO_CATEGORY = "\u0000none";
+const FILTER_HEIGHT = "calc(var(--pos-hit-dense) + 8px)";
+const EMPTY_DRAFT: ItemDraft = {
+  name: "",
+  sku: "",
+  category: "",
+  diet: "",
+  price: "",
+  available: true,
+  favorite: false,
+  variants: [],
+};
+
+function normalizeVariantDrafts(input: VariantDraft[]): NormalizedVariant[] {
   const rows = (input || [])
     .map((variant, index) => ({
       id: variant.id,
@@ -42,10 +92,6 @@ function normalizeVariantDrafts(input: VariantDraft[]) {
         : index,
     }))
     .filter((variant) => variant.name || String(variant.price ?? "").trim() !== "");
-
-  if (!rows.length) {
-    return [] as VariantDraft[];
-  }
 
   const seen = new Set<string>();
   return rows.map((variant) => {
@@ -61,41 +107,64 @@ function normalizeVariantDrafts(input: VariantDraft[]) {
     if (price === null) {
       throw new Error("item-variant-price-invalid");
     }
-    return {
-      id: variant.id,
-      name: variant.name,
-      price,
-      sortOrder: variant.sortOrder,
-    };
+    return { id: variant.id, name: variant.name, price, sortOrder: variant.sortOrder };
   });
 }
 
-function getVariantMinPrice(variants: VariantDraft[]) {
-  if (!Array.isArray(variants) || variants.length === 0) {
-    return null;
-  }
-  const prices = variants
-    .map((variant) => parsePositiveMoney(variant.price))
-    .filter((price): price is number => price !== null);
-  if (!prices.length) {
-    return null;
-  }
-  return Math.min(...prices);
+function itemVariants(item: ItemDoc) {
+  return Array.isArray(item.variants)
+    ? item.variants.map((variant, index) => ({
+        id: variant.id,
+        name: variant.name,
+        price: Number(variant.price),
+        sortOrder: Number(variant.sortOrder ?? index),
+      }))
+    : [];
 }
 
-function getVariantPriceLabel(variants: VariantDraft[]) {
-  if (!Array.isArray(variants) || variants.length === 0) {
-    return "";
+function draftFromItem(item: ItemDoc): ItemDraft {
+  return {
+    name: item.name || "",
+    sku: item.sku || "",
+    category: item.category || "",
+    diet: item.diet || "",
+    price: String(item.price ?? ""),
+    available: item.available !== false,
+    favorite: item.available !== false && Boolean(item.favorite),
+    variants: itemVariants(item),
+  };
+}
+
+function draftKey(draft: ItemDraft) {
+  return JSON.stringify({
+    ...draft,
+    variants: draft.variants.map((variant) => [variant.name, String(variant.price)]),
+  });
+}
+
+function priceLabel(item: ItemDoc) {
+  const variants = itemVariants(item);
+  if (!variants.length) {
+    return `₹${item.price}`;
   }
-  const prices = variants
-    .map((variant) => parsePositiveMoney(variant.price))
-    .filter((price): price is number => price !== null);
-  if (!prices.length) {
-    return "";
-  }
+  const prices = variants.map((variant) => variant.price);
   const min = Math.min(...prices);
   const max = Math.max(...prices);
-  return min === max ? `₹${min}` : `₹${min} - ₹${max}`;
+  return min === max ? `₹${min}` : `₹${min} – ₹${max}`;
+}
+
+function categoryKey(value: unknown) {
+  return menuMatchKey(value) || NO_CATEGORY;
+}
+
+function downloadCsv(content: string, fileName: string) {
+  const blob = new Blob([content], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 export default function ItemsEditor({
@@ -109,158 +178,127 @@ export default function ItemsEditor({
   const { showToast: _showToast } = useToast();
   const showToast = (msg: string, kind: "ok" | "err" = "ok") =>
     _showToast(msg, kind === "err" ? "error" : "success");
-  const [items, setItems] = React.useState<any[]>([]);
+
+  const [items, setItems] = React.useState<ItemDoc[]>([]);
+  const [categories, setCategories] = React.useState<string[]>([]);
+  const [variantOptions, setVariantOptions] = React.useState<string[]>([]);
+
   const [query, setQuery] = React.useState("");
-  const [pageIndex, setPageIndex] = React.useState(0);
-  // Modal states
-  const [modalOpen, setModalOpen] = React.useState(false);
-  const [modalName, setModalName] = React.useState("");
-  const [modalSku, setModalSku] = React.useState("");
-  const [modalPrice, setModalPrice] = React.useState<number>(100);
-  const [modalCategory, setModalCategory] = React.useState("");
-  const [modalAvailable, setModalAvailable] = React.useState(true);
-  const [modalVariants, setModalVariants] = React.useState<VariantDraft[]>([]);
-  const [modalSaving, setModalSaving] = React.useState(false);
+  const [categoryFilter, setCategoryFilter] = React.useState<string>("all");
+  const [statusFilter, setStatusFilter] = React.useState<StatusFilter>("all");
+  const [favoritesOnly, setFavoritesOnly] = React.useState(false);
+  const [dietFilter, setDietFilter] = React.useState<DietFilter>("all");
+
+  const [editor, setEditor] = React.useState<EditorState | null>(null);
+  const [draft, setDraft] = React.useState<ItemDraft>(EMPTY_DRAFT);
+  const [draftBaseline, setDraftBaseline] = React.useState(draftKey(EMPTY_DRAFT));
+  const [editorSaving, setEditorSaving] = React.useState(false);
+  const [confirmDiscard, setConfirmDiscard] = React.useState(false);
+  const [confirmDelete, setConfirmDelete] = React.useState(false);
+  const [deleting, setDeleting] = React.useState(false);
+
+  const [rowBusyId, setRowBusyId] = React.useState<string | null>(null);
+  const [reorderBusy, setReorderBusy] = React.useState(false);
+
+  const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = React.useState(false);
+  const [confirmBulkDelete, setConfirmBulkDelete] = React.useState(false);
+
+  const [ioMenuOpen, setIoMenuOpen] = React.useState(false);
+  const ioMenuAnchor = React.useRef<HTMLButtonElement>(null);
+  const importInputRef = React.useRef<HTMLInputElement>(null);
+  const [importOpen, setImportOpen] = React.useState(false);
+  const [importFileName, setImportFileName] = React.useState("");
+  const [importText, setImportText] = React.useState("");
+  const [importBusy, setImportBusy] = React.useState(false);
+  const [showAllDeactivated, setShowAllDeactivated] = React.useState(false);
+  const [importMode, setImportMode] = React.useState<MenuImportMode>("upsert");
+  const [replaceConfirmed, setReplaceConfirmed] = React.useState(false);
+
+  const reload = React.useCallback(async () => {
+    const [all, loadedCategories, loadedVariantOptions] = await Promise.all([
+      getItems(),
+      getConfigCategories(),
+      getConfigMenuVariantOptions(),
+    ]);
+    setItems(all);
+    setCategories(loadedCategories);
+    setVariantOptions(loadedVariantOptions);
+  }, []);
+
+  React.useEffect(() => {
+    (async () => {
+      await seedItems();
+      await reload();
+    })();
+  }, [reload]);
+
+  const openCreate = React.useCallback(() => {
+    setEditor({ mode: "create" });
+    setDraft(EMPTY_DRAFT);
+    setDraftBaseline(draftKey(EMPTY_DRAFT));
+  }, []);
 
   React.useEffect(() => {
     if (!addItemRef) {
       return;
     }
-    addItemRef.current = () => setModalOpen(true);
+    addItemRef.current = openCreate;
     return () => {
       addItemRef.current = null;
     };
-  }, [addItemRef]);
+  }, [addItemRef, openCreate]);
 
-  // Inline edit map: itemId -> draft field overrides.
-  const [editMap, setEditMap] = React.useState<
-    Record<
-      string,
-      {
-        price?: number;
-        name?: string;
-        sku?: string;
-        category?: string;
-        available?: boolean;
-        favorite?: boolean;
-        variants?: VariantDraft[];
-      }
-    >
-  >({});
-  const [saveAllLoading, setSaveAllLoading] = React.useState(false);
-  const [deletingItemId, setDeletingItemId] = React.useState<string | null>(null);
-  const [bulkDeleteLoading, setBulkDeleteLoading] = React.useState(false);
-  const [favoriteUpdatingId, setFavoriteUpdatingId] = React.useState<string | null>(null);
-  const [variantEditorItemId, setVariantEditorItemId] = React.useState<string | null>(null);
-  const [variantEditorDraft, setVariantEditorDraft] = React.useState<VariantDraft[]>([]);
-  const [variantEditorSaving, setVariantEditorSaving] = React.useState(false);
-  const modalSavingRef = React.useRef(false);
-  const saveAllLoadingRef = React.useRef(false);
-  const deletingItemRef = React.useRef<string | null>(null);
-  const bulkDeleteLoadingRef = React.useRef(false);
-  const favoriteUpdatingRef = React.useRef(false);
+  const openEdit = (item: ItemDoc) => {
+    const next = draftFromItem(item);
+    setEditor({ mode: "edit", itemId: item._id });
+    setDraft(next);
+    setDraftBaseline(draftKey(next));
+  };
 
-  // Categories loaded from DB config
-  const [categories, setCategories] = React.useState<string[]>([]);
-  const [variantOptions, setVariantOptions] = React.useState<string[]>([]);
+  const editingItem =
+    editor?.mode === "edit" ? items.find((item) => item._id === editor.itemId) || null : null;
+  const draftDirty = editor !== null && draftKey(draft) !== draftBaseline;
 
-  React.useEffect(() => {
-    (async () => {
-      await seedItems();
-      const all = await getItems();
-      setItems(all);
-      const [loadedCategories, loadedVariantOptions] = await Promise.all([
-        getConfigCategories(),
-        getConfigMenuVariantOptions(),
-      ]);
-      setCategories(loadedCategories);
-      setVariantOptions(loadedVariantOptions);
-    })();
-  }, []);
+  const closeEditor = (force = false) => {
+    if (editorSaving || deleting) {
+      return;
+    }
+    if (!force && draftDirty) {
+      setConfirmDiscard(true);
+      return;
+    }
+    setConfirmDiscard(false);
+    setEditor(null);
+  };
 
-  const variantNameOptions = React.useCallback(
-    (currentValue?: string) => {
-      const options = [...variantOptions];
-      const current = normalizeText(currentValue);
-      if (current && !options.some((entry) => entry.toLowerCase() === current.toLowerCase())) {
-        options.push(current);
-      }
-      return options;
-    },
-    [variantOptions],
-  );
+  const variantNameOptions = (currentValue?: string) => {
+    const options = [...variantOptions];
+    const current = normalizeText(currentValue);
+    if (current && !options.some((entry) => entry.toLowerCase() === current.toLowerCase())) {
+      options.push(current);
+    }
+    return options;
+  };
 
-  const normalizedQuery = query.trim().toLowerCase();
-  const filtered = React.useMemo(
-    () =>
-      items.filter(
-        (it) =>
-          (it.name || "").toLowerCase().includes(normalizedQuery) ||
-          (it.sku || "").toLowerCase().includes(normalizedQuery),
-      ),
-    [items, normalizedQuery],
-  );
-  const pageCount = Math.max(1, Math.ceil(filtered.length / MENU_PAGE_SIZE));
-
-  React.useEffect(() => {
-    setPageIndex(0);
-  }, [normalizedQuery]);
-
-  React.useEffect(() => {
-    setPageIndex((current) => Math.min(current, pageCount - 1));
-  }, [pageCount]);
-
-  const pageStart = pageIndex * MENU_PAGE_SIZE;
-  const visibleItems = filtered.slice(pageStart, pageStart + MENU_PAGE_SIZE);
-  const displayStart = filtered.length === 0 ? 0 : pageStart + 1;
-  const displayEnd = pageStart + visibleItems.length;
-
-  const hasEdits = Object.keys(editMap).length > 0;
-
-  const itemSkuInUse = React.useCallback(
-    (skuValue: string, currentId?: string) => {
-      const sku = normalizeSku(skuValue).toLowerCase();
-      return Boolean(
-        sku &&
+  const itemSkuInUse = (skuValue: string, currentId?: string) => {
+    const sku = normalizeSku(skuValue).toLowerCase();
+    return Boolean(
+      sku &&
         items.some((it) => it._id !== currentId && normalizeSku(it.sku).toLowerCase() === sku),
-      );
-    },
-    [items],
-  );
+    );
+  };
 
-  const closeModal = React.useCallback(() => {
-    if (modalSavingRef.current) {
+  const saveEditor = async (addAnother = false) => {
+    if (!editor || editorSaving) {
       return;
     }
-    setModalOpen(false);
-    setModalName("");
-    setModalSku("");
-    setModalPrice(100);
-    setModalCategory("");
-    setModalAvailable(true);
-    setModalVariants([]);
-  }, []);
-
-  const resetModalForm = React.useCallback(() => {
-    setModalName("");
-    setModalSku("");
-    setModalPrice(100);
-    setModalCategory("");
-    setModalAvailable(true);
-    setModalVariants([]);
-  }, []);
-
-  const onModalSave = async (addAnother = false) => {
-    if (modalSavingRef.current) {
-      return;
-    }
-    const name = normalizeText(modalName);
-    const sku = normalizeSku(modalSku);
-    const price = parsePositiveMoney(modalPrice);
-    const category = normalizeCategoryName(modalCategory);
-    let variants: VariantDraft[] = [];
+    const name = normalizeText(draft.name);
+    const sku = normalizeSku(draft.sku);
+    const category = normalizeCategoryName(draft.category);
+    let variants: NormalizedVariant[] = [];
     try {
-      variants = normalizeVariantDrafts(modalVariants);
+      variants = normalizeVariantDrafts(draft.variants);
     } catch (e) {
       showToast(validationMessage(e), "err");
       return;
@@ -269,105 +307,246 @@ export default function ItemsEditor({
       showToast(validationMessage("item-name-required"), "err");
       return;
     }
-    const fallbackPrice = getVariantMinPrice(variants);
-    const effectivePrice = price ?? fallbackPrice;
-    if (effectivePrice === null) {
+    const price = variants.length
+      ? Math.min(...variants.map((variant) => variant.price))
+      : parsePositiveMoney(draft.price);
+    if (price === null) {
       showToast(validationMessage("item-price-invalid"), "err");
       return;
     }
-    if (itemSkuInUse(sku)) {
+    const currentId = editor.mode === "edit" ? editor.itemId : undefined;
+    if (itemSkuInUse(sku, currentId)) {
       showToast(validationMessage("item-sku-duplicate"), "err");
       return;
     }
-    modalSavingRef.current = true;
-    setModalSaving(true);
+    const diet = (draft.diet || null) as MenuDiet;
+    const favorite = draft.available && draft.favorite;
+    setEditorSaving(true);
     try {
-      await createItem({
-        name,
-        price: effectivePrice,
-        sku: sku || undefined,
-        category: category || undefined,
-        available: modalAvailable,
-        variants,
-      });
-      const all = await getItems();
-      setItems(all);
-      showToast(`"${name}" added`);
-      if (addAnother) {
-        resetModalForm();
+      if (editor.mode === "create") {
+        await createItem({
+          name,
+          price,
+          sku: sku || undefined,
+          category: category || undefined,
+          available: draft.available,
+          favorite,
+          diet,
+          variants,
+        });
       } else {
-        closeModal();
+        const base = items.find((item) => item._id === editor.itemId);
+        if (!base) {
+          throw new Error("item-not-found");
+        }
+        await updateItem({
+          ...base,
+          name,
+          sku: sku || undefined,
+          price,
+          category: category || undefined,
+          available: draft.available,
+          favorite,
+          diet,
+          variants: variants.map((variant, index) => ({
+            id: variant.id || "",
+            name: variant.name,
+            price: variant.price,
+            sortOrder: variant.sortOrder ?? index,
+          })),
+        });
+      }
+      await reload();
+      showToast(editor.mode === "create" ? `"${name}" added` : `"${name}" saved`);
+      if (addAnother && editor.mode === "create") {
+        const next = { ...EMPTY_DRAFT, category: draft.category, diet: draft.diet };
+        setDraft(next);
+        setDraftBaseline(draftKey(next));
+      } else {
+        setEditor(null);
       }
     } catch (e) {
-      showToast(validationMessage(e, "Failed to create item"), "err");
+      showToast(validationMessage(e, "Failed to save item"), "err");
     } finally {
-      modalSavingRef.current = false;
-      setModalSaving(false);
+      setEditorSaving(false);
     }
   };
 
-  const toggleFavorite = async (it: any) => {
-    if (favoriteUpdatingRef.current) {
+  const onDeleteEditing = async () => {
+    if (!editingItem || deleting) {
       return;
     }
-    if (it.available === false) {
-      showToast("Unavailable items cannot be favorites", "err");
-      return;
-    }
-    favoriteUpdatingRef.current = true;
-    setFavoriteUpdatingId(it._id);
-    const nextFavorite = !Boolean(it.favorite);
+    setDeleting(true);
     try {
-      await updateItem({ ...it, favorite: nextFavorite, available: true });
-      const all = await getItems();
-      setItems(all);
-      setEditMap((prev) => {
-        if (!prev[it._id]) {
-          return prev;
-        }
-        return {
-          ...prev,
-          [it._id]: { ...prev[it._id], favorite: nextFavorite },
-        };
+      await deleteItem(editingItem._id);
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(editingItem._id);
+        return next;
       });
-      showToast(nextFavorite ? "Added to favorites" : "Removed from favorites");
-    } catch (e) {
-      showToast("Failed to update favorite", "err");
-    } finally {
-      favoriteUpdatingRef.current = false;
-      setFavoriteUpdatingId(null);
-    }
-  };
-
-  // Track which item row is in "confirm delete" mode
-  const [confirmDeleteId, setConfirmDeleteId] = React.useState<string | null>(null);
-  // Multi-select
-  const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set());
-  const [confirmBulkDelete, setConfirmBulkDelete] = React.useState(false);
-
-  const onDeleteItem = async (it: any) => {
-    if (deletingItemRef.current) {
-      return;
-    }
-    deletingItemRef.current = it._id;
-    setDeletingItemId(it._id);
-    try {
-      await deleteItem(it._id);
-      setEditMap((m) => {
-        const c = { ...m };
-        delete c[it._id];
-        return c;
-      });
-      setConfirmDeleteId(null);
-      setItems(await getItems());
-      showToast(`"${it.name}" deleted`);
-    } catch (e) {
+      await reload();
+      showToast(`"${editingItem.name}" deleted`);
+      setConfirmDelete(false);
+      setEditor(null);
+    } catch {
       showToast("Failed to delete item", "err");
     } finally {
-      deletingItemRef.current = null;
-      setDeletingItemId(null);
+      setDeleting(false);
     }
   };
+
+  const updateRow = async (item: ItemDoc, patch: Partial<ItemDoc>, message: string) => {
+    if (rowBusyId) {
+      return;
+    }
+    setRowBusyId(item._id);
+    try {
+      await updateItem({ ...item, ...patch });
+      await reload();
+      showToast(message);
+    } catch (e) {
+      showToast(validationMessage(e, "Failed to update item"), "err");
+    } finally {
+      setRowBusyId(null);
+    }
+  };
+
+  const toggleAvailable = (item: ItemDoc) => {
+    const next = item.available === false;
+    void updateRow(
+      item,
+      { available: next, favorite: next ? item.favorite : false },
+      next ? `"${item.name}" is on the menu` : `"${item.name}" is off the menu`,
+    );
+  };
+
+  const toggleFavorite = (item: ItemDoc) => {
+    if (item.available === false) {
+      showToast("Items that are off the menu cannot be favourites", "err");
+      return;
+    }
+    const next = !item.favorite;
+    void updateRow(item, { favorite: next }, next ? "Added to favourites" : "Removed from favourites");
+  };
+
+  // Grouping ---------------------------------------------------------------
+
+  const sectionOrder = React.useMemo(() => {
+    const order: Array<{ key: string; name: string; configured: boolean }> = [];
+    const seen = new Set<string>();
+    for (const name of categories) {
+      const key = categoryKey(name);
+      if (!seen.has(key)) {
+        seen.add(key);
+        order.push({ key, name, configured: true });
+      }
+    }
+    for (const item of items) {
+      const key = categoryKey(item.category);
+      if (!seen.has(key) && key !== NO_CATEGORY) {
+        seen.add(key);
+        order.push({ key, name: item.category || "", configured: false });
+      }
+    }
+    order.push({ key: NO_CATEGORY, name: "No category", configured: false });
+    return order;
+  }, [categories, items]);
+
+  const itemsByCategory = React.useMemo(() => {
+    const map = new Map<string, ItemDoc[]>();
+    for (const item of items) {
+      const key = categoryKey(item.category);
+      const list = map.get(key) || [];
+      list.push(item);
+      map.set(key, list);
+    }
+    return map;
+  }, [items]);
+
+  const normalizedQuery = query.trim().toLowerCase();
+  const filtersActive =
+    Boolean(normalizedQuery) || statusFilter !== "all" || favoritesOnly || dietFilter !== "all";
+
+  const matchesFilters = React.useCallback(
+    (item: ItemDoc) => {
+      if (
+        normalizedQuery &&
+        !(item.name || "").toLowerCase().includes(normalizedQuery) &&
+        !(item.sku || "").toLowerCase().includes(normalizedQuery)
+      ) {
+        return false;
+      }
+      const available = item.available !== false;
+      if (statusFilter === "on" && !available) {
+        return false;
+      }
+      if (statusFilter === "off" && available) {
+        return false;
+      }
+      if (favoritesOnly && !(available && item.favorite)) {
+        return false;
+      }
+      if (dietFilter === "none" && item.diet) {
+        return false;
+      }
+      if (dietFilter !== "all" && dietFilter !== "none" && item.diet !== dietFilter) {
+        return false;
+      }
+      return true;
+    },
+    [dietFilter, favoritesOnly, normalizedQuery, statusFilter],
+  );
+
+  const sections = sectionOrder
+    .filter((section) => categoryFilter === "all" || categoryFilter === section.key)
+    .map((section) => ({
+      ...section,
+      allItems: itemsByCategory.get(section.key) || [],
+      items: (itemsByCategory.get(section.key) || []).filter(matchesFilters),
+    }))
+    .filter((section) => section.items.length > 0);
+  const visibleItems = sections.flatMap((section) => section.items);
+  const offCount = items.filter((item) => item.available === false).length;
+  const canReorder = !filtersActive && !reorderBusy;
+
+  const moveItem = async (sectionItems: ItemDoc[], index: number, delta: -1 | 1) => {
+    const target = index + delta;
+    if (!canReorder || target < 0 || target >= sectionItems.length) {
+      return;
+    }
+    const ids = sectionItems.map((item) => item._id);
+    [ids[index], ids[target]] = [ids[target], ids[index]];
+    setReorderBusy(true);
+    try {
+      await reorderItems(ids);
+      await reload();
+    } catch (e) {
+      showToast(validationMessage(e, "Could not change the order"), "err");
+    } finally {
+      setReorderBusy(false);
+    }
+  };
+
+  const moveCategory = async (name: string, delta: -1 | 1) => {
+    const index = categories.findIndex((entry) => categoryKey(entry) === categoryKey(name));
+    const target = index + delta;
+    if (!canReorder || index < 0 || target < 0 || target >= categories.length) {
+      return;
+    }
+    const next = [...categories];
+    [next[index], next[target]] = [next[target], next[index]];
+    setReorderBusy(true);
+    try {
+      await setConfigCategories(next);
+      await reload();
+    } catch (e) {
+      showToast(validationMessage(e, "Could not change the order"), "err");
+    } finally {
+      setReorderBusy(false);
+    }
+  };
+
+  // Selection and bulk actions -----------------------------------------------
 
   const allVisibleSelected =
     visibleItems.length > 0 && visibleItems.every((it) => selectedIds.has(it._id));
@@ -396,210 +575,339 @@ export default function ItemsEditor({
     });
   };
 
+  const selectedItems = items.filter((item) => selectedIds.has(item._id));
+
+  const runBulk = async (
+    patch: (item: ItemDoc) => Partial<ItemDoc>,
+    message: (count: number) => string,
+  ) => {
+    if (bulkBusy || !selectedItems.length) {
+      return;
+    }
+    setBulkBusy(true);
+    let done = 0;
+    try {
+      for (const item of selectedItems) {
+        await updateItem({ ...item, ...patch(item) });
+        done += 1;
+      }
+      showToast(message(done));
+      setSelectedIds(new Set());
+    } catch (e) {
+      showToast(
+        `${validationMessage(e, "Some items could not be updated")} (${done} of ${selectedItems.length} done)`,
+        "err",
+      );
+    } finally {
+      await reload();
+      setBulkBusy(false);
+    }
+  };
+
   const onBulkDelete = async () => {
-    if (bulkDeleteLoadingRef.current) {
+    if (bulkBusy) {
       return;
     }
     const count = selectedIds.size;
-    bulkDeleteLoadingRef.current = true;
-    setBulkDeleteLoading(true);
+    setBulkBusy(true);
     try {
       for (const id of Array.from(selectedIds)) {
         await deleteItem(id);
-        setEditMap((m) => {
-          const c = { ...m };
-          delete c[id];
-          return c;
-        });
       }
-      setItems(await getItems());
       setSelectedIds(new Set());
       setConfirmBulkDelete(false);
       showToast(`${count} item${count !== 1 ? "s" : ""} deleted`);
-    } catch (e) {
+    } catch {
       showToast("Failed to delete items", "err");
     } finally {
-      bulkDeleteLoadingRef.current = false;
-      setBulkDeleteLoading(false);
+      await reload();
+      setBulkBusy(false);
     }
   };
 
-  const onSaveAll = async () => {
-    if (!hasEdits || saveAllLoadingRef.current) {
-      return;
-    }
-    const drafts = items.map((base) => {
-      const edits = editMap[base._id] || {};
-      return {
-        ...base,
-        name: normalizeText(edits.name ?? base.name),
-        sku: normalizeSku(edits.sku ?? base.sku),
-        price: parsePositiveMoney(edits.price ?? base.price),
-        category: normalizeCategoryName(edits.category ?? base.category),
-        available: edits.available ?? base.available !== false,
-        favorite: edits.available === false ? false : (edits.favorite ?? Boolean(base.favorite)),
-        variants: edits.variants ?? (Array.isArray(base.variants) ? base.variants : []),
-      };
-    });
-    for (const draft of drafts) {
-      if (!editMap[draft._id]) {
-        continue;
-      }
-      if (!draft.name) {
-        showToast(validationMessage("item-name-required"), "err");
-        return;
-      }
-      let normalizedVariants: VariantDraft[] = [];
-      try {
-        normalizedVariants = normalizeVariantDrafts(draft.variants || []);
-      } catch (e) {
-        showToast(`${validationMessage(e)} Check "${draft.name || "this item"}".`, "err");
-        return;
-      }
-      const fallbackPrice = getVariantMinPrice(normalizedVariants);
-      if (draft.price === null && fallbackPrice === null) {
-        showToast(
-          `${validationMessage("item-price-invalid")} Check "${draft.name || "this item"}".`,
-          "err",
-        );
-        return;
-      }
-    }
-    const seenSkus = new Map<string, string>();
-    for (const draft of drafts) {
-      if (!draft.sku) {
-        continue;
-      }
-      const key = draft.sku.toLowerCase();
-      const existingId = seenSkus.get(key);
-      if (existingId && (editMap[draft._id] || editMap[existingId])) {
-        showToast(validationMessage("item-sku-duplicate"), "err");
-        return;
-      }
-      seenSkus.set(key, draft._id);
-    }
-    const changedCount = Object.keys(editMap).length;
-    saveAllLoadingRef.current = true;
-    setSaveAllLoading(true);
-    try {
-      const promises = Object.entries(editMap).map(([id, edits]) => {
-        const base = items.find((it) => it._id === id);
-        if (!base) {
-          return Promise.resolve();
-        }
-        const next = drafts.find((draft) => draft._id === id) || { ...base, ...edits };
-        const variants = normalizeVariantDrafts(next.variants || []);
-        const effectivePrice = parsePositiveMoney(next.price) ?? getVariantMinPrice(variants);
-        if (effectivePrice === null) {
-          throw new Error("item-price-invalid");
-        }
-        return updateItem({
-          ...next,
-          name: next.name,
-          sku: next.sku || undefined,
-          price: Number(effectivePrice),
-          category: next.category || undefined,
-          available: next.available !== false,
-          favorite: next.available !== false && Boolean(next.favorite),
-          variants,
-        });
-      });
-      await Promise.all(promises);
-      const all = await getItems();
-      setItems(all);
-      setEditMap({});
-      showToast(`${changedCount} item(s) saved`);
-    } catch (e) {
-      showToast(validationMessage(e, "Failed to save some items"), "err");
-    } finally {
-      saveAllLoadingRef.current = false;
-      setSaveAllLoading(false);
-    }
-  };
+  // Import and export --------------------------------------------------------
 
-  const variantEditorItem = React.useMemo(
-    () => items.find((item) => item._id === variantEditorItemId) || null,
-    [items, variantEditorItemId],
+  const importPreview = React.useMemo(
+    () =>
+      importText
+        ? validateMenuCsv(
+            importText,
+            items.map((item) => ({
+              id: item._id,
+              name: item.name,
+              category: item.category || null,
+              sku: item.sku || null,
+              active: true,
+              price: item.price,
+              variants: itemVariants(item),
+              available: item.available !== false,
+              favorite: item.available !== false && Boolean(item.favorite),
+              diet: item.diet || null,
+            })),
+            categories,
+            importMode,
+          )
+        : null,
+    [categories, importMode, importText, items],
   );
+  const replaceNeedsConfirm =
+    importPreview?.mode === "replace" &&
+    importPreview.deactivatedItems + importPreview.deactivatedCategories > 0;
 
-  const saveVariantEditor = async () => {
-    if (!variantEditorItem || variantEditorSaving) {
+  const exportMenu = () => {
+    setIoMenuOpen(false);
+    const date = new Date().toISOString().slice(0, 10);
+    downloadCsv(
+      menuExportCsv(
+        items.map((item) => ({
+          category: item.category,
+          name: item.name,
+          sku: item.sku,
+          price: item.price,
+          diet: item.diet || null,
+          available: item.available !== false,
+          favorite: Boolean(item.favorite),
+          variants: itemVariants(item),
+        })),
+      ),
+      `restoniti-menu-${date}.csv`,
+    );
+  };
+
+  const downloadTemplate = () => {
+    setIoMenuOpen(false);
+    downloadCsv(menuImportTemplate(), "restoniti-menu-template.csv");
+  };
+
+  const onImportFile = async (file: File | null) => {
+    if (!file) {
       return;
     }
-    let normalized: VariantDraft[] = [];
+    setImportFileName(file.name);
+    setImportText(await file.text());
+    setShowAllDeactivated(false);
+    setImportMode("upsert");
+    setReplaceConfirmed(false);
+    setImportOpen(true);
+  };
+
+  const closeImport = () => {
+    if (importBusy) {
+      return;
+    }
+    setImportOpen(false);
+    setImportText("");
+    setImportFileName("");
+  };
+
+  const confirmImport = async () => {
+    if (
+      !importPreview ||
+      importPreview.errors.length ||
+      importBusy ||
+      (replaceNeedsConfirm && !replaceConfirmed)
+    ) {
+      return;
+    }
+    setImportBusy(true);
     try {
-      normalized = normalizeVariantDrafts(variantEditorDraft);
-    } catch (e) {
-      showToast(validationMessage(e), "err");
-      return;
-    }
-    const fallbackPrice = getVariantMinPrice(normalized);
-    const basePrice = parsePositiveMoney(variantEditorItem.price);
-    const effectivePrice = fallbackPrice ?? basePrice;
-    if (effectivePrice === null) {
-      showToast(validationMessage("item-price-invalid"), "err");
-      return;
-    }
-    setVariantEditorSaving(true);
-    try {
-      await updateItem({
-        ...variantEditorItem,
-        price: effectivePrice,
-        variants: normalized,
-      });
-      const all = await getItems();
-      setItems(all);
-      setEditMap((prev) => {
-        const current = prev[variantEditorItem._id];
-        if (!current) {
-          return prev;
-        }
-        return {
-          ...prev,
-          [variantEditorItem._id]: {
-            ...current,
-            variants: normalized,
-            ...(fallbackPrice !== null ? { price: fallbackPrice } : {}),
-          },
-        };
-      });
-      setVariantEditorItemId(null);
-      showToast("Variants saved");
-    } catch (e) {
-      showToast(validationMessage(e, "Failed to save variants"), "err");
+      await importMenu({ csv: importText, fileName: importFileName, mode: importPreview.mode });
+      setImportOpen(false);
+      setImportText("");
+      setImportFileName("");
+      await reload();
+      showToast(importPreview.mode === "replace" ? "Menu replaced" : "Menu items imported");
+    } catch (error) {
+      const details = (error as { details?: string[] }).details;
+      showToast(details?.[0] || validationMessage(error, "Menu import failed"), "err");
     } finally {
-      setVariantEditorSaving(false);
+      setImportBusy(false);
     }
   };
+
+  // Render -------------------------------------------------------------------
+
+  const categoryOptions = [
+    ...categories,
+    ...(draft.category && !categories.some((c) => categoryKey(c) === categoryKey(draft.category))
+      ? [draft.category]
+      : []),
+  ];
 
   return (
     <div className={embedded ? undefined : "pos-page"}>
       {!embedded && (
         <PageHeader
           title="Menu"
-          subtitle={`${items.length} item${items.length !== 1 ? "s" : ""} · edit prices inline, then Save All`}
+          subtitle={`${items.length} item${items.length !== 1 ? "s" : ""} · tap an item to edit it`}
           actions={
-            <Button variant="primary" onClick={() => setModalOpen(true)}>
+            <Button variant="primary" onClick={openCreate}>
               + Add Item
             </Button>
           }
         />
       )}
 
-      {/* Search bar */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 10, alignItems: "center" }}>
         <input
-          placeholder="Search by name or SKU…"
+          placeholder="Search by name or SKU..."
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          className="pos-input"
-          style={{ flex: 1 }}
+          aria-label="Search menu items"
+          style={{
+            flex: 1,
+            padding: "9px 12px",
+            borderRadius: 8,
+            border: "1.5px solid var(--pos-line)",
+            fontSize: 14,
+            outline: "none",
+            background: "var(--pos-surface)",
+            fontFamily: "inherit",
+          }}
         />
         {query && (
           <Button variant="secondary" onClick={() => setQuery("")}>
             Clear
           </Button>
         )}
+        <button
+          ref={ioMenuAnchor}
+          type="button"
+          className="ui-btn ui-btn-secondary"
+          aria-haspopup="menu"
+          aria-expanded={ioMenuOpen}
+          onClick={() => setIoMenuOpen((open) => !open)}
+        >
+          Import / Export ▾
+        </button>
+        <input
+          ref={importInputRef}
+          type="file"
+          accept=".csv,text/csv"
+          style={{ display: "none" }}
+          onChange={(event) => {
+            const file = event.target.files?.[0] || null;
+            event.target.value = "";
+            void onImportFile(file);
+          }}
+        />
+        <PortalMenu
+          open={ioMenuOpen}
+          anchorRef={ioMenuAnchor}
+          onClose={() => setIoMenuOpen(false)}
+          align="right"
+          minWidth={280}
+        >
+          <PortalMenuItem onClick={exportMenu} disabled={!items.length}>
+            Export menu as CSV
+          </PortalMenuItem>
+          <PortalMenuItem
+            onClick={() => {
+              setIoMenuOpen(false);
+              importInputRef.current?.click();
+            }}
+          >
+            Import CSV…
+          </PortalMenuItem>
+          <PortalMenuItem onClick={downloadTemplate}>Download blank template</PortalMenuItem>
+          <div
+            style={{
+              padding: "8px 12px 6px",
+              fontSize: 11,
+              lineHeight: 1.4,
+              color: "var(--pos-tx-muted)",
+              borderTop: "1px solid var(--pos-line)",
+              marginTop: 4,
+            }}
+          >
+            Tip: Use Excel&apos;s CSV UTF-8 format if your menu contains Hindi, Marathi, ₹, or
+            other special characters.
+          </div>
+        </PortalMenu>
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          gap: 8,
+          flexWrap: "wrap",
+          alignItems: "center",
+          marginBottom: 10,
+        }}
+      >
+        <div style={{ width: 300, flexShrink: 0 }}>
+          <SegmentedControl
+            ariaLabel="Filter by availability"
+            value={statusFilter}
+            onChange={(id) => setStatusFilter(id as StatusFilter)}
+            options={[
+              { id: "all", label: "All items" },
+              { id: "on", label: "On menu" },
+              { id: "off", label: `Off menu${offCount ? ` (${offCount})` : ""}` },
+            ]}
+          />
+        </div>
+        <Button
+          variant={favoritesOnly ? "primary" : "secondary"}
+          aria-pressed={favoritesOnly}
+          onClick={() => setFavoritesOnly((value) => !value)}
+          style={{ minHeight: FILTER_HEIGHT }}
+        >
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+            <Icon icon={Star} size="sm" fill={favoritesOnly ? "currentColor" : "none"} />
+            Favourites
+          </span>
+        </Button>
+        <select
+          className="ui-select"
+          aria-label="Filter by diet"
+          value={dietFilter}
+          onChange={(e) => setDietFilter(e.target.value as DietFilter)}
+          style={{ width: "auto", minWidth: 150, minHeight: FILTER_HEIGHT }}
+        >
+          <option value="all">Any diet</option>
+          <option value="veg">Veg</option>
+          <option value="non-veg">Non-veg</option>
+          <option value="egg">Egg</option>
+          <option value="none">Diet not set</option>
+        </select>
+        {filtersActive ? (
+          <Button
+            variant="ghost"
+            onClick={() => {
+              setQuery("");
+              setStatusFilter("all");
+              setFavoritesOnly(false);
+              setDietFilter("all");
+            }}
+          >
+            Reset filters
+          </Button>
+        ) : null}
+      </div>
+
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
+        <CategoryChip
+          label="All"
+          count={items.length}
+          active={categoryFilter === "all"}
+          onClick={() => setCategoryFilter("all")}
+        />
+        {sectionOrder.map((section) => {
+          const count = (itemsByCategory.get(section.key) || []).length;
+          if (!count) {
+            return null;
+          }
+          return (
+            <CategoryChip
+              key={section.key}
+              label={section.name}
+              count={count}
+              active={categoryFilter === section.key}
+              onClick={() => setCategoryFilter(section.key)}
+            />
+          );
+        })}
       </div>
 
       <div
@@ -608,1050 +916,851 @@ export default function ItemsEditor({
           justifyContent: "space-between",
           alignItems: "center",
           gap: 12,
-          marginBottom: 10,
-          color: "var(--pos-muted,var(--pos-tx-sub))",
+          marginBottom: 8,
+          color: "var(--pos-tx-muted)",
           fontSize: 12,
           flexWrap: "wrap",
         }}
       >
+        <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+          <input
+            type="checkbox"
+            checked={allVisibleSelected}
+            onChange={toggleSelectAll}
+            disabled={!visibleItems.length}
+            style={{ width: 15, height: 15, cursor: "pointer" }}
+          />
+          Select all shown ({visibleItems.length})
+        </label>
         <span>
-          Showing {displayStart}-{displayEnd} of {filtered.length} item
-          {filtered.length !== 1 ? "s" : ""}
+          {filtersActive
+            ? "Clear the search and filters to change the order."
+            : "Use the arrows to change the order on Billing and Captain."}
         </span>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      </div>
+
+      {sections.length === 0 ? (
+        <div
+          style={{
+            textAlign: "center",
+            padding: "40px 0",
+            color: "var(--pos-tx-muted)",
+            fontSize: 14,
+          }}
+        >
+          {items.length ? "No items match these filters" : "No menu items yet. Add one or import a CSV."}
+        </div>
+      ) : null}
+
+      <div style={{ display: "grid", gap: 18, paddingBottom: selectedIds.size ? 90 : 0 }}>
+        {sections.map((section) => {
+          const configuredIndex = section.configured
+            ? categories.findIndex((entry) => categoryKey(entry) === section.key)
+            : -1;
+          return (
+            <section key={section.key} aria-label={section.name}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "0 4px 6px",
+                  borderBottom: "1px solid var(--pos-line)",
+                  marginBottom: 6,
+                }}
+              >
+                <h3 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: "var(--pos-tx)" }}>
+                  {section.name}
+                </h3>
+                <span style={{ fontSize: 12, color: "var(--pos-tx-muted)" }}>
+                  {section.items.length === section.allItems.length
+                    ? `${section.allItems.length} item${section.allItems.length !== 1 ? "s" : ""}`
+                    : `${section.items.length} of ${section.allItems.length}`}
+                </span>
+                <span style={{ flex: 1 }} />
+                {configuredIndex >= 0 ? (
+                  <ReorderButtons
+                    label={`category ${section.name}`}
+                    disabled={!canReorder}
+                    canUp={configuredIndex > 0}
+                    canDown={configuredIndex < categories.length - 1}
+                    onUp={() => void moveCategory(section.name, -1)}
+                    onDown={() => void moveCategory(section.name, 1)}
+                  />
+                ) : null}
+              </div>
+              <div style={{ display: "grid", gap: 4 }}>
+                {section.items.map((item) => {
+                  const index = section.allItems.indexOf(item);
+                  return (
+                    <MenuRow
+                      key={item._id}
+                      item={item}
+                      selected={selectedIds.has(item._id)}
+                      busy={rowBusyId === item._id}
+                      reorder={{
+                        disabled: !canReorder,
+                        canUp: index > 0,
+                        canDown: index < section.allItems.length - 1,
+                        onUp: () => void moveItem(section.allItems, index, -1),
+                        onDown: () => void moveItem(section.allItems, index, 1),
+                      }}
+                      onSelect={() => toggleSelect(item._id)}
+                      onOpen={() => openEdit(item)}
+                      onToggleAvailable={() => toggleAvailable(item)}
+                      onToggleFavorite={() => toggleFavorite(item)}
+                    />
+                  );
+                })}
+              </div>
+            </section>
+          );
+        })}
+      </div>
+
+      {selectedIds.size > 0 && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: 24,
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 100,
+            display: "flex",
+            alignItems: "center",
+            flexWrap: "wrap",
+            gap: 8,
+            padding: "10px 14px",
+            borderRadius: 12,
+            background: "var(--pos-surface)",
+            border: "1px solid var(--pos-line-strong)",
+            boxShadow: "var(--pos-shadow-overlay)",
+            maxWidth: "calc(100vw - 32px)",
+          }}
+        >
+          <strong style={{ fontSize: 13, marginRight: 4 }}>
+            {selectedIds.size} selected
+          </strong>
           <Button
-            type="button"
-            variant="secondary"
-            disabled={pageIndex === 0}
-            onClick={() => setPageIndex((current) => Math.max(0, current - 1))}
+            size="sm"
+            disabled={bulkBusy}
+            onClick={() =>
+              void runBulk(
+                () => ({ available: true }),
+                (count) => `${count} item${count !== 1 ? "s" : ""} turned on`,
+              )
+            }
           >
-            Previous
+            Turn on
           </Button>
-          <span style={{ minWidth: 86, textAlign: "center" }}>
-            Page {pageIndex + 1} of {pageCount}
+          <Button
+            size="sm"
+            disabled={bulkBusy}
+            onClick={() =>
+              void runBulk(
+                () => ({ available: false, favorite: false }),
+                (count) => `${count} item${count !== 1 ? "s" : ""} turned off`,
+              )
+            }
+          >
+            Turn off
+          </Button>
+          <select
+            className="ui-select"
+            aria-label="Move selected items to category"
+            value=""
+            disabled={bulkBusy || !categories.length}
+            onChange={(e) => {
+              const category = e.target.value;
+              if (category) {
+                void runBulk(
+                  () => ({ category }),
+                  (count) => `${count} item${count !== 1 ? "s" : ""} moved to ${category}`,
+                );
+              }
+            }}
+            style={{ width: "auto", minWidth: 150 }}
+          >
+            <option value="">Move to category…</option>
+            {categories.map((category) => (
+              <option key={category} value={category}>
+                {category}
+              </option>
+            ))}
+          </select>
+          <select
+            className="ui-select"
+            aria-label="Set diet for selected items"
+            value=""
+            disabled={bulkBusy}
+            onChange={(e) => {
+              const value = e.target.value;
+              if (value) {
+                const diet = (value === "none" ? null : value) as MenuDiet;
+                void runBulk(
+                  () => ({ diet }),
+                  (count) => `Diet updated for ${count} item${count !== 1 ? "s" : ""}`,
+                );
+              }
+            }}
+            style={{ width: "auto", minWidth: 120 }}
+          >
+            <option value="">Set diet…</option>
+            <option value="veg">Veg</option>
+            <option value="non-veg">Non-veg</option>
+            <option value="egg">Egg</option>
+            <option value="none">Not set</option>
+          </select>
+          <Button
+            size="sm"
+            variant="danger-ghost"
+            disabled={bulkBusy}
+            onClick={() => setConfirmBulkDelete(true)}
+          >
+            Delete
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={bulkBusy}
+            onClick={() => setSelectedIds(new Set())}
+          >
+            Clear
+          </Button>
+        </div>
+      )}
+
+      <ConfirmModal
+        open={confirmBulkDelete}
+        title={`Delete ${selectedIds.size} item${selectedIds.size !== 1 ? "s" : ""}?`}
+        confirmLabel="Delete"
+        loading={bulkBusy}
+        onClose={() => setConfirmBulkDelete(false)}
+        onConfirm={onBulkDelete}
+        warning="This cannot be undone. To hide items for now, use Turn off instead."
+      />
+
+      <Drawer
+        open={editor !== null}
+        title={editor?.mode === "create" ? "New menu item" : `Edit ${editingItem?.name || "item"}`}
+        onClose={() => closeEditor()}
+        footer={
+          <div style={{ display: "flex", gap: 8, width: "100%", alignItems: "center" }}>
+            {editor?.mode === "edit" ? (
+              <Button
+                variant="danger-ghost"
+                disabled={editorSaving || deleting}
+                onClick={() => setConfirmDelete(true)}
+              >
+                Delete item
+              </Button>
+            ) : null}
+            <span style={{ flex: 1 }} />
+            <Button variant="secondary" onClick={() => closeEditor()} disabled={editorSaving}>
+              Cancel
+            </Button>
+            {editor?.mode === "create" ? (
+              <Button
+                variant="secondary"
+                onClick={() => void saveEditor(true)}
+                disabled={editorSaving}
+              >
+                Save & add another
+              </Button>
+            ) : null}
+            <Button
+              variant="primary"
+              onClick={() => void saveEditor(false)}
+              disabled={editorSaving || (editor?.mode === "edit" && !draftDirty)}
+            >
+              {editorSaving ? "Saving…" : "Save"}
+            </Button>
+          </div>
+        }
+      >
+        <ItemForm
+          draft={draft}
+          onChange={(patch) => setDraft((current) => ({ ...current, ...patch }))}
+          categoryOptions={categoryOptions}
+          variantOptions={variantOptions}
+          variantNameOptions={variantNameOptions}
+          onSubmit={() => void saveEditor(false)}
+        />
+      </Drawer>
+
+      <ConfirmModal
+        open={confirmDiscard}
+        title="Discard your changes?"
+        confirmLabel="Discard"
+        cancelLabel="Keep editing"
+        onClose={() => setConfirmDiscard(false)}
+        onConfirm={() => closeEditor(true)}
+        warning="Your changes to this item have not been saved."
+      />
+
+      <ConfirmModal
+        open={confirmDelete}
+        title={`Delete "${editingItem?.name || "item"}"?`}
+        confirmLabel="Delete"
+        loading={deleting}
+        onClose={() => setConfirmDelete(false)}
+        onConfirm={onDeleteEditing}
+        warning="This cannot be undone. Past bills keep their lines. To hide the item for now, turn it off instead."
+      />
+
+      <Modal
+        open={importOpen && importPreview !== null}
+        title={`Import menu from ${importFileName || "CSV"}`}
+        onClose={closeImport}
+        large
+      >
+        {importPreview ? (
+          <ImportPreviewBody
+            preview={importPreview}
+            mode={importMode}
+            busy={importBusy}
+            showAllDeactivated={showAllDeactivated}
+            replaceNeedsConfirm={replaceNeedsConfirm}
+            replaceConfirmed={replaceConfirmed}
+            onModeChange={(mode) => {
+              setImportMode(mode);
+              setReplaceConfirmed(false);
+            }}
+            onToggleShowAll={() => setShowAllDeactivated((value) => !value)}
+            onReplaceConfirmed={setReplaceConfirmed}
+            onCancel={closeImport}
+            onConfirm={() => void confirmImport()}
+          />
+        ) : null}
+      </Modal>
+    </div>
+  );
+}
+
+function CategoryChip({
+  label,
+  count,
+  active,
+  onClick,
+}: {
+  label: string;
+  count: number;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      style={{
+        padding: "5px 12px",
+        borderRadius: 999,
+        border: `1px solid ${active ? "var(--pos-teal)" : "var(--pos-line)"}`,
+        background: active ? "var(--pos-teal)" : "var(--pos-surface)",
+        color: active ? "var(--pos-surface)" : "var(--pos-tx-sec)",
+        fontSize: 13,
+        fontWeight: 600,
+        cursor: "pointer",
+        fontFamily: "inherit",
+      }}
+    >
+      {label} <span style={{ opacity: 0.75, fontWeight: 500 }}>{count}</span>
+    </button>
+  );
+}
+
+function ReorderButtons({
+  label,
+  disabled,
+  canUp,
+  canDown,
+  onUp,
+  onDown,
+}: {
+  label: string;
+  disabled: boolean;
+  canUp: boolean;
+  canDown: boolean;
+  onUp: () => void;
+  onDown: () => void;
+}) {
+  const style: React.CSSProperties = {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    border: "1px solid var(--pos-line)",
+    background: "var(--pos-surface)",
+    color: "var(--pos-tx-sec)",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 0,
+  };
+  return (
+    <span style={{ display: "inline-flex", gap: 2 }} onClick={(e) => e.stopPropagation()}>
+      <button
+        type="button"
+        aria-label={`Move ${label} up`}
+        title="Move up"
+        disabled={disabled || !canUp}
+        onClick={onUp}
+        style={{
+          ...style,
+          opacity: disabled || !canUp ? 0.35 : 1,
+          cursor: disabled || !canUp ? "default" : "pointer",
+        }}
+      >
+        <Icon icon={ChevronUp} size="sm" />
+      </button>
+      <button
+        type="button"
+        aria-label={`Move ${label} down`}
+        title="Move down"
+        disabled={disabled || !canDown}
+        onClick={onDown}
+        style={{
+          ...style,
+          opacity: disabled || !canDown ? 0.35 : 1,
+          cursor: disabled || !canDown ? "default" : "pointer",
+        }}
+      >
+        <Icon icon={ChevronDown} size="sm" />
+      </button>
+    </span>
+  );
+}
+
+function DietMark({ diet }: { diet?: string | null }) {
+  if (!diet) {
+    return null;
+  }
+  const color =
+    diet === "non-veg"
+      ? "var(--pos-danger)"
+      : diet === "egg"
+        ? "var(--pos-saffron-deep)"
+        : "var(--pos-success)";
+  const label = diet === "non-veg" ? "Non-veg" : diet === "egg" ? "Egg" : "Veg";
+  return (
+    <span
+      role="img"
+      aria-label={label}
+      title={label}
+      style={{
+        width: 14,
+        height: 14,
+        flexShrink: 0,
+        border: `1.5px solid ${color}`,
+        borderRadius: 3,
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <span style={{ width: 6, height: 6, borderRadius: "50%", background: color }} />
+    </span>
+  );
+}
+
+function AvailabilitySwitch({
+  on,
+  disabled,
+  onToggle,
+  label,
+}: {
+  on: boolean;
+  disabled?: boolean;
+  onToggle: () => void;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      aria-label={label}
+      disabled={disabled}
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggle();
+      }}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        background: "none",
+        border: "none",
+        padding: 4,
+        cursor: disabled ? "default" : "pointer",
+        fontFamily: "inherit",
+        fontSize: 12,
+        fontWeight: 700,
+        color: on ? "var(--pos-success)" : "var(--pos-tx-muted)",
+      }}
+    >
+      <span
+        aria-hidden
+        style={{
+          width: 34,
+          height: 20,
+          borderRadius: 999,
+          background: on ? "var(--pos-success)" : "var(--pos-line-strong)",
+          position: "relative",
+          transition: "background 120ms",
+          flexShrink: 0,
+        }}
+      >
+        <span
+          style={{
+            position: "absolute",
+            top: 2,
+            left: on ? 16 : 2,
+            width: 16,
+            height: 16,
+            borderRadius: "50%",
+            background: "var(--pos-surface)",
+            boxShadow: "var(--pos-shadow-1)",
+            transition: "left 120ms",
+          }}
+        />
+      </span>
+      <span style={{ minWidth: 22, textAlign: "left" }}>{on ? "On" : "Off"}</span>
+    </button>
+  );
+}
+
+function MenuRow({
+  item,
+  selected,
+  busy,
+  reorder,
+  onSelect,
+  onOpen,
+  onToggleAvailable,
+  onToggleFavorite,
+}: {
+  item: ItemDoc;
+  selected: boolean;
+  busy: boolean;
+  reorder: {
+    disabled: boolean;
+    canUp: boolean;
+    canDown: boolean;
+    onUp: () => void;
+    onDown: () => void;
+  };
+  onSelect: () => void;
+  onOpen: () => void;
+  onToggleAvailable: () => void;
+  onToggleFavorite: () => void;
+}) {
+  const available = item.available !== false;
+  const favorite = available && Boolean(item.favorite);
+  const variants = itemVariants(item);
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      aria-label={`Edit ${item.name}`}
+      onClick={onOpen}
+      onKeyDown={(e) => {
+        if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) {
+          e.preventDefault();
+          onOpen();
+        }
+      }}
+      style={{
+        display: "grid",
+        gridTemplateColumns: "28px 62px minmax(0,1fr) 130px 84px 40px 32px",
+        columnGap: 8,
+        alignItems: "center",
+        padding: "8px 12px",
+        borderRadius: 10,
+        background: selected ? "var(--pos-teal-tint)" : "var(--pos-surface)",
+        border: `1px solid ${selected ? "var(--pos-teal-line)" : "var(--pos-surface-sunken)"}`,
+        boxShadow: "var(--pos-shadow-1)",
+        cursor: "pointer",
+      }}
+    >
+      <span
+        onClick={(e) => e.stopPropagation()}
+        style={{ display: "flex", justifyContent: "center" }}
+      >
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={onSelect}
+          aria-label={`Select ${item.name}`}
+          style={{ cursor: "pointer", width: 15, height: 15 }}
+        />
+      </span>
+      <ReorderButtons label={item.name} {...reorder} />
+      <div style={{ minWidth: 0, opacity: available ? 1 : 0.55 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+          <DietMark diet={item.diet} />
+          <span
+            style={{
+              fontSize: 14,
+              fontWeight: 700,
+              color: "var(--pos-tx)",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {item.name}
+          </span>
+          {!available ? (
+            <span
+              style={{
+                fontSize: 11,
+                fontWeight: 700,
+                color: "var(--pos-tx-muted)",
+                border: "1px solid var(--pos-line)",
+                borderRadius: 4,
+                padding: "0 5px",
+                flexShrink: 0,
+              }}
+            >
+              Off menu
+            </span>
+          ) : null}
+        </div>
+        {variants.length || item.sku ? (
+          <div
+            style={{
+              fontSize: 12,
+              color: "var(--pos-tx-muted)",
+              marginTop: 2,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {variants.map((variant) => `${variant.name} ₹${variant.price}`).join(" · ")}
+            {variants.length && item.sku ? " · " : ""}
+            {item.sku ? `SKU ${item.sku}` : ""}
+          </div>
+        ) : null}
+      </div>
+      <span
+        style={{
+          textAlign: "right",
+          fontSize: 14,
+          fontWeight: 700,
+          color: "var(--pos-tx)",
+          opacity: available ? 1 : 0.55,
+          whiteSpace: "nowrap",
+        }}
+      >
+        {priceLabel(item)}
+      </span>
+      <AvailabilitySwitch
+        on={available}
+        disabled={busy}
+        onToggle={onToggleAvailable}
+        label={available ? `Take ${item.name} off the menu` : `Put ${item.name} on the menu`}
+      />
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggleFavorite();
+        }}
+        disabled={!available || busy}
+        aria-pressed={favorite}
+        aria-label={favorite ? `Remove ${item.name} from favourites` : `Add ${item.name} to favourites`}
+        title={available ? (favorite ? "Remove from favourites" : "Add to favourites") : "Off-menu items cannot be favourites"}
+        style={{
+          width: 34,
+          height: 34,
+          borderRadius: 8,
+          background: favorite ? "var(--pos-saffron-tint)" : "transparent",
+          border: `1px solid ${favorite ? "var(--pos-saffron-line)" : "transparent"}`,
+          color: favorite ? "var(--pos-saffron-deep)" : "var(--pos-tx-muted)",
+          cursor: available && !busy ? "pointer" : "default",
+          opacity: available ? 1 : 0.4,
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 0,
+        }}
+      >
+        <Icon icon={Star} size="md" fill={favorite ? "currentColor" : "none"} />
+      </button>
+      <span
+        aria-hidden
+        style={{ color: "var(--pos-tx-muted)", display: "flex", justifyContent: "center" }}
+      >
+        <Icon icon={Pencil} size="sm" />
+      </span>
+    </div>
+  );
+}
+
+const fieldLabelStyle: React.CSSProperties = {
+  fontSize: 12,
+  fontWeight: 600,
+  color: "var(--pos-tx-sec)",
+  display: "block",
+  marginBottom: 4,
+};
+
+const fieldInputStyle: React.CSSProperties = {
+  width: "100%",
+  padding: "10px 12px",
+  borderRadius: 8,
+  border: "1.5px solid var(--pos-line-strong)",
+  fontSize: 14,
+  boxSizing: "border-box",
+  background: "var(--pos-surface)",
+  color: "var(--pos-tx)",
+  fontFamily: "inherit",
+};
+
+function ItemForm({
+  draft,
+  onChange,
+  categoryOptions,
+  variantOptions,
+  variantNameOptions,
+  onSubmit,
+}: {
+  draft: ItemDraft;
+  onChange: (patch: Partial<ItemDraft>) => void;
+  categoryOptions: string[];
+  variantOptions: string[];
+  variantNameOptions: (current?: string) => string[];
+  onSubmit: () => void;
+}) {
+  const hasVariants = draft.variants.length > 0;
+  const setVariant = (index: number, patch: Partial<VariantDraft>) =>
+    onChange({
+      variants: draft.variants.map((row, rowIndex) =>
+        rowIndex === index ? { ...row, ...patch } : row,
+      ),
+    });
+  return (
+    <div style={{ display: "grid", gap: 14 }}>
+      <div>
+        <label style={fieldLabelStyle} htmlFor="menu-item-name">
+          Item name <span style={{ color: "var(--pos-danger)" }}>*</span>
+        </label>
+        <input
+          id="menu-item-name"
+          placeholder="e.g. Paneer Tikka"
+          value={draft.name}
+          onChange={(e) => onChange({ name: e.target.value })}
+          onKeyDown={(e) => e.key === "Enter" && onSubmit()}
+          autoFocus
+          style={fieldInputStyle}
+        />
+      </div>
+
+      <div>
+        <label style={fieldLabelStyle} htmlFor="menu-item-category">
+          Category
+        </label>
+        <select
+          id="menu-item-category"
+          value={draft.category}
+          onChange={(e) => onChange({ category: e.target.value })}
+          style={{ ...fieldInputStyle, cursor: "pointer" }}
+        >
+          <option value="">No category</option>
+          {categoryOptions.map((category) => (
+            <option key={category} value={category}>
+              {category}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div>
+        <span style={fieldLabelStyle}>Diet</span>
+        <SegmentedControl
+          ariaLabel="Diet"
+          value={draft.diet || "none"}
+          onChange={(id) => onChange({ diet: id === "none" ? "" : id })}
+          options={[
+            { id: "none", label: "Not set" },
+            { id: "veg", label: "Veg" },
+            { id: "non-veg", label: "Non-veg" },
+            { id: "egg", label: "Egg" },
+          ]}
+        />
+      </div>
+
+      {!hasVariants ? (
+        <div>
+          <label style={fieldLabelStyle} htmlFor="menu-item-price">
+            Price (₹) <span style={{ color: "var(--pos-danger)" }}>*</span>
+          </label>
+          <input
+            id="menu-item-price"
+            type="number"
+            inputMode="decimal"
+            placeholder="e.g. 120"
+            value={draft.price}
+            onChange={(e) => onChange({ price: e.target.value })}
+            style={fieldInputStyle}
+          />
+        </div>
+      ) : null}
+
+      <div>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: 6,
+          }}
+        >
+          <span style={{ ...fieldLabelStyle, marginBottom: 0 }}>
+            Sizes / variants {hasVariants ? "" : "(optional)"}
           </span>
           <Button
-            type="button"
-            variant="secondary"
-            disabled={pageIndex >= pageCount - 1}
-            onClick={() => setPageIndex((current) => Math.min(pageCount - 1, current + 1))}
+            size="sm"
+            onClick={() =>
+              onChange({
+                variants: [
+                  ...draft.variants,
+                  {
+                    name: variantOptions[draft.variants.length] || variantOptions[0] || "",
+                    price: draft.variants.length ? "" : draft.price,
+                    sortOrder: draft.variants.length,
+                  },
+                ],
+              })
+            }
           >
-            Next
+            + Add variant
           </Button>
         </div>
-      </div>
-
-      {/* Scrollable table area */}
-      <div
-        style={{
-          overflowX: "auto",
-          marginLeft: -14,
-          marginRight: -14,
-          paddingLeft: 14,
-          paddingRight: 14,
-        }}
-      >
-        <div style={{ minWidth: 680 }}>
-          {/* Column headers */}
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "28px 1fr 90px 130px 150px 130px 70px 44px 44px",
-              columnGap: 8,
-              padding: "8px 14px",
-              borderRadius: 8,
-              background: "var(--pos-border-light,var(--pos-surface-sunken))",
-              fontSize: 10,
-              fontWeight: 800,
-              color: "var(--pos-muted,var(--pos-tx-muted))",
-              letterSpacing: "0.08em",
-              textTransform: "uppercase",
-              marginBottom: 8,
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={allVisibleSelected}
-              onChange={toggleSelectAll}
-              title="Select / deselect visible items"
-              style={{ cursor: "pointer", margin: "auto", width: 15, height: 15 }}
-            />
-            <span>Name</span>
-            <span>SKU</span>
-            <span>Category</span>
-            <span>Variants</span>
-            <span style={{ textAlign: "right" }}>Price (₹)</span>
-            <span style={{ textAlign: "center" }}>On Menu</span>
-            <span style={{ textAlign: "center" }} title="Favorites">
-              Fav
-            </span>
-            <span style={{ textAlign: "center" }} />
+        {!hasVariants ? (
+          <div style={{ fontSize: 12, color: "var(--pos-tx-muted)" }}>
+            For items like Half / Full with different prices. The item then uses the variant
+            prices.
           </div>
-
-          {/* Bulk-delete toolbar — sticky bottom bar, doesn't shift layout */}
-          {selectedIds.size > 0 && (
-            <div
-              style={{
-                position: "fixed",
-                bottom: 28,
-                left: "50%",
-                transform: "translateX(-50%)",
-                zIndex: 100,
-                display: "flex",
-                alignItems: "center",
-                gap: 12,
-                padding: "12px 20px",
-                borderRadius: 12,
-                background: confirmBulkDelete ? "var(--pos-danger-tint)" : "var(--pos-tx)",
-                border: confirmBulkDelete ? "1.5px solid var(--pos-danger-line)" : "none",
-                boxShadow: "var(--pos-shadow-overlay)",
-                minWidth: 340,
-              }}
-            >
-              {confirmBulkDelete ? (
-                <>
-                  <span
-                    style={{ flex: 1, fontSize: 13, fontWeight: 600, color: "var(--pos-danger)" }}
-                  >
-                    Delete {selectedIds.size} item{selectedIds.size !== 1 ? "s" : ""} permanently?
-                  </span>
-                  <button
-                    onClick={onBulkDelete}
-                    disabled={bulkDeleteLoading}
-                    style={{
-                      padding: "6px 16px",
-                      borderRadius: 8,
-                      border: "none",
-                      background: "var(--pos-danger)",
-                      color: "var(--pos-surface)",
-                      fontWeight: 700,
-                      fontSize: 13,
-                      cursor: bulkDeleteLoading ? "not-allowed" : "pointer",
-                      opacity: bulkDeleteLoading ? 0.65 : 1,
-                      fontFamily: "inherit",
-                      boxShadow: "0 2px 6px rgba(239,68,68,0.3)",
-                    }}
-                  >
-                    {bulkDeleteLoading ? "Deleting..." : "Delete"}
-                  </button>
-                  <button
-                    onClick={() => setConfirmBulkDelete(false)}
-                    disabled={bulkDeleteLoading}
-                    style={{
-                      padding: "6px 16px",
-                      borderRadius: 8,
-                      border: "1px solid var(--pos-line)",
-                      background: "var(--pos-surface)",
-                      color: "var(--pos-tx-sec)",
-                      fontWeight: 600,
-                      fontSize: 13,
-                      cursor: bulkDeleteLoading ? "not-allowed" : "pointer",
-                      fontFamily: "inherit",
-                    }}
-                  >
-                    Cancel
-                  </button>
-                </>
-              ) : (
-                <>
-                  <span
-                    style={{
-                      flex: 1,
-                      fontSize: 13,
-                      fontWeight: 600,
-                      color: "var(--pos-surface-hover)",
-                    }}
-                  >
-                    {selectedIds.size} item{selectedIds.size !== 1 ? "s" : ""} selected
-                  </span>
-                  <button
-                    onClick={() => setConfirmBulkDelete(true)}
-                    disabled={bulkDeleteLoading}
-                    style={{
-                      padding: "6px 16px",
-                      borderRadius: 8,
-                      border: "none",
-                      background: "var(--pos-danger)",
-                      color: "var(--pos-surface)",
-                      fontWeight: 700,
-                      fontSize: 13,
-                      cursor: "pointer",
-                      fontFamily: "inherit",
-                    }}
-                  >
-                    Delete Selected
-                  </button>
-                  <button
-                    onClick={() => setSelectedIds(new Set())}
-                    disabled={bulkDeleteLoading}
-                    style={{
-                      padding: "6px 16px",
-                      borderRadius: 8,
-                      border: "1px solid rgba(255,255,255,0.2)",
-                      background: "rgba(255,255,255,0.08)",
-                      color: "var(--pos-line-strong)",
-                      fontWeight: 600,
-                      fontSize: 13,
-                      cursor: "pointer",
-                      fontFamily: "inherit",
-                    }}
-                  >
-                    Deselect All
-                  </button>
-                </>
-              )}
-            </div>
-          )}
-
-          {/* Item rows */}
-          <div style={{ display: "grid", gap: 4 }}>
-            {filtered.length === 0 && (
-              <div
-                style={{
-                  textAlign: "center",
-                  padding: "40px 0",
-                  color: "var(--pos-tx-muted)",
-                  fontSize: 14,
-                }}
-              >
-                No items found
-              </div>
-            )}
-            {visibleItems.map((it) => {
-              const edited = editMap[it._id] !== undefined;
-              const currentPrice = editMap[it._id]?.price ?? it.price;
-              const currentName = editMap[it._id]?.name ?? it.name;
-              const currentAvailable = editMap[it._id]?.available ?? it.available !== false;
-              const currentFavorite =
-                currentAvailable && (editMap[it._id]?.favorite ?? Boolean(it.favorite));
-              const currentVariants =
-                editMap[it._id]?.variants ??
-                (Array.isArray(it.variants)
-                  ? it.variants.map((variant: any, index: number) => ({
-                      id: variant.id,
-                      name: variant.name,
-                      price: Number(variant.price),
-                      sortOrder: Number(variant.sortOrder ?? index),
-                    }))
-                  : []);
-              const variantPriceLabel = getVariantPriceLabel(currentVariants);
-              const isConfirmingDelete = confirmDeleteId === it._id;
-              const isDeleting = deletingItemId === it._id;
-              const isFavoriteUpdating = favoriteUpdatingId === it._id;
-              return (
-                <div
-                  key={it._id}
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "28px 1fr 90px 130px 150px 130px 70px 44px 44px",
-                    columnGap: 8,
-                    alignItems: "center",
-                    padding: "10px 14px",
-                    borderRadius: 10,
-                    background: isConfirmingDelete
-                      ? "var(--pos-danger-tint)"
-                      : edited
-                        ? "var(--pos-saffron-tint)"
-                        : "var(--pos-surface)",
-                    border: isConfirmingDelete
-                      ? "1.5px solid var(--pos-danger-line)"
-                      : edited
-                        ? "1.5px solid var(--pos-saffron-line)"
-                        : "1px solid var(--pos-surface-sunken)",
-                    boxShadow: "var(--pos-shadow-1)",
-                    transition: "border-color 120ms, background 120ms",
-                  }}
-                >
-                  {isConfirmingDelete ? (
-                    /* Full-row delete confirmation — spans all 6 columns */
-                    <div
-                      style={{
-                        gridColumn: "1 / -1",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 12,
-                      }}
-                    >
-                      <span
-                        style={{
-                          flex: 1,
-                          fontSize: 13,
-                          fontWeight: 600,
-                          color: "var(--pos-danger)",
-                        }}
-                      >
-                        Delete "{it.name}" permanently?
-                      </span>
-                      <button
-                        onClick={() => onDeleteItem(it)}
-                        disabled={isDeleting}
-                        style={{
-                          padding: "6px 16px",
-                          borderRadius: 8,
-                          border: "none",
-                          background: "var(--pos-danger)",
-                          color: "var(--pos-surface)",
-                          fontWeight: 700,
-                          fontSize: 13,
-                          cursor: isDeleting ? "not-allowed" : "pointer",
-                          opacity: isDeleting ? 0.65 : 1,
-                          fontFamily: "inherit",
-                          boxShadow: "0 2px 6px rgba(239,68,68,0.3)",
-                        }}
-                      >
-                        {isDeleting ? "Deleting..." : "Delete"}
-                      </button>
-                      <button
-                        onClick={() => setConfirmDeleteId(null)}
-                        disabled={isDeleting}
-                        style={{
-                          padding: "6px 16px",
-                          borderRadius: 8,
-                          border: "1px solid var(--pos-line)",
-                          background: "var(--pos-surface)",
-                          color: "var(--pos-tx-sec)",
-                          fontWeight: 600,
-                          fontSize: 13,
-                          cursor: isDeleting ? "not-allowed" : "pointer",
-                          fontFamily: "inherit",
-                        }}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      {/* Row checkbox */}
-                      <div
-                        style={{ display: "flex", alignItems: "center", justifyContent: "center" }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedIds.has(it._id)}
-                          onChange={() => toggleSelect(it._id)}
-                          style={{ cursor: "pointer", width: 15, height: 15 }}
-                        />
-                      </div>
-                      {/* Name — inline editable */}
-                      <div>
-                        <input
-                          value={currentName}
-                          onChange={(e) =>
-                            setEditMap((m) => ({
-                              ...m,
-                              [it._id]: { ...m[it._id], name: e.target.value },
-                            }))
-                          }
-                          style={{
-                            width: "100%",
-                            padding: "6px 8px",
-                            borderRadius: 7,
-                            border:
-                              editMap[it._id]?.name !== undefined
-                                ? "1.5px solid var(--pos-saffron)"
-                                : "1px solid var(--pos-line)",
-                            fontSize: 14,
-                            fontWeight: 700,
-                            color: "var(--pos-tx)",
-                            background:
-                              editMap[it._id]?.name !== undefined
-                                ? "var(--pos-saffron-tint)"
-                                : "var(--pos-surface)",
-                            outline: "none",
-                            fontFamily: "inherit",
-                            boxSizing: "border-box",
-                          }}
-                        />
-                      </div>
-
-                      {/* SKU — inline editable */}
-                      <div>
-                        <input
-                          value={editMap[it._id]?.sku ?? it.sku ?? ""}
-                          placeholder="—"
-                          onChange={(e) =>
-                            setEditMap((m) => ({
-                              ...m,
-                              [it._id]: { ...m[it._id], sku: e.target.value },
-                            }))
-                          }
-                          style={{
-                            width: "100%",
-                            padding: "6px 8px",
-                            borderRadius: 7,
-                            border:
-                              editMap[it._id]?.sku !== undefined
-                                ? "1.5px solid var(--pos-saffron)"
-                                : "1px solid var(--pos-line)",
-                            fontSize: 12,
-                            fontFamily: "'Courier New', monospace",
-                            color: "var(--pos-tx-sub)",
-                            background:
-                              editMap[it._id]?.sku !== undefined
-                                ? "var(--pos-saffron-tint)"
-                                : "var(--pos-surface)",
-                            outline: "none",
-                            boxSizing: "border-box",
-                          }}
-                        />
-                      </div>
-
-                      {/* Category — inline dropdown */}
-                      <div>
-                        <select
-                          value={editMap[it._id]?.category ?? it.category ?? ""}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setEditMap((m) => ({
-                              ...m,
-                              [it._id]: { ...m[it._id], category: val },
-                            }));
-                          }}
-                          style={{
-                            width: "100%",
-                            padding: "6px 8px",
-                            borderRadius: 7,
-                            border:
-                              editMap[it._id]?.category !== undefined
-                                ? "1.5px solid var(--pos-saffron)"
-                                : "1px solid var(--pos-line)",
-                            fontSize: 13,
-                            background:
-                              editMap[it._id]?.category !== undefined
-                                ? "var(--pos-saffron-tint)"
-                                : "var(--pos-surface)",
-                            color: "var(--pos-tx-sec)",
-                            outline: "none",
-                            fontFamily: "inherit",
-                            cursor: "pointer",
-                          }}
-                        >
-                          <option value="">— None —</option>
-                          {it.category && !categories.includes(it.category.trim()) && (
-                            <option value={it.category}>{it.category}</option>
-                          )}
-                          {categories.map((c) => (
-                            <option key={c} value={c}>
-                              {c}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* Editable price */}
-                      <div>
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          size="sm"
-                          style={{ width: "100%", padding: "6px 8px", fontSize: 12 }}
-                          onClick={() => {
-                            setVariantEditorItemId(it._id);
-                            setVariantEditorDraft(currentVariants);
-                          }}
-                        >
-                          {currentVariants.length > 0
-                            ? `${currentVariants.length} option${currentVariants.length !== 1 ? "s" : ""}`
-                            : "No variants"}
-                        </Button>
-                      </div>
-
-                      {/* Editable price */}
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "flex-end",
-                          gap: 4,
-                        }}
-                      >
-                        {currentVariants.length > 0 ? (
-                          <div
-                            title="Price is derived from variants"
-                            style={{
-                              width: "100%",
-                              padding: "6px 8px",
-                              borderRadius: 7,
-                              border: edited
-                                ? "1.5px solid var(--pos-saffron)"
-                                : "1px solid var(--pos-line)",
-                              fontSize: 12,
-                              fontWeight: 700,
-                              textAlign: "right",
-                              color: "var(--pos-tx-sec)",
-                              background: edited
-                                ? "var(--pos-saffron-tint)"
-                                : "var(--pos-surface-hover)",
-                              boxSizing: "border-box",
-                            }}
-                          >
-                            {variantPriceLabel || "From variants"}
-                          </div>
-                        ) : (
-                          <>
-                            <span
-                              style={{ fontSize: 12, color: "var(--pos-tx-muted)", flexShrink: 0 }}
-                            >
-                              ₹
-                            </span>
-                            <input
-                              type="number"
-                              value={currentPrice}
-                              onChange={(e) =>
-                                setEditMap((m) => ({
-                                  ...m,
-                                  [it._id]: { ...m[it._id], price: Number(e.target.value) },
-                                }))
-                              }
-                              style={{
-                                width: 0,
-                                flex: 1,
-                                padding: "6px 8px",
-                                borderRadius: 7,
-                                border: edited
-                                  ? "1.5px solid var(--pos-saffron)"
-                                  : "1px solid var(--pos-line)",
-                                fontSize: 13,
-                                fontWeight: 600,
-                                fontFamily: "inherit",
-                                textAlign: "right",
-                                background: edited
-                                  ? "var(--pos-saffron-tint)"
-                                  : "var(--pos-surface)",
-                                outline: "none",
-                                boxSizing: "border-box",
-                              }}
-                            />
-                          </>
-                        )}
-                      </div>
-
-                      {/* Available toggle */}
-                      <div style={{ textAlign: "center" }}>
-                        <button
-                          onClick={() =>
-                            setEditMap((m) => {
-                              const nextAvailable = !currentAvailable;
-                              return {
-                                ...m,
-                                [it._id]: {
-                                  ...m[it._id],
-                                  available: nextAvailable,
-                                  ...(nextAvailable ? {} : { favorite: false }),
-                                },
-                              };
-                            })
-                          }
-                          title={
-                            currentAvailable
-                              ? "Click to mark as unavailable"
-                              : "Click to mark as available"
-                          }
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            padding: "3px 12px",
-                            borderRadius: 20,
-                            fontSize: 11,
-                            fontWeight: 700,
-                            border: "none",
-                            cursor: "pointer",
-                            fontFamily: "inherit",
-                            background: currentAvailable
-                              ? "var(--pos-success-tint)"
-                              : "var(--pos-danger-tint)",
-                            color: currentAvailable ? "var(--pos-success)" : "var(--pos-danger)",
-                            transition: "background 120ms, color 120ms",
-                            letterSpacing: "0.02em",
-                          }}
-                        >
-                          {currentAvailable ? "On" : "Off"}
-                        </button>
-                      </div>
-
-                      {/* Favorite star toggle */}
-                      <div style={{ textAlign: "center" }}>
-                        <button
-                          type="button"
-                          onClick={() => currentAvailable && toggleFavorite(it)}
-                          disabled={!currentAvailable || isFavoriteUpdating}
-                          aria-label={
-                            currentAvailable
-                              ? currentFavorite
-                                ? `Remove ${currentName} from favorites`
-                                : `Add ${currentName} to favorites`
-                              : "Unavailable items cannot be favorites"
-                          }
-                          aria-pressed={currentFavorite}
-                          title={
-                            currentAvailable
-                              ? currentFavorite
-                                ? "Remove from favorites"
-                                : "Add to favorites"
-                              : "Unavailable items cannot be favorites"
-                          }
-                          style={{
-                            background: currentFavorite
-                              ? "var(--pos-saffron-tint)"
-                              : "var(--pos-surface-sunken)",
-                            border: `1px solid ${currentFavorite ? "var(--pos-saffron-line)" : "var(--pos-line)"}`,
-                            cursor:
-                              currentAvailable && !isFavoriteUpdating ? "pointer" : "not-allowed",
-                            lineHeight: 1,
-                            color: currentFavorite
-                              ? "var(--pos-saffron-deep)"
-                              : "var(--pos-tx-muted)",
-                            padding: 0,
-                            width: 36,
-                            height: 36,
-                            borderRadius: 8,
-                            opacity: currentAvailable && !isFavoriteUpdating ? 1 : 0.55,
-                            display: "inline-flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            transition: "color 120ms, background 120ms, border-color 120ms",
-                          }}
-                        >
-                          <Icon
-                            icon={Star}
-                            size="md"
-                            fill={currentFavorite ? "currentColor" : "none"}
-                          />
-                        </button>
-                      </div>
-
-                      {/* Delete button — matches billing removeBtn style */}
-                      <div style={{ display: "flex", justifyContent: "center" }}>
-                        <button
-                          onClick={() => setConfirmDeleteId(it._id)}
-                          disabled={isDeleting}
-                          title={`Delete "${it.name}"`}
-                          style={{
-                            width: 36,
-                            height: 36,
-                            borderRadius: 8,
-                            background: "var(--pos-danger-tint)",
-                            border: "none",
-                            color: "var(--pos-danger)",
-                            cursor: "pointer",
-                            fontSize: 18,
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            flexShrink: 0,
-                            transition: "background 120ms",
-                          }}
-                          onMouseEnter={(e) => {
-                            (e.currentTarget as HTMLButtonElement).style.background =
-                              "var(--pos-danger-tint)";
-                          }}
-                          onMouseLeave={(e) => {
-                            (e.currentTarget as HTMLButtonElement).style.background =
-                              "var(--pos-danger-tint)";
-                          }}
-                        >
-                          <Icon icon={X} size="sm" />
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* Save All footer */}
-      <div
-        style={{
-          marginTop: 20,
-          paddingTop: 16,
-          borderTop: "1px solid var(--pos-border,var(--pos-line))",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          flexWrap: "wrap",
-          gap: 10,
-        }}
-      >
-        <span style={{ fontSize: 12, color: "var(--pos-muted,var(--pos-tx-muted))" }}>
-          {hasEdits
-            ? `${Object.keys(editMap).length} unsaved change${
-                Object.keys(editMap).length !== 1 ? "s" : ""
-              }`
-            : "No unsaved changes"}
-        </span>
-        <div style={{ display: "flex", gap: 8 }}>
-          {hasEdits && (
-            <Button variant="secondary" onClick={() => setEditMap({})} disabled={saveAllLoading}>
-              Discard
-            </Button>
-          )}
-          <Button variant="primary" onClick={onSaveAll} disabled={!hasEdits || saveAllLoading}>
-            {saveAllLoading ? "Saving…" : "Save All Changes"}
-          </Button>
-        </div>
-      </div>
-
-      <Modal open={modalOpen} title="New Menu Item" onClose={closeModal} large>
-        <div style={{ display: "grid", gap: 12 }}>
-          <div>
-            <label
-              style={{
-                fontSize: 12,
-                fontWeight: 600,
-                color: "var(--pos-tx-sec)",
-                display: "block",
-                marginBottom: 4,
-              }}
-            >
-              Item Name <span style={{ color: "var(--pos-danger)" }}>*</span>
-            </label>
-            <input
-              placeholder="e.g. Paneer Tikka"
-              value={modalName}
-              onChange={(e) => setModalName(e.target.value)}
-              autoFocus
-              onKeyDown={(e) => e.key === "Enter" && !modalSaving && onModalSave()}
-              style={{
-                width: "100%",
-                padding: "10px 12px",
-                borderRadius: 8,
-                border: "1.5px solid var(--pos-line-strong)",
-                fontSize: 14,
-                boxSizing: "border-box",
-              }}
-            />
-          </div>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: 10,
-            }}
-          >
-            <div>
-              <label
-                style={{
-                  fontSize: 12,
-                  fontWeight: 600,
-                  color: "var(--pos-tx-sec)",
-                  display: "block",
-                  marginBottom: 4,
-                }}
-              >
-                SKU / ID
-              </label>
-              <input
-                placeholder="e.g. PT-01"
-                value={modalSku}
-                onChange={(e) => setModalSku(e.target.value)}
-                style={{
-                  width: "100%",
-                  padding: "10px 12px",
-                  borderRadius: 8,
-                  border: "1.5px solid var(--pos-line-strong)",
-                  fontSize: 14,
-                  boxSizing: "border-box",
-                }}
-              />
-            </div>
-            <div>
-              <label
-                style={{
-                  fontSize: 12,
-                  fontWeight: 600,
-                  color: "var(--pos-tx-sec)",
-                  display: "block",
-                  marginBottom: 4,
-                }}
-              >
-                Price (₹) <span style={{ color: "var(--pos-danger)" }}>*</span>
-              </label>
-              <input
-                type="number"
-                placeholder="100"
-                value={modalPrice}
-                onChange={(e) => setModalPrice(Number(e.target.value))}
-                style={{
-                  width: "100%",
-                  padding: "10px 12px",
-                  borderRadius: 8,
-                  border: "1.5px solid var(--pos-line-strong)",
-                  fontSize: 14,
-                  boxSizing: "border-box",
-                }}
-              />
-            </div>
-          </div>
-          <div>
-            <label
-              style={{
-                fontSize: 12,
-                fontWeight: 600,
-                color: "var(--pos-tx-sec)",
-                display: "block",
-                marginBottom: 4,
-              }}
-            >
-              Category
-            </label>
-            <select
-              value={modalCategory}
-              onChange={(e) => setModalCategory(e.target.value)}
-              style={{
-                width: "100%",
-                padding: "10px 12px",
-                borderRadius: 8,
-                border: "1.5px solid var(--pos-line-strong)",
-                fontSize: 14,
-                background: "var(--pos-surface)",
-                color: modalCategory ? "var(--pos-tx)" : "var(--pos-tx-muted)",
-                fontFamily: "inherit",
-                outline: "none",
-                cursor: "pointer",
-                boxSizing: "border-box",
-              }}
-            >
-              <option value="">— None —</option>
-              {categories.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: 8,
-              }}
-            >
-              <label
-                style={{
-                  fontSize: 12,
-                  fontWeight: 600,
-                  color: "var(--pos-tx-sec)",
-                  display: "block",
-                }}
-              >
-                Variants (optional)
-              </label>
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                style={{ padding: "4px 10px", fontSize: 12 }}
-                onClick={() =>
-                  setModalVariants((prev) => [
-                    ...prev,
-                    {
-                      name: variantOptions[0] || "",
-                      price: modalPrice > 0 ? modalPrice : 100,
-                      sortOrder: prev.length,
-                    },
-                  ])
-                }
-              >
-                + Add Variant
-              </Button>
-            </div>
-            {variantOptions.length === 0 && (
-              <div style={{ fontSize: 12, color: "var(--pos-saffron-text)", marginBottom: 8 }}>
-                Configure variant options in Settings to use dropdown variants.
-              </div>
-            )}
-            {modalVariants.length === 0 ? (
-              <div style={{ fontSize: 12, color: "var(--pos-tx-muted)" }}>
-                Example: Half / Full with different prices.
-              </div>
-            ) : (
-              <div style={{ display: "grid", gap: 8 }}>
-                {modalVariants.map((variant, index) => (
-                  <div
-                    key={`${variant.id || "new"}-${index}`}
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "1fr 120px 40px",
-                      gap: 8,
-                      alignItems: "center",
-                    }}
-                  >
-                    <select
-                      value={variant.name}
-                      onChange={(e) =>
-                        setModalVariants((prev) =>
-                          prev.map((row, rowIndex) =>
-                            rowIndex === index ? { ...row, name: e.target.value } : row,
-                          ),
-                        )
-                      }
-                      style={{
-                        width: "100%",
-                        padding: "8px 10px",
-                        borderRadius: 8,
-                        border: "1.5px solid var(--pos-line-strong)",
-                        fontSize: 13,
-                        background: "var(--pos-surface)",
-                        color: variant.name ? "var(--pos-tx)" : "var(--pos-tx-muted)",
-                        fontFamily: "inherit",
-                        cursor: "pointer",
-                        boxSizing: "border-box",
-                      }}
-                    >
-                      <option value="">Select variant…</option>
-                      {variantNameOptions(variant.name).map((nameOption) => (
-                        <option key={nameOption} value={nameOption}>
-                          {nameOption}
-                        </option>
-                      ))}
-                    </select>
-                    <input
-                      type="number"
-                      placeholder="Price"
-                      value={variant.price}
-                      onChange={(e) =>
-                        setModalVariants((prev) =>
-                          prev.map((row, rowIndex) =>
-                            rowIndex === index ? { ...row, price: Number(e.target.value) } : row,
-                          ),
-                        )
-                      }
-                      style={{
-                        width: "100%",
-                        padding: "8px 10px",
-                        borderRadius: 8,
-                        border: "1.5px solid var(--pos-line-strong)",
-                        fontSize: 13,
-                        boxSizing: "border-box",
-                      }}
-                    />
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setModalVariants((prev) => prev.filter((_, rowIndex) => rowIndex !== index))
-                      }
-                      title="Remove variant"
-                      style={{
-                        width: 34,
-                        height: 34,
-                        borderRadius: 8,
-                        border: "none",
-                        background: "var(--pos-danger-tint)",
-                        color: "var(--pos-danger)",
-                        cursor: "pointer",
-                        fontSize: 18,
-                        lineHeight: 1,
-                      }}
-                    >
-                      <Icon icon={X} size="sm" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-          <label
-            style={{
-              display: "flex",
-              gap: 10,
-              alignItems: "center",
-              fontSize: 13,
-              color: "var(--pos-tx-sec)",
-              cursor: "pointer",
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={modalAvailable}
-              onChange={(e) => setModalAvailable(e.target.checked)}
-              style={{ width: 16, height: 16, accentColor: "var(--pos-saffron-deep)" }}
-            />
-            Available on menu
-          </label>
-        </div>
-
-        <div className="ui-form-actions" style={{ marginTop: 18 }}>
-          <Button type="button" variant="secondary" onClick={closeModal} disabled={modalSaving}>
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={() => onModalSave(true)}
-            disabled={modalSaving}
-          >
-            {modalSaving ? "Saving…" : "Save & Add Another"}
-          </Button>
-          <Button
-            type="button"
-            variant="primary"
-            onClick={() => onModalSave(false)}
-            disabled={modalSaving}
-          >
-            {modalSaving ? "Saving…" : "Save Item"}
-          </Button>
-        </div>
-      </Modal>
-
-      {variantEditorItem && (
-        <Modal
-          open
-          title={`Variants · ${variantEditorItem.name}`}
-          onClose={() => setVariantEditorItemId(null)}
-          large
-        >
-          <div style={{ fontSize: 12, color: "var(--pos-tx-sub)", marginBottom: 12 }}>
-            Add options like Half/Full with different prices.
-          </div>
-
+        ) : (
           <div style={{ display: "grid", gap: 8 }}>
-            {variantOptions.length === 0 && (
+            {variantOptions.length === 0 ? (
               <div style={{ fontSize: 12, color: "var(--pos-saffron-text)" }}>
-                Configure variant options in Settings to use dropdown variants.
+                Add variant names like Half and Full in Settings to pick them here.
               </div>
-            )}
-            {variantEditorDraft.length === 0 && (
-              <div style={{ fontSize: 12, color: "var(--pos-tx-muted)" }}>
-                No variants yet. Use Add Variant to create one.
-              </div>
-            )}
-            {variantEditorDraft.map((variant, index) => (
+            ) : null}
+            {draft.variants.map((variant, index) => (
               <div
                 key={`${variant.id || "new"}-${index}`}
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 130px 40px",
-                  gap: 8,
-                  alignItems: "center",
-                }}
+                style={{ display: "grid", gridTemplateColumns: "1fr 120px 36px", gap: 8 }}
               >
                 <select
+                  aria-label={`Variant ${index + 1} name`}
                   value={variant.name}
-                  onChange={(e) =>
-                    setVariantEditorDraft((prev) =>
-                      prev.map((row, rowIndex) =>
-                        rowIndex === index ? { ...row, name: e.target.value } : row,
-                      ),
-                    )
-                  }
-                  style={{
-                    width: "100%",
-                    padding: "8px 10px",
-                    borderRadius: 8,
-                    border: "1.5px solid var(--pos-line-strong)",
-                    fontSize: 13,
-                    background: "var(--pos-surface)",
-                    color: variant.name ? "var(--pos-tx)" : "var(--pos-tx-muted)",
-                    fontFamily: "inherit",
-                    cursor: "pointer",
-                    boxSizing: "border-box",
-                  }}
+                  onChange={(e) => setVariant(index, { name: e.target.value })}
+                  style={{ ...fieldInputStyle, padding: "8px 10px", cursor: "pointer" }}
                 >
                   <option value="">Select variant…</option>
                   {variantNameOptions(variant.name).map((nameOption) => (
@@ -1661,91 +1770,379 @@ export default function ItemsEditor({
                   ))}
                 </select>
                 <input
+                  aria-label={`Variant ${index + 1} price`}
+                  aria-invalid={parsePositiveMoney(variant.price) === null}
                   type="number"
+                  inputMode="decimal"
                   placeholder="Price"
                   value={variant.price}
-                  onChange={(e) =>
-                    setVariantEditorDraft((prev) =>
-                      prev.map((row, rowIndex) =>
-                        rowIndex === index ? { ...row, price: Number(e.target.value) } : row,
-                      ),
-                    )
-                  }
+                  onChange={(e) => setVariant(index, { price: e.target.value })}
                   style={{
-                    width: "100%",
+                    ...fieldInputStyle,
                     padding: "8px 10px",
-                    borderRadius: 8,
-                    border: "1.5px solid var(--pos-line-strong)",
-                    fontSize: 13,
-                    boxSizing: "border-box",
+                    ...(parsePositiveMoney(variant.price) === null
+                      ? { borderColor: "var(--pos-danger-line)" }
+                      : {}),
                   }}
                 />
                 <button
                   type="button"
                   onClick={() =>
-                    setVariantEditorDraft((prev) =>
-                      prev.filter((_, rowIndex) => rowIndex !== index),
-                    )
+                    onChange({
+                      variants: draft.variants.filter((_, rowIndex) => rowIndex !== index),
+                      ...(draft.variants.length === 1 && !draft.price
+                        ? { price: String(variant.price ?? "") }
+                        : {}),
+                    })
                   }
+                  aria-label={`Remove variant ${variant.name || index + 1}`}
                   title="Remove variant"
                   style={{
-                    width: 34,
-                    height: 34,
+                    width: 36,
+                    height: 38,
                     borderRadius: 8,
                     border: "none",
                     background: "var(--pos-danger-tint)",
                     color: "var(--pos-danger)",
                     cursor: "pointer",
-                    fontSize: 18,
-                    lineHeight: 1,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
                   }}
                 >
                   <Icon icon={X} size="sm" />
                 </button>
               </div>
             ))}
+            {draft.variants.some((variant) => parsePositiveMoney(variant.price) === null) ? (
+              <div style={{ fontSize: 12, color: "var(--pos-danger-text)" }}>
+                Enter a price for each variant, or remove the ones you don&apos;t need.
+              </div>
+            ) : null}
           </div>
+        )}
+      </div>
 
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginTop: 16 }}>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() =>
-                setVariantEditorDraft((prev) => [
-                  ...prev,
-                  {
-                    name: variantOptions[0] || "",
-                    price: Number(
-                      editMap[variantEditorItem._id]?.price ?? variantEditorItem.price ?? 0,
-                    ),
-                    sortOrder: prev.length,
-                  },
-                ])
-              }
-            >
-              + Add Variant
-            </Button>
-            <div style={{ display: "flex", gap: 8 }}>
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => setVariantEditorItemId(null)}
-                disabled={variantEditorSaving}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                variant="primary"
-                onClick={saveVariantEditor}
-                disabled={variantEditorSaving}
-              >
-                {variantEditorSaving ? "Saving..." : "Save Variants"}
-              </Button>
-            </div>
+      <div style={{ display: "grid", gap: 10 }}>
+        <label style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 14 }}>
+          <input
+            type="checkbox"
+            checked={draft.available}
+            onChange={(e) =>
+              onChange({
+                available: e.target.checked,
+                ...(e.target.checked ? {} : { favorite: false }),
+              })
+            }
+            style={{ width: 16, height: 16 }}
+          />
+          On the menu (shown on Billing and Captain)
+        </label>
+        <label
+          style={{
+            display: "flex",
+            gap: 10,
+            alignItems: "center",
+            fontSize: 14,
+            opacity: draft.available ? 1 : 0.5,
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={draft.available && draft.favorite}
+            disabled={!draft.available}
+            onChange={(e) => onChange({ favorite: e.target.checked })}
+            style={{ width: 16, height: 16 }}
+          />
+          Favourite (shown first on Billing)
+        </label>
+      </div>
+
+      <div>
+        <label style={fieldLabelStyle} htmlFor="menu-item-sku">
+          SKU / code (optional)
+        </label>
+        <input
+          id="menu-item-sku"
+          placeholder="e.g. PT-01"
+          value={draft.sku}
+          onChange={(e) => onChange({ sku: e.target.value })}
+          style={fieldInputStyle}
+        />
+        <div style={{ fontSize: 12, color: "var(--pos-tx-muted)", marginTop: 4 }}>
+          Only needed if you match items by code, for example in CSV imports.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SummaryChip({ label, tone = "neutral" }: { label: string; tone?: "neutral" | "danger" }) {
+  return (
+    <span
+      style={{
+        padding: "3px 10px",
+        borderRadius: 999,
+        fontSize: 12,
+        fontWeight: 700,
+        background: tone === "danger" ? "var(--pos-danger-tint)" : "var(--pos-surface-sunken)",
+        color: tone === "danger" ? "var(--pos-danger-text)" : "var(--pos-tx-sec)",
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
+function ImportPreviewSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div style={{ fontSize: 13 }}>
+      <div style={{ fontWeight: 700, marginBottom: 4 }}>{title}</div>
+      <div style={{ maxHeight: 180, overflowY: "auto", display: "grid", gap: 2 }}>{children}</div>
+    </div>
+  );
+}
+
+function ImportPreviewBody({
+  preview,
+  mode,
+  busy,
+  showAllDeactivated,
+  replaceNeedsConfirm,
+  replaceConfirmed,
+  onModeChange,
+  onToggleShowAll,
+  onReplaceConfirmed,
+  onCancel,
+  onConfirm,
+}: {
+  preview: ReturnType<typeof validateMenuCsv>;
+  mode: MenuImportMode;
+  busy: boolean;
+  showAllDeactivated: boolean;
+  replaceNeedsConfirm: boolean;
+  replaceConfirmed: boolean;
+  onModeChange: (mode: MenuImportMode) => void;
+  onToggleShowAll: () => void;
+  onReplaceConfirmed: (value: boolean) => void;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const replacing = preview.mode === "replace";
+  const hasErrors = preview.errors.length > 0;
+  return (
+    <div style={{ display: "grid", gap: 14 }}>
+      <div style={{ display: "grid", gap: 6, fontSize: 13 }}>
+        <label style={{ display: "flex", gap: 8, alignItems: "flex-start", cursor: "pointer" }}>
+          <input
+            type="radio"
+            name="menu-import-mode"
+            checked={mode === "upsert"}
+            disabled={busy}
+            onChange={() => onModeChange("upsert")}
+          />
+          <span>
+            <strong>Add or update items</strong>. Items and categories not in the file stay as they
+            are.
+          </span>
+        </label>
+        <label style={{ display: "flex", gap: 8, alignItems: "flex-start", cursor: "pointer" }}>
+          <input
+            type="radio"
+            name="menu-import-mode"
+            checked={mode === "replace"}
+            disabled={busy}
+            onChange={() => onModeChange("replace")}
+          />
+          <span>
+            <strong>Replace whole menu</strong>. The file becomes the full menu; anything not in it
+            is taken off the menu.
+          </span>
+        </label>
+      </div>
+
+      {hasErrors ? (
+        <div
+          style={{
+            color: "var(--pos-danger-text)",
+            background: "var(--pos-danger-tint)",
+            border: "1px solid var(--pos-danger-line)",
+            borderRadius: 8,
+            padding: "10px 12px",
+            fontSize: 13,
+            maxHeight: 220,
+            overflowY: "auto",
+          }}
+        >
+          <div style={{ fontWeight: 700, marginBottom: 4 }}>
+            Fix{" "}
+            {preview.errors.length === 1
+              ? "this problem"
+              : `these ${preview.errors.length} problems`}{" "}
+            in the file, then import it again:
           </div>
-        </Modal>
+          {preview.errors.map((error, index) => (
+            <div key={`${index}-${error}`}>{error}</div>
+          ))}
+        </div>
+      ) : (
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          <SummaryChip label={`${preview.created} new`} />
+          <SummaryChip label={`${preview.updated} updated`} />
+          {preview.updated ? (
+            <SummaryChip label={`${preview.changes.length} with changes`} />
+          ) : null}
+          {preview.unchangedItems ? (
+            <SummaryChip label={`${preview.unchangedItems} unchanged`} />
+          ) : null}
+          <SummaryChip
+            label={`${preview.deactivatedItems} taken off`}
+            tone={preview.deactivatedItems ? "danger" : "neutral"}
+          />
+          {replacing ? (
+            <SummaryChip
+              label={`${preview.deactivatedCategories} categories taken off`}
+              tone={preview.deactivatedCategories ? "danger" : "neutral"}
+            />
+          ) : null}
+        </div>
       )}
+
+      {preview.warnings.length ? (
+        <div
+          style={{
+            background: "var(--pos-saffron-tint)",
+            border: "1px solid var(--pos-saffron-line)",
+            color: "var(--pos-saffron-text)",
+            borderRadius: 8,
+            padding: "10px 12px",
+            fontSize: 13,
+            display: "grid",
+            gap: 4,
+          }}
+        >
+          <strong>Please check</strong>
+          {preview.warnings.map((warning, index) => (
+            <div key={`${index}-${warning}`}>{warning}</div>
+          ))}
+        </div>
+      ) : null}
+
+      {!hasErrors ? (
+        <>
+          {preview.changes.length ? (
+            <ImportPreviewSection title="What changes on existing items">
+              {preview.changes.map((change) => (
+                <div key={`${change.category}-${change.name}`}>
+                  <strong>{change.name}</strong>{" "}
+                  <span style={{ color: "var(--pos-tx-muted)" }}>({change.category})</span>:{" "}
+                  {change.details.join("; ")}
+                </div>
+              ))}
+            </ImportPreviewSection>
+          ) : null}
+          {preview.identityChanges.length ? (
+            <ImportPreviewSection title="Name, code and category changes">
+              {preview.identityChanges.map((change, index) => (
+                <div key={`${index}-${change}`}>{change}</div>
+              ))}
+            </ImportPreviewSection>
+          ) : null}
+          <ImportPreviewSection
+            title={
+              replacing
+                ? "Categories, in menu order"
+                : "Categories in the file (new ones go after your existing categories)"
+            }
+          >
+            {preview.categories.map((category) => (
+              <div key={category.name}>
+                {category.name}: {category.itemCount} {category.itemCount === 1 ? "item" : "items"}
+                {category.isNew ? " (new)" : ""}
+              </div>
+            ))}
+          </ImportPreviewSection>
+          {preview.variantItems.length ? (
+            <ImportPreviewSection title="Items with sizes or variants">
+              {preview.variantItems.map((item) => (
+                <div key={`${item.category}-${item.name}`}>
+                  {item.name} ({item.category}): {item.variantCount} variants
+                </div>
+              ))}
+            </ImportPreviewSection>
+          ) : null}
+          {preview.deactivatedItemNames.length ? (
+            <ImportPreviewSection title="Items that will be taken off the menu">
+              {(showAllDeactivated
+                ? preview.deactivatedItemNames
+                : preview.deactivatedItemNames.slice(0, 10)
+              ).map((name, index) => (
+                <div key={`${index}-${name}`}>{name}</div>
+              ))}
+              {preview.deactivatedItemNames.length > 10 ? (
+                <div>
+                  <Button size="sm" onClick={onToggleShowAll}>
+                    {showAllDeactivated
+                      ? "Show fewer"
+                      : `Show all ${preview.deactivatedItemNames.length}`}
+                  </Button>
+                </div>
+              ) : null}
+            </ImportPreviewSection>
+          ) : null}
+          {preview.deactivatedCategoryNames.length ? (
+            <ImportPreviewSection title="Categories that will be taken off the menu">
+              <div>{preview.deactivatedCategoryNames.join(", ")}</div>
+            </ImportPreviewSection>
+          ) : null}
+          <div style={{ fontSize: 12, color: "var(--pos-tx-muted)" }}>
+            Past bills are never changed by an import.
+          </div>
+        </>
+      ) : null}
+
+      {!hasErrors && replaceNeedsConfirm ? (
+        <label
+          style={{
+            display: "flex",
+            gap: 8,
+            alignItems: "flex-start",
+            fontSize: 13,
+            color: "var(--pos-danger-text)",
+            cursor: "pointer",
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={replaceConfirmed}
+            disabled={busy}
+            onChange={(event) => onReplaceConfirmed(event.target.checked)}
+          />
+          <span>
+            I understand that {preview.deactivatedItems} items and {preview.deactivatedCategories}{" "}
+            categories not in this file will be taken off the menu.
+          </span>
+        </label>
+      ) : null}
+
+      <div className="ui-form-actions">
+        <Button variant="secondary" disabled={busy} onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button
+          variant={replacing ? "danger" : "primary"}
+          disabled={busy || hasErrors || (replaceNeedsConfirm && !replaceConfirmed)}
+          onClick={onConfirm}
+        >
+          {busy
+            ? replacing
+              ? "Replacing…"
+              : "Importing…"
+            : replacing
+              ? "Replace menu"
+              : "Add or update items"}
+        </Button>
+      </div>
     </div>
   );
 }

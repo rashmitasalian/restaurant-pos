@@ -234,7 +234,9 @@ function runSchema(database: SqliteDatabase) {
       price_paise INTEGER NOT NULL CHECK (price_paise >= 0),
       available INTEGER NOT NULL DEFAULT 1,
       favorite INTEGER NOT NULL DEFAULT 0,
-      tax_rate_bps INTEGER NOT NULL DEFAULT 1800,
+      tax_rate_bps INTEGER,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      diet TEXT CHECK (diet IS NULL OR diet IN ('veg', 'non-veg', 'egg')),
       active INTEGER NOT NULL DEFAULT 1,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
@@ -356,7 +358,7 @@ function runSchema(database: SqliteDatabase) {
       category_name TEXT,
       quantity REAL NOT NULL CHECK (quantity > 0),
       rate_paise INTEGER NOT NULL CHECK (rate_paise >= 0),
-      tax_rate_bps INTEGER NOT NULL DEFAULT 1800,
+      tax_rate_bps INTEGER,
       line_total_paise INTEGER NOT NULL DEFAULT 0,
       kot_printed_qty REAL NOT NULL DEFAULT 0,
       sort_order INTEGER NOT NULL DEFAULT 0,
@@ -1642,6 +1644,26 @@ function runSchema(database: SqliteDatabase) {
     `);
   });
 
+  runMigration(database, 31, "Menu sort, diet, and nullable legacy tax rates", () => {
+    const apply = database.transaction(() => {
+      relaxLegacyTaxColumn(database, "order_lines");
+      relaxLegacyTaxColumn(database, "menu_items", [
+        "sort_order INTEGER NOT NULL DEFAULT 0",
+        "diet TEXT CHECK (diet IS NULL OR diet IN ('veg', 'non-veg', 'egg'))",
+      ]);
+    });
+    database.pragma("foreign_keys = OFF");
+    try {
+      apply();
+    } finally {
+      database.pragma("foreign_keys = ON");
+    }
+    const violations = database.pragma("foreign_key_check") as unknown[];
+    if (violations.length) {
+      throw new Error("migration-31-foreign-key-check-failed");
+    }
+  });
+
   // Startup self-healing for pre-existing/partially migrated databases:
   // ensure area_id exists even if migration 12 was marked applied while the column was missing.
   addColumnIfMissing(
@@ -1847,6 +1869,100 @@ function createIndexIfColumnExists(
   database.exec(`CREATE INDEX IF NOT EXISTS ${indexName} ${indexSqlAfterName}`);
 }
 
+function quoteIdent(name: string) {
+  return `"${String(name).replace(/"/g, "\"\"")}"`;
+}
+
+function relaxLegacyTaxColumn(
+  database: SqliteDatabase,
+  tableName: string,
+  extraColumnSql: string[] = [],
+) {
+  if (!tableExists(database, tableName)) {
+    return;
+  }
+  const columns = database.pragma(`table_info(${tableName})`) as Array<{
+    name: string;
+    notnull: number;
+    dflt_value: unknown;
+  }>;
+  const tax = columns.find((column) => column.name === "tax_rate_bps");
+  const missingExtras = extraColumnSql
+    .map((definition) => definition.trim().split(/\s+/)[0])
+    .filter((name) => name && !columns.some((column) => column.name === name));
+  const taxNeedsRelax = Boolean(tax && (tax.notnull === 1 || tax.dflt_value != null));
+  if (!taxNeedsRelax && missingExtras.length === 0) {
+    return;
+  }
+  if (!taxNeedsRelax) {
+    for (const definition of extraColumnSql) {
+      const name = definition.trim().split(/\s+/)[0];
+      addColumnIfMissing(database, tableName, name, definition.replace(new RegExp(`^${name}\\s+`), ""));
+    }
+    return;
+  }
+
+  const createRow = database
+    .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?")
+    .get(tableName) as { sql?: string } | undefined;
+  const createSql = String(createRow?.sql || "");
+  if (!/tax_rate_bps/i.test(createSql)) {
+    throw new Error(`migration-31-missing-tax-column:${tableName}`);
+  }
+  const indexRows = database
+    .prepare(
+      "SELECT sql FROM sqlite_master WHERE type = 'index' AND tbl_name = ? AND sql IS NOT NULL",
+    )
+    .all(tableName) as Array<{ sql: string }>;
+  const triggerRows = database
+    .prepare(
+      "SELECT sql FROM sqlite_master WHERE type = 'trigger' AND tbl_name = ? AND sql IS NOT NULL",
+    )
+    .all(tableName) as Array<{ sql: string }>;
+
+  let nextSql = createSql.replace(
+    /tax_rate_bps\s+INTEGER\s+NOT\s+NULL\s+DEFAULT\s+1800/i,
+    "tax_rate_bps INTEGER",
+  );
+  if (nextSql === createSql) {
+    nextSql = createSql.replace(/tax_rate_bps\s+INTEGER\s+NOT\s+NULL/i, "tax_rate_bps INTEGER");
+  }
+  if (/tax_rate_bps\s+INTEGER\s+NOT\s+NULL/i.test(nextSql)) {
+    throw new Error(`migration-31-tax-column-unchanged:${tableName}`);
+  }
+  nextSql = nextSql.replace(
+    new RegExp(`CREATE\\s+TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?(?:"${tableName}"|${tableName})`, "i"),
+    `CREATE TABLE ${quoteIdent(`${tableName}_new`)}`,
+  );
+  if (missingExtras.length) {
+    const extras = extraColumnSql
+      .filter((definition) => missingExtras.includes(definition.trim().split(/\s+/)[0]))
+      .join(",\n");
+    const closeAt = nextSql.lastIndexOf(")");
+    nextSql = `${nextSql.slice(0, closeAt)},\n${extras}${nextSql.slice(closeAt)}`;
+  }
+
+  const columnList = columns.map((column) => quoteIdent(column.name)).join(", ");
+  database.exec(nextSql);
+  database.exec(
+    `INSERT INTO ${quoteIdent(`${tableName}_new`)} (${columnList}) SELECT ${columnList} FROM ${quoteIdent(tableName)}`,
+  );
+  database.exec(`DROP TABLE ${quoteIdent(tableName)}`);
+  database.exec(
+    `ALTER TABLE ${quoteIdent(`${tableName}_new`)} RENAME TO ${quoteIdent(tableName)}`,
+  );
+  for (const index of indexRows) {
+    if (index.sql) {
+      database.exec(index.sql);
+    }
+  }
+  for (const trigger of triggerRows) {
+    if (trigger.sql) {
+      database.exec(trigger.sql);
+    }
+  }
+}
+
 function addColumnIfMissing(
   database: SqliteDatabase,
   tableName: string,
@@ -1899,8 +2015,8 @@ function seedDatabase(database: SqliteDatabase) {
       registeredAddress: "",
       stateCode: "",
       stateName: "",
-      gstRateBps: 1800,
-      priceIncludesTax: true,
+      gstRateBps: 500,
+      priceIncludesTax: false,
     }),
     now,
   );

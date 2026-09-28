@@ -76,8 +76,14 @@ declare global {
         createItem: (payload: any) => Promise<any>;
         updateItem: (payload: any) => Promise<any>;
         deleteItem: (id: string) => Promise<any>;
+        reorderItems: (ids: string[]) => Promise<{ ok: boolean; count: number }>;
         listCategories: () => Promise<string[]>;
         setCategories: (categories: string[]) => Promise<any>;
+        importMenu: (payload: {
+          csv: string;
+          fileName?: string;
+          mode?: "upsert" | "replace";
+        }) => Promise<any>;
         listVariantOptions: () => Promise<string[]>;
         setVariantOptions: (options: string[]) => Promise<any>;
       };

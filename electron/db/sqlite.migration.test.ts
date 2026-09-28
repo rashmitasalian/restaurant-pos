@@ -7,7 +7,7 @@ jest.mock("electron", () => ({
 import fs from "fs";
 import os from "os";
 import path from "path";
-import { closeDb, initializeDatabase } from "./sqlite";
+import { closeDb, getDb, initializeDatabase } from "./sqlite";
 
 function createLegacyGroceryDatabase(dbPath: string) {
   const BetterSqlite3 = require("better-sqlite3");
@@ -443,5 +443,208 @@ describe("sqlite customer credit column upgrades", () => {
     expect(allocTable?.name).toBe("customer_credit_allocations");
     expect(outstanding.outstanding_paise).toBe(0);
     expect(migration?.version).toBe(28);
+  });
+});
+
+function createPreDietMenuDatabase(dbPath: string) {
+  const BetterSqlite3 = require("better-sqlite3");
+  const legacy = new BetterSqlite3(dbPath);
+  legacy.exec(`
+    CREATE TABLE menu_categories (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      active INTEGER NOT NULL DEFAULT 1,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE menu_items (
+      id TEXT PRIMARY KEY,
+      sku TEXT,
+      name TEXT NOT NULL,
+      category_id TEXT REFERENCES menu_categories(id) ON UPDATE CASCADE ON DELETE SET NULL,
+      price_paise INTEGER NOT NULL CHECK (price_paise >= 0),
+      available INTEGER NOT NULL DEFAULT 1,
+      favorite INTEGER NOT NULL DEFAULT 0,
+      tax_rate_bps INTEGER NOT NULL DEFAULT 1800,
+      active INTEGER NOT NULL DEFAULT 1,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX idx_menu_items_name ON menu_items(name);
+
+    CREATE TABLE orders (
+      id TEXT PRIMARY KEY,
+      order_type TEXT NOT NULL CHECK (order_type IN ('table', 'takeaway', 'delivery')),
+      table_id INTEGER,
+      customer_id TEXT,
+      status TEXT NOT NULL CHECK (status IN ('open', 'held', 'ready', 'assigned', 'paid', 'cancelled')),
+      kot_status TEXT NOT NULL DEFAULT 'pending' CHECK (kot_status IN ('pending', 'sent', 'printed', 'failed')),
+      subtotal_paise INTEGER NOT NULL DEFAULT 0,
+      tax_total_paise INTEGER NOT NULL DEFAULT 0,
+      discount_percent REAL NOT NULL DEFAULT 0,
+      discount_total_paise INTEGER NOT NULL DEFAULT 0,
+      total_paise INTEGER NOT NULL DEFAULT 0,
+      invoice_number TEXT,
+      paid_at INTEGER,
+      cancelled_at INTEGER,
+      cancelled_by TEXT,
+      cancellation_reason TEXT,
+      meta_json TEXT,
+      created_by TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE order_lines (
+      id TEXT PRIMARY KEY,
+      order_id TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+      menu_item_id TEXT REFERENCES menu_items(id) ON UPDATE CASCADE ON DELETE SET NULL,
+      item_name TEXT NOT NULL,
+      category_name TEXT,
+      quantity REAL NOT NULL CHECK (quantity > 0),
+      rate_paise INTEGER NOT NULL CHECK (rate_paise >= 0),
+      tax_rate_bps INTEGER NOT NULL DEFAULT 1800,
+      line_total_paise INTEGER NOT NULL DEFAULT 0,
+      kot_printed_qty REAL NOT NULL DEFAULT 0,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX idx_order_lines_order ON order_lines(order_id, sort_order);
+
+    INSERT INTO menu_categories (id, name, sort_order, active, created_at, updated_at)
+    VALUES ('cat:mains', 'Mains', 1, 1, 1, 1);
+    INSERT INTO menu_items (
+      id, sku, name, category_id, price_paise, tax_rate_bps, active, created_at, updated_at
+    ) VALUES (
+      'item:legacy', 'LEG1', 'Legacy Biryani', 'cat:mains', 20000, 1800, 1, 1, 1
+    );
+    INSERT INTO orders (
+      id, order_type, status, total_paise, paid_at, created_at, updated_at
+    ) VALUES (
+      'order:legacy-paid', 'takeaway', 'paid', 20000, 5, 1, 5
+    );
+    INSERT INTO order_lines (
+      id, order_id, menu_item_id, item_name, quantity, rate_paise, tax_rate_bps,
+      line_total_paise, created_at, updated_at
+    ) VALUES (
+      'line:legacy', 'order:legacy-paid', 'item:legacy', 'Legacy Biryani', 1, 20000, 1800,
+      20000, 1, 1
+    );
+  `);
+  legacy.close();
+}
+
+describe("sqlite menu tax and diet migration", () => {
+  let tempDir = "";
+  let dbPath = "";
+
+  beforeEach(() => {
+    closeDb();
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "pos-migrate-menu-"));
+    dbPath = path.join(tempDir, "restaurant-pos.sqlite");
+    process.env.POS_TEST_USER_DATA_DIR = tempDir;
+    process.env.POS_DB_PATH_OVERRIDE = dbPath;
+  });
+
+  afterEach(() => {
+    closeDb();
+    delete process.env.POS_TEST_USER_DATA_DIR;
+    delete process.env.POS_DB_PATH_OVERRIDE;
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it("keeps legacy tax values and makes new tax columns nullable", async () => {
+    createPreDietMenuDatabase(dbPath);
+    await initializeDatabase();
+    const database = getDb();
+    database
+      .prepare(
+        `INSERT INTO menu_items (id, name, price_paise, created_at, updated_at)
+         VALUES ('item:new', 'New Tea', 2500, 9, 9)`,
+      )
+      .run();
+    database
+      .prepare(
+        `INSERT INTO order_lines (
+           id, order_id, item_name, quantity, rate_paise, created_at, updated_at
+         ) VALUES ('line:new', 'order:legacy-paid', 'New Tea', 1, 2500, 9, 9)`,
+      )
+      .run();
+
+    const itemTax = database.prepare("PRAGMA table_info(menu_items)").all() as Array<{
+      name: string;
+      notnull: number;
+      dflt_value: unknown;
+    }>;
+    const lineTax = database.prepare("PRAGMA table_info(order_lines)").all() as Array<{
+      name: string;
+      notnull: number;
+      dflt_value: unknown;
+    }>;
+    const legacyItem = database
+      .prepare(
+        "SELECT name, price_paise, tax_rate_bps, sort_order, diet FROM menu_items WHERE id = ?",
+      )
+      .get("item:legacy") as {
+      name: string;
+      price_paise: number;
+      tax_rate_bps: number;
+      sort_order: number;
+      diet: string | null;
+    };
+    const legacyLine = database
+      .prepare("SELECT item_name, rate_paise, tax_rate_bps, menu_item_id FROM order_lines WHERE id = ?")
+      .get("line:legacy") as {
+      item_name: string;
+      rate_paise: number;
+      tax_rate_bps: number;
+      menu_item_id: string;
+    };
+    const newItem = database
+      .prepare("SELECT tax_rate_bps, sort_order, diet FROM menu_items WHERE id = ?")
+      .get("item:new") as { tax_rate_bps: number | null; sort_order: number; diet: string | null };
+    const newLine = database
+      .prepare("SELECT tax_rate_bps FROM order_lines WHERE id = ?")
+      .get("line:new") as { tax_rate_bps: number | null };
+    const indexes = database
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name IN ('menu_items', 'order_lines')")
+      .all() as Array<{ name: string }>;
+    const violations = database.pragma("foreign_key_check") as unknown[];
+    const migration = database
+      .prepare("SELECT version FROM schema_migrations WHERE version = 31")
+      .get() as { version: number };
+
+    const itemTaxColumn = itemTax.find((column) => column.name === "tax_rate_bps");
+    const lineTaxColumn = lineTax.find((column) => column.name === "tax_rate_bps");
+    expect(itemTaxColumn?.notnull).toBe(0);
+    expect(itemTaxColumn?.dflt_value).toBeNull();
+    expect(lineTaxColumn?.notnull).toBe(0);
+    expect(lineTaxColumn?.dflt_value).toBeNull();
+    expect(itemTax.map((column) => column.name)).toEqual(
+      expect.arrayContaining(["sort_order", "diet"]),
+    );
+    expect(legacyItem).toMatchObject({
+      name: "Legacy Biryani",
+      price_paise: 20000,
+      tax_rate_bps: 1800,
+      sort_order: 0,
+      diet: null,
+    });
+    expect(legacyLine).toMatchObject({
+      item_name: "Legacy Biryani",
+      rate_paise: 20000,
+      tax_rate_bps: 1800,
+      menu_item_id: "item:legacy",
+    });
+    expect(newItem.tax_rate_bps).toBeNull();
+    expect(newLine.tax_rate_bps).toBeNull();
+    expect(indexes.map((index) => index.name)).toEqual(
+      expect.arrayContaining(["idx_menu_items_name", "idx_order_lines_order"]),
+    );
+    expect(violations).toEqual([]);
+    expect(migration.version).toBe(31);
   });
 });

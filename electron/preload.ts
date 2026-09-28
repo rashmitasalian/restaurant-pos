@@ -128,8 +128,11 @@ contextBridge.exposeInMainWorld("pos", {
     createItem: (payload: any) => authInvoke("pos:menu:create-item", payload),
     updateItem: (payload: any) => authInvoke("pos:menu:update-item", payload),
     deleteItem: (id: string) => authInvoke("pos:menu:delete-item", id),
+    reorderItems: (ids: string[]) => authInvoke("pos:menu:reorder-items", ids),
     listCategories: () => authInvoke("pos:menu:list-categories"),
     setCategories: (categories: string[]) => authInvoke("pos:menu:set-categories", categories),
+    importMenu: (payload: { csv: string; fileName?: string; mode?: "upsert" | "replace" }) =>
+      authInvoke("pos:menu:import", payload),
     listVariantOptions: () => authInvoke("pos:menu:list-variant-options"),
     setVariantOptions: (options: string[]) => authInvoke("pos:menu:set-variant-options", options),
   },
