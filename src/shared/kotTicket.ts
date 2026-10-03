@@ -7,6 +7,7 @@ export type KotPreviewItem = {
   name: string;
   qty: number;
   sentQty?: number;
+  note?: string | null;
 };
 
 export type KotPreviewData = {
@@ -108,10 +109,12 @@ export function buildKotLines(
     "SEP",
     `LEFT:${PAD}${rpad("Item", COL_ITEM)}${lpad("Qty", COL_QTY)}`,
     "SEP",
-    ...((previewData.items || orderData?.items || []) as KotPreviewItem[]).map((it) => {
+    ...((previewData.items || orderData?.items || []) as KotPreviewItem[]).flatMap((it) => {
       const name = rpad(String(it.name || "").trim(), COL_ITEM);
       const qty = lpad(String(it.qty !== null && it.qty !== undefined ? it.qty : 1), COL_QTY);
-      return `LEFTDH:${PAD}${name}${qty}`;
+      const row = `LEFTDH:${PAD}${name}${qty}`;
+      const note = String(it.note || "").trim();
+      return note ? [row, `LEFT:${PAD}  ${note}`] : [row];
     }),
     ...(orderData?.notes ? ["SEP", `LEFT:${PAD}Note: ${orderData.notes}`] : []),
     "BLANK",

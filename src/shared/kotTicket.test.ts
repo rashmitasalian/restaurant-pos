@@ -31,6 +31,23 @@ describe("buildKotLines", () => {
     expect(lines).toContain("LEFT:  Table No: F14");
     expect(lines.some((line) => line.includes("Table No: 14"))).toBe(false);
   });
+
+  it("prints a line note under the unsent item", () => {
+    const lines = buildKotLines(
+      {
+        kotId: 3,
+        orderType: "table",
+        tableLabel: "F4",
+        items: [{ name: "Paneer Tikka", qty: 2, note: "No onion" }],
+      },
+      null,
+      4,
+      { hotelName: "Green Leaf Kitchen" },
+    );
+    const itemIndex = lines.findIndex((line) => line.includes("Paneer Tikka"));
+    expect(itemIndex).toBeGreaterThan(-1);
+    expect(lines[itemIndex + 1]).toContain("No onion");
+  });
 });
 
 describe("buildKotVoidLines", () => {

@@ -1,5 +1,5 @@
 import React from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Search } from "lucide-react";
 import { Icon } from "../../ui/components/ui/Icon";
 import { TableTile } from "../../ui/components/ui/TableTile";
 import { formatKotAge } from "../../shared/kotAge";
@@ -20,6 +20,7 @@ export type TableRow = {
   count?: number;
   total?: number;
   openedAt?: number | null;
+  activityAt?: number | null;
   orderId?: string | null;
   seats?: number | null;
   unsentCount?: number;
@@ -34,9 +35,12 @@ export function TablesScreen({
   areaId,
   setAreaId,
   kotTickets,
-  busy,
+  busyTableId,
   loading,
   activeTableId,
+  resume,
+  onResume,
+  onRegisterBack,
   onOpenTable,
 }: {
   waiterName?: string;
@@ -46,12 +50,17 @@ export function TablesScreen({
   areaId: string | null;
   setAreaId: (id: string | null) => void;
   kotTickets: CaptainKotTicket[];
-  busy: boolean;
+  busyTableId?: number | null;
   loading?: boolean;
   activeTableId?: number | null;
+  resume?: { label: string; meta: string } | null;
+  onResume?: () => void;
+  onRegisterBack?: (handler: (() => boolean) | null) => void;
   onOpenTable: (table: TableRow) => void;
 }) {
   const [areaOpen, setAreaOpen] = React.useState(false);
+  const [query, setQuery] = React.useState("");
+  const [floorFilter, setFloorFilter] = React.useState<"all" | "send">("all");
   const kotByTable = React.useMemo(() => {
     const map = new Map<number, CaptainKotTicket>();
     for (const ticket of kotTickets) {
@@ -60,7 +69,21 @@ export function TablesScreen({
     return map;
   }, [kotTickets]);
 
-  const filtered = areaId ? tables.filter((table) => table.areaId === areaId) : tables;
+  const filtered = (areaId ? tables.filter((table) => table.areaId === areaId) : tables).filter(
+    (table) => {
+      const title = formatTableLabel(table.id, table.name).toLowerCase();
+      if (query.trim() && !title.includes(query.trim().toLowerCase())) {
+        return false;
+      }
+      if (query.trim()) {
+        return true;
+      }
+      if (floorFilter === "send") {
+        return Boolean(table.occupied) && Number(table.unsentCount || 0) > 0;
+      }
+      return true;
+    },
+  );
   const occupiedCount = filtered.filter((table) => table.occupied).length;
   const areaLabel = areaId ? areas.find((area) => area.id === areaId)?.name || "Area" : "All areas";
   const showAreaTitles = !areaId && areas.length > 1;
@@ -92,6 +115,17 @@ export function TablesScreen({
     }
     return ordered;
   }, [areas, filtered]);
+
+  React.useEffect(() => {
+    onRegisterBack?.(() => {
+      if (areaOpen) {
+        setAreaOpen(false);
+        return true;
+      }
+      return false;
+    });
+    return () => onRegisterBack?.(null);
+  }, [areaOpen, onRegisterBack]);
 
   if (loading && tables.length === 0) {
     return (
@@ -141,12 +175,55 @@ export function TablesScreen({
             {occupiedCount}/{filtered.length} occupied
           </span>
         </div>
+        <div className="cap-floor-filters">
+          {(
+            [
+              ["all", "All"],
+              ["send", "Needs send"],
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              className={`cap-chip ${floorFilter === id ? "active" : ""}`}
+              onClick={() => setFloorFilter(id)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <label className="cap-search-wrap">
+          <Icon icon={Search} size="md" />
+          <input
+            className="cap-search"
+            placeholder="Search table"
+            value={query}
+            aria-label="Search table"
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        </label>
       </div>
+
+      {resume && onResume ? (
+        <button type="button" className="cap-resume" onClick={onResume}>
+          <span>Resume {resume.label}</span>
+          <span className="cap-resume-meta">{resume.meta}</span>
+        </button>
+      ) : null}
 
       {filtered.length === 0 ? (
         <div className="cap-empty">
-          <strong>No tables here</strong>
-          <span>Try another area, or check table setup on the POS.</span>
+          {floorFilter === "send" && !query.trim() ? (
+            <>
+              <strong>Nothing to send</strong>
+              <span>Every table here has already gone to the kitchen.</span>
+            </>
+          ) : (
+            <>
+              <strong>No tables here</strong>
+              <span>Try another area, or check table setup on the POS.</span>
+            </>
+          )}
         </div>
       ) : (
         grouped.map((section) => (
@@ -176,7 +253,8 @@ export function TablesScreen({
                     amountLabel={occupied ? money(Number(table.total || 0)) : undefined}
                     elapsed={appearance.elapsed}
                     metaLabel={appearance.metaLabel}
-                    disabled={busy}
+                    idleLabel={occupied ? undefined : "Tap to start"}
+                    disabled={busyTableId === table.id}
                     active={activeTableId === table.id}
                     onClick={() => onOpenTable(table)}
                     aria-label={`${title}, ${appearance.stateLabel}`}

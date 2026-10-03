@@ -78,6 +78,8 @@ export type OrderLineDto = {
   rate: number;
   taxRateBps?: number | null;
   kotPrintedQty?: number;
+  /** Instruction for the kitchen. Printed with the next unsent quantity. */
+  kitchenNote?: string | null;
 };
 
 export type PaymentDto = {

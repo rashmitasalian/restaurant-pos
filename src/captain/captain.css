@@ -346,16 +346,6 @@ body,
   color: var(--pos-teal);
 }
 
-.cap-tile-age-attention.ui-table-tile-floor {
-  box-shadow: inset 4px 0 0 var(--pos-state-attention-line);
-  border-color: var(--pos-state-attention-line);
-}
-
-.cap-tile-age-danger.ui-table-tile-floor {
-  box-shadow: inset 4px 0 0 var(--pos-state-danger-line);
-  border-color: var(--pos-state-danger-line);
-}
-
 .cap-bottom-nav {
   flex-shrink: 0;
   display: flex;
@@ -694,10 +684,17 @@ body,
 }
 
 .cap-menu-row-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin: 0;
   font-size: 15px;
   font-weight: 700;
   line-height: 1.25;
+}
+
+.cap-menu-row-name span {
+  min-width: 0;
 }
 
 .cap-menu-row-meta {
@@ -1587,4 +1584,102 @@ body,
 .cap-kot-status-sent,
 .cap-kot-status-printed {
   color: var(--pos-teal-strong);
+}
+
+.cap-login-status {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  color: var(--pos-tx-2);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.cap-login-status span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cap-floor-filters {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.cap-floor-head .cap-search-wrap {
+  margin-top: 4px;
+}
+
+.cap-diet {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  border: 1.5px solid currentColor;
+  border-radius: 3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cap-diet::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.cap-diet-veg {
+  color: var(--pos-success);
+}
+
+.cap-diet-non-veg {
+  color: var(--pos-danger);
+}
+
+.cap-diet-egg {
+  color: var(--pos-saffron-deep);
+}
+
+.cap-menu-code {
+  margin-right: 6px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.cap-note {
+  width: 100%;
+  margin-top: 6px;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid var(--pos-line);
+  border-radius: var(--pos-r-sm, 8px);
+  background: var(--pos-surface);
+  font: inherit;
+}
+
+.cap-kot-items {
+  margin-top: 2px;
+  color: var(--pos-tx);
+  font-size: 14px;
+}
+
+.cap-age-attention {
+  color: var(--pos-saffron-text);
+}
+
+.cap-age-danger {
+  color: var(--pos-danger-text);
+}
+
+.cap-me-confirm {
+  display: grid;
+  gap: 8px;
+}
+
+.cap-me-confirm p {
+  margin: 0;
+  font-weight: 700;
 }

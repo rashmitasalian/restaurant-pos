@@ -120,7 +120,13 @@ export function nextSseBackoffMs(attempt: number) {
 }
 
 export const captainApi = {
-  health: () => request<{ ok: boolean }>("/api/health", { timeoutMs: 8000 }),
+  health: async () => {
+    const data = await request<{ ok: boolean }>("/api/health", { timeoutMs: 8000 });
+    if (!data?.ok) {
+      throw new Error("pos-unavailable");
+    }
+    return data;
+  },
   branding: () =>
     request<{ hotelName?: string; tagline?: string }>("/api/branding", { timeoutMs: 8000 }),
   login: async (username: string, password: string, pairingCode: string) => {

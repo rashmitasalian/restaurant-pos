@@ -48,10 +48,31 @@ export function waiterError(err: unknown, fallback: string) {
     return "This table's order is no longer open.";
   }
   if (msg === "invalid-pairing-code") {
-    return "The pairing code is wrong. Check the restaurant POS.";
+    return "That pairing code is no longer valid. Scan the POS QR or enter the new code.";
+  }
+  if (msg === "invalid-credentials") {
+    return "Username or password is wrong.";
+  }
+  if (msg === "locked") {
+    return "This account is locked for a few minutes. Try again shortly.";
+  }
+  if (msg === "inactive") {
+    return "This account is inactive. Ask a manager to turn it back on.";
   }
   if (msg === "captain-phone-only" || msg === "forbidden") {
     return "This account cannot use Captain.";
+  }
+  if (
+    msg === "print-lines-required" ||
+    /print|printer|windows-raw|econnrefused|enotfound/i.test(msg)
+  ) {
+    return "The kitchen printer did not print. The ticket was not marked sent. Try again.";
+  }
+  if (msg === "kot-sent-item-requires-void") {
+    return "That item was already sent. Reduce it from Review and give a reason.";
+  }
+  if (msg === "order-closed") {
+    return "This table's order is already closed.";
   }
   return fallback;
 }

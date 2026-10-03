@@ -14,6 +14,7 @@ import {
   createLanSession,
   destroyLanSession,
   getLanSession,
+  listLanSessions,
   type LanSession,
 } from "../services/lanSessionManager";
 import { onDomainEvent, publishDomainEvent, type DomainEvent } from "../services/domainEvents";
@@ -608,6 +609,7 @@ export function getGatewayStatus() {
     pairingCode: state.pairingCode,
     addresses: listPrivateIPv4Addresses(),
     clients: countLanSessions(),
+    phones: listLanSessions(),
     startedAt: state.startedAt,
     urls: listPrivateIPv4Addresses().map((ip) => `http://${ip}:${state.port}`),
   };

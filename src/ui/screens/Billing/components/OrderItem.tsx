@@ -41,6 +41,7 @@ export default function OrderItem({
   return (
     <OrderItemRow
       title={title}
+      modifiers={it.kitchenNote ? [it.kitchenNote] : undefined}
       rateLabel={`₹${it.rate} each`}
       qty={it.qty}
       lineTotalLabel={`₹${lineTotal}`}

@@ -62,6 +62,7 @@ import type {
   VendorDto,
 } from "../../src/shared/pos";
 import { getUnsentKotLines, isKotQueueTicket, kotLineCounts } from "../../src/shared/kot";
+import { normalizeKitchenNote } from "../../src/shared/kitchenNote";
 import {
   FLOOR_LAYOUT_LIMITS,
   formatTableLabel,
@@ -1141,6 +1142,7 @@ function lineFromRow(row: any): OrderLineDto {
     rate: paiseToRupees(row.rate_paise),
     taxRateBps: row.tax_rate_bps == null ? undefined : Number(row.tax_rate_bps),
     kotPrintedQty: Number(row.kot_printed_qty || 0),
+    kitchenNote: normalizeKitchenNote(row.kitchen_note),
   };
 }
 
@@ -2285,8 +2287,8 @@ function upsertOrderLines(database: Database.Database, orderId: string, lines: O
   const insert = database.prepare(`
     INSERT INTO order_lines (
       id, order_id, menu_item_id, item_name, category_name, quantity, rate_paise, tax_rate_bps,
-      line_total_paise, kot_printed_qty, sort_order, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      line_total_paise, kot_printed_qty, sort_order, created_at, updated_at, kitchen_note
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const at = now();
   lines.forEach((line, index) => {
@@ -2306,6 +2308,7 @@ function upsertOrderLines(database: Database.Database, orderId: string, lines: O
       index,
       at,
       at,
+      normalizeKitchenNote(line.kitchenNote),
     );
   });
 }
@@ -2532,9 +2535,38 @@ function sanitizeOrderLines(lines: OrderLineDto[]) {
         rate: Math.max(0, Number(line.rate) || 0),
         taxRateBps: line.taxRateBps ?? null,
         kotPrintedQty: printedQty,
+        kitchenNote: normalizeKitchenNote(line.kitchenNote),
       };
     })
     .filter((line) => line.name.length > 0);
+}
+
+/**
+ * A fully sent line keeps the note that already went to the kitchen.
+ * While quantity is still unsent, an omitted note keeps the previous one
+ * so a qty edit from the POS does not wipe a captain's instruction.
+ * An explicit empty string clears it.
+ */
+function applyKitchenNotes(current: OrderLineDto[], next: OrderLineDto[]) {
+  const byId = new Map(current.map((line) => [line.id, line]));
+  return next.map((line) => {
+    const prev = byId.get(line.id);
+    const rawPrinted =
+      line.kotPrintedQty != null
+        ? line.kotPrintedQty
+        : prev && prev.kotPrintedQty != null
+          ? prev.kotPrintedQty
+          : 0;
+    const printed = Math.max(0, Number(rawPrinted) || 0);
+    const pending = Math.max(0, Number(line.qty || 0) - printed);
+    if (prev && pending <= 0) {
+      return { ...line, kitchenNote: prev.kitchenNote ?? null };
+    }
+    if (line.kitchenNote === undefined) {
+      return { ...line, kitchenNote: prev?.kitchenNote ?? null };
+    }
+    return { ...line, kitchenNote: normalizeKitchenNote(line.kitchenNote) };
+  });
 }
 
 function assertNoSentKotReduction(order: OrderDto, nextLines: OrderLineDto[]) {
@@ -3539,6 +3571,7 @@ export const posService = {
            o.id AS order_id,
            o.status AS order_status,
            o.created_at AS order_created_at,
+           o.updated_at AS order_updated_at,
            (
              SELECT COUNT(*)
              FROM order_lines ol
@@ -3584,6 +3617,7 @@ export const posService = {
       occupied: Boolean(row.order_id) && Number(row.item_count || 0) > 0,
       orderId: row.order_id || null,
       openedAt: Number(row.order_created_at || 0) || null,
+      activityAt: Number(row.order_updated_at || 0) || null,
       unsentCount: Number(row.unsent_qty || 0),
       sentCount: Number(row.sent_qty || 0),
     }));
@@ -4239,17 +4273,27 @@ export const posService = {
         const items = order.items || [];
         const { sentCount, unsentCount } = kotLineCounts(items);
         const sentLines = items.filter((line) => Number(line.kotPrintedQty || 0) > 0);
+        const unsentLines = items.filter(
+          (line) => Number(line.qty || 0) > Number(line.kotPrintedQty || 0),
+        );
+        const summarySource = unsentLines.length ? unsentLines : sentLines;
         const table = tableById.get(Number(order.tableId));
         return {
           orderId: order._id,
           tableId: Number(order.tableId),
           tableName: formatTableLabel(Number(order.tableId), table?.name),
           kotStatus: order.kotStatus || "pending",
+          openedAt: Number(order.createdAt || 0) || null,
+          activityAt: Number(order.updatedAt || 0) || null,
           lastSendAt:
             order.kotSent || order.kotPrinted ? Number(order.updatedAt || 0) || null : null,
           sentSummary: sentLines
             .slice(0, 4)
             .map((line) => `${line.name} ×${Number(line.kotPrintedQty || 0)}`)
+            .join(", "),
+          itemSummary: summarySource
+            .slice(0, 3)
+            .map((line) => line.name)
             .join(", "),
           sentCount,
           unsentCount,
@@ -4287,6 +4331,7 @@ export const posService = {
       rate: number;
       menuItemId?: string | null;
       categoryName?: string | null;
+      kitchenNote?: string | null;
     },
     actor?: string | null,
     options: { baseUpdatedAt?: number | null } = {},
@@ -4316,6 +4361,7 @@ export const posService = {
           rate: Number(item.rate || 0),
           taxRateBps: null,
           kotPrintedQty: 0,
+          kitchenNote: normalizeKitchenNote(item.kitchenNote),
         });
       }
       upsertOrderLines(database, orderId, order.items);
@@ -4348,7 +4394,7 @@ export const posService = {
       const order = this.getOrderById(orderId);
       assertOrderCanBeEdited(order);
       assertOrderBaseUpdatedAt(order, options.baseUpdatedAt);
-      const sanitized = sanitizeOrderLines(lines);
+      const sanitized = sanitizeOrderLines(applyKitchenNotes(order.items || [], lines));
       assertNoSentKotReduction(order, sanitized);
       upsertOrderLines(database, orderId, sanitized);
       database

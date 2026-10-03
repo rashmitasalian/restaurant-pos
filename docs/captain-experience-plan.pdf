@@ -1,0 +1,312 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+2 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+3 0 obj
+<< /Length 6658 >>
+stream
+0.059 0.369 0.408 rg 0.00 823.89 595.28 18.00 re f
+BT /F2 20 Tf 0.059 0.369 0.408 rg 48.00 801.89 Td (Captain experience) Tj ET
+BT /F1 9.5 Tf 0.33 0.36 0.4 rg 48.00 773.89 Td (Finalized decisions and immediate build order. Captain is not in production. This document locks the first) Tj ET
+BT /F1 9.5 Tf 0.33 0.36 0.4 rg 48.00 760.89 Td (restaurant release so the phone app is not redesigned again after the first sites go live. 3 October 2026.) Tj ET
+0.94 0.96 0.96 rg 48.00 680.29 499.28 73.60 re f
+0.059 0.369 0.408 rg 48.00 680.29 3.50 73.60 re f
+BT /F2 10.5 Tf 0.059 0.369 0.408 rg 62.00 737.89 Td (Verdict) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 721.89 Td (Approve the direction. Pairing and stale work are the real problems. The ordering shell stays. Three) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 708.69 Td (changes from the earlier review are now binding: kitchen notes ship in this release, old open tickets) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 695.49 Td (stay reachable, and optimistic quantity waits for a real service.) Tj ET
+BT /F2 13 Tf 0.12 0.14 0.16 rg 48.00 658.29 Td (1. What changed from the earlier review) Tj ET
+0.82 0.84 0.86 RG 0.8 w 48.00 652.29 m 547.28 652.29 l S
+BT /F2 10.5 Tf 0.12 0.14 0.16 rg 48.00 636.29 Td (1. Kitchen notes move into this release) Tj ET
+BT /F1 10 Tf 0.33 0.36 0.4 rg 64.00 622.29 Td (A captain must be able to send Paneer Tikka, qty 2, note "No onion", and have that note travel on that) Tj ET
+BT /F1 10 Tf 0.33 0.36 0.4 rg 64.00 609.09 Td (line to the kitchen slip. The note belongs to the order line, not the order.) Tj ET
+BT /F2 10.5 Tf 0.12 0.14 0.16 rg 48.00 589.89 Td (2. Do not hide old open work) Tj ET
+BT /F1 10 Tf 0.33 0.36 0.4 rg 64.00 575.89 Td (Default the floor and the KOT tab to current-service actionable work. Keep All, so a legitimate open) Tj ET
+BT /F1 10 Tf 0.33 0.36 0.4 rg 64.00 562.69 Td (table never disappears because the shift changed.) Tj ET
+BT /F2 10.5 Tf 0.12 0.14 0.16 rg 48.00 543.49 Td (3. Defer optimistic quantity) Tj ET
+BT /F1 10 Tf 0.33 0.36 0.4 rg 64.00 529.49 Td (Quantity stays server-authoritative. Idempotent client operations, sent versus unsent qty, and void) Tj ET
+BT /F1 10 Tf 0.33 0.36 0.4 rg 64.00 516.29 Td (rules are already sensitive. Measure real Wi-Fi before making the stepper lie and then roll back.) Tj ET
+BT /F2 13 Tf 0.12 0.14 0.16 rg 48.00 489.09 Td (2. Keep the shell) Tj ET
+0.82 0.84 0.86 RG 0.8 w 48.00 483.09 m 547.28 483.09 l S
+BT /F1 10 Tf 0.12 0.14 0.16 rg 48.00 467.09 Td (Do not turn this into a Captain redesign. The menu-first flow, teal tokens, bottom navigation, and gateway) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 48.00 453.59 Td (session model stay.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 434.09 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 434.09 Td (No billing or settle from the phone.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 418.59 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 418.59 Td (No food photos and no second visual system.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 403.09 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 403.09 Td (No swipe-only gestures.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 387.59 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 387.59 Td (No gateway TLS and no Capacitor in this release.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 372.09 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 372.09 Td (No offline mutation queue.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 356.59 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 356.59 Td (No optimistic plus and minus.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 341.09 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 341.09 Td (Readable pairing words \(BLUE-7K\) are a fallback later, not the way captains pair.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 325.59 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 325.59 Td (restoniti.local waits until after restaurant trials. The QR already solves discovery.) Tj ET
+BT /F2 13 Tf 0.12 0.14 0.16 rg 48.00 302.09 Td (3. Menu: what the standard is, and what we will ship) Tj ET
+0.82 0.84 0.86 RG 0.8 w 48.00 296.09 m 547.28 296.09 l S
+BT /F1 10 Tf 0.12 0.14 0.16 rg 48.00 280.09 Td (Handheld waiter apps that stay fast \(Indian captain apps and the better handheld POS products\) use one) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 48.00 266.59 Td (column, a sticky search, category chips, a visible short code, a veg or non-veg mark, a large add control,) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 48.00 253.09 Td (and a note before the kitchen fire. Photo grids look richer and get slower once a menu passes a few dozen) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 48.00 239.59 Td (items. Captain already uses the right layout: a list, search, categories, and a 48px add control.) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 48.00 220.09 Td (We will not replace the list with tiles. The unused tile CSS stays unused. These are the gaps versus that) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 48.00 206.59 Td (standard:) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 187.09 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 187.09 Td (Search by code already works. The menu filters on item name and SKU, and the field already says "Search) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 173.59 Td (name or code". The code is not shown on the row, so captains cannot see or learn it. Billing search) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 160.09 Td (shows the SKU. Captain will show it the same way, under the name, when the item has one.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 144.59 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 144.59 Td (Veg, egg, and non-veg are words in the price line. Use the small diet mark captains already know, with) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 131.09 Td (the word kept for clarity.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 115.59 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 115.59 Td (A line note is missing. That is the in-service gap, covered in section 6.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 100.09 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 100.09 Td (When one item has two variants on the same ticket, the stepper can change the wrong line. The stepper) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 86.59 Td (must target the variant that is on that row.) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 48.00 71.09 Td (That is the menu contract. After this release we do not reopen layout, photos, or a second search box.) Tj ET
+0.82 0.84 0.86 RG 0.6 w 48 32 m 547.28 32 l S
+BT /F1 8 Tf 0.33 0.36 0.4 rg 48 18 Td (RestoNiti Captain  ·  Finalized plan  ·  3 Oct 2026  ·  1 / 4) Tj ET
+endstream
+endobj
+4 0 obj
+<< /Length 6882 >>
+stream
+BT /F2 13 Tf 0.12 0.14 0.16 rg 48.00 781.89 Td (4. Back: it must not close the app) Tj ET
+0.82 0.84 0.86 RG 0.8 w 48.00 775.89 m 547.28 775.89 l S
+BT /F1 10 Tf 0.12 0.14 0.16 rg 48.00 759.89 Td (The in-app chevron on a table does not close Captain. It returns to the floor and keeps the order in) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 48.00 746.39 Td (memory. There is no browser history stack, so the phone Back button is a different control. On Android) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 48.00 732.89 Td (that button can leave the page or close the browser. That is not acceptable for a shift.) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 48.00 713.39 Td (This release maps phone Back onto the same stack as the chevron:) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 693.89 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 693.89 Td (A sheet is open \(review, variant, void, area, category\): Back closes that sheet only.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 678.39 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 678.39 Td (Menu: Back returns to the floor. The table and unsent items stay. Resume brings them back.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 662.89 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 662.89 Td (KOTs or Me: Back returns to the floor.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 647.39 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 647.39 Td (Floor or login: Back stays inside Captain. It does not exit, and it does not sign the captain out.) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 48.00 631.89 Td (Unsent items are not discarded by Back. Leaving a table is not a cancel. Sign out stays on Me, and it asks) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 48.00 618.39 Td (before it clears the session.) Tj ET
+BT /F2 13 Tf 0.12 0.14 0.16 rg 48.00 590.89 Td (5. Pairing, without a new architecture) Tj ET
+0.82 0.84 0.86 RG 0.8 w 48.00 584.89 m 547.28 584.89 l S
+BT /F1 10 Tf 0.12 0.14 0.16 rg 48.00 568.89 Td (The gateway, 6-character code, and in-memory LAN session stay. The change is how a captain reaches them.) Tj ET
+BT /F2 11 Tf 0.059 0.369 0.408 rg 48.00 545.39 Td (POS: Captain phones) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 529.39 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 529.39 Td (Replace the tiny header chip as the only pairing UI.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 513.89 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 513.89 Td (Large pairing code, full URL, Copy URL, QR, and connected phones.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 498.39 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 498.39 Td (QR encodes http://<lan-ip>:4747/?pair=CODE.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 482.89 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 482.89 Td (Rotate stays available to a manager, and it does not pretend existing phones are still paired.) Tj ET
+BT /F2 11 Tf 0.059 0.369 0.408 rg 48.00 463.39 Td (Phone: login) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 447.39 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 447.39 Td (Scanning or opening that URL fills the pairing code. The captain does not type the IP or the hex.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 431.89 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 431.89 Td (Normal login shows restaurant name, last username, connection, and pairing. Password is the field they) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 418.39 Td (use every day.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 402.89 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 402.89 Td (The pairing field appears only for a first phone, a changed code, or an invalid code.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 387.39 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 387.39 Td (Normalize the code: trim, ignore case, ignore spaces.) Tj ET
+BT /F2 11 Tf 0.059 0.369 0.408 rg 48.00 367.89 Td (Hard rule: paired is not connected) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 48.00 351.89 Td (Me and login must not treat a saved string as a live link.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 332.39 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 332.39 Td (Pairing: RestoNiti, Paired. This means a code is saved.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 316.89 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 316.89 Td (Connection: Connected, Reconnecting, or POS unavailable. This means the gateway answered.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 301.39 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 301.39 Td (After a POS restart: Pairing stays Paired. Connection becomes Reconnecting, then login if the session) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 287.89 Td (died.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 272.39 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 272.39 Td (After the code is rotated or rejected: Pairing becomes Needs pairing, and the code field opens.) Tj ET
+BT /F2 13 Tf 0.12 0.14 0.16 rg 48.00 248.89 Td (6. Kitchen notes) Tj ET
+0.82 0.84 0.86 RG 0.8 w 48.00 242.89 m 547.28 242.89 l S
+BT /F1 10 Tf 0.12 0.14 0.16 rg 48.00 226.89 Td (order_lines has no note column today. Add kitchen_note on the line, expose it on the order line used by) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 48.00 213.39 Td (Captain and the POS, and print it under that item on the KOT. Do not store the note on the order header.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 193.89 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 193.89 Td (Set or edit the note while that line still has quantity waiting to send.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 178.39 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 178.39 Td (The next Send to kitchen prints the note with the unsent quantity only.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 162.89 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 162.89 Td (An already printed slip is never rewritten.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 147.39 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 147.39 Td (When the line is fully sent, the note is read-only until more quantity is added.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 131.89 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 131.89 Td (Adding more of the same item shows the previous note so they can keep it or change it for the next) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 118.39 Td (send.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 102.89 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 102.89 Td (Desktop order rows show the same note, so the cashier and the kitchen are looking at one field.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 87.39 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 87.39 Td (Empty note prints nothing. A note does not change price, tax, or KOT quantity.) Tj ET
+0.82 0.84 0.86 RG 0.6 w 48 32 m 547.28 32 l S
+BT /F1 8 Tf 0.33 0.36 0.4 rg 48 18 Td (RestoNiti Captain  ·  Finalized plan  ·  3 Oct 2026  ·  2 / 4) Tj ET
+endstream
+endobj
+5 0 obj
+<< /Length 6232 >>
+stream
+BT /F2 13 Tf 0.12 0.14 0.16 rg 48.00 781.89 Td (7. Floor and KOT queue) Tj ET
+0.82 0.84 0.86 RG 0.8 w 48.00 775.89 m 547.28 775.89 l S
+BT /F2 11 Tf 0.059 0.369 0.408 rg 48.00 755.89 Td (What "current service" means) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 48.00 739.89 Td (It does not mean "table created today". A table is in the default view when it still needs a send, or it had) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 48.00 726.39 Td (activity on the current business day: opened, items added, or a KOT sent. The business day is the same) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 48.00 712.89 Td (local day the POS already uses.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 693.39 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 693.39 Td (Needs send: every table with unsent quantity, including an older table. This filter ignores age.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 677.89 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 677.89 Td (Current service: the default. Actionable work for this business day, plus anything that still needs a) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 664.39 Td (send.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 648.89 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 648.89 Td (All: every open table, including quiet tickets from previous days.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 633.39 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 633.39 Td (Search by table name on the floor.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 617.89 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 617.89 Td (Age color on tiles and KOT rows, using the age tone that already exists and is unused.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 602.39 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 602.39 Td (Resume bar when a table session is still open and the captain is back on the floor.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 586.89 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 586.89 Td (Opening one table disables that tile only, not the whole floor.) Tj ET
+BT /F2 11 Tf 0.059 0.369 0.408 rg 48.00 567.39 Td (KOT tab) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 551.39 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 551.39 Td (Default filter is Send KOT, not a 12-day history.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 535.89 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 535.89 Td (All remains one tap away.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 520.39 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 520.39 Td (Each row shows the table, status, age, and the items, not only "KOT sent".) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 504.89 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 504.89 Td (Send to kitchen is the primary button on Review.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 489.39 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 489.39 Td (Preview stays as a secondary action. It is not a required step.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 473.89 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 473.89 Td (The button does not say Print KOT. Printing stays an implementation detail on the POS.) Tj ET
+BT /F2 13 Tf 0.12 0.14 0.16 rg 48.00 450.39 Td (8. Errors) Tj ET
+0.82 0.84 0.86 RG 0.8 w 48.00 444.39 m 547.28 444.39 l S
+BT /F1 10 Tf 0.12 0.14 0.16 rg 48.00 428.39 Td (Each failure gets its own sentence. They must not collapse into one generic sign-in or network line.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 408.89 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 408.89 Td (Wrong username or password.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 393.39 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 393.39 Td (Account locked or inactive.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 377.89 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 377.89 Td (Pairing code wrong, or the POS code was rotated.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 362.39 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 362.39 Td (Could not reach the POS on this Wi-Fi.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 346.89 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 346.89 Td (Kitchen printer did not print. The ticket state must say whether the send was saved.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 331.39 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 331.39 Td (Someone else changed this table. Refresh and review quantity.) Tj ET
+BT /F2 13 Tf 0.12 0.14 0.16 rg 48.00 307.89 Td (9. Build order) Tj ET
+0.82 0.84 0.86 RG 0.8 w 48.00 301.89 m 547.28 301.89 l S
+BT /F1 10 Tf 0.12 0.14 0.16 rg 48.00 285.89 Td (Build in this order so later pieces sit on finished contracts.) Tj ET
+BT /F2 10.5 Tf 0.12 0.14 0.16 rg 48.00 266.39 Td (1. Line note in the database, order payload, and KOT print) Tj ET
+BT /F1 10 Tf 0.33 0.36 0.4 rg 64.00 252.39 Td (Captain UI and the POS row both read kitchen_note. Do this before the send-button copy change, so the) Tj ET
+BT /F1 10 Tf 0.33 0.36 0.4 rg 64.00 239.19 Td (first kitchen slip is already complete.) Tj ET
+BT /F2 10.5 Tf 0.12 0.14 0.16 rg 48.00 219.99 Td (2. POS Captain phones sheet and QR) Tj ET
+BT /F1 10 Tf 0.33 0.36 0.4 rg 64.00 205.99 Td (URL plus ?pair=CODE. Copy URL. Connected phones. Login consumes the query and hides the code field.) Tj ET
+BT /F2 10.5 Tf 0.12 0.14 0.16 rg 48.00 186.79 Td (3. Login and Me truth) Tj ET
+BT /F1 10 Tf 0.33 0.36 0.4 rg 64.00 172.79 Td (Restaurant name, last username, separate Pairing and Connection. Needs pairing when the code is) Tj ET
+BT /F1 10 Tf 0.33 0.36 0.4 rg 64.00 159.59 Td (rejected.) Tj ET
+BT /F2 10.5 Tf 0.12 0.14 0.16 rg 48.00 140.39 Td (4. Phone Back stack) Tj ET
+BT /F1 10 Tf 0.33 0.36 0.4 rg 64.00 126.39 Td (Sheets, menu, tabs, and the floor. Back never exits and never drops unsent items.) Tj ET
+BT /F2 10.5 Tf 0.12 0.14 0.16 rg 48.00 107.19 Td (5. Floor and KOT filters) Tj ET
+BT /F1 10 Tf 0.33 0.36 0.4 rg 64.00 93.19 Td (Current service, Needs send, All, search, age color, Resume, single-tile busy state, items on KOT rows.) Tj ET
+BT /F2 10.5 Tf 0.12 0.14 0.16 rg 48.00 73.99 Td (6. Send to kitchen) Tj ET
+0.82 0.84 0.86 RG 0.6 w 48 32 m 547.28 32 l S
+BT /F1 8 Tf 0.33 0.36 0.4 rg 48 18 Td (RestoNiti Captain  ·  Finalized plan  ·  3 Oct 2026  ·  3 / 4) Tj ET
+endstream
+endobj
+6 0 obj
+<< /Length 4322 >>
+stream
+BT /F1 10 Tf 0.33 0.36 0.4 rg 64.00 789.89 Td (Primary action on Review. Preview secondary. Error copy for printer failure.) Tj ET
+BT /F2 10.5 Tf 0.12 0.14 0.16 rg 48.00 770.69 Td (7. Menu finish) Tj ET
+BT /F1 10 Tf 0.33 0.36 0.4 rg 64.00 756.69 Td (Show SKU, diet mark, note entry on the unsent line, variant stepper hits the correct line.) Tj ET
+BT /F2 13 Tf 0.12 0.14 0.16 rg 48.00 729.49 Td (10. Next, after the first sites) Tj ET
+0.82 0.84 0.86 RG 0.8 w 48.00 723.49 m 547.28 723.49 l S
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 707.49 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 707.49 Td (Human-readable pairing code as a spoken fallback. QR remains the primary pair.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 691.99 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 691.99 Td (Me as a small help hub: this URL, device id, last sync, Add to Home Screen, Change pairing.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 676.49 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 676.49 Td (Let a captain pin their areas, so 45 tables are not the daily view.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 660.99 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 660.99 Td (Push table-layout changes over the existing event stream, or remove the unused listeners.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 645.49 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 645.49 Td (Try a stable hostname only if restaurants still struggle after QR pairing.) Tj ET
+BT /F2 13 Tf 0.12 0.14 0.16 rg 48.00 621.99 Td (11. Later) Tj ET
+0.82 0.84 0.86 RG 0.8 w 48.00 615.99 m 547.28 615.99 l S
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 599.99 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 599.99 Td (Optimistic quantity, only if a real service shows the stepper waiting on the network.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 584.49 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 584.49 Td (A short reconnect queue for the last add. Not a full offline POS.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 568.99 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 568.99 Td (HTTPS or a native wrapper, only if install-to-home-screen becomes a real support problem.) Tj ET
+BT /F2 13 Tf 0.12 0.14 0.16 rg 48.00 545.49 Td (12. Done when) Tj ET
+0.82 0.84 0.86 RG 0.8 w 48.00 539.49 m 547.28 539.49 l S
+BT /F1 10 Tf 0.12 0.14 0.16 rg 48.00 523.49 Td (A new captain, on restaurant Wi-Fi, with no one typing an IP:) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 503.99 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 503.99 Td (Scans the POS QR and signs in with name and password.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 488.49 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 488.49 Td (Sees today's work, not every ticket from the last two weeks.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 472.99 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 472.99 Td (Finds a dish by name or by code, and can see the code on the row.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 457.49 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 457.49 Td (Adds a line note and sends it to the kitchen in one primary tap from Review.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 441.99 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 441.99 Td (Presses phone Back from the menu and lands on the floor, still signed in, with the table waiting on) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 428.49 Td (Resume.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 412.99 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 412.99 Td (Can still open an older open table from All.) Tj ET
+BT /F2 10 Tf 0.059 0.369 0.408 rg 48.00 397.49 Td (-) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 397.49 Td (After a POS restart, sees Paired and Reconnecting as two different facts, then signs in again with the) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 62.00 383.99 Td (saved username.) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 48.00 360.49 Td (Source of these decisions: Captain SPA review, the live screenshots, Local Gateway pairing, order_lines) Tj ET
+BT /F1 10 Tf 0.12 0.14 0.16 rg 48.00 346.99 Td (\(no note column yet\), and the menu search that already matches SKU in MenuScreen.) Tj ET
+0.82 0.84 0.86 RG 0.6 w 48 32 m 547.28 32 l S
+BT /F1 8 Tf 0.33 0.36 0.4 rg 48 18 Td (RestoNiti Captain  ·  Finalized plan  ·  3 Oct 2026  ·  4 / 4) Tj ET
+endstream
+endobj
+7 0 obj
+<< /Type /Page /Parent 11 0 R /MediaBox [0 0 595.28 841.89] /Contents 3 0 R /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> >>
+endobj
+8 0 obj
+<< /Type /Page /Parent 11 0 R /MediaBox [0 0 595.28 841.89] /Contents 4 0 R /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> >>
+endobj
+9 0 obj
+<< /Type /Page /Parent 11 0 R /MediaBox [0 0 595.28 841.89] /Contents 5 0 R /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> >>
+endobj
+10 0 obj
+<< /Type /Page /Parent 11 0 R /MediaBox [0 0 595.28 841.89] /Contents 6 0 R /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> >>
+endobj
+11 0 obj
+<< /Type /Pages /Count 4 /Kids [7 0 R 8 0 R 9 0 R 10 0 R] >>
+endobj
+12 0 obj
+<< /Type /Catalog /Pages 11 0 R >>
+endobj
+xref
+0 13
+0000000000 65535 f 
+0000000009 00000 n 
+0000000079 00000 n 
+0000000154 00000 n 
+0000006864 00000 n 
+0000013798 00000 n 
+0000020082 00000 n 
+0000024456 00000 n 
+0000024599 00000 n 
+0000024742 00000 n 
+0000024885 00000 n 
+0000025029 00000 n 
+0000025106 00000 n 
+trailer
+<< /Size 13 /Root 12 0 R >>
+startxref
+25157
+%%EOF

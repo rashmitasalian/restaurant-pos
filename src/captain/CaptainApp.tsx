@@ -39,7 +39,13 @@ export function CaptainApp() {
   const [sendPhase, setSendPhase] = React.useState<KotSendPhase>("idle");
   const [sendError, setSendError] = React.useState<string | null>(null);
 
-  const [username, setUsername] = React.useState("");
+  const [username, setUsername] = React.useState(() => {
+    try {
+      return localStorage.getItem("captain-last-username") || "";
+    } catch {
+      return "";
+    }
+  });
   const [password, setPassword] = React.useState("");
   const [pairingCode, setPairingCode] = React.useState(() => {
     try {
@@ -48,6 +54,15 @@ export function CaptainApp() {
       return "";
     }
   });
+  const [linkPaired, setLinkPaired] = React.useState(false);
+  const [pairingNeeds, setPairingNeeds] = React.useState(() => {
+    try {
+      return localStorage.getItem("captain-pairing-invalid") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const [openingTableId, setOpeningTableId] = React.useState<number | null>(null);
 
   const [areas, setAreas] = React.useState<Array<{ id: string; name: string }>>([]);
   const [tables, setTables] = React.useState<TableRow[]>([]);
@@ -68,6 +83,15 @@ export function CaptainApp() {
   const [toast, setToast] = React.useState<string | null>(null);
   const toastTimer = React.useRef<number | null>(null);
   const sendTimer = React.useRef<number | null>(null);
+  const menuBackRef = React.useRef<(() => boolean) | null>(null);
+  const floorBackRef = React.useRef<(() => boolean) | null>(null);
+  const navRef = React.useRef({
+    screen: "login" as Screen,
+    showOrderSheet: false,
+    sendPhase: "idle" as KotSendPhase,
+    hasVariant: false,
+    hasVoid: false,
+  });
 
   const showToast = React.useCallback((msg: string) => {
     setToast(msg);
@@ -168,6 +192,28 @@ export function CaptainApp() {
     },
     [reloadOpenOrder, refreshTables, refreshKots, showToast],
   );
+
+  React.useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const pair = params.get("pair");
+      if (!pair) {
+        return;
+      }
+      const code = pair.replace(/\s+/g, "").toUpperCase();
+      setPairingCode(code);
+      setPairingNeeds(false);
+      setLinkPaired(true);
+      localStorage.setItem("captain-pairing-code", code);
+      localStorage.removeItem("captain-pairing-invalid");
+      params.delete("pair");
+      const next = params.toString();
+      const path = `${window.location.pathname}${next ? `?${next}` : ""}${window.location.hash}`;
+      window.history.replaceState(window.history.state, "", path);
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   React.useEffect(() => {
     captainApi
@@ -304,12 +350,16 @@ export function CaptainApp() {
   const login = async () => {
     setBusy(true);
     setError(null);
+    const code = pairingCode.replace(/\s+/g, "").trim();
     try {
-      const result = await captainApi.login(username.trim(), password, pairingCode.trim());
+      const result = await captainApi.login(username.trim(), password, code);
       setToken(result.sessionToken);
       setUser(result.user);
+      setPairingNeeds(false);
       try {
-        localStorage.setItem("captain-pairing-code", pairingCode.trim());
+        localStorage.setItem("captain-pairing-code", code);
+        localStorage.setItem("captain-last-username", username.trim());
+        localStorage.removeItem("captain-pairing-invalid");
       } catch {
         /* ignore */
       }
@@ -317,6 +367,15 @@ export function CaptainApp() {
       setTablesLoading(true);
       setConnection("live");
     } catch (err: any) {
+      const message = String(err?.message || "");
+      if (message === "invalid-pairing-code") {
+        setPairingNeeds(true);
+        try {
+          localStorage.setItem("captain-pairing-invalid", "1");
+        } catch {
+          /* ignore */
+        }
+      }
       setError(waiterError(err, "Couldn’t sign in. Check username, password, and pairing code."));
     } finally {
       setBusy(false);
@@ -363,7 +422,7 @@ export function CaptainApp() {
       setScreen("menu");
       return;
     }
-    setBusy(true);
+    setOpeningTableId(table.id);
     orderIdRef.current = null;
     try {
       const next = table.orderId
@@ -380,7 +439,7 @@ export function CaptainApp() {
       }
       setError(mutationError(err, "Couldn’t open this table."));
     } finally {
-      setBusy(false);
+      setOpeningTableId(null);
     }
   };
 
@@ -526,6 +585,42 @@ export function CaptainApp() {
     }
   };
 
+  const changeNote = async (line: any, note: string) => {
+    if (!token || !order) {
+      return;
+    }
+    const pending = Math.max(0, Number(line.qty || 0) - Number(line.kotPrintedQty || 0));
+    if (pending <= 0) {
+      return;
+    }
+    const lines = (order.items || []).map((candidate: any) =>
+      candidate.id === line.id ? { ...candidate, kitchenNote: note } : candidate,
+    );
+    setBusy(true);
+    try {
+      const next = await captainApi.updateLines(
+        token,
+        order._id,
+        lines,
+        newClientOpId("update-lines"),
+        order.updatedAt ?? null,
+      );
+      setOrder(next);
+    } catch (err: any) {
+      if (isAuthRequiredError(err)) {
+        void logout("pos-restart");
+        return;
+      }
+      if (isOrderConflictError(err)) {
+        await handleOrderConflict(token, err);
+        return;
+      }
+      setError(mutationError(err, "Couldn’t save that note."));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const sendKot = async () => {
     if (!token || !order || sendPhase === "sending") {
       return;
@@ -661,6 +756,54 @@ export function CaptainApp() {
     setScreen(tab === "floor" ? "floor" : tab);
   };
 
+  navRef.current = {
+    screen,
+    showOrderSheet,
+    sendPhase,
+    hasVariant: Boolean(variantItem),
+    hasVoid: Boolean(voidLine),
+  };
+
+  const registerMenuBack = React.useCallback((handler: (() => boolean) | null) => {
+    menuBackRef.current = handler;
+  }, []);
+  const registerFloorBack = React.useCallback((handler: (() => boolean) | null) => {
+    floorBackRef.current = handler;
+  }, []);
+
+  React.useEffect(() => {
+    const trap = () => {
+      window.history.pushState({ captain: true }, "");
+    };
+    trap();
+    const onPop = () => {
+      const nav = navRef.current;
+      if (nav.showOrderSheet && nav.sendPhase === "sending") {
+        /* leave the send in progress */
+      } else if (nav.hasVoid) {
+        setVoidLine(null);
+      } else if (nav.hasVariant) {
+        setVariantItem(null);
+      } else if (nav.showOrderSheet && nav.sendPhase === "confirm") {
+        setSendPhase("idle");
+      } else if (nav.showOrderSheet && nav.sendPhase !== "sending") {
+        setShowOrderSheet(false);
+        setSendPhase("idle");
+      } else if (nav.screen === "menu" && menuBackRef.current?.()) {
+        /* category sheet closed */
+      } else if (nav.screen === "menu") {
+        setScreen("floor");
+      } else if (nav.screen === "floor" && floorBackRef.current?.()) {
+        /* area sheet closed */
+      } else if (nav.screen === "kots" || nav.screen === "me") {
+        setScreen("floor");
+      }
+      trap();
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
   const kotBadgeCount = kotTickets.filter((ticket) => Number(ticket.unsentCount || 0) > 0).length;
   const activeTab: CaptainTab | null =
     screen === "login" || screen === "menu" ? null : screen === "floor" ? "floor" : screen;
@@ -688,6 +831,9 @@ export function CaptainApp() {
           setPairingCode={setPairingCode}
           busy={busy}
           error={error}
+          connection={connection}
+          pairingNeeds={pairingNeeds}
+          linkPaired={linkPaired}
           onLogin={login}
         />
       ) : null}
@@ -701,9 +847,19 @@ export function CaptainApp() {
           areaId={areaId}
           setAreaId={setAreaId}
           kotTickets={kotTickets}
-          busy={busy}
+          busyTableId={openingTableId}
           loading={tablesLoading}
           activeTableId={selectedTable?.id}
+          resume={
+            selectedTable && order
+              ? {
+                  label: tableName,
+                  meta: `${(order.items || []).reduce((sum: number, line: any) => sum + Number(line.qty || 0), 0)} items`,
+                }
+              : null
+          }
+          onResume={() => setScreen("menu")}
+          onRegisterBack={registerFloorBack}
           onOpenTable={enterTable}
         />
       ) : null}
@@ -723,6 +879,7 @@ export function CaptainApp() {
             setSendPhase("idle");
             setShowOrderSheet(true);
           }}
+          onRegisterBack={registerMenuBack}
         />
       ) : null}
 
@@ -736,6 +893,7 @@ export function CaptainApp() {
           hotelName={branding.hotelName}
           connection={connection}
           pairingCode={pairingCode}
+          pairingNeeds={pairingNeeds}
           onRetry={() => void retryConnection()}
           onLogout={() => logout()}
         />
@@ -757,6 +915,7 @@ export function CaptainApp() {
           sendPhase={sendPhase}
           sendError={sendError}
           onChangeQty={changeQty}
+          onChangeNote={(line, note) => void changeNote(line, note)}
           onSendKot={sendKot}
           onConfirmSendKot={() => void confirmSendKot()}
           onCancelSendConfirm={() => setSendPhase("idle")}

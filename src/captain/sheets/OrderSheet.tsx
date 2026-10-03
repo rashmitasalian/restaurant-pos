@@ -12,6 +12,7 @@ export function OrderSheet({
   sendPhase,
   sendError,
   onChangeQty,
+  onChangeNote,
   onSendKot,
   onConfirmSendKot,
   onCancelSendConfirm,
@@ -23,6 +24,7 @@ export function OrderSheet({
   sendPhase: KotSendPhase;
   sendError?: string | null;
   onChangeQty: (line: any, nextQty: number) => void;
+  onChangeNote: (line: any, note: string) => void;
   onSendKot: () => void;
   onConfirmSendKot: () => void;
   onCancelSendConfirm: () => void;
@@ -92,6 +94,9 @@ export function OrderSheet({
                 <div key={line.id} className="cap-line cap-line-new">
                   <div className="cap-line-copy">
                     <strong>{line.name}</strong>
+                    {line.note || line.kitchenNote ? (
+                      <div className="cap-meta">{line.kitchenNote || line.note}</div>
+                    ) : null}
                     <div className="cap-meta">{money(Number(line.rate || 0))} each</div>
                   </div>
                   <strong>×{pending}</strong>
@@ -101,7 +106,7 @@ export function OrderSheet({
           </div>
           <div className="cap-sheet-footer">
             <button type="button" className="cap-btn cap-btn-accent" onClick={onConfirmSendKot}>
-              Print KOT
+              Send to kitchen
             </button>
             <button type="button" className="cap-btn cap-btn-quiet" onClick={onCancelSendConfirm}>
               Back
@@ -152,7 +157,13 @@ export function OrderSheet({
               <section className="cap-ticket-group cap-ticket-new">
                 <div className="cap-ticket-label">New — not sent</div>
                 {pendingLines.map(({ line }) => (
-                  <TicketLine key={line.id} line={line} busy={sending} onChangeQty={onChangeQty} />
+                  <TicketLine
+                    key={line.id}
+                    line={line}
+                    busy={sending}
+                    onChangeQty={onChangeQty}
+                    onChangeNote={onChangeNote}
+                  />
                 ))}
               </section>
             ) : null}
@@ -166,6 +177,7 @@ export function OrderSheet({
                     sent
                     busy={sending}
                     onChangeQty={onChangeQty}
+                    onChangeNote={onChangeNote}
                   />
                 ))}
               </section>
@@ -194,10 +206,15 @@ export function OrderSheet({
             type="button"
             className="cap-btn cap-btn-accent"
             disabled={sending || newCount === 0}
-            onClick={onSendKot}
+            onClick={onConfirmSendKot}
           >
-            {sending ? "Sending…" : sendPhase === "failed" ? "Try again" : "Send KOT"}
+            {sending ? "Sending…" : sendPhase === "failed" ? "Try again" : "Send to kitchen"}
           </button>
+          {newCount > 0 && sendPhase !== "sending" ? (
+            <button type="button" className="cap-btn cap-btn-quiet" onClick={onSendKot}>
+              Preview
+            </button>
+          ) : null}
           <button
             type="button"
             className="cap-btn cap-btn-quiet"
@@ -217,15 +234,23 @@ function TicketLine({
   sent,
   busy,
   onChangeQty,
+  onChangeNote,
 }: {
   line: any;
   sent?: boolean;
   busy: boolean;
   onChangeQty: (line: any, nextQty: number) => void;
+  onChangeNote: (line: any, note: string) => void;
 }) {
   const qty = Number(line.qty || 0);
   const printed = Number(line.kotPrintedQty || 0);
   const pending = Math.max(0, qty - printed);
+  const note = String(line.kitchenNote || "");
+  const [draft, setDraft] = React.useState(note);
+  React.useEffect(() => {
+    setDraft(note);
+  }, [note]);
+  const canEditNote = pending > 0;
   return (
     <div className={`cap-line ${sent ? "cap-line-sent" : "cap-line-new"}`}>
       <div className="cap-line-copy">
@@ -235,6 +260,23 @@ function TicketLine({
           {sent ? ` · sent ${printed}` : ""}
           {!sent && printed > 0 ? ` · ${printed} sent · ${pending} new` : ""}
         </div>
+        {canEditNote ? (
+          <input
+            className="cap-note"
+            value={draft}
+            placeholder="Note for kitchen"
+            aria-label={`Note for ${line.name}`}
+            maxLength={80}
+            onChange={(event) => setDraft(event.target.value)}
+            onBlur={() => {
+              if (draft.trim() !== note.trim()) {
+                onChangeNote(line, draft);
+              }
+            }}
+          />
+        ) : note ? (
+          <div className="cap-meta">{note}</div>
+        ) : null}
       </div>
       <div className="cap-qty cap-qty-compact">
         <button

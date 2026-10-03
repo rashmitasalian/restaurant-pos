@@ -56,15 +56,24 @@ export function destroyLanSession(token: string | null | undefined) {
   }
 }
 
-export function countLanSessions() {
+export function listLanSessions() {
   const now = Date.now();
-  let count = 0;
+  const phones: Array<{ username: string; displayName: string; deviceLabel: string }> = [];
   for (const [token, session] of sessions.entries()) {
     if (now > session.expiresAt) {
       sessions.delete(token);
-    } else {
-      count += 1;
+      continue;
     }
+    const device = String(session.deviceId || "");
+    phones.push({
+      username: session.username,
+      displayName: session.displayName || session.username,
+      deviceLabel: device ? device.slice(-6).toUpperCase() : "",
+    });
   }
-  return count;
+  return phones;
+}
+
+export function countLanSessions() {
+  return listLanSessions().length;
 }

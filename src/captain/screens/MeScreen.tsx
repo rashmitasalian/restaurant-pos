@@ -9,6 +9,7 @@ export function MeScreen({
   hotelName,
   connection,
   pairingCode,
+  pairingNeeds,
   onRetry,
   onLogout,
 }: {
@@ -16,6 +17,7 @@ export function MeScreen({
   hotelName?: string;
   connection: ConnectionState;
   pairingCode?: string;
+  pairingNeeds?: boolean;
   onRetry: () => void;
   onLogout: () => void | Promise<void>;
 }) {
@@ -26,6 +28,7 @@ export function MeScreen({
     user?.username ||
     "Captain";
   const live = connection === "live";
+  const [confirmOut, setConfirmOut] = React.useState(false);
 
   return (
     <div className="cap-stack cap-me">
@@ -56,7 +59,7 @@ export function MeScreen({
         </div>
         <div>
           <dt>Pairing</dt>
-          <dd>{pairingCode ? "Connected" : "Not saved"}</dd>
+          <dd>{pairingNeeds ? "Needs pairing" : pairingCode ? "Paired" : "Not saved"}</dd>
         </div>
       </dl>
 
@@ -67,9 +70,21 @@ export function MeScreen({
         </button>
       ) : null}
 
-      <button type="button" className="cap-btn cap-btn-danger" onClick={() => void onLogout()}>
-        Sign out
-      </button>
+      {confirmOut ? (
+        <div className="cap-me-confirm">
+          <p>Sign out of Captain on this phone?</p>
+          <button type="button" className="cap-btn cap-btn-danger" onClick={() => void onLogout()}>
+            Sign out
+          </button>
+          <button type="button" className="cap-btn cap-btn-quiet" onClick={() => setConfirmOut(false)}>
+            Stay signed in
+          </button>
+        </div>
+      ) : (
+        <button type="button" className="cap-btn cap-btn-danger" onClick={() => setConfirmOut(true)}>
+          Sign out
+        </button>
+      )}
     </div>
   );
 }

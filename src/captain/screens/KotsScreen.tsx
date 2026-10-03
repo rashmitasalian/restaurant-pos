@@ -1,28 +1,19 @@
 import React from "react";
-import { formatKotAge } from "../../shared/kotAge";
+import { formatKotAge, kotAgeTone } from "../../shared/kotAge";
 
 export type CaptainKotTicket = {
   orderId: string;
   tableId: number;
   tableName: string;
   kotStatus: string;
+  openedAt?: number | null;
+  activityAt?: number | null;
   lastSendAt: number | null;
   sentSummary: string;
+  itemSummary?: string;
   sentCount: number;
   unsentCount: number;
 };
-
-type KotFilter = "all" | "new" | "sent";
-
-function matchesFilter(ticket: CaptainKotTicket, filter: KotFilter) {
-  if (filter === "new") {
-    return ticket.unsentCount > 0;
-  }
-  if (filter === "sent") {
-    return ticket.unsentCount === 0 && ticket.sentCount > 0;
-  }
-  return true;
-}
 
 export function KotsScreen({
   tickets,
@@ -33,9 +24,6 @@ export function KotsScreen({
   loading?: boolean;
   onOpenTable: (tableId: number) => void;
 }) {
-  const [filter, setFilter] = React.useState<KotFilter>("all");
-  const visible = tickets.filter((ticket) => matchesFilter(ticket, filter));
-
   if (loading && tickets.length === 0) {
     return (
       <div className="cap-stack">
@@ -50,38 +38,18 @@ export function KotsScreen({
   return (
     <div className="cap-stack">
       <h2 className="cap-page-title">KOT Queue</h2>
-      <div className="cap-cats" role="tablist" aria-label="KOT status">
-        {(
-          [
-            ["all", "All"],
-            ["new", "Send KOT"],
-            ["sent", "KOT sent"],
-          ] as const
-        ).map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            className={`cap-chip ${filter === id ? "active" : ""}`}
-            onClick={() => setFilter(id)}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
 
       {tickets.length === 0 ? (
         <div className="cap-empty">
           <strong>No kitchen tickets</strong>
           <span>Send an order from a table and it will show up here.</span>
         </div>
-      ) : visible.length === 0 ? (
-        <div className="cap-empty">
-          <strong>Nothing here</strong>
-          <span>Try another filter.</span>
-        </div>
       ) : (
         <div className="cap-kot-list">
-          {visible.map((ticket) => (
+          {tickets.map((ticket) => {
+            const when = ticket.lastSendAt || ticket.activityAt || ticket.openedAt;
+            const age = when ? kotAgeTone(when) : "neutral";
+            return (
             <button
               key={ticket.orderId}
               type="button"
@@ -97,16 +65,18 @@ export function KotsScreen({
                     {ticket.unsentCount > 0 ? `${ticket.unsentCount} to send` : "KOT sent"}
                   </span>
                 </div>
-                <div className="cap-meta">
+                {ticket.itemSummary ? <div className="cap-kot-items">{ticket.itemSummary}</div> : null}
+                <div className={`cap-meta cap-age-${age}`}>
                   {ticket.unsentCount > 0
                     ? "Items waiting for kitchen"
-                    : ticket.lastSendAt
-                      ? `Kitchen received · ${formatKotAge(ticket.lastSendAt)} ago`
+                    : when
+                      ? `Kitchen received · ${formatKotAge(when)} ago`
                       : "KOT sent to kitchen"}
                 </div>
               </div>
             </button>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

@@ -34,6 +34,7 @@ import { getDefaultServiceModes } from "../shared/serviceModes";
 import restoNitiMark from "./assets/restoniti-icon.png";
 import { PageLoadingFallback } from "./components/PageLoadingFallback";
 import Activation from "./screens/Activation/Activation";
+import { CaptainPhonesDialog, type GatewayStatus } from "./components/CaptainPhonesDialog";
 import {
   prefetchScreen,
   schedulePostLoginPrefetch,
@@ -82,12 +83,8 @@ function getRendererStartupElapsedMs() {
 }
 
 function GatewayChip() {
-  const [status, setStatus] = React.useState<{
-    running?: boolean;
-    pairingCode?: string;
-    urls?: string[];
-    clients?: number;
-  } | null>(null);
+  const [status, setStatus] = React.useState<GatewayStatus | null>(null);
+  const [open, setOpen] = React.useState(false);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -122,21 +119,31 @@ function GatewayChip() {
   }
   const url = status.urls?.[0] || "";
   return (
-    <div
-      className="pos-clock"
-      title={url ? `Captain URL: ${url}` : "Local Gateway online"}
-      style={{ maxWidth: 220 }}
-    >
-      <div className="pos-clock-dot" aria-hidden="true" />
-      <div>
-        <div className="pos-clock-time" style={{ fontSize: 12 }}>
-          Gateway · {status.clients || 0}
+    <>
+      <button
+        type="button"
+        className="pos-clock"
+        title={url ? `Captain phones: ${url}` : "Local Gateway online"}
+        style={{ maxWidth: 220, border: 0, cursor: "pointer", textAlign: "left" }}
+        onClick={() => setOpen(true)}
+      >
+        <div className="pos-clock-dot" aria-hidden="true" />
+        <div>
+          <div className="pos-clock-time" style={{ fontSize: 12 }}>
+            Gateway · {status.clients || 0}
+          </div>
+          <div className="pos-clock-date" style={{ fontSize: 11 }}>
+            Pair {String(status.pairingCode || "").toUpperCase()}
+          </div>
         </div>
-        <div className="pos-clock-date" style={{ fontSize: 11 }}>
-          Pair {String(status.pairingCode || "").toUpperCase()}
-        </div>
-      </div>
-    </div>
+      </button>
+      <CaptainPhonesDialog
+        open={open}
+        status={status}
+        onClose={() => setOpen(false)}
+        onRotated={(next) => setStatus(next)}
+      />
+    </>
   );
 }
 

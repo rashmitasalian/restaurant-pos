@@ -362,6 +362,7 @@ function runSchema(database: SqliteDatabase) {
       tax_rate_bps INTEGER,
       line_total_paise INTEGER NOT NULL DEFAULT 0,
       kot_printed_qty REAL NOT NULL DEFAULT 0,
+      kitchen_note TEXT,
       sort_order INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
@@ -1665,6 +1666,10 @@ function runSchema(database: SqliteDatabase) {
     }
   });
 
+  runMigration(database, 32, "Kitchen note on order lines", () => {
+    addColumnIfMissing(database, "order_lines", "kitchen_note", "TEXT");
+  });
+
   // Startup self-healing for pre-existing/partially migrated databases:
   // ensure area_id exists even if migration 12 was marked applied while the column was missing.
   addColumnIfMissing(
@@ -1678,6 +1683,7 @@ function runSchema(database: SqliteDatabase) {
   addColumnIfMissing(database, "orders", "cancelled_at", "INTEGER");
   addColumnIfMissing(database, "orders", "cancelled_by", "TEXT");
   addColumnIfMissing(database, "orders", "cancellation_reason", "TEXT");
+  addColumnIfMissing(database, "order_lines", "kitchen_note", "TEXT");
   if (columnExists(database, "orders", "cancelled_at")) {
     database.exec(`
       CREATE INDEX IF NOT EXISTS idx_orders_cancelled_at

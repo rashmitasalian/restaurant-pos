@@ -2,6 +2,7 @@ import React from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { Icon } from "../../ui/components/ui/Icon";
 import restoNitiMark from "../../ui/assets/restoniti-icon.png";
+import { connectionLabel, type ConnectionState } from "../copy";
 
 export function LoginScreen({
   brandingName,
@@ -13,6 +14,9 @@ export function LoginScreen({
   setPairingCode,
   busy,
   error,
+  connection,
+  pairingNeeds,
+  linkPaired,
   onLogin,
 }: {
   brandingName?: string;
@@ -24,17 +28,29 @@ export function LoginScreen({
   setPairingCode: (v: string) => void;
   busy: boolean;
   error?: string | null;
+  connection: ConnectionState;
+  pairingNeeds: boolean;
+  linkPaired?: boolean;
   onLogin: () => void | Promise<void>;
 }) {
   const [showPassword, setShowPassword] = React.useState(false);
-  const storedPairing = React.useMemo(() => {
-    try {
-      return Boolean(localStorage.getItem("captain-pairing-code"));
-    } catch {
-      return false;
+  const [editPairing, setEditPairing] = React.useState(pairingNeeds || !pairingCode);
+  const [copied, setCopied] = React.useState(false);
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const live = connection === "live";
+
+  React.useEffect(() => {
+    if (pairingNeeds) {
+      setEditPairing(true);
     }
-  }, []);
-  const [editPairing, setEditPairing] = React.useState(!storedPairing || !pairingCode);
+  }, [pairingNeeds]);
+
+  React.useEffect(() => {
+    if (linkPaired && pairingCode && !pairingNeeds) {
+      setEditPairing(false);
+    }
+  }, [linkPaired, pairingCode, pairingNeeds]);
+
   return (
     <div className="cap-login">
       <div className="cap-login-brand">
@@ -55,6 +71,14 @@ export function LoginScreen({
         }}
       >
         {error ? <div className="cap-error">{error}</div> : null}
+
+        <div className="cap-login-status">
+          <span>
+            <span className={`cap-legend-dot ${live ? "is-sent" : connection === "reconnecting" ? "is-send" : ""}`} />
+            {connectionLabel(connection)}
+          </span>
+          <span>{pairingNeeds || !pairingCode ? "Needs pairing" : "Paired"}</span>
+        </div>
 
         <div className="cap-field">
           <label htmlFor="cap-user">Username</label>
@@ -97,8 +121,8 @@ export function LoginScreen({
               autoCapitalize="characters"
               autoComplete="one-time-code"
               value={pairingCode}
-              onChange={(e) => setPairingCode(e.target.value)}
-              placeholder="Shown on the restaurant POS"
+              onChange={(e) => setPairingCode(e.target.value.toUpperCase())}
+              placeholder="From the POS QR"
             />
           </div>
         ) : (
@@ -120,6 +144,20 @@ export function LoginScreen({
       </form>
 
       <p className="cap-login-hint">Use the same Wi-Fi as the restaurant POS.</p>
+      {origin ? (
+        <p className="cap-login-hint">
+          {origin}{" "}
+          <button
+            type="button"
+            className="cap-text-btn"
+            onClick={() => {
+              void navigator.clipboard?.writeText(origin).then(() => setCopied(true));
+            }}
+          >
+            {copied ? "Copied" : "Copy"}
+          </button>
+        </p>
+      ) : null}
     </div>
   );
 }

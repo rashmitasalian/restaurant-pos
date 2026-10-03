@@ -122,6 +122,7 @@ export const kotPrintService = {
         name: line.name,
         qty: pendingKotQty(line),
         sentQty: Number(line.qty || 0),
+        note: line.kitchenNote || null,
       })),
       platform: String(meta.platform || meta.orderSource || meta.source || ""),
       platformCode: String(meta.code || meta.orderCode || meta.reference || ""),

@@ -11,9 +11,15 @@ function lineMatchesItem(line: any, item: any) {
   if (menuId && String(line.menuItemId || "") === menuId) {
     return true;
   }
-  const name = String(item?.name || "");
-  const lineName = String(line.name || "");
-  return lineName === name || lineName.startsWith(`${name} (`);
+  return String(line.name || "") === String(item?.name || "");
+}
+
+function DietMark({ diet }: { diet?: string | null }) {
+  if (diet !== "veg" && diet !== "non-veg" && diet !== "egg") {
+    return null;
+  }
+  const label = diet === "veg" ? "Veg" : diet === "egg" ? "Egg" : "Non-veg";
+  return <span className={`cap-diet cap-diet-${diet}`} title={label} aria-label={label} />;
 }
 
 function groupMenuItems(items: any[], categoryOrder: string[]) {
@@ -76,15 +82,12 @@ function MenuItemRow({
       className={`cap-menu-row ${flashed ? "cap-menu-tile-flash" : ""} ${qty > 0 ? "is-in-order" : ""}`}
     >
       <div className="cap-menu-row-copy">
-        <p className="cap-menu-row-name">{item.name}</p>
+        <p className="cap-menu-row-name">
+          <DietMark diet={item.diet} />
+          <span>{item.name}</span>
+        </p>
         <span className="cap-menu-row-meta">
-          {item.diet === "veg"
-            ? "Veg · "
-            : item.diet === "non-veg"
-              ? "Non-veg · "
-              : item.diet === "egg"
-                ? "Egg · "
-                : ""}
+          {item.sku ? <span className="cap-menu-code">{item.sku}</span> : null}
           {money(Number(item.price || 0))}
           {hasVariants ? ` · ${item.variants.length} options` : ""}
         </span>
@@ -110,9 +113,10 @@ function MenuItemRow({
             aria-label={`Decrease ${item.name}`}
             onClick={() => {
               const line = primaryLineForItem(item);
-              if (line) {
-                onChangeQty(line, Number(line.qty || 0) - 1);
+              if (!line) {
+                return;
               }
+              onChangeQty(line, Number(line.qty || 0) - 1);
             }}
           >
             <Icon icon={Minus} size="sm" />
@@ -159,6 +163,7 @@ export function MenuScreen({
   onAddItem,
   onChangeQty,
   onReview,
+  onRegisterBack,
 }: {
   tableName: string;
   menuItems: any[];
@@ -170,6 +175,7 @@ export function MenuScreen({
   onAddItem: (item: any) => void;
   onChangeQty: (line: any, nextQty: number) => void;
   onReview: () => void;
+  onRegisterBack?: (handler: (() => boolean) | null) => void;
 }) {
   const [query, setQuery] = React.useState("");
   const [category, setCategory] = React.useState<string>("all");
@@ -225,12 +231,24 @@ export function MenuScreen({
 
   const primaryLineForItem = (item: any) => {
     const matches = items.filter((line) => lineMatchesItem(line, item));
-    return (
-      matches.find((line) => Number(line.qty || 0) > Number(line.kotPrintedQty || 0)) ||
-      matches[matches.length - 1] ||
-      null
-    );
+    const exact = matches.filter((line) => String(line.name || "") === String(item.name || ""));
+    const pool = exact.length ? exact : matches;
+    if (pool.length !== 1) {
+      return null;
+    }
+    return pool[0];
   };
+
+  React.useEffect(() => {
+    onRegisterBack?.(() => {
+      if (categoryOpen) {
+        setCategoryOpen(false);
+        return true;
+      }
+      return false;
+    });
+    return () => onRegisterBack?.(null);
+  }, [categoryOpen, onRegisterBack]);
 
   React.useEffect(() => {
     if (!flashId) {
