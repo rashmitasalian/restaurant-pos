@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.electron.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": ["electron/licensing/**/*.ts", "tools/license-issuer/**/*.ts"],
+  "exclude": ["**/*.test.ts", "node_modules"]
+}

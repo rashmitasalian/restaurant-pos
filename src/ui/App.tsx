@@ -33,6 +33,7 @@ import {
 import { getDefaultServiceModes } from "../shared/serviceModes";
 import restoNitiMark from "./assets/restoniti-icon.png";
 import { PageLoadingFallback } from "./components/PageLoadingFallback";
+import Activation from "./screens/Activation/Activation";
 import {
   prefetchScreen,
   schedulePostLoginPrefetch,
@@ -828,6 +829,75 @@ function MainContent({
 }
 
 export default function App() {
+  const [licenseState, setLicenseState] = React.useState<
+    "loading" | "licensed" | "unlicensed"
+  >("loading");
+  const [unlicensed, setUnlicensed] = React.useState<{
+    status: "unlicensed";
+    message?: string;
+    supportDetail?: string | null;
+  }>({ status: "unlicensed" });
+
+  const refreshLicense = React.useCallback(() => {
+    const api = window.pos?.license;
+    if (!window.pos) {
+      setLicenseState("licensed");
+      return;
+    }
+    if (!api?.getStatus) {
+      setUnlicensed({
+        status: "unlicensed",
+        message: "This license could not be verified.",
+      });
+      setLicenseState("unlicensed");
+      return;
+    }
+    api
+      .getStatus()
+      .then((status) => {
+        if (status.status === "licensed") {
+          setLicenseState("licensed");
+          return;
+        }
+        setUnlicensed({
+          status: "unlicensed",
+          message: status.message,
+          supportDetail: status.supportDetail,
+        });
+        setLicenseState("unlicensed");
+      })
+      .catch(() => {
+        setUnlicensed({
+          status: "unlicensed",
+          message: "This license could not be verified.",
+        });
+        setLicenseState("unlicensed");
+      });
+  }, []);
+
+  React.useEffect(() => {
+    refreshLicense();
+  }, [refreshLicense]);
+
+  if (licenseState === "loading") {
+    return (
+      <ErrorBoundary>
+        <PageLoadingFallback variant="auth" label="Starting RestoNiti" />
+      </ErrorBoundary>
+    );
+  }
+  if (licenseState === "unlicensed") {
+    return (
+      <ErrorBoundary>
+        <Activation initialStatus={unlicensed} onActivated={refreshLicense} />
+      </ErrorBoundary>
+    );
+  }
+
+  return <LicensedApp />;
+}
+
+function LicensedApp() {
   const [hasUsers, setHasUsers] = React.useState<boolean | null>(null);
 
   // Run DB migrations and check for existing users on first render.

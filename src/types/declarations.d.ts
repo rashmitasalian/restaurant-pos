@@ -278,6 +278,29 @@ declare global {
         stop: () => Promise<any>;
         rotatePairing: () => Promise<any>;
       };
+      license?: {
+        getStatus: () => Promise<{
+          status: "licensed" | "unlicensed";
+          devBypass?: boolean;
+          licenseId?: string;
+          customerName?: string;
+          plan?: "offline-perpetual";
+          message?: string;
+          supportDetail?: string | null;
+        }>;
+        getInstallationCode: () => Promise<
+          { ok: true; code: string } | { ok: false; message: string }
+        >;
+        copyInstallationCode: () => Promise<{ ok: boolean; message?: string }>;
+        importLicense: (filePath?: string) => Promise<{
+          ok: boolean;
+          cancelled?: boolean;
+          message?: string;
+          reason?: string;
+          licenseId?: string;
+          customerName?: string;
+        }>;
+      };
       events?: {
         onDomainEvent: (listener: (event: any) => void) => () => void;
       };

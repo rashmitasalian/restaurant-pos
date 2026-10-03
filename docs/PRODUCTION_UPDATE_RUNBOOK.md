@@ -145,6 +145,8 @@ Also note the file sizes in bytes:
 
 ### Step 6 — Publish the update manifest
 
+Do **not** publish the first licensed build (the first installer that requires a `.rnlc`) to this manifest for a restaurant that is still on an unlicensed build. That update would restart them into the activation screen with no license ready, and they could not bill until you issue a file. Hand-install that build and import the license first. After the PC is licensed, later versions can go through this manifest because the license stays in `%APPDATA%\Restaurant POS`.
+
 Create `manifest.json` with the values collected above and publish it at a stable HTTPS URL that the POS app is configured to check.
 
 ```json
@@ -210,6 +212,7 @@ Do this during a quiet period (after close or between service periods).
 - [ ] Windows admin credentials available for UAC prompt
 - [ ] Machine has internet access to GitHub
 - [ ] Step 6b completed — `POS_UPDATE_MANIFEST_URL` is set
+- [ ] This is not the first licensed build on an unlicensed site (if it is, stop and use `docs/FIRST_TIME_INSTALLATION_RUNBOOK.md` instead)
 
 **At the POS machine:**
 

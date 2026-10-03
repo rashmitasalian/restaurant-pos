@@ -104,6 +104,23 @@ npm run verify:win-sign
 - `build.win.signtoolOptions.publisherName` in `package.json` must match the cert Subject CN.
 - Expect `Valid` on the setup EXE and `win-unpacked\RestoNiti.exe`.
 
+### License key (once per vendor machine)
+
+The installer is the same for every restaurant. Each PC is unlocked with a signed `.rnlc` file. The private key stays on your machine, outside this repo:
+
+```text
+%USERPROFILE%\.restoniti\license-ed25519.pem
+%USERPROFILE%\.restoniti\license-ledger.jsonl
+```
+
+```powershell
+npm run license:keygen
+```
+
+`electron/licensing/publicKey.ts` already contains the matching public key. If keygen says the private key does not match, do not issue licenses.
+
+Do not commit the private key, the ledger, or `.rnlc` files.
+
 ---
 
 ## 3. Deliver the installer
@@ -171,6 +188,49 @@ Sign out/in (or reboot) so the app sees the variable. Details: `docs/PRODUCTION_
 2. Approve UAC → finish → launch **RestoNiti**.
 3. Default location: `C:\Program Files\RestoNiti\`.
 
+### Activate this PC
+
+The first launch must be the Windows account that will run RestoNiti every day. A different Windows login cannot read the installation identity.
+
+1. Open RestoNiti. If this PC is not licensed, it shows **Installation Code** and does not open the POS. Captain does not start.
+2. Copy the full code and send it to RestoNiti. Internet is not required on the restaurant PC.
+3. On the vendor machine, issue a perpetual license. Paste the full code. Do not shorten it.
+
+```powershell
+npm run license:issue -- --customer "Restaurant Name" --code "RN1-...." --out "$env:USERPROFILE\Desktop\Restaurant-Name.rnlc"
+npm run license:verify -- --file "$env:USERPROFILE\Desktop\Restaurant-Name.rnlc"
+```
+
+4. On the restaurant PC, choose that `.rnlc` file. After it verifies, first-admin setup continues.
+5. The license is stored at `%APPDATA%\Restaurant POS\license\license.rnlc`. It is not inside the SQLite database and is not part of a database backup.
+
+Everything RestoNiti keeps for that Windows user is in `%APPDATA%\Restaurant POS`: the database, the license, the installation identity, and Chromium's `Local State` file. `Local State` holds the key that unlocks the installation identity. Do not delete or "clean up" any file in that folder. An old `%APPDATA%\restaurant-pos` folder from earlier builds only holds caches and can be left alone.
+
+Only one RestoNiti window runs at a time. Opening it again brings the running window to the front.
+
+A normal reinstall that leaves `%APPDATA%\Restaurant POS\license\` in place stays licensed. A Windows reinstall, a different Windows user, a deleted identity file, or a wiped AppData folder needs a replacement license. Ask for the new installation code and issue a new file with `--replaces` set to the old license id, so the ledger marks the old one replaced:
+
+```powershell
+npm run license:issue -- --customer "Restaurant Name" --code "RN1-...." --replaces RN-2026-000001 --out "$env:USERPROFILE\Desktop\Restaurant-Name.rnlc"
+```
+
+The issuer warns if the restaurant name already has an active license and you did not pass `--replaces`, or if that installation code was already issued. A second restaurant with the same name is allowed; read the warning and continue. The old PC is not remotely disabled. A damaged identity file is a support case: do not delete it unless you are ready to issue a new license.
+
+### Restaurant that already runs RestoNiti
+
+This is a one-time unlock for that PC, not a renewal. A site that already bills on an older build has no license file yet. Their menu, bills, and users stay in `%APPDATA%\Restaurant POS`. Do not install this build during service unless you can import the license in the same visit. Until the `.rnlc` is imported, that PC cannot open the POS or Captain.
+
+Do not ship the first licensed build to an existing site through the update manifest or the in-app updater. An automatic update would restart them into the activation screen with no license ready, and they could not bill until you respond. Install it on site, or on a phone or remote call where you issue the `.rnlc` straight away. Once the PC is licensed, later updates through the manifest are fine because the license stays in AppData.
+
+1. Install the new setup exe over the current one. Program files change. The existing database does not.
+2. Open RestoNiti with the Windows account they use every day. The activation screen shows the installation code. The database is not opened yet.
+3. Copy the full code and issue the license on your machine (same commands as above). Use the restaurant’s real name in `--customer`.
+4. On their PC, choose that `.rnlc` file.
+
+They then log in with the admin account they already have. They do not repeat first-time setup. After that, the license stays valid with no internet and no renewal. Settings → License shows the license id, Perpetual, and the restaurant name.
+
+A later reinstall that keeps `%APPDATA%\Restaurant POS\license\` does not need a new file.
+
 ### If Windows blocks it
 
 Only for a file **you** built or whose SHA256 you verified:
@@ -189,10 +249,10 @@ Unblock-File -LiteralPath "$env:USERPROFILE\Downloads\<installer>.exe"
 
 ## 5. First run setup
 
-Database is created under Electron userData, typically:
+Database is created under Electron userData:
 
 ```text
-%LOCALAPPDATA%\RestoNiti\...\data\restaurant-pos.sqlite
+%APPDATA%\Restaurant POS\data\restaurant-pos.sqlite
 ```
 
 ### Configure once
@@ -261,7 +321,10 @@ Write down:
 
 - [ ] PC meets requirements  
 - [ ] Hash verified  
-- [ ] Installed as admin  
-- [ ] Admin + cashier + branding + printers + backup  
+- [ ] Installed as admin
+- [ ] License imported for this PC (installation code issued on the vendor machine)
+- [ ] Existing site: same Windows account, license imported before leaving, old login still works
+- [ ] Existing site: first licensed build installed by hand, not through the update manifest
+- [ ] Admin + cashier + branding + printers + backup
 - [ ] Smoke test passed  
 - [ ] Handoff record saved  

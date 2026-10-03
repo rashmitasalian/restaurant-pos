@@ -295,6 +295,12 @@ contextBridge.exposeInMainWorld("pos", {
     stop: () => authInvoke("pos:gateway:stop"),
     rotatePairing: () => authInvoke("pos:gateway:rotate-pairing"),
   },
+  license: {
+    getStatus: () => invoke("license:get-status"),
+    getInstallationCode: () => invoke("license:get-installation-code"),
+    copyInstallationCode: () => invoke("license:copy-installation-code"),
+    importLicense: (filePath) => invoke("license:import", filePath),
+  },
   events: {
     onDomainEvent: (listener) => {
       const handler = (_event, payload) => listener(payload);

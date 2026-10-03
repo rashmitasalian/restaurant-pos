@@ -30,3 +30,8 @@ services/cloud-api/publish.zip
 __pycache__/
 *.pyc
 .venv/
+# Vendor license signing key and issuance ledger. Never commit.
+.restoniti/
+*.rnlc
+license-ledger.jsonl
+

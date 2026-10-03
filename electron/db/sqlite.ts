@@ -53,6 +53,7 @@ export function closeDb() {
   }
 }
 
+/** Snapshots the open SQLite database only. License files under userData/license are not included. */
 export async function backupDatabase(targetPath: string) {
   const database = getDb();
   await database.backup(targetPath);

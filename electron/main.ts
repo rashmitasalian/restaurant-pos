@@ -15,7 +15,18 @@ import path from "path";
 import http from "http";
 import https from "https";
 import fs from "fs";
+import { registerLicenseIpc } from "./ipc/licenseIpc";
 import { registerPosIpc } from "./ipc/posIpc";
+import { electronKeyProtector } from "./licensing/electronProtector";
+import { isLicenseGateEnabled } from "./licensing/licenseGate";
+import { configureLicenseRuntime } from "./licensing/licenseService";
+import { readWindowsMachineGuid } from "./licensing/machineIdentity";
+import {
+  isLicensedAtStartup,
+  runStartupSequence,
+  startLicensedServices,
+} from "./licensing/startupSequence";
+import { vendorPublicKeyRaw } from "./licensing/publicKey";
 import { closeDb, initializeDatabase } from "./db/sqlite";
 import { posService } from "./services/posService";
 import { configureDomainEvents } from "./services/domainEvents";
@@ -181,6 +192,24 @@ function configureStableUserDataPath() {
   } catch (e) {
     // Keep Electron's default path if appData is unavailable.
   }
+}
+
+// Must run before app ready: Chromium fixes the Local State location (which holds the
+// safeStorage key protecting the license identity) at startup.
+configureStableUserDataPath();
+
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      if (mainWindow.isMinimized()) {
+        mainWindow.restore();
+      }
+      mainWindow.focus();
+    }
+  });
 }
 
 function resolveAppIconPath() {
@@ -453,59 +482,109 @@ app.on("certificate-error", (event, _webContents, _url, _error, _certificate, ca
   callback(false);
 });
 
+let posCorePromise: Promise<void> | null = null;
+let posDeferredStarted = false;
+
+function startPosCore() {
+  if (!posCorePromise) {
+    posCorePromise = (async () => {
+      logStartupStage("db:init:start");
+      await initializeDatabase();
+      logStartupStage("db:init:done");
+      logStartupStage("service:ensure-ready:start");
+      posService.ensureReady();
+      logStartupStage("service:ensure-ready:done");
+      logStartupStage("ipc:register:start");
+      registerPosIpc(() => mainWindow);
+      configureDomainEvents(() => mainWindow);
+      logStartupStage("ipc:register:done");
+    })().catch((error) => {
+      posCorePromise = null;
+      throw error;
+    });
+  }
+  return posCorePromise;
+}
+
+function startPosDeferred() {
+  if (posDeferredStarted) {
+    return;
+  }
+  posDeferredStarted = true;
+  logStartupStage("deferred:startup-services:start");
+  try {
+    updateService.processStartupState();
+  } catch (error: any) {
+    writeLogToFile("warn", `Update startup state failed: ${error?.stack || error}`);
+  }
+  try {
+    bootstrapBackupManager((level, message, context) => writeLogToFile(level, message, context));
+    startBackupScheduler({
+      logger: (level, message, context) => writeLogToFile(level, `[backup] ${message}`, context),
+    });
+  } catch (error: any) {
+    writeLogToFile("warn", `Backup bootstrap failed: ${error?.stack || error}`);
+  }
+  warmUpWindowsRawPrinter(app.getPath("userData"));
+  logStartupStage("deferred:startup-services:done");
+}
+
+async function startPosGateway() {
+  try {
+    logStartupStage("gateway:start");
+    await startLocalGateway();
+    logStartupStage("gateway:ready", getGatewayStatus());
+  } catch (gatewayError: any) {
+    writeLogToFile(
+      "error",
+      `Local gateway failed to start: ${gatewayError?.stack || gatewayError}`,
+    );
+  }
+}
+
+const posStartupSteps = {
+  startCore: startPosCore,
+  startDeferred: startPosDeferred,
+  startGateway: startPosGateway,
+};
+
 app.whenReady().then(async () => {
+  if (!gotSingleInstanceLock) {
+    return;
+  }
   logStartupStage("app:whenReady");
   // POS shell: no File/Edit/View menu in production; dev keeps Alt-accessible bar via autoHideMenuBar.
   if (!isDev) {
     Menu.setApplicationMenu(null);
   }
-  configureStableUserDataPath();
   try {
     openBootSplash(resolveAppIconPath());
-    logStartupStage("db:init:start");
-    await initializeDatabase();
-    logStartupStage("db:init:done");
-    logStartupStage("service:ensure-ready:start");
-    posService.ensureReady();
-    logStartupStage("service:ensure-ready:done");
-    logStartupStage("ipc:register:start");
-    registerPosIpc(() => mainWindow);
-    configureDomainEvents(() => mainWindow);
-    logStartupStage("ipc:register:done");
-
-    // Show UI as soon as DB/IPC are ready; defer non-critical work so first paint is faster.
-    const windowReady = createWindow();
-    void windowReady.then(() => {
-      logStartupStage("deferred:startup-services:start");
-      try {
-        updateService.processStartupState();
-      } catch (error: any) {
-        writeLogToFile("warn", `Update startup state failed: ${error?.stack || error}`);
-      }
-      try {
-        bootstrapBackupManager((level, message, context) => writeLogToFile(level, message, context));
-        startBackupScheduler({
-          logger: (level, message, context) => writeLogToFile(level, `[backup] ${message}`, context),
-        });
-      } catch (error: any) {
-        writeLogToFile("warn", `Backup bootstrap failed: ${error?.stack || error}`);
-      }
-      warmUpWindowsRawPrinter(app.getPath("userData"));
-      logStartupStage("deferred:startup-services:done");
+    const gateEnabled = isLicenseGateEnabled({
+      isDev,
+      posLicenseRequired: process.env.POS_LICENSE_REQUIRED,
     });
-
-    try {
-      logStartupStage("gateway:start");
-      await startLocalGateway();
-      logStartupStage("gateway:ready", getGatewayStatus());
-    } catch (gatewayError: any) {
-      writeLogToFile(
-        "error",
-        `Local gateway failed to start: ${gatewayError?.stack || gatewayError}`,
-      );
+    const evaluation = configureLicenseRuntime({
+      gateEnabled,
+      userDataDir: app.getPath("userData"),
+      protector: electronKeyProtector(),
+      readMachineGuid: readWindowsMachineGuid,
+      vendorPublicKey: vendorPublicKeyRaw(),
+    });
+    registerLicenseIpc(
+      () => startLicensedServices(posStartupSteps),
+      (error: any) => {
+        writeLogToFile("fatal", `Startup after license import failed: ${error?.stack || error}`);
+      },
+    );
+    const licensedAtStartup = isLicensedAtStartup(gateEnabled, evaluation);
+    if (evaluation && !evaluation.openDatabase) {
+      writeLogToFile("info", "license activation required", {
+        reason: evaluation.reason,
+        licenseId: evaluation.licenseId,
+      });
     }
 
-    await windowReady;
+    await runStartupSequence(licensedAtStartup, { ...posStartupSteps, createWindow });
     logStartupStage("createWindow:done");
   } catch (err: any) {
     closeBootSplash();
