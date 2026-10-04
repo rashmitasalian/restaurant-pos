@@ -2,10 +2,8 @@ import React from "react";
 import {
   getTablesSnapshot,
   getOrCreateOrderForTable,
-  getOpenOrders as listOpenOrders,
   getOrderById,
 } from "../../../app/db/posRepository";
-import { useFocusTrap } from "../../hooks/useFocusTrap";
 import styles from "./Tables.module.css";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { SegmentedControl } from "../../components/ui/SegmentedControl";
@@ -32,24 +30,14 @@ type TableInfo = {
 
 export default function Tables() {
   const [query, setQuery] = React.useState("");
+  const [statusFilter, setStatusFilter] = React.useState<"all" | "available" | "open">("all");
   const [tables, setTables] = React.useState<TableInfo[]>([]);
   const [areas, setAreas] = React.useState<Array<{ id: string; name: string; active?: boolean }>>(
     [],
   );
   const [selectedAreaId, setSelectedAreaId] = React.useState<string>("all");
-  const [openOrders, setOpenOrders] = React.useState<any[] | null>(null);
-  const [openOrdersLoading, setOpenOrdersLoading] = React.useState(false);
   const [openingTableId, setOpeningTableId] = React.useState<number | null>(null);
-  const openOrdersLoadingRef = React.useRef(false);
-  const openOrdersPromiseRef = React.useRef<Promise<any[]> | null>(null);
   const openingBillingRef = React.useRef(false);
-
-  // Refs for focus management
-  const openOrdersBtnRef = React.useRef<HTMLButtonElement>(null);
-  const closeModal = React.useCallback(() => {
-    setOpenOrders(null);
-  }, []);
-  const openOrdersDialogRef = useFocusTrap<HTMLDivElement>(openOrders !== null, closeModal);
 
   const refresh = React.useCallback(async () => {
     const snapshot = await getTablesSnapshot();
@@ -94,15 +82,28 @@ export default function Tables() {
     };
   }, [refresh]);
 
-  const filtered = tables.filter(
-    (t) =>
-      (selectedAreaId === "all" || t.areaId === selectedAreaId) &&
-      (String(t.id).includes(query) ||
-        String(t.name || "")
-          .toLowerCase()
-          .includes(query.toLowerCase()) ||
-        (t.orderSummary || "").toLowerCase().includes(query.toLowerCase())),
-  );
+  const filtered = tables.filter((t) => {
+    if (selectedAreaId !== "all" && t.areaId !== selectedAreaId) {
+      return false;
+    }
+    if (statusFilter === "available" && t.occupied) {
+      return false;
+    }
+    if (statusFilter === "open" && !t.occupied) {
+      return false;
+    }
+    const needle = query.trim().toLowerCase();
+    if (!needle) {
+      return true;
+    }
+    return (
+      String(t.id).includes(needle) ||
+      String(t.name || "")
+        .toLowerCase()
+        .includes(needle) ||
+      (t.orderSummary || "").toLowerCase().includes(needle)
+    );
+  });
 
   const grouped = React.useMemo(() => {
     const map = new Map<string, TableInfo[]>();
@@ -114,20 +115,6 @@ export default function Tables() {
     }
     return map;
   }, [filtered]);
-
-  const openBillingById = async (tableId: number, orderId: string) => {
-    if (openingBillingRef.current) {
-      return;
-    }
-    openingBillingRef.current = true;
-    setOpeningTableId(tableId);
-    window.localStorage.setItem("currentOrderId", orderId);
-    window.localStorage.setItem("currentTable", String(tableId));
-    setOpenOrders(null);
-    window.dispatchEvent(new CustomEvent("select-table", { detail: { table: tableId } }));
-    openingBillingRef.current = false;
-    setOpeningTableId(null);
-  };
 
   const openBilling = async (table: TableInfo) => {
     if (openingBillingRef.current) {
@@ -160,23 +147,6 @@ export default function Tables() {
       setOpeningTableId(null);
     }
     window.dispatchEvent(new CustomEvent("select-table", { detail: { table: table.id } }));
-  };
-
-  const getOpenOrders = async () => {
-    if (openOrdersPromiseRef.current) {
-      return openOrdersPromiseRef.current;
-    }
-    openOrdersLoadingRef.current = true;
-    setOpenOrdersLoading(true);
-    const promise = listOpenOrders();
-    openOrdersPromiseRef.current = promise;
-    try {
-      return await promise;
-    } finally {
-      openOrdersPromiseRef.current = null;
-      openOrdersLoadingRef.current = false;
-      setOpenOrdersLoading(false);
-    }
   };
 
   const occupied = tables.filter((t) => t.occupied).length;
@@ -212,6 +182,18 @@ export default function Tables() {
                 />
               </div>
               <div className={styles.actions}>
+                <div className={styles.filterInline}>
+                  <SegmentedControl
+                    ariaLabel="Table status"
+                    value={statusFilter}
+                    onChange={(id) => setStatusFilter(id as "all" | "available" | "open")}
+                    options={[
+                      { id: "all", label: "All" },
+                      { id: "available", label: "Available" },
+                      { id: "open", label: "Open" },
+                    ]}
+                  />
+                </div>
                 <input
                   aria-label="Search tables"
                   placeholder="Search table…"
@@ -219,25 +201,6 @@ export default function Tables() {
                   onChange={(e) => setQuery(e.target.value)}
                   className={styles.input}
                 />
-                <button
-                  ref={openOrdersBtnRef}
-                  aria-label="View all open dine-in orders"
-                  onClick={async () => {
-                    const ops = await getOpenOrders();
-                    setOpenOrders(
-                      ops.filter(
-                        (o) =>
-                          o.tableId !== null &&
-                          o.tableId !== undefined &&
-                          (o.items || []).length > 0,
-                      ),
-                    );
-                  }}
-                  disabled={openOrdersLoading}
-                  className={styles.btn}
-                >
-                  {openOrdersLoading ? "Loading..." : "Open Orders"}
-                </button>
               </div>
             </div>
           }
@@ -309,87 +272,18 @@ export default function Tables() {
           );
         })}
 
-        {filtered.length === 0 && <div className={styles.noMatch}>No tables match “{query}”</div>}
-      </div>
-
-      {/* Open Orders Modal */}
-      {openOrders !== null && (
-        <div
-          className={styles.modalOverlay}
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              closeModal();
-            }
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") {
-              closeModal();
-            }
-          }}
-        >
-          <div
-            ref={openOrdersDialogRef}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="open-orders-title"
-            className={styles.modalDialog}
-            tabIndex={-1}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: 16,
-              }}
-            >
-              <h3
-                id="open-orders-title"
-                style={{ margin: 0, fontSize: 17, fontWeight: 800, color: "var(--pos-tx)" }}
-              >
-                Open Orders
-              </h3>
-              <button onClick={closeModal} aria-label="Close" className={styles.modalClose}>
-                ×
-              </button>
-            </div>
-            {openOrders.length === 0 ? (
-              <div style={{ color: "var(--pos-tx-muted)", fontSize: 14 }}>
-                No open dine-in orders
-              </div>
-            ) : (
-              <div className={styles.modalList}>
-                {openOrders.map((o) => (
-                  <div
-                    key={o._id}
-                    role="button"
-                    tabIndex={0}
-                    className={styles.modalItem}
-                    onClick={() => openBillingById(o.tableId, o._id)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        openBillingById(o.tableId, o._id);
-                      }
-                    }}
-                  >
-                    <div style={{ fontWeight: 800, color: "var(--pos-tx)" }}>Table {o.tableId}</div>
-                    <div style={{ fontSize: 13, color: "var(--pos-tx-sub)", marginTop: 4 }}>
-                      {(o.items || []).length} items · ₹
-                      {Number(
-                        (o.items || []).reduce(
-                          (s: number, it: any) => s + Number(it.qty || 0) * Number(it.rate || 0),
-                          0,
-                        ),
-                      ).toLocaleString("en-IN")}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+        {filtered.length === 0 && (
+          <div className={styles.noMatch}>
+            {query.trim()
+              ? `No tables match “${query.trim()}”`
+              : statusFilter === "available"
+                ? "No available tables"
+                : statusFilter === "open"
+                  ? "No open tables"
+                  : "No tables in this area"}
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

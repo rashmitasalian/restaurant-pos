@@ -81,29 +81,6 @@
   color: var(--pos-tx-muted);
 }
 
-.btn {
-  padding: 6px 11px;
-  min-height: 32px;
-  border-radius: var(--pos-r-md);
-  border: 1px solid var(--pos-line);
-  background: var(--pos-surface);
-  color: var(--pos-tx-sec);
-  font-weight: 600;
-  font-size: 13px;
-  cursor: pointer;
-  font-family: inherit;
-}
-
-.btn:hover {
-  background: var(--pos-surface-hover);
-  border-color: var(--pos-line-strong);
-}
-
-.btn:focus-visible {
-  outline: none;
-  box-shadow: var(--pos-focus-ring);
-}
-
 .grid {
   display: grid;
   /* ~5 columns on typical 1280–1440 POS desktops */
@@ -155,71 +132,6 @@
   text-align: center;
   color: var(--pos-tx-muted);
   font-size: 14px;
-}
-
-.modalOverlay {
-  position: fixed;
-  inset: 0;
-  z-index: 99999;
-  background: var(--pos-overlay);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.modalDialog {
-  background: var(--pos-surface);
-  border-radius: var(--pos-r-lg);
-  padding: 26px 28px;
-  width: 490px;
-  max-width: 95vw;
-  box-shadow: var(--pos-shadow-overlay);
-  border: 1px solid var(--pos-line);
-}
-
-.modalClose {
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: var(--pos-tx-muted);
-  font-size: 22px;
-  line-height: 1;
-  border-radius: 6px;
-  padding: 2px;
-}
-
-.modalClose:hover {
-  color: var(--pos-tx);
-}
-
-.modalClose:focus-visible {
-  outline: 2px solid var(--pos-saffron);
-  outline-offset: 2px;
-}
-
-.modalList {
-  max-height: 360px;
-  overflow: auto;
-  display: grid;
-  gap: 8px;
-}
-
-.modalItem {
-  padding: 12px 14px;
-  border-radius: var(--pos-r-md);
-  background: var(--pos-surface-hover);
-  border: 1px solid var(--pos-line);
-  cursor: pointer;
-}
-
-.modalItem:hover {
-  background: var(--pos-saffron-tint);
-  border-color: var(--pos-saffron-line);
-}
-
-.modalItem:focus-visible {
-  outline: none;
-  box-shadow: var(--pos-focus-ring);
 }
 
 /* Wide desktop: keep ~6 cards, more breathing room */

@@ -60,7 +60,9 @@ export function TablesScreen({
 }) {
   const [areaOpen, setAreaOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
-  const [floorFilter, setFloorFilter] = React.useState<"all" | "send">("all");
+  const [floorFilter, setFloorFilter] = React.useState<"all" | "available" | "open" | "send">(
+    "all",
+  );
   const kotByTable = React.useMemo(() => {
     const map = new Map<number, CaptainKotTicket>();
     for (const ticket of kotTickets) {
@@ -77,6 +79,12 @@ export function TablesScreen({
       }
       if (query.trim()) {
         return true;
+      }
+      if (floorFilter === "available") {
+        return !table.occupied;
+      }
+      if (floorFilter === "open") {
+        return Boolean(table.occupied);
       }
       if (floorFilter === "send") {
         return Boolean(table.occupied) && Number(table.unsentCount || 0) > 0;
@@ -179,6 +187,8 @@ export function TablesScreen({
           {(
             [
               ["all", "All"],
+              ["available", "Available"],
+              ["open", "Open"],
               ["send", "Needs send"],
             ] as const
           ).map(([id, label]) => (
@@ -213,7 +223,17 @@ export function TablesScreen({
 
       {filtered.length === 0 ? (
         <div className="cap-empty">
-          {floorFilter === "send" && !query.trim() ? (
+          {floorFilter === "available" && !query.trim() ? (
+            <>
+              <strong>No available tables</strong>
+              <span>Every table in this area has a check.</span>
+            </>
+          ) : floorFilter === "open" && !query.trim() ? (
+            <>
+              <strong>No open tables</strong>
+              <span>Every table in this area is free.</span>
+            </>
+          ) : floorFilter === "send" && !query.trim() ? (
             <>
               <strong>Nothing to send</strong>
               <span>Every table here has already gone to the kitchen.</span>
