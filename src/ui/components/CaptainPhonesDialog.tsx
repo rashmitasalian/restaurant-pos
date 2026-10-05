@@ -1,5 +1,6 @@
 import React from "react";
 import QRCode from "qrcode";
+import { Check } from "lucide-react";
 import { Modal } from "./ui/Modal";
 import { useRolePermissions } from "../../app/auth/useRolePermissions";
 
@@ -31,6 +32,8 @@ export function CaptainPhonesDialog({
   const perms = useRolePermissions();
   const [qrUrl, setQrUrl] = React.useState("");
   const [copied, setCopied] = React.useState("");
+  const [copyNote, setCopyNote] = React.useState("");
+  const copyTimer = React.useRef<number | null>(null);
   const [confirmRotate, setConfirmRotate] = React.useState(false);
   const [rotating, setRotating] = React.useState(false);
   const [rotateError, setRotateError] = React.useState("");
@@ -44,6 +47,11 @@ export function CaptainPhonesDialog({
       setConfirmRotate(false);
       setRotateError("");
       setCopied("");
+      setCopyNote("");
+      if (copyTimer.current) {
+        window.clearTimeout(copyTimer.current);
+        copyTimer.current = null;
+      }
       return;
     }
     if (!pairUrl) {
@@ -71,11 +79,29 @@ export function CaptainPhonesDialog({
     if (!value) {
       return;
     }
+    if (copyTimer.current) {
+      window.clearTimeout(copyTimer.current);
+      copyTimer.current = null;
+    }
     try {
-      await navigator.clipboard.writeText(value);
+      if (window.pos?.copyText) {
+        const result = await window.pos.copyText(value);
+        if (!result?.ok) {
+          throw new Error("copy-failed");
+        }
+      } else {
+        await navigator.clipboard.writeText(value);
+      }
       setCopied(label);
+      setCopyNote(label === "code" ? "Pairing code copied." : "Address copied.");
+      copyTimer.current = window.setTimeout(() => {
+        setCopied("");
+        setCopyNote("");
+        copyTimer.current = null;
+      }, 3000);
     } catch {
       setCopied("");
+      setCopyNote("Could not copy. Try again.");
     }
   };
 
@@ -119,12 +145,29 @@ export function CaptainPhonesDialog({
           <div style={{ fontWeight: 600, margin: "4px 0 12px", wordBreak: "break-all" }}>{pairUrl || "Gateway is off"}</div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button type="button" className="pos-btn" disabled={!pairUrl} onClick={() => void copy("url", pairUrl)}>
+              {copied === "url" ? <Check size={16} strokeWidth={2.5} /> : null}
               {copied === "url" ? "Copied" : "Copy URL"}
             </button>
             <button type="button" className="pos-btn" disabled={!code} onClick={() => void copy("code", code)}>
+              {copied === "code" ? <Check size={16} strokeWidth={2.5} /> : null}
               {copied === "code" ? "Copied" : "Copy code"}
             </button>
           </div>
+          {copyNote ? (
+            <p
+              className="pos-meta"
+              role="status"
+              aria-live="polite"
+              style={{
+                margin: "8px 0 0",
+                color: copyNote.startsWith("Could not")
+                  ? "var(--pos-danger)"
+                  : "var(--pos-success-text)",
+              }}
+            >
+              {copyNote}
+            </p>
+          ) : null}
           {perms.has("system:settings") ? (
             <div style={{ marginTop: 16 }}>
               {confirmRotate ? (
