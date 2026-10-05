@@ -115,6 +115,9 @@ export type OrderDto = {
   kotPrinted?: boolean;
   payments?: PaymentDto[];
   discountPercent?: number;
+  /** percent applies discountPercent; amount applies discountAmount in rupees. */
+  discountMode?: "percent" | "amount";
+  discountAmount?: number;
   subtotal?: number;
   taxTotal?: number;
   discountTotal?: number;

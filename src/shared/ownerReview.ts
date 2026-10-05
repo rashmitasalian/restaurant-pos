@@ -119,6 +119,10 @@ export type ReviewDiscountEvent = {
   actor: string | null;
   previousDiscountPercent?: number | null;
   discountPercent?: number | null;
+  discountMode?: "percent" | "amount" | null;
+  discountAmount?: number | null;
+  previousDiscountMode?: "percent" | "amount" | null;
+  previousDiscountAmount?: number | null;
   amount?: number;
   tableId?: number | null;
   tableName?: string | null;
@@ -147,6 +151,10 @@ export type ReviewItemDto = {
   voidQty?: number | null;
   discountPercent?: number | null;
   previousDiscountPercent?: number | null;
+  discountMode?: "percent" | "amount" | null;
+  discountAmount?: number | null;
+  previousDiscountMode?: "percent" | "amount" | null;
+  previousDiscountAmount?: number | null;
 };
 
 export type ReviewSummaryDto = {
@@ -247,23 +255,67 @@ function namedItem(name?: string | null, qty?: number | null): string {
   return label;
 }
 
+function formatInrAmount(value: number) {
+  const rounded = Math.round(value * 100) / 100;
+  return Number.isInteger(rounded) ? `₹${rounded}` : `₹${rounded.toFixed(2)}`;
+}
+
+function formatDiscountLabel(
+  mode: "percent" | "amount" | null | undefined,
+  percent: number | null | undefined,
+  amount: number | null | undefined,
+): string | null {
+  if (mode === "amount") {
+    const value = Number(amount);
+    if (!Number.isFinite(value) || value < 0) {
+      return null;
+    }
+    return formatInrAmount(value);
+  }
+  const next = Number(percent);
+  if (!Number.isFinite(next)) {
+    return null;
+  }
+  return `${next}%`;
+}
+
+function discountEventIsActive(event: ReviewDiscountEvent) {
+  if (event.discountMode === "amount") {
+    return Number(event.discountAmount) > 0;
+  }
+  const nextPercent = Number(event.discountPercent);
+  return Number.isFinite(nextPercent) && nextPercent > 0;
+}
+
 export function reviewWhatHappened(
   item: Pick<
     ReviewItemDto,
-    "rule" | "itemName" | "voidQty" | "discountPercent" | "previousDiscountPercent"
+    | "rule"
+    | "itemName"
+    | "voidQty"
+    | "discountPercent"
+    | "previousDiscountPercent"
+    | "discountMode"
+    | "discountAmount"
+    | "previousDiscountMode"
+    | "previousDiscountAmount"
   >,
 ): string {
   if (item.rule === "item_void") {
     return namedItem(item.itemName, item.voidQty) || "Kitchen item voided";
   }
   if (item.rule === "discount_applied") {
-    const next = Number(item.discountPercent);
-    const previous = Number(item.previousDiscountPercent);
-    if (Number.isFinite(previous) && Number.isFinite(next)) {
-      return `${previous}% → ${next}%`;
+    const next = formatDiscountLabel(item.discountMode, item.discountPercent, item.discountAmount);
+    const previous = formatDiscountLabel(
+      item.previousDiscountMode || (item.previousDiscountPercent != null ? "percent" : undefined),
+      item.previousDiscountPercent,
+      item.previousDiscountAmount,
+    );
+    if (previous && next) {
+      return `${previous} → ${next}`;
     }
-    if (Number.isFinite(next)) {
-      return `${next}%`;
+    if (next) {
+      return next;
     }
     return "Discount applied";
   }
@@ -274,7 +326,16 @@ export function reviewWhatHappened(
 }
 
 export function reviewHeadline(
-  item: Pick<ReviewItemDto, "rule" | "actor" | "itemName" | "voidQty" | "discountPercent">,
+  item: Pick<
+    ReviewItemDto,
+    | "rule"
+    | "actor"
+    | "itemName"
+    | "voidQty"
+    | "discountPercent"
+    | "discountMode"
+    | "discountAmount"
+  >,
   actorDisplay?: string | null,
 ): string {
   const who = String(actorDisplay || item.actor || "Staff").trim() || "Staff";
@@ -283,8 +344,8 @@ export function reviewHeadline(
     return `${who} voided ${what} after KOT was sent.`;
   }
   if (item.rule === "discount_applied") {
-    const percent = Number(item.discountPercent);
-    const amount = Number.isFinite(percent) ? ` a ${percent}% discount` : " a discount";
+    const label = formatDiscountLabel(item.discountMode, item.discountPercent, item.discountAmount);
+    const amount = label ? ` a ${label} discount` : " a discount";
     return `${who} applied${amount}.`;
   }
   if (item.rule === "cancellation_after_kot") {
@@ -410,8 +471,7 @@ export function buildReviewItems(input: {
     if (filter && actorKey(event.actor) !== filter) {
       continue;
     }
-    const nextPercent = Number(event.discountPercent);
-    if (!Number.isFinite(nextPercent) || nextPercent <= 0) {
+    if (!discountEventIsActive(event)) {
       continue;
     }
     const orderKey = String(event.orderId || "").trim();
@@ -448,6 +508,11 @@ export function buildReviewItems(input: {
       discountPercent: nextPercent,
       previousDiscountPercent:
         event.previousDiscountPercent != null ? Number(event.previousDiscountPercent) : null,
+      discountMode: event.discountMode === "amount" ? "amount" : "percent",
+      discountAmount: event.discountAmount != null ? Number(event.discountAmount) : null,
+      previousDiscountMode: event.previousDiscountMode === "amount" ? "amount" : "percent",
+      previousDiscountAmount:
+        event.previousDiscountAmount != null ? Number(event.previousDiscountAmount) : null,
     });
   }
 
@@ -549,13 +614,29 @@ export function timelineEventDetail(
     return timelineItemLine(detail);
   }
   if (event.action === "order.discount.updated") {
-    const previous = detail.previousDiscountPercent;
-    const next = detail.discountPercent;
-    if (previous !== undefined && previous !== null && next !== undefined && next !== null) {
-      return `${previous}% → ${next}%`;
+    const previous = formatDiscountLabel(
+      detail.previousDiscountMode === "amount"
+        ? "amount"
+        : detail.previousDiscountPercent != null
+          ? "percent"
+          : undefined,
+      detail.previousDiscountPercent != null ? Number(detail.previousDiscountPercent) : null,
+      detail.previousDiscountAmount != null ? Number(detail.previousDiscountAmount) : null,
+    );
+    const next = formatDiscountLabel(
+      detail.discountMode === "amount"
+        ? "amount"
+        : detail.discountPercent != null
+          ? "percent"
+          : undefined,
+      detail.discountPercent != null ? Number(detail.discountPercent) : null,
+      detail.discountAmount != null ? Number(detail.discountAmount) : null,
+    );
+    if (previous && next) {
+      return `${previous} → ${next}`;
     }
-    if (next !== undefined && next !== null) {
-      return `${next}%`;
+    if (next) {
+      return next;
     }
   }
   if (event.action === "order.kot.void") {

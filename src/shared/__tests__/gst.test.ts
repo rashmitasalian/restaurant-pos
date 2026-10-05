@@ -138,6 +138,26 @@ describe("GST totals", () => {
     expect(totals.totalPaise).toBe(94500);
   });
 
+  it("applies a fixed rupee discount in exact paise", () => {
+    const totals = calculateGstTotalsPaise(
+      [{ qty: 1, rate: 350 }],
+      { mode: "amount", amount: 50 },
+      { enabled: false },
+    );
+    expect(totals.discountTotalPaise).toBe(5000);
+    expect(totals.totalPaise).toBe(30000);
+  });
+
+  it("caps a fixed rupee discount at the item subtotal", () => {
+    const totals = calculateGstTotals(
+      [{ qty: 1, rate: 80 }],
+      { mode: "amount", amount: 500 },
+      { enabled: false },
+    );
+    expect(totals.discountTotal).toBe(80);
+    expect(totals.total).toBe(0);
+  });
+
   it("keeps a missing rate at the legacy 18% inclusive default", () => {
     const cfg = normalizeGstConfig({ enabled: true });
     expect(cfg.gstRateBps).toBe(1800);

@@ -13,6 +13,8 @@ interface CrashRecoveryState {
   }>;
   timestamp: number;
   discountPercent: number;
+  discountMode?: "percent" | "amount";
+  discountAmount?: number;
   recovered: boolean;
 }
 

@@ -437,9 +437,9 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
   );
   ipcMain.handle(
     "pos:orders:set-discount",
-    (event, token: string | null, orderId: string, discountPercent: number) => {
+    (event, token: string | null, orderId: string, discount: number | { mode?: "percent" | "amount"; percent?: number; amount?: number }) => {
       const user = requireSession(event, token);
-      return posService.setOrderDiscount(orderId, discountPercent, user.username);
+      return posService.setOrderDiscount(orderId, discount, user.username);
     },
   );
   ipcMain.handle(

@@ -334,6 +334,8 @@ function runSchema(database: SqliteDatabase) {
       subtotal_paise INTEGER NOT NULL DEFAULT 0,
       tax_total_paise INTEGER NOT NULL DEFAULT 0,
       discount_percent REAL NOT NULL DEFAULT 0,
+      discount_mode TEXT NOT NULL DEFAULT 'percent',
+      discount_amount_paise INTEGER NOT NULL DEFAULT 0,
       discount_total_paise INTEGER NOT NULL DEFAULT 0,
       total_paise INTEGER NOT NULL DEFAULT 0,
       invoice_number TEXT,
@@ -1670,6 +1672,16 @@ function runSchema(database: SqliteDatabase) {
     addColumnIfMissing(database, "order_lines", "kitchen_note", "TEXT");
   });
 
+  runMigration(database, 33, "Order discount amount", () => {
+    addColumnIfMissing(database, "orders", "discount_mode", "TEXT NOT NULL DEFAULT 'percent'");
+    addColumnIfMissing(
+      database,
+      "orders",
+      "discount_amount_paise",
+      "INTEGER NOT NULL DEFAULT 0",
+    );
+  });
+
   // Startup self-healing for pre-existing/partially migrated databases:
   // ensure area_id exists even if migration 12 was marked applied while the column was missing.
   addColumnIfMissing(
@@ -1684,6 +1696,8 @@ function runSchema(database: SqliteDatabase) {
   addColumnIfMissing(database, "orders", "cancelled_by", "TEXT");
   addColumnIfMissing(database, "orders", "cancellation_reason", "TEXT");
   addColumnIfMissing(database, "order_lines", "kitchen_note", "TEXT");
+  addColumnIfMissing(database, "orders", "discount_mode", "TEXT NOT NULL DEFAULT 'percent'");
+  addColumnIfMissing(database, "orders", "discount_amount_paise", "INTEGER NOT NULL DEFAULT 0");
   if (columnExists(database, "orders", "cancelled_at")) {
     database.exec(`
       CREATE INDEX IF NOT EXISTS idx_orders_cancelled_at

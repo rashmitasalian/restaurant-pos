@@ -243,8 +243,11 @@ export async function updateOrderLines(orderId: string, lines: OrderLineDto[]) {
   return api().orders!.updateLines(orderId, lines);
 }
 
-export async function setOrderDiscount(orderId: string, discountPercent: number) {
-  return api().orders!.setDiscount(orderId, discountPercent);
+export async function setOrderDiscount(
+  orderId: string,
+  discount: number | { mode?: "percent" | "amount"; percent?: number; amount?: number },
+) {
+  return api().orders!.setDiscount(orderId, discount);
 }
 
 export async function setOrderStatus(

@@ -31,7 +31,11 @@ import {
   formatGstRate,
   getOrderGstConfig,
   normalizeGstConfig,
+  normalizeOrderDiscount,
+  orderDiscountsEqual,
+  type DiscountMode,
   type GstConfig,
+  type OrderDiscount,
 } from "../../../shared/gst";
 import { printReceipt, printKOT } from "../../../app/services/printer";
 import { logger } from "../../../app/utils/logger";
@@ -120,8 +124,12 @@ type BillingBusyAction =
   | "receiptRetry"
   | "printBill";
 
-function computeTotals(ord: any, discountPercent: number, gstConfig: Partial<GstConfig>) {
-  return calculateGstTotals(ord?.items || [], discountPercent, getOrderGstConfig(ord, gstConfig));
+function computeTotals(
+  ord: any,
+  discount: number | Partial<OrderDiscount>,
+  gstConfig: Partial<GstConfig>,
+) {
+  return calculateGstTotals(ord?.items || [], discount, getOrderGstConfig(ord, gstConfig));
 }
 
 function formatCurrency(v: number) {
@@ -346,7 +354,10 @@ export default function Billing() {
   const [categoryMoreOpen, setCategoryMoreOpen] = React.useState(false);
   const [qty, setQty] = React.useState(1);
   const [lastAddedId, setLastAddedId] = React.useState<string | null>(null);
+  const [discountMode, setDiscountMode] = React.useState<DiscountMode>("percent");
   const [discountPercent, setDiscountPercent] = React.useState(0);
+  const [discountAmount, setDiscountAmount] = React.useState(0);
+  const [discountDraft, setDiscountDraft] = React.useState<string | null>(null);
   const [gstConfig, setGstConfig] = React.useState(() => normalizeGstConfig(DEFAULT_GST_CONFIG));
   const [creditConfig, setCreditConfig] = React.useState(() =>
     normalizeCreditConfig(DEFAULT_CREDIT_CONFIG),
@@ -515,7 +526,12 @@ export default function Billing() {
   }, [tableNum, tablesByArea]);
   const currentUserLabel =
     auth?.session?.displayName || auth?.session?.username || order?.createdBy || "";
-  const totals = computeTotals(order, discountPercent, gstConfig);
+  const liveDiscount = normalizeOrderDiscount({
+    mode: discountMode,
+    percent: discountPercent,
+    amount: discountAmount,
+  });
+  const totals = computeTotals(order, liveDiscount, gstConfig);
   const subtotal = totals.itemSubtotal;
   const cgst = totals.cgst;
   const sgst = totals.sgst;
@@ -620,22 +636,89 @@ export default function Billing() {
   const billPrinting = Boolean(busyActions.printBill);
   const canPrintBill = allowsManualBillPrint && hasItems && !isPaid && !billPrinting;
 
+  const applySavedDiscount = React.useCallback((source: any) => {
+    const saved = normalizeOrderDiscount({
+      mode: source?.discountMode,
+      percent: source?.discountPercent,
+      amount: source?.discountAmount,
+    });
+    setDiscountMode(saved.mode);
+    setDiscountPercent(saved.percent);
+    setDiscountAmount(saved.amount);
+    setDiscountDraft(null);
+  }, []);
+
+  const clearDiscount = React.useCallback(() => {
+    setDiscountMode("percent");
+    setDiscountPercent(0);
+    setDiscountAmount(0);
+    setDiscountDraft(null);
+  }, []);
+
   const persistDiscountIfNeeded = React.useCallback(
-    async (nextPercent = discountPercent) => {
+    async (next?: Partial<OrderDiscount>) => {
       if (!order || order.status === "paid" || order.status === "cancelled") {
         return order;
       }
-      const safePercent = Math.max(0, Math.min(100, Number(nextPercent || 0)));
-      if (Number(order.discountPercent || 0) === safePercent) {
+      const desired = normalizeOrderDiscount({
+        mode: next?.mode ?? discountMode,
+        percent: next?.percent ?? discountPercent,
+        amount: next?.amount ?? discountAmount,
+      });
+      const current = normalizeOrderDiscount({
+        mode: order.discountMode,
+        percent: order.discountPercent,
+        amount: order.discountAmount,
+      });
+      if (orderDiscountsEqual(desired, current)) {
         return order;
       }
-      const updated = await setOrderDiscount(order._id, safePercent);
+      const updated = await setOrderDiscount(order._id, desired);
       setOrder(updated);
-      setDiscountPercent(Number(updated.discountPercent || 0));
+      applySavedDiscount(updated);
       return updated;
     },
-    [order, discountPercent],
+    [order, discountMode, discountPercent, discountAmount, applySavedDiscount],
   );
+
+  const saveDiscount = React.useCallback(
+    (next?: Partial<OrderDiscount>) => {
+      void persistDiscountIfNeeded(next).catch((e) => {
+        logger.error("Failed to save discount", e);
+        showToast(
+          reportClientError("billing.discount", e, "Discount could not be saved."),
+          "error",
+        );
+      });
+    },
+    [persistDiscountIfNeeded, showToast],
+  );
+
+  const chooseDiscountMode = (mode: DiscountMode) => {
+    if (isPaid || mode === discountMode) {
+      return;
+    }
+    setDiscountDraft(null);
+    if (mode === "amount") {
+      const amount = Math.round(discountAmt * 100) / 100;
+      setDiscountMode("amount");
+      setDiscountPercent(0);
+      setDiscountAmount(amount);
+      saveDiscount({ mode: "amount", percent: 0, amount });
+      return;
+    }
+    const percent =
+      subtotal > 0
+        ? Math.max(
+            0,
+            Math.min(100, Math.round((Math.min(discountAmt, subtotal) / subtotal) * 10000) / 100),
+          )
+        : 0;
+    setDiscountMode("percent");
+    setDiscountPercent(percent);
+    setDiscountAmount(0);
+    saveDiscount({ mode: "percent", percent, amount: 0 });
+  };
 
   // ── Data loading ────────────────────────────────────────────────────────
   const loadQueues = React.useCallback(async () => {
@@ -831,13 +914,13 @@ export default function Billing() {
             window.localStorage.removeItem("currentTable");
           } else {
             setOrder(o);
+            applySavedDiscount(o);
             if (tableStr) {
               setTableNum(parseInt(tableStr, 10));
               setView("table");
             } else if (o) {
               setTableNum(null);
               setView(deriveOrderType(o, null));
-              setDiscountPercent(Number(o.discountPercent || 0));
             }
           }
         } else if (tableStr) {
@@ -873,17 +956,25 @@ export default function Billing() {
     // Clear immediately so UI doesn't flash the previous table's order
     setOrder(null);
     setTableNum(tn);
-    setDiscountPercent(0);
+    clearDiscount();
     try {
       const o = await getOrCreateOrderForTable(tn);
       setOrder(o);
+      applySavedDiscount(o);
       window.localStorage.setItem("currentOrderId", o._id);
       window.localStorage.setItem("currentTable", String(tn));
+      const saved = normalizeOrderDiscount({
+        mode: o?.discountMode,
+        percent: o?.discountPercent,
+        amount: o?.discountAmount,
+      });
       CrashRecovery.saveState({
         currentOrderId: o._id,
         currentTable: tn,
         cartItems: o?.items || [],
-        discountPercent: o?.discountPercent || 0,
+        discountPercent: saved.percent,
+        discountMode: saved.mode,
+        discountAmount: saved.amount,
       });
       const matchingAreaId = Object.entries(tablesByArea).find(([, list]) =>
         list.some((entry) => entry.id === tn),
@@ -1178,9 +1269,16 @@ export default function Billing() {
       const id = fresh._id;
       setOrder(fresh);
       setTableNum(null);
+      clearDiscount();
       window.localStorage.setItem("currentOrderId", id);
       window.localStorage.removeItem("currentTable");
-      CrashRecovery.saveState({ currentOrderId: id, cartItems: [], discountPercent: 0 });
+      CrashRecovery.saveState({
+        currentOrderId: id,
+        cartItems: [],
+        discountPercent: 0,
+        discountMode: "percent",
+        discountAmount: 0,
+      });
       window.dispatchEvent(new Event("orders-changed"));
       setTimeout(() => searchRef.current?.focus(), 50);
       return fresh;
@@ -1331,7 +1429,7 @@ export default function Billing() {
     }
     setOrder(fullOrder);
     setTableNum(null);
-    setDiscountPercent(Number(fullOrder.discountPercent || 0));
+    applySavedDiscount(fullOrder);
     window.localStorage.setItem("currentOrderId", fullOrder._id);
     window.localStorage.removeItem("currentTable");
     const modeId = deriveOrderType(fullOrder, null);
@@ -1623,7 +1721,7 @@ export default function Billing() {
         totals,
         undefined,
         branding,
-        { preview: true, tableLabel: activeTableLabel || undefined },
+        { preview: true, tableLabel: activeTableLabel || undefined, discountMode },
       );
       await printReceipt({ lines });
       try {
@@ -1684,7 +1782,11 @@ export default function Billing() {
       // Snapshot totals (state will be stale inside the async closure)
       const snapTableNum = tableNum;
       const snapTableLabel = activeTableLabel;
-      const snapDiscount = Number(paidOrder?.discountPercent ?? discountPercent);
+      const snapDiscount = normalizeOrderDiscount({
+        mode: paidOrder?.discountMode ?? discountMode,
+        percent: paidOrder?.discountPercent ?? discountPercent,
+        amount: paidOrder?.discountAmount ?? discountAmount,
+      });
       const snapTotals = computeTotals(paidOrder, snapDiscount, gstConfig);
       const snapMethod = payment.method;
       const snapAmountStr = formatCurrency(
@@ -1768,11 +1870,14 @@ export default function Billing() {
           const lines = buildReceiptLines(
             paidOrder,
             snapTableNum,
-            snapDiscount || 0,
+            snapDiscount.percent,
             snapTotals,
             undefined,
             branding,
-            { tableLabel: snapTableLabel || paidOrder?.tableName || undefined },
+            {
+              tableLabel: snapTableLabel || paidOrder?.tableName || undefined,
+              discountMode: snapDiscount.mode,
+            },
           );
           await printReceipt({ lines, printer: "counter" });
           if (sequence === "bill_then_kot") {
@@ -1866,7 +1971,11 @@ export default function Billing() {
       setOrder(paidOrder);
       const snapTableNum = tableNum;
       const snapTableLabel = activeTableLabel;
-      const snapDiscount = Number(paidOrder?.discountPercent ?? discountPercent);
+      const snapDiscount = normalizeOrderDiscount({
+        mode: paidOrder?.discountMode ?? discountMode,
+        percent: paidOrder?.discountPercent ?? discountPercent,
+        amount: paidOrder?.discountAmount ?? discountAmount,
+      });
       const snapTotals = computeTotals(paidOrder, snapDiscount, gstConfig);
       const snapAmountStr = formatCurrency(Number(paidOrder?.total || finalTotal));
 
@@ -1886,11 +1995,14 @@ export default function Billing() {
           const lines = buildReceiptLines(
             paidOrder,
             snapTableNum,
-            snapDiscount || 0,
+            snapDiscount.percent,
             snapTotals,
             undefined,
             branding,
-            { tableLabel: snapTableLabel || paidOrder?.tableName || undefined },
+            {
+              tableLabel: snapTableLabel || paidOrder?.tableName || undefined,
+              discountMode: snapDiscount.mode,
+            },
           );
           await printReceipt({ lines });
           finishDelivery();
@@ -2074,7 +2186,7 @@ export default function Billing() {
               // Leaving the current order's mode — clear, then auto-load for non-table queues.
               setOrder(null);
               setTableNum(null);
-              setDiscountPercent(0);
+              clearDiscount();
               window.localStorage.removeItem("currentOrderId");
               window.localStorage.removeItem("currentTable");
 
@@ -2343,37 +2455,81 @@ export default function Billing() {
                     <div className={styles.discountRow}>
                       <span className={styles.textMuted}>Discount</span>
                       <div className={styles.discountControls}>
+                        <div className={styles.discountMode} role="group" aria-label="Discount type">
+                          <button
+                            type="button"
+                            className={`${styles.discountModeBtn} ${
+                              discountMode === "percent" ? styles.discountModeBtnActive : ""
+                            }`}
+                            aria-pressed={discountMode === "percent"}
+                            disabled={isPaid}
+                            onClick={() => chooseDiscountMode("percent")}
+                          >
+                            %
+                          </button>
+                          <button
+                            type="button"
+                            className={`${styles.discountModeBtn} ${
+                              discountMode === "amount" ? styles.discountModeBtnActive : ""
+                            }`}
+                            aria-pressed={discountMode === "amount"}
+                            disabled={isPaid}
+                            onClick={() => chooseDiscountMode("amount")}
+                          >
+                            ₹
+                          </button>
+                        </div>
                         <input
                           type="number"
                           min={0}
-                          max={100}
-                          value={discountPercent}
-                          disabled={isPaid}
-                          onChange={(e) =>
-                            setDiscountPercent(
-                              Math.max(0, Math.min(100, Number(e.target.value || 0))),
-                            )
+                          max={discountMode === "percent" ? 100 : undefined}
+                          step="0.01"
+                          inputMode="decimal"
+                          value={
+                            discountDraft != null
+                              ? discountDraft
+                              : discountMode === "amount"
+                                ? discountAmount
+                                : discountPercent
                           }
-                          onBlur={() => {
-                            void persistDiscountIfNeeded().catch((e) => {
-                              logger.error("Failed to save discount", e);
-                              showToast(
-                                reportClientError(
-                                  "billing.discount",
-                                  e,
-                                  "Discount could not be saved.",
-                                ),
-                                "error",
-                              );
-                            });
+                          disabled={isPaid}
+                          onFocus={() => {
+                            setDiscountDraft(
+                              String(discountMode === "amount" ? discountAmount : discountPercent),
+                            );
+                          }}
+                          onChange={(e) => {
+                            const text = e.target.value;
+                            setDiscountDraft(text);
+                            const raw = text.trim() === "" ? 0 : Number(text);
+                            const next = Number.isFinite(raw) ? Math.max(0, raw) : 0;
+                            if (discountMode === "amount") {
+                              setDiscountAmount(next);
+                              return;
+                            }
+                            setDiscountPercent(Math.min(100, next));
+                          }}
+                          onBlur={(e) => {
+                            const text = e.currentTarget.value;
+                            setDiscountDraft(null);
+                            const raw = text.trim() === "" ? 0 : Number(text);
+                            const next = Number.isFinite(raw) ? Math.max(0, raw) : 0;
+                            if (discountMode === "amount") {
+                              const cap = subtotal > 0 ? Math.round(subtotal * 100) / 100 : 0;
+                              const amount = Math.round(Math.min(next, cap) * 100) / 100;
+                              setDiscountAmount(amount);
+                              saveDiscount({ mode: "amount", amount });
+                              return;
+                            }
+                            const percent = Math.round(Math.min(100, next) * 100) / 100;
+                            setDiscountPercent(percent);
+                            saveDiscount({ mode: "percent", percent, amount: 0 });
                           }}
                           className={styles.discountInput}
-                          aria-label="Discount percent"
+                          aria-label={
+                            discountMode === "amount" ? "Discount amount" : "Discount percent"
+                          }
                         />
-                        <span className={styles.textMuted} style={{ fontSize: 13 }}>
-                          %
-                        </span>
-                        <span className={styles.discountAmt}>−{formatCurrency(discountAmt)}</span>
                       </div>
                     </div>
                   </div>

@@ -37,6 +37,20 @@ function normalizeModeId(value: unknown): string {
     .replace(/[^a-z0-9_-]/g, "");
 }
 
+function discountOffLabel(order: {
+  discountMode?: string;
+  discountPercent: number;
+  discountTotal: number;
+}) {
+  if (!(order.discountTotal > 0) && !(order.discountPercent > 0)) {
+    return "";
+  }
+  if (order.discountMode === "amount" || (!(order.discountPercent > 0) && order.discountTotal > 0)) {
+    return `₹${order.discountTotal.toLocaleString("en-IN")} off`;
+  }
+  return `${order.discountPercent}% off`;
+}
+
 function titleizeMode(modeId: string): string {
   return modeId
     .split(/[_-]+/)
@@ -53,6 +67,7 @@ type UIOrder = {
   orderLabel: string; // "Table 3" | "Takeaway" | "Delivery" with id
   total: number;
   discountPercent: number;
+  discountMode?: "percent" | "amount";
   discountTotal: number;
   items: number;
   method: string;
@@ -215,6 +230,7 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
         orderLabel,
         total,
         discountPercent: Number(d.discountPercent || 0),
+        discountMode: d.discountMode === "amount" ? "amount" : "percent",
         discountTotal: Number(d.discountTotal || 0),
         items: (d.items || []).length,
         method,
@@ -604,7 +620,15 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
       0,
     );
     const cfg = getOrderGstConfig(ord, gstConfig);
-    const calculated = calculateGstTotals(ord?.items || [], Number(ord?.discountPercent || 0), cfg);
+    const calculated = calculateGstTotals(
+      ord?.items || [],
+      {
+        mode: ord?.discountMode === "amount" ? "amount" : "percent",
+        percent: Number(ord?.discountPercent || 0),
+        amount: Number(ord?.discountAmount || 0),
+      },
+      cfg,
+    );
     const paid = ord?.status === "paid" || Number(ord?.paidAt) > 0;
     if (paid && typeof ord?.total === "number" && typeof ord?.taxTotal === "number") {
       const taxPaise = Math.round(Number(ord.taxTotal) * 100);
@@ -724,18 +748,23 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
       `₹${v.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
     const rows = allItems
-      .map(
-        (o, i) =>
-          `<tr${o.discountPercent > 0 ? ` style="background:${PRINT.dangerRow}"` : ""}>
+      .map((o, i) => {
+        const discountLabel = discountOffLabel(o);
+        const discountCell = !discountLabel
+          ? "—"
+          : o.discountMode === "amount" || !(o.discountPercent > 0)
+            ? `−${fmt(o.discountTotal)}`
+            : `${o.discountPercent}% (−${fmt(o.discountTotal)})`;
+        return `<tr${discountLabel ? ` style="background:${PRINT.dangerRow}"` : ""}>
         <td>${i + 1}</td>
         <td>${o.orderLabel}</td>
         <td>${new Date(o.time).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</td>
         <td style="text-align:center">${o.items}</td>
         <td style="text-align:center">${o.method}</td>
-        <td style="text-align:center;color:${o.discountPercent > 0 ? "var(--pos-danger)" : PRINT.faint}">${o.discountPercent > 0 ? `${o.discountPercent}% (−${fmt(o.discountTotal)})` : "—"}</td>
+        <td style="text-align:center;color:${discountLabel ? "var(--pos-danger)" : PRINT.faint}">${discountCell}</td>
         <td style="text-align:right">${fmt(o.total)}</td>
-      </tr>`,
-      )
+      </tr>`;
+      })
       .join("");
 
     const html = `<!DOCTYPE html>
@@ -970,9 +999,9 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
               }}
             >
               {s.orderLabel}
-              {s.discountPercent > 0 && (
+              {discountOffLabel(s) ? (
                 <span
-                  title={`${s.discountPercent}% discount applied (−₹${s.discountTotal.toLocaleString("en-IN")})`}
+                  title={`${discountOffLabel(s)} (−₹${s.discountTotal.toLocaleString("en-IN")})`}
                   style={{
                     fontSize: 10,
                     fontWeight: 700,
@@ -984,9 +1013,9 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
                     whiteSpace: "nowrap",
                   }}
                 >
-                  {s.discountPercent}% off
+                  {discountOffLabel(s)}
                 </span>
-              )}
+              ) : null}
             </div>
             {/* Time */}
             <span style={{ fontSize: 12, color: "var(--pos-tx-sub)" }}>
@@ -1447,7 +1476,9 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
                   const discountPercent = previewFull?.discountPercent;
                   const discountLine =
                     t.discountTotal > 0
-                      ? `${Number(discountPercent || 0)}% (−₹${t.discountTotal.toLocaleString("en-IN")})`
+                      ? previewFull?.discountMode === "amount" || !(Number(discountPercent) > 0)
+                        ? `−₹${t.discountTotal.toLocaleString("en-IN")}`
+                        : `${Number(discountPercent || 0)}% (−₹${t.discountTotal.toLocaleString("en-IN")})`
                       : null;
                   const paymentsArr = (previewFull?.payments || []) as any[];
                   const paidTotal = paymentsArr.reduce(

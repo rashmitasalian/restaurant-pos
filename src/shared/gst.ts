@@ -203,6 +203,49 @@ function paiseToRupees(value: number | null | undefined) {
   return Math.round(Number(value) || 0) / 100;
 }
 
+export type DiscountMode = "percent" | "amount";
+
+/** One discount at a time: a percent of the item subtotal, or a fixed rupee amount. */
+export type OrderDiscount = {
+  mode: DiscountMode;
+  /** 0–100. Applied when mode is percent. */
+  percent: number;
+  /** Rupees. Applied when mode is amount, and never more than the item subtotal. */
+  amount: number;
+};
+
+function clampDiscountPercent(value: unknown) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) {
+    return 0;
+  }
+  return Math.max(0, Math.min(100, Math.round(n * 100) / 100));
+}
+
+function clampDiscountAmount(value: unknown) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) {
+    return 0;
+  }
+  return Math.round(n * 100) / 100;
+}
+
+export function normalizeOrderDiscount(
+  input?: number | Partial<OrderDiscount> | null,
+): OrderDiscount {
+  if (typeof input !== "object" || input == null) {
+    return { mode: "percent", percent: clampDiscountPercent(input), amount: 0 };
+  }
+  if (input.mode === "amount") {
+    return { mode: "amount", percent: 0, amount: clampDiscountAmount(input.amount) };
+  }
+  return { mode: "percent", percent: clampDiscountPercent(input.percent), amount: 0 };
+}
+
+export function orderDiscountsEqual(a: OrderDiscount, b: OrderDiscount) {
+  return a.mode === b.mode && a.percent === b.percent && a.amount === b.amount;
+}
+
 export function calculateBillGstPaise(input: BillGstInput): BillGstPaise {
   const grossPaise = Math.max(0, Math.trunc(Number(input.grossPaise) || 0));
   const rateBps = Math.max(0, Math.trunc(Number(input.gstRateBps) || 0));
@@ -253,7 +296,7 @@ export function calculateBillGstPaise(input: BillGstInput): BillGstPaise {
 
 export function calculateGstTotalsPaise(
   lines: Array<Pick<OrderLineDto, "qty" | "rate">>,
-  discountPercent = 0,
+  discount: number | Partial<OrderDiscount> = 0,
   inputConfig?: Partial<GstConfig> | null,
 ): GstTotalsPaise {
   const config = normalizeGstConfig(inputConfig);
@@ -261,11 +304,14 @@ export function calculateGstTotalsPaise(
     const qty = Number(line.qty) || 0;
     return sum + Math.round(qty * rupeesToPaise(Number(line.rate) || 0));
   }, 0);
-  const safeDiscountPercent = Math.max(0, Math.min(100, Number(discountPercent) || 0));
-  const discountTotalPaise = roundHalfUpDiv(
-    itemSubtotalPaise * Math.round(safeDiscountPercent * 100),
-    10000,
-  );
+  const normalizedDiscount = normalizeOrderDiscount(discount);
+  const discountTotalPaise =
+    normalizedDiscount.mode === "amount"
+      ? Math.min(itemSubtotalPaise, rupeesToPaise(normalizedDiscount.amount))
+      : roundHalfUpDiv(
+          itemSubtotalPaise * Math.round(normalizedDiscount.percent * 100),
+          10000,
+        );
   const grossPaise = Math.max(0, itemSubtotalPaise - discountTotalPaise);
   const bill = calculateBillGstPaise({
     grossPaise,
@@ -295,10 +341,10 @@ export function calculateGstTotalsPaise(
 
 export function calculateGstTotals(
   lines: Array<Pick<OrderLineDto, "qty" | "rate">>,
-  discountPercent = 0,
+  discount: number | Partial<OrderDiscount> = 0,
   inputConfig?: Partial<GstConfig> | null,
 ): GstTotals {
-  const totals = calculateGstTotalsPaise(lines, discountPercent, inputConfig);
+  const totals = calculateGstTotalsPaise(lines, discount, inputConfig);
   return {
     itemSubtotal: paiseToRupees(totals.itemSubtotalPaise),
     preDiscountTotal: paiseToRupees(totals.preDiscountTotalPaise),

@@ -104,7 +104,10 @@ function createMockDb() {
             return db.auditRows;
           }
           if (sql.includes("FROM orders o") && sql.includes("discount_percent > 0")) {
-            return db.orderRows.filter((row: any) => Number(row.discount_percent || 0) > 0);
+            return db.orderRows.filter(
+              (row: any) =>
+                Number(row.discount_percent || 0) > 0 || Number(row.discount_amount_paise || 0) > 0,
+            );
           }
           if (sql.includes("FROM orders o") && sql.includes("status = 'cancelled'")) {
             return db.orderRows.filter((row: any) => row.status === "cancelled");
@@ -870,6 +873,46 @@ describe("posService strict SQLite APIs", () => {
     expect(audit?.params[1]).toBe("order.discount.updated");
     expect(String(audit?.params[5])).toContain('"previousDiscountPercent":10');
     expect(String(audit?.params[5])).toContain('"discountPercent":25');
+  });
+
+  it("stores a fixed rupee discount without converting it to a percent", () => {
+    mockDb.orderById = {
+      id: "order:1",
+      order_type: "table",
+      table_id: 3,
+      status: "open",
+      kot_status: "pending",
+      discount_percent: 0,
+      discount_mode: "percent",
+      discount_amount_paise: 0,
+      subtotal_paise: 35000,
+      tax_total_paise: 0,
+      discount_total_paise: 0,
+      total_paise: 35000,
+      invoice_number: null,
+      paid_at: null,
+      meta_json: "{}",
+      created_at: 1000,
+      updated_at: 1000,
+      created_by: "rahul",
+    };
+    mockDb.lineRows.set("order:1", [
+      {
+        id: "line:1",
+        item_name: "Thali",
+        quantity: 1,
+        rate_paise: 35000,
+        tax_rate_bps: 0,
+        kot_printed_qty: 0,
+      },
+    ]);
+
+    posService.setOrderDiscount("order:1", { mode: "amount", amount: 50 }, "rahul");
+    const audit = mockDb.calls.find((call: any) => call.sql.includes("INSERT INTO audit_logs"));
+    const update = mockDb.calls.find((call: any) => call.sql.includes("discount_amount_paise"));
+    expect(String(audit?.params[5])).toContain('"discountMode":"amount"');
+    expect(String(audit?.params[5])).toContain('"discountAmount":50');
+    expect(update?.params).toEqual(expect.arrayContaining(["amount", 5000]));
   });
 
   it("keeps cancelled-after-KOT orders in Needs Review", () => {

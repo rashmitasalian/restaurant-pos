@@ -151,8 +151,8 @@ contextBridge.exposeInMainWorld("pos", {
     addLine: (orderId: string, item: any) => authInvoke("pos:orders:add-line", orderId, item),
     updateLines: (orderId: string, lines: any[]) =>
       authInvoke("pos:orders:update-lines", orderId, lines),
-    setDiscount: (orderId: string, discountPercent: number) =>
-      authInvoke("pos:orders:set-discount", orderId, discountPercent),
+    setDiscount: (orderId: string, discount: number | { mode?: "percent" | "amount"; percent?: number; amount?: number }) =>
+      authInvoke("pos:orders:set-discount", orderId, discount),
     setStatus: (orderId: string, status: string, payload?: any) =>
       authInvoke("pos:orders:set-status", orderId, status, payload),
     markKotSent: (orderId: string, sentLines?: any[]) =>

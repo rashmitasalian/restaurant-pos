@@ -101,7 +101,7 @@ declare global {
         listPaidIds: (opts?: any) => Promise<string[]>;
         addLine: (orderId: string, item: any) => Promise<any>;
         updateLines: (orderId: string, lines: any[]) => Promise<any>;
-        setDiscount: (orderId: string, discountPercent: number) => Promise<any>;
+        setDiscount: (orderId: string, discount: number | { mode?: "percent" | "amount"; percent?: number; amount?: number }) => Promise<any>;
         setStatus: (orderId: string, status: string, payload?: any) => Promise<any>;
         markKotSent: (
           orderId: string,

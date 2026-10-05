@@ -444,7 +444,11 @@ export default function LogSettings() {
                 </div>
                 <div className={styles.recoveryItem}>
                   <span className={styles.label}>Discount:</span>
-                  <span>{recoveryState.discountPercent || 0}%</span>
+                  <span>
+                    {recoveryState.discountMode === "amount"
+                      ? `₹${recoveryState.discountAmount || 0}`
+                      : `${recoveryState.discountPercent || 0}%`}
+                  </span>
                 </div>
 
                 <div className={styles.recoveryJSON}>

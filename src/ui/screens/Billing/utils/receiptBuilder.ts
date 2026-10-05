@@ -100,7 +100,7 @@ export function buildReceiptLines(
   totals: Partial<GstTotals> & { subtotal?: number; cgst?: number; sgst?: number; total: number },
   gstConfigInput?: Partial<GstConfig> | null,
   brandingInput?: ReceiptBranding | null,
-  options?: { preview?: boolean; tableLabel?: string | null },
+  options?: { preview?: boolean; tableLabel?: string | null; discountMode?: "percent" | "amount" },
 ): string[] {
   const branding = getReceiptBranding(brandingInput);
   const gstConfig = normalizeGstConfig(
@@ -123,6 +123,10 @@ export function buildReceiptLines(
   const taxLabelSuffix = gstConfig.priceIncludesTax ? " incl." : "";
   const gstStateLine = formatGstStateLine(gstConfig.stateName, gstConfig.stateCode);
 
+  const discountMode =
+    options?.discountMode ?? (ord?.discountMode === "amount" ? "amount" : "percent");
+  const discountLabel =
+    discountMode === "percent" && discPct > 0 ? `Discount ${discPct}%` : "Discount";
   const printedAtStr = formatReceiptDateTime(Date.now());
   const billDateTimeStr = formatReceiptDateTime(getBillTimestamp(ord));
 
@@ -202,7 +206,7 @@ export function buildReceiptLines(
     }),
     "SEP",
     totalRow("Sub Total", itemSubtotal),
-    ...(discAmt > 0 ? [totalRow(`Discount ${discPct}%`, -discAmt)] : []),
+    ...(discAmt > 0 ? [totalRow(discountLabel, -discAmt)] : []),
     ...(gstEnabled
       ? [
           ...(gstConfig.priceIncludesTax ? [totalRow("Taxable Value", taxableSubtotal)] : []),

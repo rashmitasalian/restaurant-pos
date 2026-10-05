@@ -128,7 +128,10 @@ import {
   calculateGstTotalsPaise,
   isValidGstin,
   normalizeGstConfig,
+  normalizeOrderDiscount,
+  orderDiscountsEqual,
   type GstConfig,
+  type OrderDiscount,
 } from "../../src/shared/gst";
 import {
   menuMatchKey,
@@ -1361,14 +1364,50 @@ function nextKotSeq(database: Database.Database): number {
   return nextNumber;
 }
 
+function discountFromOrder(
+  order:
+    | {
+        discountMode?: string | null;
+        discountPercent?: number | null;
+        discountAmount?: number | null;
+      }
+    | null
+    | undefined,
+) {
+  return normalizeOrderDiscount({
+    mode: order?.discountMode === "amount" ? "amount" : "percent",
+    percent: Number(order?.discountPercent || 0),
+    amount: Number(order?.discountAmount || 0),
+  });
+}
+
+function discountFromRow(row: { discount_mode?: string | null; discount_percent?: number | null; discount_amount_paise?: number | null } | null | undefined) {
+  return normalizeOrderDiscount({
+    mode: row?.discount_mode === "amount" ? "amount" : "percent",
+    percent: Number(row?.discount_percent || 0),
+    amount: paiseToRupees(row?.discount_amount_paise),
+  });
+}
+
+function discountAuditDetail(previous: OrderDiscount, next: OrderDiscount) {
+  return {
+    previousDiscountMode: previous.mode,
+    previousDiscountPercent: previous.percent,
+    previousDiscountAmount: previous.amount,
+    discountMode: next.mode,
+    discountPercent: next.percent,
+    discountAmount: next.amount,
+  };
+}
+
 function computeOrderTotals(
   lines: OrderLineDto[],
-  discountPercent = 0,
+  discount: number | Partial<OrderDiscount> = 0,
   gstConfig?: Partial<GstConfig> | null,
 ) {
   const totals = calculateGstTotalsPaise(
     lines,
-    discountPercent,
+    discount,
     gstConfig || getGstSettingFromDb(),
   );
   return {
@@ -1389,6 +1428,7 @@ function orderFromRow(database: Database.Database, row: any): OrderDto {
     .all(row.id)
     .map(paymentFromRow);
   const meta = parseJson(row.meta_json, {});
+  const discount = discountFromRow(row);
   const tableId = row.table_id === null || row.table_id === undefined ? null : Number(row.table_id);
   let tableName: string | null = null;
   if (tableId !== null && Number.isFinite(tableId)) {
@@ -1411,7 +1451,9 @@ function orderFromRow(database: Database.Database, row: any): OrderDto {
     kotPrinted: row.kot_status === "printed",
     items: lines,
     payments,
-    discountPercent: Number(row.discount_percent || 0),
+    discountMode: discount.mode,
+    discountPercent: discount.percent,
+    discountAmount: discount.amount,
     subtotal: paiseToRupees(row.subtotal_paise),
     taxTotal: paiseToRupees(row.tax_total_paise),
     discountTotal: paiseToRupees(row.discount_total_paise),
@@ -2158,6 +2200,13 @@ function discountEventFromAudit(
   const orderPercent = order?.discountPercent != null ? Number(order.discountPercent) : null;
   const discountPercent =
     detailPercent != null && Number.isFinite(detailPercent) ? detailPercent : orderPercent;
+  const detailMode =
+    detail.discountMode === "amount" || detail.discountMode === "percent"
+      ? detail.discountMode
+      : null;
+  const discountMode =
+    detailMode || (detailPercent == null && order?.discountMode === "amount" ? "amount" : "percent");
+  const detailAmount = Number(detail.discountAmount);
   return {
     auditId: audit._id,
     orderId: String(audit.entityId || audit.orderId || order?._id || ""),
@@ -2170,6 +2219,18 @@ function discountEventFromAudit(
           ? Number(detail.previous_discount_percent)
           : null,
     discountPercent,
+    discountMode,
+    discountAmount:
+      Number.isFinite(detailAmount)
+        ? detailAmount
+        : discountMode === "amount"
+          ? Number(order?.discountAmount || 0)
+          : 0,
+    previousDiscountMode: detail.previousDiscountMode === "amount" ? "amount" : "percent",
+    previousDiscountAmount:
+      detail.previousDiscountAmount != null && Number.isFinite(Number(detail.previousDiscountAmount))
+        ? Number(detail.previousDiscountAmount)
+        : null,
     amount: Number.isFinite(amountPaise) ? paiseToRupees(amountPaise) : Number(order?.total || 0),
     tableId: order?.tableId ?? context.tableId,
     tableName: context.tableName,
@@ -2188,6 +2249,8 @@ function discountEventFromOrder(database: Database.Database, order: OrderDto): R
     actor: order.createdBy || null,
     previousDiscountPercent: null,
     discountPercent: Number(order.discountPercent || 0),
+    discountMode: order.discountMode === "amount" ? "amount" : "percent",
+    discountAmount: Number(order.discountAmount || 0),
     amount: Number(order.total || 0),
     tableId: order.tableId ?? context.tableId,
     tableName: context.tableName,
@@ -2325,21 +2388,25 @@ function updateOrderTotals(
   database: Database.Database,
   orderId: string,
   lines: OrderLineDto[],
-  discountPercent = 0,
+  discount: number | Partial<OrderDiscount> = 0,
   gstConfig?: Partial<GstConfig> | null,
 ) {
-  const totals = computeOrderTotals(lines, discountPercent, gstConfig);
+  const normalized = normalizeOrderDiscount(discount);
+  const totals = computeOrderTotals(lines, normalized, gstConfig);
   database
     .prepare(
       `UPDATE orders
        SET subtotal_paise = ?, tax_total_paise = ?, discount_percent = ?,
+           discount_mode = ?, discount_amount_paise = ?,
            discount_total_paise = ?, total_paise = ?, updated_at = ?
        WHERE id = ?`,
     )
     .run(
       totals.subtotalPaise,
       totals.taxTotalPaise,
-      discountPercent,
+      normalized.percent,
+      normalized.mode,
+      rupeesToPaise(normalized.amount),
       totals.discountTotalPaise,
       totals.totalPaise,
       now(),
@@ -2359,7 +2426,7 @@ function recalculateOpenOrderTotals(database: Database.Database, gstConfig: GstC
       )
       .all(row.id)
       .map(lineFromRow);
-    updateOrderTotals(database, row.id, lines, Number(row.discount_percent || 0), gstConfig);
+    updateOrderTotals(database, row.id, lines, discountFromRow(row), gstConfig);
   });
 }
 
@@ -4386,7 +4453,7 @@ export const posService = {
       database
         .prepare("UPDATE orders SET kot_status = ?, updated_at = ? WHERE id = ?")
         .run(kotStatusAfterLineChange(order, order.items), now(), orderId);
-      updateOrderTotals(database, orderId, order.items, order.discountPercent || 0);
+      updateOrderTotals(database, orderId, order.items, discountFromOrder(order));
       const auditActor = actor || order.createdBy || null;
       createAuditRow(
         database,
@@ -4418,7 +4485,7 @@ export const posService = {
       database
         .prepare("UPDATE orders SET kot_status = ?, updated_at = ? WHERE id = ?")
         .run(kotStatusAfterLineChange(order, sanitized), now(), orderId);
-      updateOrderTotals(database, orderId, sanitized, Number(order.discountPercent || 0));
+      updateOrderTotals(database, orderId, sanitized, discountFromOrder(order));
       const auditActor = actor || order.createdBy || null;
       createAuditRow(
         database,
@@ -4477,7 +4544,7 @@ export const posService = {
       database
         .prepare("UPDATE orders SET kot_status = ?, updated_at = ? WHERE id = ?")
         .run(kotStatusAfterLineChange(order, nextLines), now(), orderId);
-      updateOrderTotals(database, orderId, nextLines, Number(order.discountPercent || 0));
+      updateOrderTotals(database, orderId, nextLines, discountFromOrder(order));
       const auditActor = actor || order.createdBy || null;
       createAuditRow(
         database,
@@ -4500,24 +4567,32 @@ export const posService = {
     return updated;
   },
 
-  setOrderDiscount(orderId: string, discountPercent: number, actor?: string | null) {
+  setOrderDiscount(
+    orderId: string,
+    discount: number | Partial<OrderDiscount>,
+    actor?: string | null,
+  ) {
     return inTransaction((database) => {
       const order = this.getOrderById(orderId);
       assertOrderCanBeEdited(order);
-      const previousDiscount = Number(order.discountPercent || 0);
-      const safeDiscount = Math.max(0, Math.min(100, Number(discountPercent) || 0));
-      updateOrderTotals(database, orderId, order.items || [], safeDiscount);
-      createAuditRow(
-        database,
-        "order.discount.updated",
-        "order",
-        orderId,
-        actor || order.createdBy || null,
-        mergeOrderAuditDetail(database, order, actor || order.createdBy || null, {
-          previousDiscountPercent: previousDiscount,
-          discountPercent: safeDiscount,
-        }),
-      );
+      const previousDiscount = discountFromOrder(order);
+      const nextDiscount = normalizeOrderDiscount(discount);
+      updateOrderTotals(database, orderId, order.items || [], nextDiscount);
+      if (!orderDiscountsEqual(previousDiscount, nextDiscount)) {
+        createAuditRow(
+          database,
+          "order.discount.updated",
+          "order",
+          orderId,
+          actor || order.createdBy || null,
+          mergeOrderAuditDetail(
+            database,
+            order,
+            actor || order.createdBy || null,
+            discountAuditDetail(previousDiscount, nextDiscount),
+          ),
+        );
+      }
       return this.getOrderById(orderId)!;
     });
   },
@@ -4730,7 +4805,7 @@ export const posService = {
         database,
         order._id,
         order.items || [],
-        Number(order.discountPercent || 0),
+        discountFromOrder(order),
         gstConfig,
       );
       return this.getOrderById(order._id)!;
@@ -4742,24 +4817,25 @@ export const posService = {
       const order = this.getOrderById(orderId);
       assertOrderCanBeEdited(order);
       const rawPayment = (payment || {}) as any;
-      const previousDiscount = Number(order.discountPercent || 0);
-      const discountPercent =
+      const previousDiscount = discountFromOrder(order);
+      const nextDiscount =
         rawPayment.discountPercent !== undefined
-          ? Number(rawPayment.discountPercent || 0)
+          ? normalizeOrderDiscount(Number(rawPayment.discountPercent || 0))
           : previousDiscount;
-      const safeDiscount = Math.max(0, Math.min(100, Number(discountPercent) || 0));
       const payActor = rawPayment.receivedBy || order.createdBy || null;
-      if (safeDiscount !== previousDiscount) {
+      if (!orderDiscountsEqual(previousDiscount, nextDiscount)) {
         createAuditRow(
           database,
           "order.discount.updated",
           "order",
           orderId,
           payActor,
-          mergeOrderAuditDetail(database, order, payActor, {
-            previousDiscountPercent: previousDiscount,
-            discountPercent: safeDiscount,
-          }),
+          mergeOrderAuditDetail(
+            database,
+            order,
+            payActor,
+            discountAuditDetail(previousDiscount, nextDiscount),
+          ),
         );
       }
       const gstConfig = getGstSettingFromDb(database);
@@ -4767,7 +4843,7 @@ export const posService = {
         database,
         orderId,
         order.items || [],
-        safeDiscount,
+        nextDiscount,
         gstConfig,
       );
       const safePayment =
@@ -5040,7 +5116,7 @@ export const posService = {
         order.meta && (order.meta as any).gstSnapshot
           ? normalizeGstConfig((order.meta as any).gstSnapshot)
           : getGstSettingFromDb(database);
-      updateOrderTotals(database, order._id, lines, Number(order.discountPercent || 0), gstConfig);
+      updateOrderTotals(database, order._id, lines, discountFromOrder(order), gstConfig);
       (order.payments || []).forEach((payment) => {
         const paymentId = payment.id || `payment:${randomUUID()}`;
         database
@@ -5629,7 +5705,7 @@ export const posService = {
   /** Orders that still carry a positive discount in-range (History truth), even if audit rows are missing. */
   listDiscountedOrdersInRange(opts: ReviewRangeQuery = {}): OrderDto[] {
     const database = getDb();
-    const clauses = ["o.discount_percent > 0"];
+    const clauses = ["(o.discount_percent > 0 OR COALESCE(o.discount_amount_paise, 0) > 0)"];
     const params: unknown[] = [];
     // Prefer payment time; fall back to update/create so open discounted tickets still appear.
     appendReviewRange(clauses, params, "COALESCE(o.paid_at, o.updated_at, o.created_at)", opts);
