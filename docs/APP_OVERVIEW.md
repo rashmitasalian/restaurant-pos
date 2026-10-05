@@ -6,7 +6,7 @@ RestoNiti is a professional desktop Point-of-Sale (POS) and operations platform 
 
 Alongside the desktop terminal, **Captain** is a phone-only waiter handheld served on the restaurant LAN by the POS **Local Gateway**. Captains open tables, add items, send KOTs, and void sent kitchen quantity. They do not settle bills or use Manage screens. The system supports configurable service modes (dine-in, takeaway, delivery, self-service), thermal kitchen printing, permission-based staff access, Owner Review for high-risk voids/discounts/cancellations, comprehensive reporting, and administrative controls.
 
-**Current version**: **0.5.6**
+**Current version**: **0.6.0**
 
 ---
 
@@ -244,13 +244,15 @@ Rules:
 - Unsent KOT wins over bill-ready Pending.
 - Configured table names (e.g. FF1, G1) display via `formatTableLabel`; otherwise `Table N`.
 
+Desktop **Tables** filters the same grid: area, then **All** / **Available** / **Open**, plus search. **Open** is every occupied table. There is no separate Open Orders list. Captain uses those three filters and adds **Needs send** for food that has not gone to the kitchen. Age on a captain card is text only; **Send KOT** stays saffron and **KOT sent** stays teal.
+
 ---
 
 ### 4. KITCHEN ORDER TICKET (KOT) PRINTING
 
 #### KOT Workflow
 1. Cashier or Captain selects items awaiting kitchen
-2. Clicks **Send KOT** / **Print KOT** (preview confirm on both desktop and Captain)
+2. On the desktop, clicks **Send KOT**. On Captain, **Send to kitchen** sends immediately; **Preview** shows the ticket first. Both paths print the kitchen slip, including a line kitchen note when one is set
 3. App builds ESC/POS print buffer with:
    - Restaurant name
    - Order number and type (Table #X / Takeaway / Delivery)
@@ -352,12 +354,12 @@ Detail: `docs/CAPTAIN_APP.md`. Summary:
 **Explicitly not on Captain**: pay, cancel paid orders, Manage, Customers, Reports, Settings.
 
 #### Screens
-- **Login**: Username, password, POS pairing code (stored after first success as “Paired with POS”)
-- **Tables**: Greeting, area picker, occupancy, status legend (Available / Send KOT / KOT sent), shared `TableTile`
-- **Menu session**: Search, Favorites / All / named categories / More, list rows with **+** or − qty +, Review dock
-- **Order sheet**: Unsent vs KOT sent; Send KOT preview → Print KOT; void sheet → Print Void KOT
-- **KOTs**: Same membership rule as desktop; filters All / Send KOT / KOT sent; badge counts tickets with unsent lines
-- **Me**: Profile, connection/retry, hotel/device/pairing, sign out
+- **Login**: Restaurant name, last username, password. Connection (Connected / Reconnecting) is separate from pairing (Paired / Needs pairing). A QR from the POS fills the code and hides the field
+- **Tables**: Area, search, and filters **All** / **Available** / **Open** / **Needs send**. **All** is the default and shows every table. Status colors match the desktop
+- **Menu**: Search by name or code, diet mark beside the dish name, category chips, **+** or a stepper, Review dock
+- **Order sheet**: Unsent vs KOT sent, kitchen note on an unsent line, **Send to kitchen** (primary) and **Preview**, void sheet for sent quantity
+- **KOTs**: Same membership as the desktop queue, one list, age on each row. Badge counts tickets that still have unsent lines
+- **Me**: Profile, connection and retry, pairing status, sign-out confirm
 
 #### Runtime
 - Served by Local Gateway at `http://<lan-ip>:4747/`
@@ -372,8 +374,8 @@ Detail: `docs/CAPTAIN_APP.md`. Summary:
 
 - Auto-starts with Electron main process (default port **4747**, overridable via `POS_GATEWAY_PORT`)
 - Serves Captain static UI + REST + SSE (`electron/gateway/localGateway.ts`)
-- Desktop header **Gateway chip**: live status, client count, pairing code, Captain URL tooltip
-- Pairing code required for Captain login; can be rotated via IPC
+- Desktop header **Gateway** chip opens **Captain phones**: QR for `http://<lan-ip>:4747/?pair=CODE`, the code, Copy URL, connected phones, and rotate (settings permission). Rotation does not sign out phones already connected
+- Pairing code required for Captain login
 - Domain events (`orders-changed`, etc.) bridge desktop UI and Captain SSE
 
 ---
@@ -691,8 +693,8 @@ setx /M POS_UPDATE_MANIFEST_URL "https://updates.example.com/restaurant-pos/mani
 
 #### Version Management
 - Semantic versioning (major.minor.patch)
-- Current: **0.5.6**
-- Installer named: `RestoNiti Setup 0.5.6.exe`
+- Current: **0.6.0**
+- Installer named: `RestoNiti Setup 0.6.0.exe`
 
 ---
 
@@ -714,7 +716,7 @@ setx /M POS_UPDATE_MANIFEST_URL "https://updates.example.com/restaurant-pos/mani
 | `attendance_records` | Daily attendance per staff | staff_id, date, status, shift_id, is_late, overtime_minutes, remarks |
 | `salary_advances` | Staff salary advances | staff_id, amount_paise, advance_date, voided_at |
 | `orders` | Customer orders | id, orderType, tableId, status, total, discount, paid_at, invoice_number |
-| `order_lines` | Items in each order | id, order_id, item_id, quantity, price, kot_printed_qty |
+| `order_lines` | Items in each order | id, order_id, item_id, quantity, price, kot_printed_qty, kitchen_note |
 | `payments` | Payment records (separate from orders) | id, order_id, method, amount_paise, received_at, txn_ref |
 | `settings` | Key-value config (GST, printers, service modes, etc.) | key, value_json, updatedAt |
 | `audit_logs` | Action history | id, timestamp, user_id, action, entity_type, entity_id, details_json |
@@ -787,7 +789,7 @@ After login, the app shows a persistent header with:
 - **Main navigation** (role-filtered): Tables, Billing, KOT Queue, Reports (admin), Customers, Manage
 - **Clock** and **user menu** (profile dialog, logout)
 - **Branding** from Settings (restaurant name shown in user menu)
-- **Gateway chip** when Local Gateway is running (pairing code, client count, Captain URL)
+- **Gateway** chip when Local Gateway is running (opens Captain phones: QR, pairing code, connected phones)
 
 Screens are lazy-loaded with skeleton loaders. Post-login prefetch warms common screen chunks for faster first navigation.
 
@@ -804,7 +806,7 @@ Screens are lazy-loaded with skeleton loaders. Post-login prefetch warms common 
 
 | Page | Route hash | Who | Purpose |
 |---|---|---|---|
-| **Tables** | `#tables` | Cashier+ (if table mode enabled) | Seating-area grid; Available / Send KOT / KOT sent; select → Billing |
+| **Tables** | `#tables` | Cashier+ (if table mode enabled) | Seating-area grid; All / Available / Open; Available / Send KOT / KOT sent colors; select → Billing |
 | **Billing** | `#billing` | Cashier+ | Primary order screen: service mode tabs, search, favorites, cart, discount, payment, KOT |
 | **KOT Queue** | `#kot` | Cashier+ | Kitchen tickets already sent/failed/mixed; print / mark done |
 | **Customers** | `#customers` | Cashier+ | Search, create, edit customers; virtualized list |
@@ -842,11 +844,11 @@ Opened via **Manage** nav or deep-link hashes. Sidebar groups:
 
 | Screen | Purpose |
 |---|---|
-| **Login** | Captain credentials + pairing code |
-| **Tables** | Floor grid with shared status model |
-| **Menu** | Table session: search, categories, add items, Review dock |
-| **KOTs** | Kitchen attention list (same membership as desktop) |
-| **Me** | Profile, connection, sign out |
+| **Login** | Captain credentials; pairing from the POS QR. Connected and Paired are separate |
+| **Tables** | Full floor by default. Filters: All, Available, Open, Needs send |
+| **Menu** | Search by name or code, diet mark, add items, Review dock |
+| **KOTs** | Same pending tickets as the desktop KOT Queue |
+| **Me** | Profile, connection, pairing, sign out |
 
 ### Role → Page Access Summary
 
@@ -883,7 +885,7 @@ npm run perf:all          # Seed + app + UI benchmarks
 
 ### Production Deployment
 1. **Build machine**: Windows with Node.js 22.x, Visual Studio 2022 Build Tools (C++)
-2. **Build**: `npm run build` → `release/RestoNiti Setup 0.5.6.exe`
+2. **Build**: `npm run build` → `release/RestoNiti Setup 0.6.0.exe`
 3. **Update manifest**: Publish `.exe` and manifest.json to HTTPS server
 4. **Install on restaurant machine**: Run `.exe` installer
 5. **Configure**: Set `POS_UPDATE_MANIFEST_URL` environment variable
@@ -914,7 +916,7 @@ npm run perf:all          # Seed + app + UI benchmarks
 - POS API for third-party integrations
 - Full payroll processing (attendance and advances only)
 - Captain: billing/settle, HTTPS gateway, service worker / Capacitor, offline mutation queue
-- Guest count, item notes, food photos on Captain
+- Guest count and food photos on Captain
 
 ---
 
@@ -962,7 +964,7 @@ npm run perf:all          # Seed + app + UI benchmarks
 - Update failures: Rollback to previous version from About screen
 - Database corruption: Restore from backup
 - Performance: Archive old audit logs
-- Captain login: Confirm Local Gateway chip is live, same Wi‑Fi, correct pairing code
+- Captain login: Gateway chip shows the QR and code. Phone must be on the same Wi‑Fi. Paired is not the same as Connected
 
 ### Contact & Support
 For deployment, updates, or custom feature requirements, refer to project maintainers.
@@ -976,15 +978,15 @@ For deployment, updates, or custom feature requirements, refer to project mainta
 **Floor (POS)**
 - Role-based login with admin, manager, and cashier access
 - Configurable service modes: dine-in, self-service, takeaway, delivery
-- Table grid with Available / Send KOT / KOT sent; billing with menu variants, favorites, discounts, GST
+- Table grid with All / Available / Open filters and Available / Send KOT / KOT sent colors; billing with menu variants, favorites, discounts, GST
 - KOT workflow with partial/incremental printing, void KOT, retry queue
 - KOT Queue shows only tickets kitchen already has
 - Payments: cash, card, UPI, voucher, online, other, split; invoice generation
 - Customer directory with search and order linking
 
 **Captain (phone)**
-- LAN waiter app: Tables → Menu → Review → Send KOT / Void KOT
-- KOTs tab + Me; pairing code; no pay/cancel/Manage
+- LAN waiter app: Tables → Menu → Review → Send to kitchen / void sent quantity
+- Floor filters All, Available, Open, Needs send. KOTs tab matches the desktop queue. Kitchen note on an unsent line. No pay, cancel, or Manage
 
 **Back office (Manage)**
 - Grocery buying lists, purchases, vendors, and item catalog

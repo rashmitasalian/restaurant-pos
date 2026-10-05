@@ -287,7 +287,7 @@ Use IPv4 for LAN printers (not hostnames).
 - [ ] History/reports show both orders
 - [ ] Restart app → login, settings, printers still OK
 
-Captain (optional): same Wi‑Fi as POS; open `http://<POS-LAN-IP>:4747` with pairing code from the Gateway chip.
+Captain (optional): same Wi‑Fi as the POS. On the POS header, open the Gateway chip (**Captain phones**) and scan the QR, or open `http://<POS-LAN-IP>:4747` and enter the pairing code shown there.
 
 ---
 

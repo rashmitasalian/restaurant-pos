@@ -32,9 +32,9 @@ Runs the restaurant when the owner is away: floor POS plus grocery, expenses, me
 
 Counter POS only: tables, billing, customers, KOT queue.
 
-### Waiter / Captain (future)
+### Captain
 
-Not a desktop login role. Planned for Phase 2+ tablet app with narrower order/KOT permissions than Cashier.
+A phone role, not a desktop login. Captain accounts are rejected on the POS (`captain-phone-only`) and sign in only through Local Gateway. Permissions are open table, add item, send KOT, and void sent quantity. They cannot settle a bill or open Manage.
 
 Print queue creation is available to authenticated users so cashier/KOT flows can queue failed prints. Print queue listing, retry, mark-completed, and cleanup require `system:settings` (admin only).
 

@@ -1,6 +1,6 @@
 # Captain app — work overview
 
-Status as of modernization pass (Sep 2026). Captain is the phone-only waiter handheld served by the POS Local Gateway over LAN. This document summarizes what exists today, what changed in the modernization, and how to try it.
+Status as of October 2026. Captain is the phone-only waiter handheld served by the POS Local Gateway over LAN. This document is the current behavior. `docs/captain-experience-plan.pdf` is the earlier planning snapshot; where they differ, this file wins.
 
 ---
 
@@ -35,7 +35,7 @@ Bottom nav was only **Tables** + **More**. Tapping Tables cleared the open order
 1. Tap table → **menu workspace** immediately
 2. Tap **+** on tiles (qty badge / − + when already on the ticket)
 3. **Review** dock opens an order bottom sheet
-4. **Send KOT** is the saffron accent action (disabled when nothing new)
+4. **Send to kitchen** is the primary action (disabled when nothing new)
 
 Bottom nav is **Floor / KOTs / Me**. Switching tabs keeps the active table + order; Floor can show **Resume**. Login, Floor, session, KOTs, and Me were redesigned inside the existing teal design tokens (no new UI framework).
 
@@ -52,53 +52,54 @@ Floor / KOTs / Me ← bottom tabs (order kept)
 
 ### Login
 
-- Branded card: hotel/product mark, username, password (show/hide), pairing code
-- If a pairing code is already stored → collapsed **Paired with POS** + Change
-- Hint that Local Gateway on this Wi‑Fi is required
-- Errors shown on the login card
+- Restaurant name, last username, password (show/hide)
+- **Connected** and **Paired** are separate. Connected means the phone can reach the POS. Paired means a pairing code is saved. After a POS restart the phone can stay Paired while the connection is Reconnecting. A rejected or rotated code shows **Needs pairing**
+- Pairing field stays hidden once a code is stored or a QR link (`/?pair=CODE`) fills it. **Change** shows the field again
+- Copy shows the gateway address. Errors on the card use distinct copy (wrong password, locked, inactive, pairing invalid, POS unavailable)
 
 ### Floor
 
-- Greeting + area picker + occupancy (`n of total occupied`)
-- Status legend: **Available** · **Send KOT** · **KOT sent** (same colors as desktop)
-- Shared `TableTile` + `tableKotAppearance`: grey free, saffron needs kitchen, teal kitchen has it
-- Meta: `n to send` / `Not sent` when attention; items · age when KOT sent
+- Greeting, area picker, occupancy, table search
+- Status filters, same words as the desktop Tables screen, plus the captain work list: **All** (default, every table) · **Available** (empty) · **Open** (has a check) · **Needs send** (unsent food still on the table)
+- Search finds a table in the current area even when a status filter is on
+- Status legend: **Available** · **Send KOT** · **KOT sent**. Colors match the POS: grey free, saffron **Send KOT**, teal **KOT sent**. Age is text on the card. It does not repaint the card red
+- Shared `TableTile` + `tableKotAppearance`. Meta: `n to send` / `Not sent` when attention; items · age when KOT sent
 - Empty open orders stay Available (occupied only when item count > 0)
-- Skeletons while loading; empty state per area
-- Available tap → menu without opening an order; first add creates the order
-- Occupied tap → load existing order → menu
+- Available tap → menu without opening an order; first add creates the order. Occupied tap loads the existing order. **Resume** returns to the table left open
+- Phone Back from the menu returns to the floor and keeps the order. It does not close the app or sign out
 
-### Service session (menu)
+### Menu
 
-- Compact session header: back, table name, live total
-- Sticky search + category chips (Favorites with icon, not emoji)
-- Handheld tiles: category letter mark, price, visible **+**, qty badge / steppers
-- Variants open `VariantSheet` (Regular + options) before add
-- Cart dock (`button`): item count · total · **Review** (+ saffron unsent bubble)
-- Empty search: “No items match” + clear
+- Compact header: back, table name, count, live total
+- Search matches item name or code (SKU). Rows show the code when the item has one
+- Diet mark is the Indian square outline with a dot, to the left of the dish name (green veg, red non-veg, saffron egg)
+- Category chips: Favorites, All, a few named categories, then **More** for the rest
+- **+** adds a simple item. Variants open `VariantSheet`. The stepper changes quantity only when that dish has exactly one line on the order
+- Review dock: item count · total · **Review**
 
-### Order sheet (replaces full-page ticket + separate Send KOT confirm)
+### Order sheet
 
-- Bottom sheet (~90%): New (not sent) first, **KOT sent** quieter below
-- 48px qty steppers; reducing below sent qty → **Void Sent KOT** sheet (reason + **Print Void KOT**)
-- **Send KOT** opens a KOT preview, then **Print KOT** (same confirm path as desktop)
-- Toast on success; no second confirm sheet after print
+- Bottom sheet: unsent lines first, **KOT sent** below
+- A kitchen note (up to 80 characters) sits on an unsent line, prints under that line on the next KOT, and shows on the desktop order row. A fully sent line keeps its note until more quantity is added
+- **Send to kitchen** is the primary action. **Preview** opens the ticket first; the preview button also sends. The phone does not say Print KOT
+- Reducing below sent quantity opens the void sheet (reason, then void KOT)
+- Toast on success
 
 ### KOTs tab
 
-- New gateway API: `GET /api/kots`
-- Filters: All · **Send KOT** · **KOT sent**
-- List of open table tickets: configured table name, `n to send` / **KOT sent**, relative time
-- Tap row → open that table’s session
-- Tab badge when any ticket has unsent lines
-- Empty: “No kitchen tickets yet”
+- `GET /api/kots`, same membership as the desktop KOT Queue (`isKotQueueTicket`): tickets the kitchen already has
+- One list. No Today or Send KOT filter. Unsent-only tables stay on the floor under **Needs send**
+- Each row: table name, `n to send` or **KOT sent**, item summary, age
+- Tap a row to open that table
+- Tab badge when any ticket still has unsent lines
+- Empty: “No kitchen tickets”
 
 ### Me
 
 - Profile (avatar initial, name, Captain)
-- Connection + **Retry**
-- Hotel, truncated device id, pairing status
-- Sign out (logout lives here; header **Out** removed)
+- Connection and **Retry**, separate from pairing (**Paired** / **Needs pairing** / **Not saved**)
+- Hotel, truncated device id
+- Sign out asks for a second confirm
 
 ---
 
@@ -140,11 +141,11 @@ Until that product decision, Captain remains LAN HTTP only.
 
 ### Login still needs three things
 
-1. Captain username  
-2. Password  
-3. **POS pairing code** (shown on desktop when Local Gateway is running)
+1. Captain username
+2. Password
+3. **POS pairing code**
 
-After first success, the phone stores the pairing code and shows **Paired with POS** until Change.
+On the desktop, the header **Gateway** chip opens **Captain phones**: a QR of `http://<lan-ip>:4747/?pair=CODE`, the code, the full URL, Copy URL, and phones currently connected. Scanning the QR stores the code and hides the pairing field. Rotating the code (requires `system:settings`) makes new phones pair again. Captains already signed in stay signed in until the POS restarts.
 
 ### Demo / test accounts (opt-in seed)
 
@@ -186,7 +187,7 @@ Password: `Captain1!`
 
 - Desktop Billing / Tables layout redesign
 - Food photos / menu image pipeline
-- Guest count, item notes, swipe gestures
+- Guest count, food photos, swipe gestures
 - Native store app / offline service worker / HTTPS on the gateway
 - Billing / settle from Captain
 - Changing permissions or KOT print pipeline behavior
@@ -201,6 +202,6 @@ Password: `Captain1!`
 2. Ensure renderer includes Captain (`npm run build:renderer` or full start so `dist/captain` exists).
 3. On phone (same Wi‑Fi), open the gateway URL from the POS panel.
 4. Sign in with a captain user + pairing code (or demo seed accounts above).
-5. Smoke path: Floor → open table → add items → Review → Send KOT → KOTs tab → Me.
+5. Smoke path: Floor → open table → add items → Review → Send to kitchen → KOTs tab → Me.
 
 Optional: Add to Home Screen to hide browser chrome (manifest + icons; no offline cache, no Android install prompt on LAN HTTP).
