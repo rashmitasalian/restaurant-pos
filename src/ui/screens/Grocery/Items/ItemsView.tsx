@@ -11,6 +11,7 @@ import {
 } from "../../../../app/db/posRepository";
 import type { BuyingListTemplateDto, GroceryUnit } from "../../../../shared/pos";
 import { validationMessage } from "../../../../shared/validation";
+import { TEXT_LIMITS } from "../../../../shared/textLimits";
 import { Badge } from "../../../components/ui/Badge";
 import { Button } from "../../../components/ui/Button";
 import { ConfirmModal } from "../../../components/ui/ConfirmModal";
@@ -219,6 +220,7 @@ export function ItemsView({
       <div className={styles.toolbarRow}>
         <Input
           placeholder="Search items…"
+          maxLength={TEXT_LIMITS.search}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           style={{ maxWidth: 260 }}
@@ -327,12 +329,14 @@ export function ItemsView({
           <Input
             label="Item name"
             value={itemForm.name}
+            maxLength={TEXT_LIMITS.groceryItemName}
             onChange={(e) => setItemForm((f) => ({ ...f, name: e.target.value }))}
             placeholder="Tomato"
           />
           <Input
             label="Category"
             value={itemForm.category}
+            maxLength={TEXT_LIMITS.groceryCategory}
             onChange={(e) => setItemForm((f) => ({ ...f, category: e.target.value }))}
             placeholder="Vegetables"
           />
@@ -362,6 +366,7 @@ export function ItemsView({
           <Input
             label="Vendor hint"
             value={itemForm.vendorHint}
+            maxLength={TEXT_LIMITS.vendorName}
             onChange={(e) => setItemForm((f) => ({ ...f, vendorHint: e.target.value }))}
             placeholder="Optional preferred vendor"
           />
@@ -389,6 +394,7 @@ export function ItemsView({
           <Input
             label="Template name"
             value={templateName}
+            maxLength={TEXT_LIMITS.templateName}
             onChange={(e) => setTemplateName(e.target.value)}
             placeholder="Daily Morning"
           />

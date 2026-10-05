@@ -3,6 +3,7 @@ import { ChevronDown, ChevronLeft, Minus, Plus, Search, Star } from "lucide-reac
 import { Icon } from "../../ui/components/ui/Icon";
 import { money } from "../money";
 import { CategorySheet } from "../sheets/CategorySheet";
+import { TEXT_LIMITS } from "../../shared/textLimits";
 
 const PINNED_NAMED_CATEGORIES = 2;
 
@@ -277,6 +278,7 @@ export function MenuScreen({
           <input
             className="cap-search"
             placeholder="Search name or code"
+            maxLength={TEXT_LIMITS.search}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             aria-label="Search name or code"

@@ -1441,8 +1441,8 @@
 }
 
 .qtyEditor select {
-  width: 72px;
-  padding: 0 6px;
+  width: 96px;
+  padding: 0 4px 0 8px;
   border: 0;
   border-left: 1px solid var(--pos-line);
   outline: none;
@@ -1483,6 +1483,10 @@
 }
 
 .ticketRowPicked {
+  background: var(--pos-saffron-tint);
+}
+
+.ticketRowFlash {
   background: var(--pos-saffron-tint);
 }
 

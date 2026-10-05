@@ -13,6 +13,7 @@ import {
 } from "../../../app/db/posRepository";
 import { isHolidayDate, isWeeklyOffDay } from "../../../shared/attendanceSchedule";
 import { normalizeText, todayDateOnly, validationMessage } from "../../../shared/validation";
+import { TEXT_LIMITS } from "../../../shared/textLimits";
 import type { AttendanceStatus } from "../../../shared/pos";
 import { useToast } from "../../context/ToastContext";
 import { Button } from "../../components/ui/Button";
@@ -587,6 +588,7 @@ export default function Attendance({ embedded = false }: { embedded?: boolean })
                   id="attendance-search"
                   className={`pos-input ${styles.searchInput}`}
                   placeholder="Search employee..."
+                  maxLength={TEXT_LIMITS.search}
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                 />

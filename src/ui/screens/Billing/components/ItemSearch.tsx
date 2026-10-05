@@ -1,5 +1,6 @@
 import React from "react";
 import styles from "../Billing.module.css";
+import { TEXT_LIMITS } from "../../../../shared/textLimits";
 
 // ── Fuzzy match logic ───────────────────────────────────────────────────────
 
@@ -188,6 +189,7 @@ export default function ItemSearch({ items, onSelect, inputRef }: ItemSearchProp
       <input
         ref={effectiveRef}
         value={query}
+        maxLength={TEXT_LIMITS.search}
         onKeyDown={handleKeyDown}
         onChange={(e) => setQuery(e.target.value)}
         onBlur={() => {

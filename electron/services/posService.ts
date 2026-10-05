@@ -90,6 +90,7 @@ import {
   type StaffActivityRowDto,
 } from "../../src/shared/ownerReview";
 import { publishOrdersChanged } from "./domainEvents";
+import { TEXT_LIMITS } from "../../src/shared/textLimits";
 import {
   CUSTOMER_NAME_LIMIT,
   PAYMENT_TXN_REF_LIMIT,
@@ -214,7 +215,7 @@ function normalizeSeatingAreaId(value: unknown, fallback?: string) {
 }
 
 function normalizeSeatingAreaName(value: unknown, fallback?: string) {
-  const name = normalizeText(value);
+  const name = normalizeText(value).slice(0, TEXT_LIMITS.areaName);
   return name || fallback || DEFAULT_SEATING_AREA_NAME;
 }
 
@@ -277,6 +278,9 @@ function normalizeMenuVariants(input: unknown): MenuItemVariantDto[] {
     const name = normalizeText((raw as any)?.name);
     if (!name) {
       throw new Error("item-variant-name-required");
+    }
+    if (name.length > TEXT_LIMITS.menuVariant) {
+      throw new Error("menu-variant-name-too-long");
     }
     const key = name.toLowerCase();
     if (seen.has(key)) {
@@ -1026,6 +1030,9 @@ function slugId(prefix: string, value: string) {
 function assertPassword(password: string) {
   if (!password) {
     throw new Error("Password is required");
+  }
+  if (password.length > TEXT_LIMITS.password) {
+    throw new Error("password-too-long");
   }
   if (password.length < 8) {
     throw new Error(`Password must be at least 8 characters`);
@@ -2542,6 +2549,9 @@ function normalizeDisplayName(value: unknown, fallback: string) {
   if (!displayName) {
     return fallback;
   }
+  if (displayName.length > TEXT_LIMITS.personName) {
+    throw new Error("display-name-too-long");
+  }
   if (!isValidPersonName(displayName)) {
     throw new Error("display-name-invalid");
   }
@@ -3326,7 +3336,10 @@ export const posService = {
         order: Number.isFinite(Number(entry?.order)) ? Math.trunc(Number(entry?.order)) : index + 1,
         tableCount: Math.max(0, Math.trunc(Number(entry?.tableCount) || 0)),
         namingMode,
-        prefix: String(entry?.prefix || ""),
+        prefix: String(entry?.prefix || "")
+          .trim()
+          .toUpperCase()
+          .slice(0, TEXT_LIMITS.areaPrefix),
         defaultSeats:
           Number.isInteger(defaultSeats) &&
           defaultSeats >= 1 &&
@@ -3636,7 +3649,7 @@ export const posService = {
     }
     const safeName = String(name || "")
       .trim()
-      .slice(0, 40);
+      .slice(0, TEXT_LIMITS.tableName);
     if (!safeName) {
       throw new Error("table-name-invalid");
     }
@@ -3830,6 +3843,15 @@ export const posService = {
     if (!name) {
       throw new Error("item-name-required");
     }
+    if (name.length > TEXT_LIMITS.menuItemName) {
+      throw new Error("menu-item-name-too-long");
+    }
+    if (sku.length > TEXT_LIMITS.sku) {
+      throw new Error("menu-item-sku-too-long");
+    }
+    if (category.length > TEXT_LIMITS.menuCategory) {
+      throw new Error("menu-category-too-long");
+    }
     if (price === null) {
       throw new Error("item-price-invalid");
     }
@@ -3879,6 +3901,15 @@ export const posService = {
     const storedPrice = variantFloor ?? price;
     if (!name) {
       throw new Error("item-name-required");
+    }
+    if (name.length > TEXT_LIMITS.menuItemName) {
+      throw new Error("menu-item-name-too-long");
+    }
+    if (sku.length > TEXT_LIMITS.sku) {
+      throw new Error("menu-item-sku-too-long");
+    }
+    if (category.length > TEXT_LIMITS.menuCategory) {
+      throw new Error("menu-category-too-long");
     }
     if (storedPrice === null) {
       throw new Error("item-price-invalid");
@@ -4530,6 +4561,9 @@ export const posService = {
       if (!reason) {
         throw new Error("kot-void-reason-required");
       }
+      if (reason.length > TEXT_LIMITS.reason) {
+        throw new Error("kot-void-reason-too-long");
+      }
       const line = order.items.find((candidate) => candidate.id === lineId);
       if (!line) {
         throw new Error("order-line-not-found");
@@ -5005,6 +5039,9 @@ export const posService = {
     const reasonText = normalizeText(reason);
     if (!reasonText) {
       throw new Error("cancel-reason-required");
+    }
+    if (reasonText.length > TEXT_LIMITS.reason) {
+      throw new Error("cancel-reason-too-long");
     }
     const updated = inTransaction((database) => {
       const order = this.getOrderById(orderId);
@@ -6221,6 +6258,9 @@ export const posService = {
     const suggestedTitle =
       hour < 12 ? "Morning Procurement" : hour < 17 ? "Afternoon Refill" : "Evening Refill";
     const title = normalizeText(input.title) || suggestedTitle;
+    if (title.length > TEXT_LIMITS.listTitle) {
+      throw new Error("grocery-list-title-too-long");
+    }
     const notes = optionalGroceryText(input.notes, 500, "grocery-notes-too-long");
     return inTransaction((database) => {
       // Explicit `lines: []` means blank list. Omitted lines keep legacy seed-from-items.
@@ -6386,6 +6426,9 @@ export const posService = {
       }
       const title =
         updates.title === undefined ? current.title : normalizeText(updates.title) || current.title;
+      if (title.length > TEXT_LIMITS.listTitle) {
+        throw new Error("grocery-list-title-too-long");
+      }
       const listDate =
         updates.listDate === undefined ? current.list_date : Number(updates.listDate);
       if (!Number.isFinite(listDate) || listDate <= 0) {
@@ -7777,6 +7820,9 @@ export const posService = {
     const name = normalizeText(input.name);
     if (!name) {
       throw new Error("template-name-required");
+    }
+    if (name.length > TEXT_LIMITS.templateName) {
+      throw new Error("template-name-too-long");
     }
     const id = `grocery-list-template:${randomUUID()}`;
     const at = now();

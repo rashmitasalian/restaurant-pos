@@ -2,6 +2,7 @@ import React from "react";
 import { createGroceryList, type GroceryListDoc } from "../../../../app/db/posRepository";
 import type { BuyingListTemplateDto, GroceryListType } from "../../../../shared/pos";
 import { validationMessage } from "../../../../shared/validation";
+import { TEXT_LIMITS } from "../../../../shared/textLimits";
 import { Modal } from "../../../components/ui/Modal";
 import { Button } from "../../../components/ui/Button";
 import { Input } from "../../../components/ui/Input";
@@ -86,6 +87,7 @@ export function NewBuyingListModal({ open, templates, recentLists, onClose, onCr
         <Input
           label="List name"
           value={title}
+          maxLength={TEXT_LIMITS.listTitle}
           onChange={(e) => setTitle(e.target.value)}
           placeholder={suggestListName()}
           autoFocus

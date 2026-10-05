@@ -9,6 +9,7 @@ import { greetingFor } from "../copy";
 import { tableKotAppearance } from "../../shared/kot";
 import type { CaptainKotTicket } from "./KotsScreen";
 import { AreaSheet } from "../sheets/AreaSheet";
+import { TEXT_LIMITS } from "../../shared/textLimits";
 
 export type TableRow = {
   id: number;
@@ -207,6 +208,7 @@ export function TablesScreen({
           <input
             className="cap-search"
             placeholder="Search table"
+            maxLength={TEXT_LIMITS.search}
             value={query}
             aria-label="Search table"
             onChange={(event) => setQuery(event.target.value)}

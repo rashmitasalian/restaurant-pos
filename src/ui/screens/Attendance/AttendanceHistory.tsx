@@ -8,6 +8,7 @@ import {
   type StaffDoc,
 } from "../../../app/db/posRepository";
 import { todayDateOnly, validationMessage } from "../../../shared/validation";
+import { TEXT_LIMITS } from "../../../shared/textLimits";
 import { useToast } from "../../context/ToastContext";
 import { Button } from "../../components/ui/Button";
 import { filterStaffBySearch } from "../People/peopleUtils";
@@ -279,6 +280,7 @@ export default function AttendanceHistory({ embedded = false }: { embedded?: boo
           <input
             className={`pos-input ${styles.searchInput}`}
             placeholder="Search employee..."
+            maxLength={TEXT_LIMITS.search}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />

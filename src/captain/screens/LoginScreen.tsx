@@ -3,6 +3,7 @@ import { Eye, EyeOff } from "lucide-react";
 import { Icon } from "../../ui/components/ui/Icon";
 import restoNitiMark from "../../ui/assets/restoniti-icon.png";
 import { connectionLabel, type ConnectionState } from "../copy";
+import { TEXT_LIMITS } from "../../shared/textLimits";
 
 export function LoginScreen({
   brandingName,
@@ -88,6 +89,7 @@ export function LoginScreen({
             autoCorrect="off"
             autoComplete="username"
             value={username}
+            maxLength={TEXT_LIMITS.username}
             onChange={(e) => setUsername(e.target.value)}
           />
         </div>
@@ -100,6 +102,7 @@ export function LoginScreen({
               type={showPassword ? "text" : "password"}
               autoComplete="current-password"
               value={password}
+              maxLength={TEXT_LIMITS.password}
               onChange={(e) => setPassword(e.target.value)}
             />
             <button
@@ -121,6 +124,7 @@ export function LoginScreen({
               autoCapitalize="characters"
               autoComplete="one-time-code"
               value={pairingCode}
+              maxLength={TEXT_LIMITS.pairingCode}
               onChange={(e) => setPairingCode(e.target.value.toUpperCase())}
               placeholder="From the POS QR"
             />

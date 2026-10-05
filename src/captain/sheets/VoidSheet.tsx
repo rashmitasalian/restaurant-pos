@@ -1,5 +1,6 @@
 import React from "react";
 import { CANCEL_REASON_OTHER, CANCEL_REASON_PRESETS } from "../../shared/cancelReasons";
+import { TEXT_LIMITS } from "../../shared/textLimits";
 import { useBackdropDismiss } from "../../ui/hooks/useBackdropDismiss";
 
 export function VoidSheet({
@@ -68,6 +69,7 @@ export function VoidSheet({
             <input
               className="cap-search"
               placeholder="Describe the reason"
+              maxLength={TEXT_LIMITS.reason}
               value={other}
               disabled={busy}
               onChange={(e) => onOther(e.target.value)}

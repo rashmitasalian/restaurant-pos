@@ -3,6 +3,7 @@ import { AuthContext } from "../../context/AuthContext";
 import { Button } from "../../components/ui/Button";
 import { ConfirmModal } from "../../components/ui/ConfirmModal";
 import { Input } from "../../components/ui/Input";
+import { TEXT_LIMITS } from "../../../shared/textLimits";
 import { reportClientError } from "../../../app/utils/clientError";
 import {
   activateCloudBackup,
@@ -331,12 +332,14 @@ export function BackupSettingsSection() {
               value={restaurantCodeInput}
               onChange={(e) => setRestaurantCodeInput(e.target.value)}
               placeholder="RN-XXXXX"
+              maxLength={TEXT_LIMITS.restaurantCode}
             />
             <Input
               label="Recovery key"
               value={recoveryKeyInput}
               onChange={(e) => setRecoveryKeyInput(e.target.value)}
               placeholder="XXXX-XXXX-…"
+              maxLength={TEXT_LIMITS.recoveryKey}
             />
             <Button
               type="button"

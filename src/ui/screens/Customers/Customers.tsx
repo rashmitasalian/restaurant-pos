@@ -8,6 +8,7 @@ import {
   normalizeText,
   validationMessage,
 } from "../../../shared/validation";
+import { TEXT_LIMITS } from "../../../shared/textLimits";
 import { CREDIT_CONFIG_KEY, normalizeCreditConfig } from "../../../shared/customerCredit";
 import { getConfigBranding } from "../../../app/db/posRepository";
 import { printReceipt } from "../../../app/services/printer";
@@ -608,6 +609,7 @@ export default function Customers() {
                   inputMode="tel"
                   autoComplete="tel"
                   value={editPhone}
+                  maxLength={TEXT_LIMITS.phoneEntry}
                   onChange={(e) => {
                     setEditPhone(normalizePhone(e.target.value).slice(0, CUSTOMER_PHONE_LIMIT));
                     if (editPhoneError) {
@@ -789,6 +791,7 @@ export default function Customers() {
               inputMode="tel"
               autoComplete="tel"
               value={phone}
+              maxLength={TEXT_LIMITS.phoneEntry}
               onChange={(e) => {
                 setPhone(normalizePhone(e.target.value).slice(0, CUSTOMER_PHONE_LIMIT));
                 if (phoneError) {
@@ -834,7 +837,7 @@ export default function Customers() {
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Search name or phone"
-            maxLength={CUSTOMER_NAME_LIMIT}
+            maxLength={TEXT_LIMITS.search}
           />
         </div>
         <div
@@ -962,6 +965,7 @@ export default function Customers() {
                 <Input
                   label="Amount (₹)"
                   value={receiveAmount}
+                  maxLength={TEXT_LIMITS.money}
                   onChange={(e) => setReceiveAmount(e.target.value)}
                 />
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -979,6 +983,7 @@ export default function Customers() {
                 <Input
                   label="Notes"
                   value={receiveNotes}
+                  maxLength={TEXT_LIMITS.notes}
                   onChange={(e) => setReceiveNotes(e.target.value)}
                   placeholder="Optional"
                 />
@@ -1027,6 +1032,7 @@ export default function Customers() {
                     <Input
                       label="Credit limit (₹)"
                       value={creditLimitEdit}
+                      maxLength={TEXT_LIMITS.money}
                       onChange={(e) => setCreditLimitEdit(e.target.value)}
                     />
                   </div>
@@ -1034,6 +1040,7 @@ export default function Customers() {
                     <Input
                       label="Due in days (optional)"
                       value={creditDaysEdit}
+                      maxLength={TEXT_LIMITS.dueDays}
                       onChange={(e) => setCreditDaysEdit(e.target.value)}
                       placeholder={`Blank = ${restaurantDefaultDays}`}
                     />
@@ -1150,6 +1157,7 @@ export default function Customers() {
             <Input
               label="Reason (optional)"
               value={voidReason}
+              maxLength={TEXT_LIMITS.notes}
               onChange={(e) => setVoidReason(e.target.value)}
               placeholder="Wrong bill, customer dispute…"
             />

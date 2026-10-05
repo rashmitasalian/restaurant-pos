@@ -24,6 +24,7 @@ import {
   parseNonNegativeMoney,
   validationMessage,
 } from "../../../shared/validation";
+import { TEXT_LIMITS } from "../../../shared/textLimits";
 import { AuthContext } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
 import { useBackdropDismiss } from "../../hooks/useBackdropDismiss";
@@ -1150,6 +1151,7 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
             className="pos-input"
             placeholder="Search by name, phone, designation..."
             value={staffSearch}
+            maxLength={TEXT_LIMITS.search}
             onChange={(e) => setStaffSearch(e.target.value)}
           />
         </div>
@@ -1336,8 +1338,11 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
               id="staff-phone"
               label="Mobile Number"
               value={form.phone}
-              onChange={(value) => setField("phone", normalizePhone(value))}
+              onChange={(value) =>
+                setField("phone", normalizePhone(value).slice(0, TEXT_LIMITS.phoneStored))
+              }
               placeholder="10-digit mobile"
+              maxLength={TEXT_LIMITS.phoneEntry}
               type="tel"
               inputMode="tel"
               required
@@ -1493,7 +1498,10 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
               id="staff-edit-phone"
               label="Mobile Number"
               value={editForm.phone}
-              onChange={(value) => setEditField("phone", normalizePhone(value))}
+              onChange={(value) =>
+                setEditField("phone", normalizePhone(value).slice(0, TEXT_LIMITS.phoneStored))
+              }
+              maxLength={TEXT_LIMITS.phoneEntry}
               type="tel"
               inputMode="tel"
               required
@@ -1968,6 +1976,7 @@ function LeftAccountPromptModal({
         type="password"
         className="pos-input"
         value={adminPassword}
+        maxLength={TEXT_LIMITS.password}
         onChange={(e) => setAdminPassword(e.target.value)}
         autoComplete="current-password"
         disabled={submitting}
@@ -2069,6 +2078,7 @@ function CreateStaffAccountModal({
           id="staff-account-username"
           label="Username"
           value={username}
+          maxLength={TEXT_LIMITS.username}
           onChange={setUsername}
           required
         />
@@ -2076,6 +2086,7 @@ function CreateStaffAccountModal({
           id="staff-account-display-name"
           label="Display name"
           value={displayName}
+          maxLength={TEXT_LIMITS.personName}
           onChange={setDisplayName}
           required
         />
@@ -2099,6 +2110,7 @@ function CreateStaffAccountModal({
           label="Password"
           type="password"
           value={password}
+          maxLength={TEXT_LIMITS.password}
           onChange={setPassword}
           required
         />
@@ -2107,6 +2119,7 @@ function CreateStaffAccountModal({
           label="Confirm password"
           type="password"
           value={confirmPassword}
+          maxLength={TEXT_LIMITS.password}
           onChange={setConfirmPassword}
           required
         />

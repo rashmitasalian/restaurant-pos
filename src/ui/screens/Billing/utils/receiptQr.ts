@@ -1,9 +1,10 @@
 import { create as createQrSymbol } from "qrcode/lib/core/qrcode";
+import { TEXT_LIMITS } from "../../../../shared/textLimits";
 import { RECEIPT_TEXT_WIDTH, wrapText } from "./receiptWrap";
 
 export const RECEIPT_QR_SIZE = 240;
 export const RECEIPT_QR_ERROR_CORRECTION = "M" as const;
-export const RECEIPT_QR_NOTE_LIMIT = 120;
+export const RECEIPT_QR_NOTE_LIMIT = TEXT_LIMITS.receiptNote;
 export const RECEIPT_QR_SAMPLE_AMOUNT = 100;
 export const RECEIPT_QR_SAMPLE_REFERENCE = "SAMPLE";
 

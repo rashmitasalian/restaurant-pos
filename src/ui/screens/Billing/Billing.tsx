@@ -48,6 +48,7 @@ import {
   parseNonNegativeMoney,
   validationMessage,
 } from "../../../shared/validation";
+import { TEXT_LIMITS } from "../../../shared/textLimits";
 import { reportClientError } from "../../../app/utils/clientError";
 import styles from "./Billing.module.css";
 import {
@@ -2101,7 +2102,7 @@ export default function Billing() {
       showToast(validationMessage("rider-name-required"), "error");
       return;
     }
-    if (!isValidPersonName(name)) {
+    if (!isValidPersonName(name, { max: TEXT_LIMITS.personName })) {
       showToast(validationMessage("rider-name-invalid"), "error");
       return;
     }

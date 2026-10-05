@@ -10,6 +10,7 @@ import { EmptyState } from "../../../components/ui/EmptyState";
 import { Input } from "../../../components/ui/Input";
 import { Select } from "../../../components/ui/Select";
 import { validationMessage } from "../../../../shared/validation";
+import { TEXT_LIMITS } from "../../../../shared/textLimits";
 import styles from "../Grocery.module.css";
 import {
   formatCurrency,
@@ -173,6 +174,7 @@ export function BuyingListsView({
         <div className={styles.filterTools}>
           <Input
             placeholder="Search lists…"
+            maxLength={TEXT_LIMITS.search}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             aria-label="Search lists"

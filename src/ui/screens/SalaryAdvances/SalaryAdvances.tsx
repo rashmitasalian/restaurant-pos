@@ -9,6 +9,7 @@ import {
 } from "../../../app/db/posRepository";
 import type { SalaryAdvanceDto } from "../../../shared/pos";
 import { parsePositiveMoney, todayDateOnly, validationMessage } from "../../../shared/validation";
+import { TEXT_LIMITS } from "../../../shared/textLimits";
 import { useToast } from "../../context/ToastContext";
 import { Button } from "../../components/ui/Button";
 import { DataTable } from "../../components/ui/DataTable";
@@ -516,6 +517,7 @@ export default function SalaryAdvances({
           <input
             className={`pos-input ${styles.searchInput}`}
             placeholder="Search employee…"
+            maxLength={TEXT_LIMITS.search}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             aria-label="Search employee"
@@ -664,6 +666,7 @@ export default function SalaryAdvances({
           <Input
             label="Note"
             value={form.note}
+            maxLength={TEXT_LIMITS.notes}
             onChange={(event) => setForm((current) => ({ ...current, note: event.target.value }))}
           />
           {selectedStaff ? (

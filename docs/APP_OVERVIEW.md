@@ -957,6 +957,7 @@ npm run perf:all          # Seed + app + UI benchmarks
 - `docs/CAPTAIN_APP.md` — Captain handheld work overview and how to try it
 - `docs/REPORT_PERFORMANCE_TESTING.md` — Performance seeding and stress-test harness
 - `docs/design-system.md` — UI tokens, components, and RestoNiti 2026 design rules
+- `docs/TEXT_FIELD_LIMITS.md` — Character limits for every text box
 - `docs/SECURITY_PENTEST_REPORT.md` — Security assessment notes
 
 ### Troubleshooting

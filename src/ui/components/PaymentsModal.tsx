@@ -12,6 +12,7 @@ import {
   todayDateOnly,
   validationMessage,
 } from "../../shared/validation";
+import { TEXT_LIMITS } from "../../shared/textLimits";
 import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
 import styles from "./PaymentsModal.module.css";
@@ -895,6 +896,7 @@ export default function PaymentsModal({
                     <Input
                       label="Phone"
                       value={newPhone}
+                      maxLength={TEXT_LIMITS.phoneEntry}
                       onChange={(e) =>
                         setNewPhone(
                           normalizePhone(e.target.value).slice(0, CUSTOMER_PHONE_LIMIT),

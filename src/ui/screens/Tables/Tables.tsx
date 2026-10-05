@@ -9,6 +9,7 @@ import { PageHeader } from "../../components/ui/PageHeader";
 import { SegmentedControl } from "../../components/ui/SegmentedControl";
 import { TableTile } from "../../components/ui/TableTile";
 import { formatKotAge } from "../../../shared/kotAge";
+import { TEXT_LIMITS } from "../../../shared/textLimits";
 import { tableKotAppearance } from "../../../shared/kot";
 import { formatTableTileLabel } from "../../../shared/floorLayout";
 
@@ -197,6 +198,7 @@ export default function Tables() {
                 <input
                   aria-label="Search tables"
                   placeholder="Search table…"
+                  maxLength={TEXT_LIMITS.search}
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   className={styles.input}

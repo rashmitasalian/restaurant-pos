@@ -2,6 +2,7 @@ import React from "react";
 import { AuthContext } from "../../context/AuthContext";
 import { PasswordValidator } from "../../../app/utils/validators";
 import { validationMessage } from "../../../shared/validation";
+import { TEXT_LIMITS } from "../../../shared/textLimits";
 import authStyles from "./Auth.module.css";
 
 export default function ChangePasswordScreen() {
@@ -112,6 +113,7 @@ export default function ChangePasswordScreen() {
             type="password"
             className={authStyles.input}
             value={currentPassword}
+            maxLength={TEXT_LIMITS.password}
             autoComplete="current-password"
             autoFocus
             onChange={(e) => setCurrentPassword(e.target.value)}
@@ -125,6 +127,7 @@ export default function ChangePasswordScreen() {
             type="password"
             className={authStyles.input}
             value={newPassword}
+            maxLength={TEXT_LIMITS.password}
             autoComplete="new-password"
             onChange={(e) => setNewPassword(e.target.value)}
             disabled={isSubmitting}
@@ -138,6 +141,7 @@ export default function ChangePasswordScreen() {
             type="password"
             className={authStyles.input}
             value={confirmPassword}
+            maxLength={TEXT_LIMITS.password}
             autoComplete="new-password"
             onChange={(e) => setConfirmPassword(e.target.value)}
             disabled={isSubmitting}

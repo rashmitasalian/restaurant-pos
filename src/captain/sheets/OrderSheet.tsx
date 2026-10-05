@@ -2,6 +2,7 @@ import React from "react";
 import { Minus, Plus, X } from "lucide-react";
 import { Icon } from "../../ui/components/ui/Icon";
 import { pendingKotQty } from "../../shared/kot";
+import { KITCHEN_NOTE_MAX } from "../../shared/kitchenNote";
 import { useBackdropDismiss } from "../../ui/hooks/useBackdropDismiss";
 import { money } from "../money";
 
@@ -261,7 +262,7 @@ function TicketLine({
             value={draft}
             placeholder="Note for kitchen"
             aria-label={`Note for ${line.name}`}
-            maxLength={80}
+            maxLength={KITCHEN_NOTE_MAX}
             onChange={(event) => setDraft(event.target.value)}
             onBlur={() => {
               if (draft.trim() !== note.trim()) {

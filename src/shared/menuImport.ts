@@ -1,4 +1,5 @@
 import { parse } from "csv-parse/sync";
+import { TEXT_LIMITS } from "./textLimits";
 
 export const MENU_IMPORT_HEADERS = [
   "category",
@@ -302,8 +303,24 @@ export function validateMenuCsv(
       errors.push(`Row ${row}: category is empty.`);
       continue;
     }
+    if (category.length > TEXT_LIMITS.menuCategory) {
+      errors.push(`Row ${row}: category must be ${TEXT_LIMITS.menuCategory} characters or fewer.`);
+      continue;
+    }
     if (!name) {
       errors.push(`Row ${row}: item is empty.`);
+      continue;
+    }
+    if (name.length > TEXT_LIMITS.menuItemName) {
+      errors.push(`Row ${row}: item must be ${TEXT_LIMITS.menuItemName} characters or fewer.`);
+      continue;
+    }
+    if (variant.length > TEXT_LIMITS.menuVariant) {
+      errors.push(`Row ${row}: variant must be ${TEXT_LIMITS.menuVariant} characters or fewer.`);
+      continue;
+    }
+    if (sku && sku.length > TEXT_LIMITS.sku) {
+      errors.push(`Row ${row}: sku must be ${TEXT_LIMITS.sku} characters or fewer.`);
       continue;
     }
     if (legacyVariantPrice) {

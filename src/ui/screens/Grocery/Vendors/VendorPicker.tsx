@@ -2,6 +2,7 @@ import React from "react";
 import { createVendor, listVendors } from "../../../../app/db/posRepository";
 import type { VendorDto } from "../../../../shared/pos";
 import { normalizeText, validationMessage } from "../../../../shared/validation";
+import { TEXT_LIMITS } from "../../../../shared/textLimits";
 import { Button } from "../../../components/ui/Button";
 import { Input } from "../../../components/ui/Input";
 import { Modal } from "../../../components/ui/Modal";
@@ -101,12 +102,14 @@ export function VendorPicker({
           <Input
             label="Vendor name"
             value={name}
+            maxLength={TEXT_LIMITS.vendorName}
             onChange={(e) => setName(e.target.value)}
             autoFocus
           />
           <Input
             label="Phone"
             value={phone}
+            maxLength={TEXT_LIMITS.vendorPhone}
             onChange={(e) => setPhone(e.target.value)}
             placeholder="Optional"
           />

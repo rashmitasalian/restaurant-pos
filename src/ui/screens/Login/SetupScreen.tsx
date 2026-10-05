@@ -4,6 +4,7 @@ import { PasswordValidator } from "../../../app/utils/validators";
 import { ENV } from "../../../config/env";
 import { RECOVERY_CODE_COUNT } from "../../../shared/auth";
 import { isValidPersonName, normalizeText, validationMessage } from "../../../shared/validation";
+import { TEXT_LIMITS } from "../../../shared/textLimits";
 import { reportClientError } from "../../../app/utils/clientError";
 import restoNitiMark from "../../assets/restoniti-icon.png";
 import authStyles from "./Auth.module.css";
@@ -127,6 +128,7 @@ export default function SetupScreen({ onComplete }: { onComplete: () => void }) 
                 type="text"
                 className={authStyles.input}
                 value={username}
+                maxLength={TEXT_LIMITS.username}
                 onChange={(event) => setUsername(event.target.value)}
                 autoComplete="username"
                 autoFocus
@@ -140,6 +142,7 @@ export default function SetupScreen({ onComplete }: { onComplete: () => void }) 
                 type="text"
                 className={authStyles.input}
                 value={displayName}
+                maxLength={TEXT_LIMITS.personName}
                 onChange={(event) => setDisplayName(event.target.value)}
                 disabled={isSubmitting}
               />
@@ -151,6 +154,7 @@ export default function SetupScreen({ onComplete }: { onComplete: () => void }) 
                 type="password"
                 className={authStyles.input}
                 value={password}
+                maxLength={TEXT_LIMITS.password}
                 onChange={(event) => setPassword(event.target.value)}
                 autoComplete="new-password"
                 disabled={isSubmitting}
@@ -171,6 +175,7 @@ export default function SetupScreen({ onComplete }: { onComplete: () => void }) 
                 type="password"
                 className={authStyles.input}
                 value={confirmPassword}
+                maxLength={TEXT_LIMITS.password}
                 onChange={(event) => setConfirmPassword(event.target.value)}
                 autoComplete="new-password"
                 disabled={isSubmitting}

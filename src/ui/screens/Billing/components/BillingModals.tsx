@@ -5,6 +5,7 @@ import {
   PAYMENT_TXN_REF_LIMIT,
   normalizePhone,
 } from "../../../../shared/validation";
+import { TEXT_LIMITS } from "../../../../shared/textLimits";
 import { useFocusTrap } from "../../../hooks/useFocusTrap";
 import styles from "../Billing.module.css";
 import {
@@ -239,6 +240,7 @@ export function ConfirmCancelModal({
           value={otherText}
           onChange={(event) => setOtherText(event.target.value)}
           placeholder="Describe the reason"
+          maxLength={TEXT_LIMITS.reason}
           autoFocus
           className={styles.modalInput}
           style={{ marginTop: 10 }}
@@ -377,6 +379,7 @@ export function KotVoidModal({
           value={otherText}
           onChange={(event) => setOtherText(event.target.value)}
           placeholder="Describe the reason"
+          maxLength={TEXT_LIMITS.reason}
           autoFocus
           className={styles.modalInput}
           style={{ marginTop: 10 }}
@@ -465,6 +468,7 @@ export function NewTakeawayModal({
             }
           }}
           placeholder="e.g. Priya, Walk-in 1…"
+          maxLength={TEXT_LIMITS.personName}
           autoFocus
           className={styles.modalInput}
         />
@@ -484,7 +488,9 @@ export function NewTakeawayModal({
           inputMode="tel"
           autoComplete="tel"
           value={phone}
-          onChange={(e) => onPhoneChange(normalizePhone(e.target.value))}
+          onChange={(e) =>
+            onPhoneChange(normalizePhone(e.target.value).slice(0, TEXT_LIMITS.phoneStored))
+          }
           onKeyDown={(e) => {
             if (e.key === "Enter") {
               submit();
@@ -496,6 +502,7 @@ export function NewTakeawayModal({
             }
           }}
           placeholder="e.g. 9876543210"
+          maxLength={TEXT_LIMITS.phoneEntry}
           className={styles.modalInput}
         />
         {requiresCustomer ? <p className={styles.textMuted}>Name or phone is required</p> : null}
@@ -685,6 +692,7 @@ export function NewDeliveryModal({
               onCustomerPhoneChange(normalizePhone(e.target.value).slice(0, CUSTOMER_PHONE_LIMIT))
             }
             placeholder="e.g. 9876543210"
+            maxLength={TEXT_LIMITS.phoneEntry}
             className={styles.modalInput}
           />
           {requiresCustomer ? (
@@ -746,6 +754,7 @@ export function AssignRiderModal({
             value={riderName}
             onChange={(e) => onNameChange(e.target.value)}
             placeholder="e.g. Rajan"
+            maxLength={TEXT_LIMITS.personName}
             autoFocus
             className={styles.modalInput}
           />
@@ -757,8 +766,11 @@ export function AssignRiderModal({
             inputMode="tel"
             autoComplete="tel"
             value={riderPhone}
-            onChange={(e) => onPhoneChange(normalizePhone(e.target.value))}
+            onChange={(e) =>
+              onPhoneChange(normalizePhone(e.target.value).slice(0, TEXT_LIMITS.phoneStored))
+            }
             placeholder="e.g. 9876543210"
+            maxLength={TEXT_LIMITS.phoneEntry}
             className={styles.modalInput}
           />
         </div>

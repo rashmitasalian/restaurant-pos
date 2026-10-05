@@ -8,6 +8,7 @@ import {
 } from "../../../../app/db/posRepository";
 import type { GroceryPurchaseDto, VendorDto } from "../../../../shared/pos";
 import { validationMessage } from "../../../../shared/validation";
+import { TEXT_LIMITS } from "../../../../shared/textLimits";
 import { Badge } from "../../../components/ui/Badge";
 import { Button } from "../../../components/ui/Button";
 import { ConfirmModal } from "../../../components/ui/ConfirmModal";
@@ -205,6 +206,7 @@ export function VendorsView({
       <div className={styles.toolbarRow}>
         <Input
           placeholder="Search vendors…"
+          maxLength={TEXT_LIMITS.search}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           style={{ maxWidth: 280 }}
@@ -258,24 +260,28 @@ export function VendorsView({
           <Input
             label="Name"
             value={form.name}
+            maxLength={TEXT_LIMITS.vendorName}
             onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
             placeholder="Metro Foods"
           />
           <Input
             label="Phone"
             value={form.phone}
+            maxLength={TEXT_LIMITS.vendorPhone}
             onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
             placeholder="98765 43210"
           />
           <Input
             label="Contact person"
             value={form.contactPerson}
+            maxLength={TEXT_LIMITS.contactName}
             onChange={(e) => setForm((f) => ({ ...f, contactPerson: e.target.value }))}
             placeholder="Optional"
           />
           <Input
             label="Notes"
             value={form.notes}
+            maxLength={TEXT_LIMITS.notes}
             onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
             placeholder="Delivery days, credit terms…"
           />

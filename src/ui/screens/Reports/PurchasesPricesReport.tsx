@@ -1,5 +1,6 @@
 import React from "react";
 import type { GroceryPurchaseAnalysisDto } from "../../../shared/pos";
+import { TEXT_LIMITS } from "../../../shared/textLimits";
 import { ENV } from "../../../config/env";
 import { DataTable } from "../../components/ui/DataTable";
 import { Drawer } from "../../components/ui/Drawer";
@@ -246,6 +247,7 @@ export function PurchasesPricesReport({
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search items"
+            maxLength={TEXT_LIMITS.search}
             aria-label="Search purchased items"
           />
           <span className="rpt-muted">Click an item to see its purchase and price history.</span>

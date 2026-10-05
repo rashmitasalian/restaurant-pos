@@ -1,5 +1,6 @@
 import React from "react";
 import type { SalesFactsDto } from "../../../shared/pos";
+import { TEXT_LIMITS } from "../../../shared/textLimits";
 import { DataTable } from "../../components/ui/DataTable";
 import { Stat } from "../../components/ui/Stat";
 
@@ -160,6 +161,7 @@ export function SalesFactsView({
                 value={itemSearch}
                 onChange={(event) => setItemSearch(event.target.value)}
                 placeholder="Search item or category"
+                maxLength={TEXT_LIMITS.search}
                 aria-label="Search menu items sold"
               />
             </div>

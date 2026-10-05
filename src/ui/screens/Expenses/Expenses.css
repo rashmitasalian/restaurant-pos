@@ -9,7 +9,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-  align-items: flex-end;
+  align-items: center;
   margin-bottom: 16px;
 }
 
@@ -21,6 +21,9 @@
 }
 
 .exp-preset-btn {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--pos-hit-dense);
   padding: 5px 12px;
   border-radius: var(--pos-r-md);
   font-size: 12px;
@@ -31,6 +34,7 @@
   background: var(--pos-surface);
   color: var(--pos-tx-sub);
   font-family: inherit;
+  box-sizing: border-box;
 }
 
 .exp-preset-btn:hover {
@@ -47,6 +51,7 @@
 }
 
 .exp-date-input {
+  min-height: var(--pos-hit-dense);
   padding: 5px 10px;
   border-radius: var(--pos-r-md);
   font-size: 12px;
@@ -55,6 +60,7 @@
   color: var(--pos-tx-sec);
   outline: none;
   font-family: inherit;
+  box-sizing: border-box;
 }
 
 .exp-date-sep {
@@ -65,6 +71,10 @@
 .exp-filter {
   min-width: 180px;
   flex: 0 1 220px;
+}
+
+.exp-filter .ui-field-error {
+  display: none;
 }
 
 .exp-status {

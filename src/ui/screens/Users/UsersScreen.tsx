@@ -12,6 +12,7 @@ import { DEFAULT_ROLE, PAGE_LABELS, ROLE_KEYS, ROLES } from "../../../config/rol
 import type { Role } from "../../../config/roles";
 import { roleHasPermission } from "../../../shared/permissions";
 import { isValidPersonName, normalizeText, validationMessage } from "../../../shared/validation";
+import { TEXT_LIMITS } from "../../../shared/textLimits";
 import { reportClientError } from "../../../app/utils/clientError";
 import { AuthContext } from "../../context/AuthContext";
 import { PageHeader } from "../../components/ui/PageHeader";
@@ -83,6 +84,7 @@ export function AccountsSearch({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder="Search name, username, or role"
+        maxLength={TEXT_LIMITS.search}
       />
     </div>
   );
@@ -395,6 +397,7 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
             id="create-username"
             type="text"
             value={username}
+            maxLength={TEXT_LIMITS.username}
             onChange={(event) => setUsername(event.target.value)}
             autoComplete="off"
             autoFocus
@@ -408,6 +411,7 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
             id="create-displayname"
             type="text"
             value={displayName}
+            maxLength={TEXT_LIMITS.personName}
             onChange={(event) => setDisplayName(event.target.value)}
             autoComplete="off"
             placeholder="e.g. John Doe"
@@ -435,6 +439,7 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
             id="create-password"
             type="password"
             value={password}
+            maxLength={TEXT_LIMITS.password}
             onChange={(event) => setPassword(event.target.value)}
             autoComplete="new-password"
             placeholder="Minimum 8 characters"
@@ -447,6 +452,7 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
             id="create-confirm"
             type="password"
             value={confirmPassword}
+            maxLength={TEXT_LIMITS.password}
             onChange={(event) => setConfirmPassword(event.target.value)}
             autoComplete="new-password"
             placeholder="Repeat password"
@@ -459,6 +465,7 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
             id="create-admin-password"
             type="password"
             value={adminPassword}
+            maxLength={TEXT_LIMITS.password}
             onChange={(event) => setAdminPassword(event.target.value)}
             autoComplete="current-password"
             placeholder="Required to create users"
@@ -648,6 +655,7 @@ function ConfirmStatusModal({
             id="status-admin-password"
             type="password"
             value={adminPassword}
+            maxLength={TEXT_LIMITS.password}
             onChange={(event) => setAdminPassword(event.target.value)}
             autoComplete="current-password"
             autoFocus
@@ -698,6 +706,7 @@ function PasswordField({
           id={id}
           type={visible ? "text" : "password"}
           value={value}
+          maxLength={TEXT_LIMITS.password}
           onChange={(event) => onChange(event.target.value)}
           autoComplete={autoComplete}
           autoFocus={autoFocus}

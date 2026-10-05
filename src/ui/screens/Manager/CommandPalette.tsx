@@ -1,6 +1,7 @@
 import React from "react";
 import { createPortal } from "react-dom";
 import { Input } from "../../components/ui/Input";
+import { TEXT_LIMITS } from "../../../shared/textLimits";
 import { useBackdropDismiss } from "../../hooks/useBackdropDismiss";
 import { useFocusTrap } from "../../hooks/useFocusTrap";
 import type { ManagerSection, PeopleTab } from "../../../shared/manageSections";
@@ -89,6 +90,7 @@ export function CommandPalette({ open, onClose, items }: CommandPaletteProps) {
           label="Jump to"
           labelHidden
           placeholder="Go to section or action…"
+          maxLength={TEXT_LIMITS.search}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           autoFocus

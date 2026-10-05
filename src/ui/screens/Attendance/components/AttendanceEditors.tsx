@@ -2,6 +2,7 @@ import React from "react";
 import { Modal } from "../../../components/ui/Modal";
 import { Button } from "../../../components/ui/Button";
 import { formatOvertimeInput, parseOvertimeHours } from "../../People/peopleUtils";
+import { TEXT_LIMITS } from "../../../../shared/textLimits";
 
 export function OvertimeEditor({
   open,
@@ -107,6 +108,7 @@ export function NoteEditor({
         <textarea
           id="attendance-note"
           className="pos-input"
+          maxLength={TEXT_LIMITS.notes}
           rows={3}
           value={value}
           placeholder={required ? "Reason for leave" : "Optional note"}

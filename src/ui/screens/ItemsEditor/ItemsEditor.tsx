@@ -27,6 +27,7 @@ import {
   parsePositiveMoney,
   validationMessage,
 } from "../../../shared/validation";
+import { TEXT_LIMITS } from "../../../shared/textLimits";
 import { useToast } from "../../context/ToastContext";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { Button } from "../../components/ui/Button";
@@ -752,6 +753,7 @@ export default function ItemsEditor({
         <input
           placeholder="Search by name or SKU..."
           value={query}
+          maxLength={TEXT_LIMITS.search}
           onChange={(e) => setQuery(e.target.value)}
           aria-label="Search menu items"
           style={{
@@ -1651,6 +1653,7 @@ function ItemForm({
           id="menu-item-name"
           placeholder="e.g. Paneer Tikka"
           value={draft.name}
+          maxLength={TEXT_LIMITS.menuItemName}
           onChange={(e) => onChange({ name: e.target.value })}
           onKeyDown={(e) => e.key === "Enter" && onSubmit()}
           autoFocus
@@ -1866,6 +1869,7 @@ function ItemForm({
           id="menu-item-sku"
           placeholder="e.g. PT-01"
           value={draft.sku}
+          maxLength={TEXT_LIMITS.sku}
           onChange={(e) => onChange({ sku: e.target.value })}
           style={fieldInputStyle}
         />

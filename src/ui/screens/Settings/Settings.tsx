@@ -63,6 +63,7 @@ import {
 } from "../../../shared/gst";
 import { RECOVERY_CODE_COUNT } from "../../../shared/auth";
 import { normalizeCategoryName, validationMessage } from "../../../shared/validation";
+import { TEXT_LIMITS } from "../../../shared/textLimits";
 import { reportClientError } from "../../../app/utils/clientError";
 import { getDefaultServiceModes, type ServiceMode } from "../../../shared/serviceModes";
 import {
@@ -1769,12 +1770,13 @@ export default function Settings({
 
               <div style={{ display: "flex", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
                 <Input
-                  type="password"
                   label="Current admin password"
                   labelHidden
+                  type="password"
                   value={recoveryPassword}
                   onChange={(event) => setRecoveryPassword(event.target.value)}
                   placeholder="Current admin password"
+                  maxLength={TEXT_LIMITS.password}
                   autoComplete="current-password"
                   style={{ maxWidth: 260 }}
                 />
@@ -1886,6 +1888,7 @@ export default function Settings({
                 value={hotelName}
                 onChange={(event) => setHotelName(event.target.value)}
                 placeholder="Restaurant name"
+                maxLength={TEXT_LIMITS.hotelName}
               />
               <Input
                 label="Initials"
@@ -1903,12 +1906,14 @@ export default function Settings({
                 value={hotelPhone}
                 onChange={(event) => setHotelPhone(event.target.value)}
                 placeholder="Receipt phone"
+                maxLength={TEXT_LIMITS.receiptPhone}
               />
               <Input
                 label="Email"
                 value={hotelEmail}
                 onChange={(event) => setHotelEmail(event.target.value)}
                 placeholder="Receipt email"
+                maxLength={TEXT_LIMITS.email}
               />
               <div style={{ gridColumn: "1 / -1" }}>
                 <Input
@@ -1916,6 +1921,7 @@ export default function Settings({
                   value={hotelTagline}
                   onChange={(event) => setHotelTagline(event.target.value)}
                   placeholder="POINT OF SALE"
+                  maxLength={TEXT_LIMITS.tagline}
                 />
               </div>
               <div style={{ gridColumn: "1 / -1" }}>
@@ -2054,6 +2060,7 @@ export default function Settings({
                       value={feedbackUrl}
                       onChange={(event) => setFeedbackUrl(event.target.value)}
                       placeholder="https://example.com/feedback"
+                      maxLength={TEXT_LIMITS.feedbackUrl}
                     />
                   </div>
                 )}
@@ -2071,12 +2078,14 @@ export default function Settings({
                       value={upiId}
                       onChange={(event) => setUpiId(event.target.value.trim())}
                       placeholder="name@bank"
+                      maxLength={TEXT_LIMITS.upiId}
                     />
                     <Input
                       label="Payee name"
                       value={payeeName}
                       onChange={(event) => setPayeeName(event.target.value)}
                       placeholder={hotelName || "Restaurant"}
+                      maxLength={TEXT_LIMITS.personName}
                     />
                     <label
                       style={{
@@ -2308,6 +2317,7 @@ export default function Settings({
                   value={gstLegalName}
                   onChange={(event) => setGstLegalName(event.target.value)}
                   placeholder="Registered business name"
+                  maxLength={TEXT_LIMITS.legalName}
                 />
               </div>
               <div style={{ gridColumn: "1 / -1" }}>
@@ -2317,6 +2327,7 @@ export default function Settings({
                   value={gstRegisteredAddress}
                   onChange={(event) => setGstRegisteredAddress(event.target.value)}
                   placeholder="Address printed on GST bills"
+                  maxLength={TEXT_LIMITS.address}
                   rows={3}
                   style={{ resize: "vertical", minHeight: 74 }}
                 />
@@ -2334,6 +2345,7 @@ export default function Settings({
                 value={gstStateName}
                 onChange={(event) => setGstStateName(event.target.value)}
                 placeholder="e.g. Maharashtra"
+                maxLength={TEXT_LIMITS.stateName}
               />
             </div>
 
@@ -2632,6 +2644,7 @@ export default function Settings({
                   className="pos-input"
                   style={{ marginTop: 10, fontFamily: "monospace" }}
                   aria-label="Kitchen printer IP address"
+                  maxLength={TEXT_LIMITS.printerIp}
                 />
               ) : null}
             </div>
@@ -2680,6 +2693,7 @@ export default function Settings({
                   className="pos-input"
                   style={{ marginTop: 10, fontFamily: "monospace" }}
                   aria-label="Counter printer IP address"
+                  maxLength={TEXT_LIMITS.printerIp}
                 />
               ) : null}
             </div>
@@ -3221,6 +3235,7 @@ export default function Settings({
                 value={newSeatingAreaName}
                 onChange={(event) => setNewSeatingAreaName(event.target.value)}
                 placeholder="Garden, Ground Floor, First Floor, Bar..."
+                maxLength={TEXT_LIMITS.areaName}
                 style={{ maxWidth: 320 }}
                 onKeyDown={(event) => {
                   if (event.key === "Enter") {
@@ -3287,6 +3302,7 @@ export default function Settings({
                     <input
                       className="pos-input"
                       value={area.name}
+                      maxLength={TEXT_LIMITS.areaName}
                       onChange={(event) =>
                         setSeatingAreas((current) =>
                           current.map((entry) =>
@@ -3418,6 +3434,7 @@ export default function Settings({
                         <input
                           className="pos-input"
                           value={area.prefix}
+                          maxLength={TEXT_LIMITS.areaPrefix}
                           onChange={(event) =>
                             setSeatingAreas((current) =>
                               current.map((entry) =>
@@ -3558,6 +3575,7 @@ export default function Settings({
                                   <input
                                     className="pos-input"
                                     value={displayName}
+                                    maxLength={TEXT_LIMITS.tableName}
                                     aria-label={`Name for planned table ${table.name}`}
                                     onChange={(event) =>
                                       setPreviewOverrides((current) => ({
@@ -3716,6 +3734,7 @@ export default function Settings({
                           <input
                             className="pos-input"
                             value={tableNameDraft[table.id] ?? table.name ?? ""}
+                            maxLength={TEXT_LIMITS.tableName}
                             aria-label={`Name for table ${table.id}`}
                             onChange={(event) =>
                               setTableNameDraft((current) => ({
@@ -4020,6 +4039,7 @@ export default function Settings({
                 className="pos-input"
                 placeholder="e.g. Starters, Mains, Beverages…"
                 value={newCategory}
+                maxLength={TEXT_LIMITS.menuCategory}
                 onChange={(e) => setNewCategory(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && addCategory()}
                 style={{ flex: 1 }}
@@ -4152,6 +4172,7 @@ export default function Settings({
                 className="pos-input"
                 placeholder="e.g. Half, Full, Family Pack…"
                 value={newMenuVariantOption}
+                maxLength={TEXT_LIMITS.menuVariant}
                 onChange={(e) => setNewMenuVariantOption(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && addMenuVariantOption()}
                 style={{ flex: 1 }}

@@ -11,6 +11,7 @@ import {
 } from "../../../../app/db/posRepository";
 import type { GroceryPurchaseDto, VendorDto } from "../../../../shared/pos";
 import { validationMessage } from "../../../../shared/validation";
+import { TEXT_LIMITS } from "../../../../shared/textLimits";
 import { Badge } from "../../../components/ui/Badge";
 import { Button } from "../../../components/ui/Button";
 import { ConfirmModal } from "../../../components/ui/ConfirmModal";
@@ -512,6 +513,7 @@ export function PurchasesView({
           <Input
             label="Amount *"
             value={amount}
+            maxLength={TEXT_LIMITS.money}
             onChange={(e) => setAmount(e.target.value)}
             inputMode="decimal"
           />
@@ -540,6 +542,7 @@ export function PurchasesView({
             <Input
               label="Vendor name"
               value={newVendor}
+              maxLength={TEXT_LIMITS.vendorName}
               onChange={(e) => setNewVendor(e.target.value)}
               placeholder="Optional"
             />
@@ -564,6 +567,7 @@ export function PurchasesView({
           <Input
             label="Notes"
             value={notes}
+            maxLength={TEXT_LIMITS.notes}
             onChange={(e) => setNotes(e.target.value)}
             placeholder="Optional"
           />

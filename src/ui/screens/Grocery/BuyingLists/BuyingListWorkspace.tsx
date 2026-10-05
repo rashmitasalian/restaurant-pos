@@ -25,6 +25,7 @@ import type {
   VendorDto,
 } from "../../../../shared/pos";
 import { normalizeText, validationMessage } from "../../../../shared/validation";
+import { TEXT_LIMITS } from "../../../../shared/textLimits";
 import { Badge } from "../../../components/ui/Badge";
 import { Button } from "../../../components/ui/Button";
 import { Icon } from "../../../components/ui/Icon";
@@ -80,6 +81,7 @@ function ReceivedQtyInput({
     >
       <input
         value={value}
+        maxLength={TEXT_LIMITS.quantity}
         placeholder={String(planned)}
         onChange={(e) => onChange(e.target.value)}
         inputMode="decimal"
@@ -94,14 +96,13 @@ function purchaseLinePayload(
   coveredIds: string[],
   pricedLines: Array<{ listLineId: string; lineTotal: number }>,
   receivedQty: Record<string, string>,
-  singleCovered: boolean,
   coverage: "pending" | "selected" | "none",
 ) {
   const lines = coveredIds.map((listLineId) => {
     const received = (receivedQty[listLineId] || "").trim();
     const priced = pricedLines.find((line) => line.listLineId === listLineId);
     const entry: { listLineId: string; lineTotal?: number | null; quantity?: number } = { listLineId };
-    if (!singleCovered && priced) {
+    if (priced) {
       entry.lineTotal = priced.lineTotal;
     }
     if (received) {
@@ -160,8 +161,14 @@ export function BuyingListWorkspace({ listId, startCompose = false, onClose, onC
   const [qtyDrafts, setQtyDrafts] = React.useState<Record<string, string>>({});
   const [editingBill, setEditingBill] = React.useState<GroceryPurchaseDto | null>(null);
   const [voidOpen, setVoidOpen] = React.useState(false);
+  const [flashLineId, setFlashLineId] = React.useState<string | null>(null);
   const addRef = React.useRef<HTMLInputElement>(null);
   const menuAnchor = React.useRef<HTMLDivElement>(null);
+  const queryRef = React.useRef("");
+  const menuOpenRef = React.useRef(false);
+  const composingRef = React.useRef(false);
+  const editingBillRef = React.useRef(false);
+  const confirmOpenRef = React.useRef(false);
   const updateTimer = React.useRef<number | null>(null);
   const pendingUpdates = React.useRef(new Map<string, LinePatch>());
   const changeQueue = React.useRef<Promise<void>>(Promise.resolve());
@@ -262,24 +269,52 @@ export function BuyingListWorkspace({ listId, startCompose = false, onClose, onC
     onClose();
   }, [listId, onChanged, onClose]);
 
+  queryRef.current = query;
+  menuOpenRef.current = menuOpen;
+  composingRef.current = composing;
+  editingBillRef.current = Boolean(editingBill);
+  confirmOpenRef.current = cancelOpen || deleteOpen || voidOpen;
+
   React.useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape" || e.defaultPrevented) {
+    const dismissQuery = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || confirmOpenRef.current || composingRef.current || !queryRef.current.trim()) {
         return;
       }
-      if (composing) {
+      e.preventDefault();
+      e.stopPropagation();
+      setQuery("");
+      setHighlight(0);
+      addRef.current?.focus();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented || confirmOpenRef.current) {
+        return;
+      }
+      if (menuOpenRef.current) {
+        e.preventDefault();
+        setMenuOpen(false);
+        return;
+      }
+      if (composingRef.current) {
+        e.preventDefault();
         setComposing(false);
         return;
       }
-      if (editingBill) {
+      if (editingBillRef.current) {
+        e.preventDefault();
         setEditingBill(null);
         return;
       }
+      e.preventDefault();
       close();
     };
+    document.addEventListener("keydown", dismissQuery, true);
     document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [composing, editingBill, close]);
+    return () => {
+      document.removeEventListener("keydown", dismissQuery, true);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [close]);
 
   const showLines = (nextLines: GroceryListDoc["lines"]) => {
     linesRef.current = nextLines;
@@ -375,6 +410,32 @@ export function BuyingListWorkspace({ listId, startCompose = false, onClose, onC
     }
   }, [loading, list?.id]);
 
+  const revealExisting = (name: string, itemId?: string | null) => {
+    const line = linesRef.current.find(
+      (row) =>
+        (itemId && row.groceryItemId === itemId) ||
+        normalizeText(row.itemName).toLowerCase() === name.toLowerCase(),
+    );
+    setQuery("");
+    setHighlight(0);
+    setStatus(`${line?.itemName || name} is already on this list`);
+    if (!line) {
+      return;
+    }
+    setFlashLineId(line.id);
+    window.setTimeout(() => setFlashLineId((current) => (current === line.id ? null : current)), 1600);
+    window.requestAnimationFrame(() => {
+      const input = document.getElementById(`grocery-qty-${line.id}`);
+      if (input instanceof HTMLInputElement) {
+        input.focus();
+        input.select();
+        input.scrollIntoView({ block: "nearest" });
+        return;
+      }
+      document.getElementById(`grocery-line-${line.id}`)?.scrollIntoView({ block: "nearest" });
+    });
+  };
+
   const addItem = async (item?: GroceryItemDoc, customName?: string) => {
     const name = item?.name || customName || normalizedQuery;
     if (!name || !list) {
@@ -387,7 +448,7 @@ export function BuyingListWorkspace({ listId, startCompose = false, onClose, onC
           normalizeText(line.itemName).toLowerCase() === name.toLowerCase(),
       )
     ) {
-      setStatus(`${name} is already on this list`);
+      revealExisting(name, item?.id);
       return;
     }
     const line = {
@@ -518,8 +579,7 @@ export function BuyingListWorkspace({ listId, startCompose = false, onClose, onC
     coverage === "selected"
       ? pendingLines.filter((line) => selectedIds.has(line.id)).map((line) => line.id)
       : pendingLines.map((line) => line.id);
-  const singleCovered = coveredIds.length === 1;
-  const pricedLines = (singleCovered ? [] : coveredIds)
+  const pricedLines = coveredIds
     .map((listLineId) => ({ listLineId, lineTotal: parseMoney(lineAmounts[listLineId] || "") }))
     .filter((line): line is { listLineId: string; lineTotal: number } => line.lineTotal != null && line.lineTotal > 0);
   const itemSum = +pricedLines.reduce((sum, line) => sum + line.lineTotal, 0).toFixed(2);
@@ -572,7 +632,7 @@ export function BuyingListWorkspace({ listId, startCompose = false, onClose, onC
         purchaseDate: new Date(`${purchaseDate}T12:00:00`).getTime(),
         invoiceNumber: invoice.trim() || null,
         coverage,
-        lines: purchaseLinePayload(coveredIds, pricedLines, receivedQty, singleCovered, coverage),
+        lines: purchaseLinePayload(coveredIds, pricedLines, receivedQty, coverage),
       });
       setComposing(false);
       setStatus("Purchase recorded");
@@ -591,7 +651,7 @@ export function BuyingListWorkspace({ listId, startCompose = false, onClose, onC
       return;
     }
     setAmount(String(bill.total));
-    setAmountTouched(true);
+    setAmountTouched(false);
     setVendorId(bill.vendorId || "");
     setNewVendor("");
     setShowNewVendor(false);
@@ -611,9 +671,26 @@ export function BuyingListWorkspace({ listId, startCompose = false, onClose, onC
 
   const editLines = editingBill?.lines || [];
   const editSingle = editLines.length === 1;
-  const editItemSum = +(editSingle ? [] : editLines)
-    .reduce((sum, line) => sum + (parseMoney(lineAmounts[line.id] || "") || 0), 0)
-    .toFixed(2);
+  const sumEditLines = (amounts: Record<string, string>) =>
+    +editLines.reduce((sum, line) => sum + (parseMoney(amounts[line.id] || "") || 0), 0).toFixed(2);
+  const editItemSum = editSingle ? 0 : sumEditLines(lineAmounts);
+
+  const setEditLineAmount = (lineId: string, value: string) => {
+    const next = { ...lineAmounts, [lineId]: value };
+    setLineAmounts(next);
+    if (amountTouched || editSingle) {
+      return;
+    }
+    const previousSum = sumEditLines(lineAmounts);
+    const nextSum = sumEditLines(next);
+    const bill = parsedAmount ?? 0;
+    if (nextSum <= 0) {
+      return;
+    }
+    if (bill <= previousSum + 0.001 || nextSum > bill) {
+      setAmount(String(nextSum));
+    }
+  };
   const editBlocker =
     parsedAmount == null || parsedAmount <= 0
       ? "Enter the bill amount."
@@ -776,7 +853,7 @@ export function BuyingListWorkspace({ listId, startCompose = false, onClose, onC
   const renderPendingRow = (line: Line) => (
     <div
       key={line.id}
-      className={`${styles.ticketRow} ${picking ? styles.ticketRowPicking : ""} ${
+      className={`${styles.ticketRow} ${flashLineId === line.id ? styles.ticketRowFlash : ""} ${picking ? styles.ticketRowPicking : ""} ${
         picking && selectedIds.has(line.id) ? styles.ticketRowPicked : ""
       }`}
       onClick={picking ? () => toggleSelected(line.id, !selectedIds.has(line.id)) : undefined}
@@ -811,13 +888,12 @@ export function BuyingListWorkspace({ listId, startCompose = false, onClose, onC
           ) : (
             <span className={styles.qtyBoxSpacer} />
           )}
-          {singleCovered && coveredIds[0] === line.id ? (
-            <span className={`${styles.linePriceSpacer} ${styles.ticketMoneyMuted}`}>whole bill</span>
-          ) : !picking || selectedIds.has(line.id) ? (
+          {!picking || selectedIds.has(line.id) ? (
             <label className={styles.linePrice} onClick={(e) => e.stopPropagation()}>
               <span aria-hidden="true">₹</span>
               <input
                 value={lineAmounts[line.id] || ""}
+                maxLength={TEXT_LIMITS.money}
                 onChange={(e) => setLineAmount(line.id, e.target.value)}
                 inputMode="decimal"
                 placeholder="Amount"
@@ -836,7 +912,9 @@ export function BuyingListWorkspace({ listId, startCompose = false, onClose, onC
         <>
           <div className={styles.qtyEditor}>
             <input
+              id={`grocery-qty-${line.id}`}
               value={qtyDrafts[line.id] ?? String(line.quantity)}
+              maxLength={TEXT_LIMITS.quantity}
               onChange={(e) => setQtyDrafts((current) => ({ ...current, [line.id]: e.target.value }))}
               onBlur={() => commitQty(line.id)}
               onKeyDown={(e) => {
@@ -891,8 +969,9 @@ export function BuyingListWorkspace({ listId, startCompose = false, onClose, onC
         key={line.id}
         type="button"
         className={`${styles.ticketRow} ${styles.ticketRowPurchased} ${styles.ticketRowButton} ${
-          inEditedBill ? styles.ticketRowPicked : ""
-        }`}
+          flashLineId === line.id ? styles.ticketRowFlash : ""
+        } ${inEditedBill ? styles.ticketRowPicked : ""}`}
+        id={`grocery-line-${line.id}`}
         onClick={bill ? () => beginEdit(bill) : undefined}
         disabled={!bill || composing}
         title={bill ? "Open this bill to edit amounts" : undefined}
@@ -944,6 +1023,7 @@ export function BuyingListWorkspace({ listId, startCompose = false, onClose, onC
         <Input
           label="New vendor name"
           value={newVendor}
+          maxLength={TEXT_LIMITS.vendorName}
           onChange={(e) => setNewVendor(e.target.value)}
           autoFocus
         />
@@ -974,6 +1054,7 @@ export function BuyingListWorkspace({ listId, startCompose = false, onClose, onC
         <Input
           label="Invoice / bill no."
           value={invoice}
+          maxLength={TEXT_LIMITS.invoiceNumber}
           onChange={(e) => setInvoice(e.target.value)}
         />
       ) : (
@@ -997,7 +1078,11 @@ export function BuyingListWorkspace({ listId, startCompose = false, onClose, onC
             <input
               className={styles.amountInput}
               value={amount}
-              onChange={(e) => setAmount(e.target.value)}
+              maxLength={TEXT_LIMITS.money}
+              onChange={(e) => {
+                setAmount(e.target.value);
+                setAmountTouched(true);
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   e.preventDefault();
@@ -1051,9 +1136,8 @@ export function BuyingListWorkspace({ listId, startCompose = false, onClose, onC
                   <span aria-hidden="true">₹</span>
                   <input
                     value={lineAmounts[line.id] || ""}
-                    onChange={(e) =>
-                      setLineAmounts((current) => ({ ...current, [line.id]: e.target.value }))
-                    }
+                    maxLength={TEXT_LIMITS.money}
+                    onChange={(e) => setEditLineAmount(line.id, e.target.value)}
                     inputMode="decimal"
                     placeholder="Amount"
                     aria-label={`Amount for ${line.itemName}`}
@@ -1180,6 +1264,7 @@ export function BuyingListWorkspace({ listId, startCompose = false, onClose, onC
                   ref={addRef}
                   className="ui-input"
                   value={query}
+                  maxLength={TEXT_LIMITS.search}
                   onChange={(e) => {
                     setQuery(e.target.value);
                     setHighlight(0);
@@ -1222,7 +1307,13 @@ export function BuyingListWorkspace({ listId, startCompose = false, onClose, onC
                       >
                         <span>{item.name}</span>
                         <span className={styles.addItemMeta}>
-                          {entryQtyLabel || `${item.defaultQuantity} ${item.defaultUnit}`}
+                          {allLines.some(
+                            (line) =>
+                              line.groceryItemId === item.id ||
+                              normalizeText(line.itemName).toLowerCase() === item.name.toLowerCase(),
+                          )
+                            ? "Already on this list"
+                            : entryQtyLabel || `${item.defaultQuantity} ${groceryUnitLabel(item.defaultUnit)}`}
                         </span>
                       </button>
                     ))}
@@ -1310,6 +1401,7 @@ export function BuyingListWorkspace({ listId, startCompose = false, onClose, onC
                       <input
                         className={styles.amountInput}
                         value={amount}
+                        maxLength={TEXT_LIMITS.money}
                         onChange={(e) => {
                           setAmount(e.target.value);
                           setAmountTouched(e.target.value.trim() !== "");
@@ -1326,9 +1418,7 @@ export function BuyingListWorkspace({ listId, startCompose = false, onClose, onC
                       />
                     </span>
                     <span className={styles.amountHint}>
-                      {singleCovered
-                        ? "One item — the whole bill goes to it."
-                        : itemSum > 0
+                      {itemSum > 0
                         ? parsedAmount != null && parsedAmount > itemSum
                           ? `Items ${formatCurrency(itemSum)} · ${formatCurrency(
                               +(parsedAmount - itemSum).toFixed(2),

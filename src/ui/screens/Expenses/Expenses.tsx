@@ -13,6 +13,7 @@ import { EmptyState } from "../../components/ui/EmptyState";
 import { Modal } from "../../components/ui/Modal";
 import { Input } from "../../components/ui/Input";
 import { Select } from "../../components/ui/Select";
+import { TEXT_LIMITS } from "../../../shared/textLimits";
 import { ManageShell } from "../Manager/ManageShell";
 import { validationMessage } from "../../../shared/validation";
 import "./Expenses.css";
@@ -296,9 +297,11 @@ export default function Expenses() {
               ? `No expenses ${rangeLabel(preset).toLowerCase()}`
               : "No expenses in this category"
           }
-          text="Record rent, electricity, staff, and other operating costs here."
-          actionLabel="Add Expense"
-          onAction={() => setAddOpen(true)}
+          text={
+            expenses.length === 0
+              ? "Record rent, electricity, staff, and other operating costs with Add Expense."
+              : "Nothing in this category for the selected period."
+          }
         />
       ) : (
         <DataTable
@@ -360,6 +363,7 @@ export default function Expenses() {
           <Input
             label="Description"
             value={form.description}
+            maxLength={TEXT_LIMITS.notes}
             onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
           />
           <Select

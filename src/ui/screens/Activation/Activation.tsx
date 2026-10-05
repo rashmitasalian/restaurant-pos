@@ -1,6 +1,7 @@
 import React from "react";
 import restoNitiMark from "../../assets/restoniti-icon.png";
 import { Button } from "../../components/ui/Button";
+import { TEXT_LIMITS } from "../../../shared/textLimits";
 import styles from "./Activation.module.css";
 
 type UnlicensedStatus = {
@@ -100,6 +101,7 @@ export default function Activation({
           className={styles.code}
           readOnly
           rows={4}
+          maxLength={TEXT_LIMITS.installationCode}
           value={code || codeError || ""}
           aria-readonly="true"
         />

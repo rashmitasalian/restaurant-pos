@@ -9,6 +9,7 @@ import {
   getConfigBranding,
 } from "../../../app/db/posRepository";
 import { printReceipt } from "../../../app/services/printer";
+import { TEXT_LIMITS } from "../../../shared/textLimits";
 import { useToast } from "../../context/ToastContext";
 import { reportClientError } from "../../../app/utils/clientError";
 import { useFocusTrap } from "../../hooks/useFocusTrap";
@@ -911,6 +912,7 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
             <>
               <input
                 placeholder="Search order or reference"
+                maxLength={TEXT_LIMITS.search}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 onKeyDown={(e) => {
@@ -959,6 +961,7 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
         >
           <input
             placeholder="Search order or reference"
+            maxLength={TEXT_LIMITS.search}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={(e) => {

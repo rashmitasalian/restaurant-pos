@@ -8,6 +8,7 @@ import restoNitiMark from "../../assets/restoniti-icon.png";
 import { Button } from "../../components/ui/Button";
 import { Eye, EyeOff } from "lucide-react";
 import authStyles from "./Auth.module.css";
+import { TEXT_LIMITS } from "../../../shared/textLimits";
 
 export default function LoginScreen() {
   const auth = React.useContext(AuthContext);
@@ -150,6 +151,7 @@ export default function LoginScreen() {
             <input
               type="text"
               value={username}
+              maxLength={TEXT_LIMITS.username}
               autoComplete="username"
               autoFocus
               onChange={(event) => setUsername(event.target.value)}
@@ -164,6 +166,7 @@ export default function LoginScreen() {
               <input
                 type={showPassword ? "text" : "password"}
                 value={password}
+                maxLength={TEXT_LIMITS.password}
                 autoComplete="current-password"
                 onChange={(event) => setPassword(event.target.value)}
                 disabled={isSubmitting || isLocked}
@@ -340,6 +343,7 @@ function RecoveryModal({
               <input
                 type="text"
                 value={username}
+                maxLength={TEXT_LIMITS.username}
                 onChange={(event) => setUsername(event.target.value)}
                 autoComplete="username"
                 autoFocus
@@ -353,6 +357,7 @@ function RecoveryModal({
               <input
                 type="text"
                 value={recoveryCode}
+                maxLength={TEXT_LIMITS.recoveryCode}
                 onChange={(event) => setRecoveryCode(event.target.value)}
                 autoComplete="off"
                 disabled={isSubmitting || lockedSeconds > 0}
@@ -365,6 +370,7 @@ function RecoveryModal({
               <input
                 type="password"
                 value={newPassword}
+                maxLength={TEXT_LIMITS.password}
                 onChange={(event) => setNewPassword(event.target.value)}
                 autoComplete="new-password"
                 disabled={isSubmitting || lockedSeconds > 0}
@@ -385,6 +391,7 @@ function RecoveryModal({
               <input
                 type="password"
                 value={confirmPassword}
+                maxLength={TEXT_LIMITS.password}
                 onChange={(event) => setConfirmPassword(event.target.value)}
                 autoComplete="new-password"
                 disabled={isSubmitting || lockedSeconds > 0}

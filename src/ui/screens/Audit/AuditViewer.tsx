@@ -3,6 +3,7 @@ import { countAudits, getAudits } from "../../../app/db/posRepository";
 import { Icon } from "../../components/ui/Icon";
 import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui/Input";
+import { TEXT_LIMITS } from "../../../shared/textLimits";
 import { Select } from "../../components/ui/Select";
 import { DataTable } from "../../components/ui/DataTable";
 import { ManageShell } from "../Manager/ManageShell";
@@ -208,6 +209,7 @@ export default function AuditViewer() {
             <Input
               label="Search"
               placeholder="Filter by action/order/user"
+              maxLength={TEXT_LIMITS.search}
               value={filter}
               onChange={(e) => {
                 setFilter(e.target.value);
