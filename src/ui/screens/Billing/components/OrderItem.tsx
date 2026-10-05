@@ -1,4 +1,5 @@
 import React from "react";
+import { lineHasUnsentQty } from "../../../../shared/kitchenNote";
 import { OrderItemRow } from "../../../components/ui/OrderItemRow";
 
 interface Props {
@@ -14,6 +15,8 @@ interface Props {
   variantChoices?: Array<{ id?: string; name: string; price: number }>;
   selectedVariantName?: string;
   onChangeVariant: (id: string, variantName: string) => Promise<void>;
+  onCommitNote: (id: string, note: string) => Promise<void>;
+  noteLocked?: boolean;
   displayName?: string;
 }
 
@@ -30,6 +33,8 @@ export default function OrderItem({
   variantChoices = [],
   selectedVariantName = "",
   onChangeVariant,
+  onCommitNote,
+  noteLocked = false,
   displayName,
 }: Props) {
   const kotSentQty = Math.max(0, Number(it.kotPrintedQty || 0));
@@ -41,7 +46,11 @@ export default function OrderItem({
   return (
     <OrderItemRow
       title={title}
-      modifiers={it.kitchenNote ? [it.kitchenNote] : undefined}
+      kitchenNote={it.kitchenNote}
+      noteEditable={!noteLocked && lineHasUnsentQty(it)}
+      onCommitNote={(note) => {
+        void onCommitNote(it.id, note);
+      }}
       rateLabel={`₹${it.rate} each`}
       qty={it.qty}
       lineTotalLabel={`₹${lineTotal}`}

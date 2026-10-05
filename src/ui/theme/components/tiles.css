@@ -454,6 +454,23 @@
   color: var(--pos-tx-muted);
 }
 
+.ui-order-row-note,
+.ui-order-row-note-locked {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.ui-order-row-note {
+  margin-top: 2px;
+  min-height: 28px;
+  padding: 4px 8px;
+  font-size: var(--pos-type-12);
+}
+
+.ui-order-row-note-locked {
+  overflow-wrap: anywhere;
+}
+
 .ui-order-row-qty {
   display: inline-flex;
   align-items: center;

@@ -14,6 +14,8 @@ interface Props {
   removeLine: (id: string) => Promise<unknown>;
   updateOrderQty: (id: string, delta: number) => Promise<void>;
   onChangeVariant: (id: string, variantName: string) => Promise<void>;
+  onCommitNote: (id: string, note: string) => Promise<void>;
+  noteLocked?: boolean;
 }
 
 function detectSelectedVariant(line: any, menuItem: any) {
@@ -53,6 +55,8 @@ export default function OrderList({
   removeLine,
   updateOrderQty,
   onChangeVariant,
+  onCommitNote,
+  noteLocked = false,
 }: Props) {
   if (!items || items.length === 0) {
     return (
@@ -87,6 +91,8 @@ export default function OrderList({
             variantChoices={variants}
             selectedVariantName={selectedVariantName}
             onChangeVariant={onChangeVariant}
+            onCommitNote={onCommitNote}
+            noteLocked={noteLocked}
           />
         );
       })}

@@ -1,5 +1,6 @@
 import React from "react";
 import { Minus, Plus, X } from "lucide-react";
+import { KITCHEN_NOTE_MAX } from "../../../shared/kitchenNote";
 import { Icon } from "./Icon";
 
 export function OrderItemRow({
@@ -23,6 +24,9 @@ export function OrderItemRow({
   onCommitQty,
   onCommitRate,
   onRemove,
+  kitchenNote,
+  noteEditable = false,
+  onCommitNote,
 }: {
   title: string;
   modifiers?: string[];
@@ -44,9 +48,27 @@ export function OrderItemRow({
   onCommitQty: () => void;
   onCommitRate: () => void;
   onRemove: () => void;
+  kitchenNote?: string | null;
+  noteEditable?: boolean;
+  onCommitNote?: (note: string) => void;
 }) {
   const name = String(title || "").trim() || "Item";
   const hasVariants = Array.isArray(variantChoices) && variantChoices.length > 0;
+  const savedNote = String(kitchenNote || "");
+  const [noteDraft, setNoteDraft] = React.useState(savedNote);
+  const noteFocused = React.useRef(false);
+  React.useEffect(() => {
+    if (!noteFocused.current) {
+      setNoteDraft(savedNote);
+    }
+  }, [savedNote]);
+  const canEditNote = noteEditable && typeof onCommitNote === "function";
+  const commitNote = () => {
+    if (!onCommitNote || noteDraft.trim() === savedNote.trim()) {
+      return;
+    }
+    onCommitNote(noteDraft);
+  };
 
   return (
     <div className="ui-order-row">
@@ -177,6 +199,33 @@ export function OrderItemRow({
       >
         <Icon icon={X} size="sm" />
       </button>
+      {canEditNote ? (
+        <input
+          className="pos-input ui-order-row-note"
+          value={noteDraft}
+          placeholder="Kitchen note"
+          aria-label={`Kitchen note for ${name}`}
+          maxLength={KITCHEN_NOTE_MAX}
+          autoComplete="off"
+          onFocus={() => {
+            noteFocused.current = true;
+          }}
+          onChange={(event) => setNoteDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              (event.target as HTMLInputElement).blur();
+            }
+          }}
+          onBlur={() => {
+            noteFocused.current = false;
+            commitNote();
+          }}
+        />
+      ) : savedNote ? (
+        <ul className="ui-order-row-mod ui-order-row-note-locked">
+          <li>{savedNote}</li>
+        </ul>
+      ) : null}
     </div>
   );
 }

@@ -22,20 +22,35 @@ import { Card } from "../../components/ui/Card";
 import { buildKotLines } from "../Billing/utils/receiptBuilder";
 import styles from "./KOTQueue.module.css";
 
+type KotQueueLine = {
+  name: string;
+  qty: number;
+  note?: string | null;
+};
+
 type KOTItem = {
   orderId: string;
   table: number;
   tableLabel: string;
   status: OrderDoc["kotStatus"];
   order: OrderDoc;
-  sentItems: { name: string; qty: number }[];
-  pendingItems: Array<{ id: string; name: string; qty: number; sentQty: number }>;
+  sentItems: KotQueueLine[];
+  pendingItems: Array<KotQueueLine & { id: string; sentQty: number }>;
   time: number;
 };
 
-function getPrintedItems(order: OrderDoc) {
+function kitchenNoteFor(line: { kitchenNote?: string | null }) {
+  const note = String(line.kitchenNote || "").trim();
+  return note || null;
+}
+
+function getPrintedItems(order: OrderDoc): KotQueueLine[] {
   return (order.items || [])
-    .map((it) => ({ name: it.name, qty: Math.max(0, Number(it.kotPrintedQty || 0)) }))
+    .map((it) => ({
+      name: it.name,
+      qty: Math.max(0, Number(it.kotPrintedQty || 0)),
+      note: kitchenNoteFor(it),
+    }))
     .filter((it) => it.qty > 0);
 }
 
@@ -46,15 +61,21 @@ function getPendingItems(order: OrderDoc) {
       const printedQty = Math.max(0, Number(it.kotPrintedQty || 0));
       const pendingQty = Math.max(0, qty - printedQty);
       return pendingQty > 0
-        ? { id: it.id, name: it.name, qty: pendingQty, sentQty: printedQty + pendingQty }
+        ? {
+            id: it.id,
+            name: it.name,
+            qty: pendingQty,
+            sentQty: printedQty + pendingQty,
+            note: kitchenNoteFor(it),
+          }
         : null;
     })
-    .filter(Boolean) as Array<{ id: string; name: string; qty: number; sentQty: number }>;
+    .filter(Boolean) as Array<KotQueueLine & { id: string; sentQty: number }>;
 }
 
 function buildPreview(
   order: OrderDoc,
-  items: Array<{ name: string; qty: number }>,
+  items: KotQueueLine[],
   sentBy?: string,
   kotSeqNum?: number,
   tableLabel?: string | null,
@@ -225,7 +246,11 @@ export default function KOTQueue() {
               `CENTER:${label}`,
               ...(currentUserLabel ? [`LEFT:  Reprinted by: ${currentUserLabel}`] : []),
               "SEP",
-              ...itemsToPrint.map((it) => `LEFT:  ${String(it.qty).padStart(3)} x ${it.name}`),
+              ...itemsToPrint.flatMap((it) => {
+                const row = `LEFT:  ${String(it.qty).padStart(3)} x ${it.name}`;
+                const note = String(it.note || "").trim();
+                return note ? [row, `LEFT:    ${note}`] : [row];
+              }),
               "BLANK",
               "CUT",
             ];
@@ -321,7 +346,10 @@ export default function KOTQueue() {
                     <div className="ui-overline">Pending to print</div>
                     {k.pendingItems.map((it) => (
                       <div key={`pending-${it.id}`} className={styles.line}>
-                        <span style={{ flex: 1 }}>{it.name}</span>
+                        <div className={styles.lineMain}>
+                          <div>{it.name}</div>
+                          {it.note ? <div className={styles.note}>{it.note}</div> : null}
+                        </div>
                         <span className={`${styles.qty} ${styles.qtyPending}`}>x{it.qty}</span>
                       </div>
                     ))}
@@ -333,7 +361,10 @@ export default function KOTQueue() {
                     <div className="ui-overline">Already sent</div>
                     {k.sentItems.map((it, index) => (
                       <div key={`sent-${it.name}-${index}`} className={styles.line}>
-                        <span style={{ flex: 1 }}>{it.name}</span>
+                        <div className={styles.lineMain}>
+                          <div>{it.name}</div>
+                          {it.note ? <div className={styles.note}>{it.note}</div> : null}
+                        </div>
                         <span className={`${styles.qty} ${styles.qtySent}`}>x{it.qty}</span>
                       </div>
                     ))}

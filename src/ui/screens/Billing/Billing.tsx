@@ -90,6 +90,7 @@ import {
   samePrinterTarget,
 } from "../../../shared/printerConfig";
 import { formatTableTileLabel } from "../../../shared/floorLayout";
+import { lineHasUnsentQty, normalizeKitchenNote } from "../../../shared/kitchenNote";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -1164,6 +1165,36 @@ export default function Billing() {
     } catch (e: any) {
       logger.error("Failed to save order rate", e);
       showToast(reportClientError("billing.save-rate", e, "Failed to save rate"), "error");
+    }
+  };
+
+  const commitKitchenNote = async (id: string, note: string) => {
+    if (!order || order.status === "paid" || order.status === "cancelled") {
+      return;
+    }
+    const line = order.items.find((candidate: any) => candidate.id === id);
+    if (!line || !lineHasUnsentQty(line)) {
+      return;
+    }
+    const next = normalizeKitchenNote(note);
+    if (next === normalizeKitchenNote(line.kitchenNote)) {
+      return;
+    }
+    try {
+      const updated = await updateOrderLines(
+        order._id,
+        order.items.map((entry: any) =>
+          entry.id === id ? { ...entry, kitchenNote: next } : entry,
+        ),
+      );
+      setOrder(updated);
+      window.dispatchEvent(new Event("orders-changed"));
+    } catch (e: any) {
+      logger.error("Failed to save kitchen note", e);
+      showToast(
+        reportClientError("billing.kitchen-note", e, "Couldn't save the kitchen note"),
+        "error",
+      );
     }
   };
 
@@ -2440,6 +2471,8 @@ export default function Billing() {
                       removeLine={removeLine}
                       updateOrderQty={updateOrderQty}
                       onChangeVariant={changeLineVariant}
+                      onCommitNote={commitKitchenNote}
+                      noteLocked={isPaid || order?.status === "cancelled"}
                     />
                   </div>
                 ) : (

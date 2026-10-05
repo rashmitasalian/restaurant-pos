@@ -44,7 +44,7 @@
 
 .line {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
   border-bottom: 1px solid var(--pos-line);
@@ -52,6 +52,20 @@
   font-size: 13px;
   font-weight: 600;
   color: var(--pos-tx-sec);
+}
+
+.lineMain {
+  flex: 1;
+  min-width: 0;
+}
+
+.note {
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--pos-tx-sub);
+  overflow-wrap: anywhere;
 }
 
 .qty {

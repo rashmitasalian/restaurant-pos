@@ -1,4 +1,4 @@
-const KITCHEN_NOTE_MAX = 80;
+export const KITCHEN_NOTE_MAX = 80;
 
 /** Kitchen instruction stored on an order line. Empty becomes null. */
 export function normalizeKitchenNote(value: unknown): string | null {

@@ -79,6 +79,33 @@ describe("ui tile accessibility", () => {
     expect(html).toContain('aria-label="Remove Paneer Tikka Masala with Butter Garlic Naan"');
   });
 
+  it("OrderItemRow kitchen note has an accessible name while the line can still be sent", () => {
+    const html = renderToStaticMarkup(
+      React.createElement(OrderItemRow, {
+        title: "Tea",
+        rateLabel: "₹20 each",
+        qty: 1,
+        lineTotalLabel: "₹20",
+        kitchenNote: "less oily",
+        noteEditable: true,
+        onCommitNote: () => undefined,
+        onDecrease: () => undefined,
+        onIncrease: () => undefined,
+        onStartEditQty: () => undefined,
+        onStartEditRate: () => undefined,
+        onQtyChange: () => undefined,
+        onRateChange: () => undefined,
+        onCommitQty: () => undefined,
+        onCommitRate: () => undefined,
+        onRemove: () => undefined,
+      }),
+    );
+    expect(html).toContain('aria-label="Kitchen note for Tea"');
+    expect(html).toContain('placeholder="Kitchen note"');
+    expect(html).toContain('value="less oily"');
+    expect(html).toContain('maxLength="80"');
+  });
+
   it("StatusDot decorative mode hides from assistive tech", () => {
     const html = renderToStaticMarkup(
       React.createElement(StatusDot, {

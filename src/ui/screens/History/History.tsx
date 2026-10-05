@@ -1571,14 +1571,16 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
                       No line items.
                     </div>
                   )}
-                  {(previewFull?.items || []).map((it: any, idx: number) => (
+                  {(previewFull?.items || []).map((it: any, idx: number) => {
+                    const kitchenNote = String(it.kitchenNote || "").trim();
+                    return (
                     <div
                       key={idx}
                       style={{
                         display: "grid",
                         gridTemplateColumns: PREVIEW_ITEM_COLUMNS,
                         columnGap: 12,
-                        alignItems: "center",
+                        alignItems: "start",
                         padding: "10px 12px",
                         borderRadius: 8,
                         background:
@@ -1586,16 +1588,33 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
                         borderBottom: "1px solid var(--pos-surface-sunken)",
                       }}
                     >
-                      <span
-                        style={{
-                          minWidth: 0,
-                          fontWeight: 600,
-                          fontSize: 14,
-                          color: "var(--pos-tx)",
-                          overflowWrap: "anywhere",
-                        }}
-                      >
-                        {it.name || it.title || "Item"}
+                      <span style={{ minWidth: 0 }}>
+                        <span
+                          style={{
+                            display: "block",
+                            fontWeight: 600,
+                            fontSize: 14,
+                            color: "var(--pos-tx)",
+                            overflowWrap: "anywhere",
+                          }}
+                        >
+                          {it.name || it.title || "Item"}
+                        </span>
+                        {kitchenNote ? (
+                          <span
+                            style={{
+                              display: "block",
+                              marginTop: 4,
+                              fontSize: 12,
+                              fontWeight: 600,
+                              lineHeight: 1.35,
+                              color: "var(--pos-tx-sub)",
+                              overflowWrap: "anywhere",
+                            }}
+                          >
+                            {kitchenNote}
+                          </span>
+                        ) : null}
                       </span>
                       <span
                         style={{
@@ -1631,7 +1650,8 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
                         {formatPreviewMoney((it.qty || 0) * (it.rate || 0))}
                       </span>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
 
                 {/* Totals card */}
