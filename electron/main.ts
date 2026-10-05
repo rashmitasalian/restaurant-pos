@@ -778,7 +778,13 @@ ipcMain.handle("clipboard:writeText", (event, token: string | null, text: string
 // Report PDF export: render HTML to PDF via printToPDF and save via native save dialog
 ipcMain.handle(
   "report:exportPdf",
-  async (event, token: string | null, html: string, defaultFileName: string) => {
+  async (
+    event,
+    token: string | null,
+    html: string,
+    defaultFileName: string,
+    landscape?: boolean,
+  ) => {
     requireMainSession(event, token, ["admin"]);
     const runExport = async () => {
       let tmpFile: string | null = null;
@@ -792,6 +798,7 @@ ipcMain.handle(
 
         const pdfBuffer = await pdfWin.webContents.printToPDF({
           printBackground: true,
+          landscape: landscape === true,
           pageSize: "A4",
           // Electron 44+: PrintToPDFMargins is inch values only (no marginType).
           margins: { top: 0.4, bottom: 0.4, left: 0.4, right: 0.4 },

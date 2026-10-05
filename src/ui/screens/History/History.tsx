@@ -71,10 +71,48 @@ type UIOrder = {
   discountTotal: number;
   items: number;
   method: string;
+  txnRef?: string;
+  invoiceNumber?: string;
   time: number;
   _id?: string;
   _rev?: string;
 };
+
+function labelPaymentMethod(value: string) {
+  const raw = String(value || "").toLowerCase();
+  if (raw === "upi") return "UPI";
+  if (raw === "cash") return "Cash";
+  if (raw === "card") return "Card";
+  if (raw === "split") return "Split";
+  if (raw === "credit") return "Credit";
+  return raw ? raw.charAt(0).toUpperCase() + raw.slice(1) : "–";
+}
+
+function paymentReferenceLabel(method: string) {
+  const raw = String(method || "").toLowerCase();
+  if (raw === "upi") return "UPI ID";
+  if (raw === "card") return "Txn ref";
+  return "Reference";
+}
+
+const HISTORY_COLUMNS = "36px 48px minmax(0, 1fr) 132px 44px 156px 148px 96px";
+
+function formatPreviewMoney(value: number) {
+  return `₹${Number(value || 0).toLocaleString("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+const PREVIEW_ITEM_COLUMNS = "minmax(0, 1fr) 48px 88px 112px";
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
 
 const samples: UIOrder[] = [];
 
@@ -194,26 +232,25 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
             : "Order";
       }
 
-      // Normalise method to title-case for display
+      const splitParts = Array.isArray(paymentsArr[0]?.splitBreakdown)
+        ? paymentsArr[0].splitBreakdown.filter((part: any) => Number(part?.amount) > 0)
+        : [];
+      const splitHasCredit = splitParts.some(
+        (part: any) => String(part?.method || "").toLowerCase() === "credit",
+      );
       const rawMethod = (paymentsArr[0]?.method || "").toLowerCase();
       const method =
-        rawMethod === "upi"
-          ? "UPI"
-          : rawMethod === "cash"
-            ? "Cash"
-            : rawMethod === "card"
-              ? "Card"
-              : rawMethod === "split"
-                ? "Split"
-                : rawMethod === "credit"
-                  ? "Credit"
-                  : rawMethod
-                    ? rawMethod.charAt(0).toUpperCase() + rawMethod.slice(1)
-                    : "–";
+        rawMethod === "split" && splitHasCredit
+          ? splitParts.map((part: any) => labelPaymentMethod(part?.method)).join(" + ")
+          : labelPaymentMethod(rawMethod);
+      const txnRef = paymentsArr
+        .map((payment) => String(payment?.txnRef || "").trim())
+        .filter(Boolean)
+        .join(", ");
 
       const creditName = String(d.meta?.credit?.customerName || "").trim();
       const invoiceNumber = String(d.invoiceNumber || d.meta?.invoice?.number || "").trim();
-      if (rawMethod === "credit" && creditName) {
+      if ((rawMethod === "credit" || splitHasCredit) && creditName) {
         orderLabel = `${orderLabel} · ${creditName}`;
       }
       if (invoiceNumber) {
@@ -234,6 +271,8 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
         discountTotal: Number(d.discountTotal || 0),
         items: (d.items || []).length,
         method,
+        txnRef: txnRef || undefined,
+        invoiceNumber: invoiceNumber || undefined,
         // Prefer settle time so credit sales show when they were saved to account
         time: d.paidAt || d.updatedAt || d.createdAt || Date.now(),
       } as UIOrder;
@@ -754,15 +793,28 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
           ? "—"
           : o.discountMode === "amount" || !(o.discountPercent > 0)
             ? `−${fmt(o.discountTotal)}`
-            : `${o.discountPercent}% (−${fmt(o.discountTotal)})`;
-        return `<tr${discountLabel ? ` style="background:${PRINT.dangerRow}"` : ""}>
-        <td>${i + 1}</td>
-        <td>${o.orderLabel}</td>
-        <td>${new Date(o.time).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</td>
-        <td style="text-align:center">${o.items}</td>
-        <td style="text-align:center">${o.method}</td>
-        <td style="text-align:center;color:${discountLabel ? "var(--pos-danger)" : PRINT.faint}">${discountCell}</td>
-        <td style="text-align:right">${fmt(o.total)}</td>
+            : `<div>${o.discountPercent}%</div><div>−${fmt(o.discountTotal)}</div>`;
+        const invoice = o.invoiceNumber || "";
+        const invoiceSuffix = invoice ? ` · ${invoice}` : "";
+        const orderTitle =
+          invoice && o.orderLabel.endsWith(invoiceSuffix)
+            ? o.orderLabel.slice(0, -invoiceSuffix.length)
+            : o.orderLabel;
+        const when = new Date(o.time);
+        const dateLine = when.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+        const timeLine = when.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+        return `<tr class="${discountLabel ? "has-discount" : ""}">
+        <td class="num">${i + 1}</td>
+        <td class="order">
+          <div class="order-name">${escapeHtml(orderTitle)}</div>
+          ${invoice ? `<div class="invoice">${escapeHtml(invoice)}</div>` : ""}
+        </td>
+        <td class="when"><div>${dateLine}</div><div>${timeLine}</div></td>
+        <td class="items">${o.items}</td>
+        <td class="method">${escapeHtml(o.method)}</td>
+        <td class="ref">${o.txnRef ? escapeHtml(o.txnRef) : "—"}</td>
+        <td class="col-discount">${discountCell}</td>
+        <td class="total">${fmt(o.total)}</td>
       </tr>`;
       })
       .join("");
@@ -771,44 +823,73 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
 <html lang="en">
 <head>
   <meta charset="UTF-8"/>
-  <title>Order History — ${label}</title>
+  <title>Order History — ${escapeHtml(label)}</title>
   <style>
-    body { font-family: Arial, sans-serif; padding: 32px; color: ${PRINT.ink}; font-size: 13px; }
-    h1 { font-size: 18px; margin-bottom: 2px; }
-    p.sub { color: ${PRINT.sub}; font-size: 12px; margin: 0 0 20px; }
-    table { width: 100%; border-collapse: collapse; }
-    th { text-align: left; padding: 8px 10px; font-size: 10px; text-transform: uppercase;
-         letter-spacing: 0.06em; color: ${PRINT.sub}; border-bottom: 2px solid var(--pos-line); }
-    td { padding: 9px 10px; border-bottom: 1px solid var(--pos-surface-sunken); }
-    tr:nth-child(even) td { background: var(--pos-surface-hover); }
-    .total-row td { font-weight: 800; border-top: 2px solid var(--pos-line); font-size: 14px; }
-    footer { margin-top: 32px; font-size: 10px; color: ${PRINT.faint}; text-align: center; }
-    @media print { body { padding: 0; } }
+    * { box-sizing: border-box; }
+    body { font-family: Arial, Helvetica, sans-serif; margin: 0; color: ${PRINT.ink}; font-size: 11px; }
+    h1 { font-size: 16px; margin: 0 0 2px; }
+    p.sub { color: ${PRINT.sub}; font-size: 11px; margin: 0 0 12px; }
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    thead { display: table-header-group; }
+    th { text-align: left; padding: 6px 8px; font-size: 9px; text-transform: uppercase;
+         letter-spacing: 0.04em; color: ${PRINT.sub}; border-bottom: 1.5px solid ${PRINT.ink}; }
+    td { padding: 7px 8px; border-bottom: 1px solid ${PRINT.line}; vertical-align: top; text-align: left; }
+    tr { break-inside: avoid; }
+    tbody tr.has-discount td { background: ${PRINT.dangerRow}; }
+    .num { width: 4%; color: ${PRINT.muted}; }
+    .order { width: 20%; }
+    .order-name { font-weight: 700; overflow-wrap: break-word; }
+    .invoice { margin-top: 2px; color: ${PRINT.sub}; font-size: 10px; white-space: nowrap; }
+    .when { width: 10%; white-space: nowrap; }
+    .when div + div { color: ${PRINT.sub}; margin-top: 2px; }
+    .items { width: 6%; text-align: center; }
+    .method { width: 12%; }
+    .ref { width: 26%; overflow-wrap: anywhere; font-size: 10px; line-height: 1.35; color: ${PRINT.ink}; }
+    .col-discount { width: 10%; text-align: right; white-space: nowrap; }
+    .col-discount div + div { color: ${PRINT.sub}; margin-top: 2px; }
+    .total { width: 12%; text-align: right; font-weight: 700; white-space: nowrap; }
+    th.items { text-align: center; }
+    th.col-discount, th.total { text-align: right; }
+    .total-row td { font-weight: 800; border-top: 1.5px solid ${PRINT.ink}; border-bottom: none; font-size: 12px; background: #fff; }
+    footer { margin-top: 14px; font-size: 9px; color: ${PRINT.muted}; text-align: center; }
   </style>
 </head>
 <body>
   <h1>Order History</h1>
-  <p class="sub">${label} &middot; ${allItems.length} order${allItems.length !== 1 ? "s" : ""}</p>
+  <p class="sub">${escapeHtml(label)} &middot; ${allItems.length} order${allItems.length !== 1 ? "s" : ""}</p>
   <table>
+    <colgroup>
+      <col class="num" /><col class="order" /><col class="when" /><col class="items" />
+      <col class="method" /><col class="ref" /><col class="col-discount" /><col class="total" />
+    </colgroup>
     <thead>
-      <tr><th>#</th><th>Order</th><th>Time</th><th style="text-align:center">Items</th><th style="text-align:center">Method</th><th style="text-align:center">Discount</th><th style="text-align:right">Total</th></tr>
+      <tr>
+        <th class="num">#</th>
+        <th>Order</th>
+        <th>Time</th>
+        <th class="items">Items</th>
+        <th class="method">Method</th>
+        <th>Reference</th>
+        <th class="col-discount">Discount</th>
+        <th class="total">Total</th>
+      </tr>
     </thead>
     <tbody>
       ${rows}
       <tr class="total-row">
-        <td colspan="5">Total</td>
-        <td style="text-align:center;color:var(--pos-danger)">${grandDiscount > 0 ? `−${fmt(grandDiscount)}` : "—"}</td>
-        <td style="text-align:right">${fmt(grandTotal)}</td>
+        <td colspan="6">Total</td>
+        <td class="col-discount">${grandDiscount > 0 ? `−${fmt(grandDiscount)}` : "—"}</td>
+        <td class="total">${fmt(grandTotal)}</td>
       </tr>
     </tbody>
   </table>
-  <footer>Generated ${new Date().toLocaleString("en-IN")}</footer>
+  <footer>Generated ${new Date().toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</footer>
 </body>
 </html>`;
 
     try {
       if ((window as any).pos?.exportReportPdf) {
-        await (window as any).pos.exportReportPdf(html, fileName);
+        await (window as any).pos.exportReportPdf(html, fileName, true);
       } else {
         throw new Error("PDF export is available only in Electron.");
       }
@@ -829,7 +910,7 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
           actions={
             <>
               <input
-                placeholder="Search order, method…"
+                placeholder="Search order or reference"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 onKeyDown={(e) => {
@@ -838,7 +919,7 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
                   }
                 }}
                 className="pos-input"
-                style={{ width: 200 }}
+                style={{ width: 220 }}
               />
               <Button
                 onClick={() => loadFirstPage(pageSize, search, fromTs, toTs)}
@@ -877,7 +958,7 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
           }}
         >
           <input
-            placeholder="Search order, method…"
+            placeholder="Search order or reference"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={(e) => {
@@ -886,7 +967,7 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
               }
             }}
             className="pos-input"
-            style={{ width: 200 }}
+            style={{ width: 220 }}
           />
           <Button onClick={() => loadFirstPage(pageSize, search, fromTs, toTs)} variant="secondary">
             Search
@@ -907,7 +988,7 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "36px 56px 1fr 160px 60px 80px 160px 100px",
+          gridTemplateColumns: HISTORY_COLUMNS,
           columnGap: 8,
           alignItems: "center",
           padding: "8px 16px",
@@ -952,7 +1033,7 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
             key={s.uid}
             style={{
               display: "grid",
-              gridTemplateColumns: "36px 56px 1fr 160px 60px 80px 160px 100px",
+              gridTemplateColumns: HISTORY_COLUMNS,
               columnGap: 8,
               alignItems: "center",
               padding: "10px 16px",
@@ -1038,7 +1119,7 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
               {s.items}
             </span>
             {/* Method badge */}
-            <div style={{ textAlign: "center" }}>
+            <div style={{ minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
               <span
                 style={{
                   display: "inline-flex",
@@ -1072,6 +1153,26 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
               >
                 {s.method}
               </span>
+              {s.txnRef ? (
+                <span
+                  title={s.txnRef}
+                  style={{
+                    display: "block",
+                    maxWidth: "100%",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    lineHeight: 1.2,
+                    letterSpacing: "0.01em",
+                    fontVariantNumeric: "tabular-nums",
+                    color: "var(--pos-tx)",
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                  }}
+                >
+                  {s.txnRef}
+                </span>
+              ) : null}
             </div>
             {/* Actions */}
             <div style={{ display: "flex", gap: 5, justifyContent: "center" }}>
@@ -1318,13 +1419,14 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
             tabIndex={-1}
             onClick={(e) => e.stopPropagation()}
             style={{
-              width: 560,
+              width: 520,
               maxWidth: "94vw",
               maxHeight: "85vh",
-              overflow: "auto",
+              overflowX: "hidden",
+              overflowY: "auto",
               background: "var(--pos-surface)",
               borderRadius: 14,
-              padding: "24px 28px",
+              padding: "20px 22px 22px",
               boxShadow: "var(--pos-shadow-overlay)",
               transform: modalVisible ? "translateY(0) scale(1)" : "translateY(8px) scale(0.98)",
               opacity: modalVisible ? 1 : 0,
@@ -1337,15 +1439,37 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
                 display: "flex",
                 justifyContent: "space-between",
                 alignItems: "flex-start",
-                paddingBottom: 16,
-                marginBottom: 16,
+                gap: 16,
+                position: "sticky",
+                top: 0,
+                zIndex: 1,
+                margin: "-20px -22px 16px",
+                padding: "20px 22px 14px",
+                background: "var(--pos-surface)",
                 borderBottom: "1px solid var(--pos-surface-sunken)",
               }}
             >
-              <div>
+              <div style={{ minWidth: 0, flex: 1 }}>
                 <h3
                   id="historyPreviewTitle"
-                  style={{ margin: 0, fontSize: 17, fontWeight: 800, color: "var(--pos-tx)" }}
+                  title={
+                    previewFull
+                      ? previewFull.orderType === "takeaway"
+                        ? `Takeaway${previewFull.meta?.customerName ? ` – ${previewFull.meta.customerName}` : ""}`
+                        : previewFull.orderType === "delivery"
+                          ? `${previewFull.meta?.platform || "Delivery"}${previewFull.meta?.code ? ` #${previewFull.meta.code}` : ""}`
+                          : formatTableLabel(previewFull.tableId, previewFull.tableName) || "Table"
+                      : "Order Preview"
+                  }
+                  style={{
+                    margin: 0,
+                    fontSize: 18,
+                    fontWeight: 800,
+                    color: "var(--pos-tx)",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
                 >
                   {previewFull
                     ? previewFull.orderType === "takeaway"
@@ -1356,14 +1480,32 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
                     : "Order Preview"}
                 </h3>
                 {previewFull && (
-                  <div style={{ fontSize: 12, color: "var(--pos-tx-muted)", marginTop: 3 }}>
-                    {new Date(
-                      previewFull.updatedAt || previewFull.createdAt || Date.now(),
-                    ).toLocaleString("en-IN")}
-                    {" · "}
-                    <span style={{ fontFamily: "'Courier New', monospace" }}>
-                      #{(previewFull._id || "").split(":").pop()?.slice(-8)}
-                    </span>
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: "var(--pos-tx-muted)",
+                      marginTop: 4,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {[
+                      String(
+                        previewFull.invoiceNumber || previewFull.meta?.invoice?.number || "",
+                      ).trim(),
+                      new Date(
+                        previewFull.paidAt || previewFull.updatedAt || previewFull.createdAt || Date.now(),
+                      ).toLocaleString("en-IN", {
+                        day: "numeric",
+                        month: "short",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      }),
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
                   </div>
                 )}
               </div>
@@ -1398,16 +1540,16 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
 
             {/* Order content */}
             {!previewLoading && previewFull && (
-              <div style={{ display: "grid", gap: 16 }}>
+              <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
                 {/* Line items */}
                 <div>
                   {/* Column mini-header */}
                   <div
                     style={{
                       display: "grid",
-                      gridTemplateColumns: "1fr 60px 70px 80px",
-                      columnGap: 8,
-                      padding: "6px 10px",
+                      gridTemplateColumns: PREVIEW_ITEM_COLUMNS,
+                      columnGap: 12,
+                      padding: "7px 12px",
                       borderRadius: 6,
                       background: "var(--pos-surface-hover)",
                       fontSize: 10,
@@ -1434,27 +1576,47 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
                       key={idx}
                       style={{
                         display: "grid",
-                        gridTemplateColumns: "1fr 60px 70px 80px",
-                        columnGap: 8,
-                        padding: "9px 10px",
+                        gridTemplateColumns: PREVIEW_ITEM_COLUMNS,
+                        columnGap: 12,
+                        alignItems: "center",
+                        padding: "10px 12px",
                         borderRadius: 8,
                         background:
                           idx % 2 === 0 ? "var(--pos-surface)" : "var(--pos-surface-hover)",
                         borderBottom: "1px solid var(--pos-surface-sunken)",
                       }}
                     >
-                      <span style={{ fontWeight: 600, fontSize: 13, color: "var(--pos-tx)" }}>
+                      <span
+                        style={{
+                          minWidth: 0,
+                          fontWeight: 600,
+                          fontSize: 14,
+                          color: "var(--pos-tx)",
+                          overflowWrap: "anywhere",
+                        }}
+                      >
                         {it.name || it.title || "Item"}
                       </span>
                       <span
-                        style={{ textAlign: "center", fontSize: 13, color: "var(--pos-tx-sec)" }}
+                        style={{
+                          textAlign: "center",
+                          fontSize: 13,
+                          color: "var(--pos-tx-sec)",
+                          fontVariantNumeric: "tabular-nums",
+                        }}
                       >
                         {it.qty}
                       </span>
                       <span
-                        style={{ textAlign: "right", fontSize: 13, color: "var(--pos-tx-sub)" }}
+                        style={{
+                          textAlign: "right",
+                          fontSize: 13,
+                          color: "var(--pos-tx-sub)",
+                          fontVariantNumeric: "tabular-nums",
+                          whiteSpace: "nowrap",
+                        }}
                       >
-                        ₹{(it.rate || 0).toLocaleString("en-IN")}
+                        {formatPreviewMoney(it.rate || 0)}
                       </span>
                       <span
                         style={{
@@ -1462,9 +1624,11 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
                           fontSize: 13,
                           fontWeight: 700,
                           color: "var(--pos-tx)",
+                          fontVariantNumeric: "tabular-nums",
+                          whiteSpace: "nowrap",
                         }}
                       >
-                        ₹{((it.qty || 0) * (it.rate || 0)).toLocaleString("en-IN")}
+                        {formatPreviewMoney((it.qty || 0) * (it.rate || 0))}
                       </span>
                     </div>
                   ))}
@@ -1474,12 +1638,37 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
                 {(() => {
                   const t = computeTotals(previewFull);
                   const discountPercent = previewFull?.discountPercent;
-                  const discountLine =
+                  const discountLabel =
                     t.discountTotal > 0
                       ? previewFull?.discountMode === "amount" || !(Number(discountPercent) > 0)
-                        ? `−₹${t.discountTotal.toLocaleString("en-IN")}`
-                        : `${Number(discountPercent || 0)}% (−₹${t.discountTotal.toLocaleString("en-IN")})`
+                        ? "Discount"
+                        : `Discount ${Number(discountPercent || 0)}%`
                       : null;
+                  const summaryRow = (label: string, value: string, emphasis = false): React.ReactNode => (
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "minmax(0, 1fr) 112px",
+                        columnGap: 12,
+                        alignItems: "baseline",
+                        fontSize: emphasis ? 16 : 13,
+                        fontWeight: emphasis ? 800 : 500,
+                        color: emphasis ? "var(--pos-saffron-text)" : "var(--pos-tx-sec)",
+                      }}
+                    >
+                      <span style={{ minWidth: 0 }}>{label}</span>
+                      <span
+                        style={{
+                          textAlign: "right",
+                          fontVariantNumeric: "tabular-nums",
+                          whiteSpace: "nowrap",
+                          fontWeight: emphasis ? 800 : 600,
+                        }}
+                      >
+                        {value}
+                      </span>
+                    </div>
+                  );
                   const paymentsArr = (previewFull?.payments || []) as any[];
                   const paidTotal = paymentsArr.reduce(
                     (s: number, p: any) => s + (Number(p?.amount) || 0),
@@ -1493,88 +1682,39 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
                         background: "var(--pos-saffron-tint)",
                         border: "1.5px solid var(--pos-saffron-line)",
                         borderRadius: 10,
-                        padding: "14px 16px",
+                        padding: "12px",
                         display: "grid",
-                        gap: 6,
+                        gap: 7,
                       }}
                     >
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          fontSize: 13,
-                          color: "var(--pos-tx-sec)",
-                        }}
-                      >
-                        <span>Subtotal</span>
-                        <span style={{ fontWeight: 600 }}>
-                          ₹{t.subtotal.toLocaleString("en-IN")}
-                        </span>
-                      </div>
+                      {summaryRow("Subtotal", formatPreviewMoney(t.subtotal))}
                       {t.gstEnabled && (
                         <>
-                          <div
-                            style={{
-                              display: "flex",
-                              justifyContent: "space-between",
-                              fontSize: 12,
-                              color: "var(--pos-tx-sub)",
-                            }}
-                          >
-                            <span>Taxable value</span>
-                            <span>₹{t.taxableSubtotal.toLocaleString("en-IN")}</span>
-                          </div>
-                          <div
-                            style={{
-                              display: "flex",
-                              justifyContent: "space-between",
-                              fontSize: 12,
-                              color: "var(--pos-tx-sub)",
-                            }}
-                          >
-                            <span>CGST ({formatGstRate(t.gstHalfRateBps)})</span>
-                            <span>₹{t.cgst.toLocaleString("en-IN")}</span>
-                          </div>
-                          <div
-                            style={{
-                              display: "flex",
-                              justifyContent: "space-between",
-                              fontSize: 12,
-                              color: "var(--pos-tx-sub)",
-                            }}
-                          >
-                            <span>SGST ({formatGstRate(t.gstHalfRateBps)})</span>
-                            <span>₹{t.sgst.toLocaleString("en-IN")}</span>
-                          </div>
+                          {summaryRow("Taxable value", formatPreviewMoney(t.taxableSubtotal))}
+                          {summaryRow(
+                            `CGST (${formatGstRate(t.gstHalfRateBps)})`,
+                            formatPreviewMoney(t.cgst),
+                          )}
+                          {summaryRow(
+                            `SGST (${formatGstRate(t.gstHalfRateBps)})`,
+                            formatPreviewMoney(t.sgst),
+                          )}
                         </>
                       )}
-                      {discountLine && (
-                        <div
-                          style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            fontSize: 12,
-                            color: "var(--pos-success)",
-                          }}
-                        >
-                          <span>Discount</span>
-                          <span>{discountLine}</span>
-                        </div>
-                      )}
+                      {discountLabel
+                        ? summaryRow(discountLabel, `−${formatPreviewMoney(t.discountTotal)}`)
+                        : null}
+                      {Math.abs(Number(t.roundOff || 0)) >= 0.01
+                        ? summaryRow("Round off", formatPreviewMoney(t.roundOff))
+                        : null}
                       <div
                         style={{
-                          display: "flex",
-                          justifyContent: "space-between",
                           paddingTop: 8,
                           marginTop: 2,
                           borderTop: "1px solid var(--pos-saffron-line)",
-                          fontSize: 16,
-                          fontWeight: 900,
-                          color: "var(--pos-saffron-text)",
                         }}
                       >
-                        <span>Total</span>
-                        <span>₹{displayTotal.toLocaleString("en-IN")}</span>
+                        {summaryRow("Total", formatPreviewMoney(displayTotal), true)}
                       </div>
                     </div>
                   );
@@ -1595,58 +1735,128 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
                     >
                       Payments
                     </div>
-                    <div style={{ display: "grid", gap: 5 }}>
-                      {(previewFull!.payments || []).map((p: any, idx: number) => {
-                        const method = (p?.method || p?.type || "Payment").toLowerCase();
-                        const bg =
-                          method === "upi"
-                            ? "var(--pos-teal-tint)"
-                            : method === "card"
+                    <div style={{ display: "grid", gap: 5, minWidth: 0 }}>
+                      {(previewFull!.payments || []).flatMap((p: any, idx: number) => {
+                        const breakdown = Array.isArray(p?.splitBreakdown) ? p.splitBreakdown : [];
+                        const rows = breakdown.filter((part: any) => Number(part?.amount) > 0);
+                        const lines = rows.length
+                          ? rows
+                          : [{ method: p?.method || p?.type || "Payment", amount: p?.amount }];
+                        return lines.map((row: any, rowIdx: number) => {
+                          const method = String(row?.method || "Payment").toLowerCase();
+                          const creditCustomer = String(
+                            previewFull?.meta?.credit?.customerName || "",
+                          ).trim();
+                          const bg =
+                            method === "upi"
                               ? "var(--pos-teal-tint)"
-                              : method === "split" || method === "credit"
-                                ? "var(--pos-saffron-tint)"
-                                : "var(--pos-success-tint)";
-                        const fg =
-                          method === "upi"
-                            ? "var(--pos-teal)"
-                            : method === "card"
-                              ? "var(--pos-teal-strong)"
-                              : method === "split" || method === "credit"
-                                ? "var(--pos-saffron-text)"
-                                : "var(--pos-success)";
-                        return (
-                          <div
-                            key={idx}
-                            style={{
-                              display: "flex",
-                              justifyContent: "space-between",
-                              alignItems: "center",
-                              padding: "8px 12px",
-                              borderRadius: 8,
-                              background: "var(--pos-surface-hover)",
-                              border: "1px solid var(--pos-surface-sunken)",
-                            }}
-                          >
-                            <span
+                              : method === "card"
+                                ? "var(--pos-teal-tint)"
+                                : method === "split" || method === "credit"
+                                  ? "var(--pos-saffron-tint)"
+                                  : "var(--pos-success-tint)";
+                          const fg =
+                            method === "upi"
+                              ? "var(--pos-teal)"
+                              : method === "card"
+                                ? "var(--pos-teal-strong)"
+                                : method === "split" || method === "credit"
+                                  ? "var(--pos-saffron-text)"
+                                  : "var(--pos-success)";
+                          const label = labelPaymentMethod(String(row?.method || "Payment"));
+                          const reference =
+                            rowIdx === 0 ? String(p?.txnRef || "").trim() : "";
+                          return (
+                            <div
+                              key={`${idx}-${rowIdx}`}
                               style={{
-                                display: "inline-flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                padding: "3px 10px",
-                                borderRadius: 20,
-                                fontSize: 11,
-                                fontWeight: 700,
-                                background: bg,
-                                color: fg,
+                                display: "grid",
+                                gridTemplateColumns: "minmax(0, 1fr) 112px",
+                                columnGap: 12,
+                                alignItems: "start",
+                                padding: "12px",
+                                borderRadius: 10,
+                                background: "var(--pos-surface-hover)",
+                                border: "1px solid var(--pos-surface-sunken)",
+                                minWidth: 0,
                               }}
                             >
-                              {p?.method || p?.type || "Payment"}
-                            </span>
-                            <span style={{ fontWeight: 800, fontSize: 14, color: "var(--pos-tx)" }}>
-                              ₹{(+(p?.amount || 0)).toLocaleString("en-IN")}
-                            </span>
-                          </div>
-                        );
+                              <div style={{ minWidth: 0 }}>
+                                <span
+                                  style={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    maxWidth: "100%",
+                                    padding: "3px 10px",
+                                    borderRadius: 20,
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    background: bg,
+                                    color: fg,
+                                  }}
+                                >
+                                  {label}
+                                </span>
+                                {method === "credit" && creditCustomer ? (
+                                  <div
+                                    style={{
+                                      marginTop: 8,
+                                      fontSize: 13,
+                                      fontWeight: 700,
+                                      lineHeight: 1.35,
+                                      color: "var(--pos-tx)",
+                                      overflowWrap: "anywhere",
+                                    }}
+                                  >
+                                    {creditCustomer}
+                                  </div>
+                                ) : null}
+                                {reference ? (
+                                  <div style={{ marginTop: 8, minWidth: 0 }}>
+                                    <div
+                                      style={{
+                                        fontSize: 11,
+                                        fontWeight: 700,
+                                        letterSpacing: "0.06em",
+                                        textTransform: "uppercase",
+                                        color: "var(--pos-tx-muted)",
+                                      }}
+                                    >
+                                      {paymentReferenceLabel(String(p?.method || ""))}
+                                    </div>
+                                    <div
+                                      style={{
+                                        marginTop: 2,
+                                        fontSize: 14,
+                                        fontWeight: 600,
+                                        lineHeight: 1.35,
+                                        letterSpacing: "0.02em",
+                                        fontVariantNumeric: "tabular-nums",
+                                        color: "var(--pos-tx)",
+                                        overflowWrap: "anywhere",
+                                      }}
+                                    >
+                                      {reference}
+                                    </div>
+                                  </div>
+                                ) : null}
+                              </div>
+                              <span
+                                style={{
+                                  textAlign: "right",
+                                  fontWeight: 800,
+                                  fontSize: 15,
+                                  color: "var(--pos-tx)",
+                                  fontVariantNumeric: "tabular-nums",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {formatPreviewMoney(Number(row?.amount || 0))}
+                              </span>
+                            </div>
+                          );
+                        });
                       })}
                     </div>
                   </div>

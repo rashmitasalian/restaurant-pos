@@ -147,6 +147,80 @@ describe("customer credit ledger", () => {
     expect(dbOutstanding.outstanding_paise).toBe(0);
   });
 
+  it("collects part of a bill now and puts the rest on account", () => {
+    const customer = createCreditReadyCustomer(1000);
+    const order = posService.createOrder({
+      orderType: "takeaway",
+      serviceModeId: "takeaway",
+      customerId: customer.id,
+      createdBy: "cashier",
+    });
+    posService.updateOrderLines(order._id, [
+      {
+        id: "line:partial",
+        name: "Test Dish",
+        qty: 1,
+        rate: 330,
+      },
+    ]);
+    const paid = posService.setOrderPaid(order._id, {
+      method: "split",
+      amount: 330,
+      amountPaid: 165,
+      customerId: customer.id,
+      dueDate: "2026-10-12",
+      splitBreakdown: [
+        { method: "cash", amount: 165 },
+        { method: "credit", amount: 165 },
+      ],
+      receivedBy: "cashier",
+    });
+
+    expect(paid.status).toBe("paid");
+    expect(paid.payments?.[0]?.method).toBe("split");
+    expect(paid.payments?.[0]?.amount).toBe(330);
+    expect(paid.payments?.[0]?.amountPaid).toBe(165);
+    expect(posService.getCustomerAccount(customer.id).outstanding).toBe(165);
+    expect((paid.meta as any)?.credit?.amount).toBe(165);
+    expect((paid.meta as any)?.credit?.customerName).toBe("Credit Guest");
+
+    const entry = getDb()
+      .prepare(
+        `SELECT amount_paise, remaining_paise FROM customer_account_entries
+         WHERE customer_id = ? AND entry_type = 'credit_sale'`,
+      )
+      .get(customer.id) as { amount_paise: number; remaining_paise: number };
+    expect(entry.amount_paise).toBe(16500);
+    expect(entry.remaining_paise).toBe(16500);
+
+    const other = posService.createOrder({
+      orderType: "takeaway",
+      serviceModeId: "takeaway",
+      createdBy: "cashier",
+    });
+    posService.updateOrderLines(other._id, [
+      {
+        id: "line:double-credit",
+        name: "Test Dish",
+        qty: 1,
+        rate: 200,
+      },
+    ]);
+    expect(() =>
+      posService.setOrderPaid(other._id, {
+        method: "split",
+        amount: 200,
+        customerId: customer.id,
+        dueDate: "2026-10-12",
+        splitBreakdown: [
+          { method: "credit", amount: 100 },
+          { method: "credit", amount: 100 },
+        ],
+        receivedBy: "cashier",
+      }),
+    ).toThrow("credit-split-not-allowed");
+  });
+
   it("relinks orphaned credit ledger rows when restoring a deleted paid credit order", () => {
     const customer = createCreditReadyCustomer(2000);
     const paid = createPaidCreditOrder(customer.id, 250);

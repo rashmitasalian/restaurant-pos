@@ -1,5 +1,7 @@
 ﻿import React from "react";
 import {
+  CUSTOMER_NAME_LIMIT,
+  CUSTOMER_PHONE_LIMIT,
   isValidIndianMobile,
   isValidPersonName,
   normalizePhone,
@@ -239,7 +241,7 @@ export default function Customers() {
     setPhoneError(null);
 
     const trimmedName = normalizeText(name);
-    if (!isValidPersonName(trimmedName)) {
+    if (!isValidPersonName(trimmedName, { max: CUSTOMER_NAME_LIMIT })) {
       setNameError(validationMessage("customer-name-invalid"));
       return;
     }
@@ -294,7 +296,7 @@ export default function Customers() {
     setEditNameError(null);
     setEditPhoneError(null);
     const trimmedName = normalizeText(editName);
-    if (!isValidPersonName(trimmedName)) {
+    if (!isValidPersonName(trimmedName, { max: CUSTOMER_NAME_LIMIT })) {
       setEditNameError(validationMessage("customer-name-invalid"));
       return;
     }
@@ -594,6 +596,7 @@ export default function Customers() {
                     }
                   }}
                   placeholder="Customer name"
+                  maxLength={CUSTOMER_NAME_LIMIT}
                   error={editNameError}
                 />
               </div>
@@ -606,7 +609,7 @@ export default function Customers() {
                   autoComplete="tel"
                   value={editPhone}
                   onChange={(e) => {
-                    setEditPhone(normalizePhone(e.target.value));
+                    setEditPhone(normalizePhone(e.target.value).slice(0, CUSTOMER_PHONE_LIMIT));
                     if (editPhoneError) {
                       setEditPhoneError(null);
                     }
@@ -774,6 +777,7 @@ export default function Customers() {
                 }
               }}
               placeholder="Customer name"
+              maxLength={CUSTOMER_NAME_LIMIT}
               error={nameError}
             />
           </div>
@@ -786,7 +790,7 @@ export default function Customers() {
               autoComplete="tel"
               value={phone}
               onChange={(e) => {
-                setPhone(normalizePhone(e.target.value));
+                setPhone(normalizePhone(e.target.value).slice(0, CUSTOMER_PHONE_LIMIT));
                 if (phoneError) {
                   setPhoneError(null);
                 }
@@ -830,6 +834,7 @@ export default function Customers() {
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Search name or phone"
+            maxLength={CUSTOMER_NAME_LIMIT}
           />
         </div>
         <div

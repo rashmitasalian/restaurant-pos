@@ -1,5 +1,5 @@
 .dialog {
-  width: 660px;
+  width: 480px;
   max-width: 96vw;
   background: var(--pos-surface);
   border-radius: 14px;
@@ -12,6 +12,7 @@
 
 .bodyRow {
   display: flex;
+  flex-direction: column;
   flex: 1;
   min-height: 0;
   overflow: auto;
@@ -20,25 +21,34 @@
 .mainCol {
   flex: 1;
   min-width: 0;
-  padding: 18px 20px;
-  border-right: 1px solid var(--pos-surface-sunken);
+  padding: 18px 20px 8px;
+  display: flex;
+  flex-direction: column;
 }
 
 .summaryCol {
-  width: 200px;
-  flex-shrink: 0;
-  padding: 18px;
-  background: var(--pos-surface-hover);
+  padding: 14px 20px 18px;
+  border-top: 1px solid var(--pos-surface-sunken);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
+}
+
+.methods {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 20px;
 }
 
 .methodGrid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
   gap: 8px;
-  margin-bottom: 20px;
+}
+
+.actionRow {
+  display: grid;
+  grid-template-columns: 1fr 1.6fr;
+  gap: 8px;
 }
 
 @media (max-width: 640px) {
@@ -52,17 +62,10 @@
   }
 
   .mainCol {
-    border-right: none;
-    border-bottom: 1px solid var(--pos-surface-sunken);
     padding: 16px;
   }
 
   .summaryCol {
-    width: 100%;
     padding: 16px;
-  }
-
-  .methodGrid {
-    grid-template-columns: repeat(2, 1fr);
   }
 }

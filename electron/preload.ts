@@ -62,8 +62,8 @@ contextBridge.exposeInMainWorld("pos", {
   copyText: async (text: string) =>
     ipcRenderer.invoke("clipboard:writeText", getSessionToken(), text),
   // Export report as PDF via native save dialog
-  exportReportPdf: async (html: string, defaultFileName: string) =>
-    ipcRenderer.invoke("report:exportPdf", getSessionToken(), html, defaultFileName),
+  exportReportPdf: async (html: string, defaultFileName: string, landscape?: boolean) =>
+    ipcRenderer.invoke("report:exportPdf", getSessionToken(), html, defaultFileName, landscape),
   // Expose environment variables needed by renderer
   env: {
     LOG_LEVEL: process.env.LOG_LEVEL || "info",

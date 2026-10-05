@@ -91,6 +91,8 @@ import {
 } from "../../src/shared/ownerReview";
 import { publishOrdersChanged } from "./domainEvents";
 import {
+  CUSTOMER_NAME_LIMIT,
+  PAYMENT_TXN_REF_LIMIT,
   STAFF_TEXT_LIMITS,
   isValidDateOnly,
   isFutureDateOnly,
@@ -2698,17 +2700,16 @@ function normalizeSplitBreakdown(value: unknown) {
   if (!Array.isArray(value)) {
     return undefined;
   }
-  return value
+  const entries = value
     .map((entry) => ({
       method: normalizePaymentMethod((entry as any)?.method),
       amountPaise: rupeesToPaise((entry as any)?.amount),
     }))
-    .filter((entry) => {
-      if (entry.method === "credit") {
-        throw new Error("credit-split-not-allowed");
-      }
-      return entry.amountPaise > 0;
-    });
+    .filter((entry) => entry.amountPaise > 0);
+  if (entries.filter((entry) => entry.method === "credit").length > 1) {
+    throw new Error("credit-split-not-allowed");
+  }
+  return entries;
 }
 
 function preparePaymentForTotal(payment: PaymentDto, expectedAmountPaise: number) {
@@ -2719,6 +2720,7 @@ function preparePaymentForTotal(payment: PaymentDto, expectedAmountPaise: number
       amountPaise: expectedAmountPaise,
       amountPaidPaise: 0,
       changePaise: 0,
+      creditPortionPaise: expectedAmountPaise,
       splitJson: null as string | null,
     };
   }
@@ -2729,6 +2731,8 @@ function preparePaymentForTotal(payment: PaymentDto, expectedAmountPaise: number
   const splitBreakdown =
     method === "split" ? normalizeSplitBreakdown(payment.splitBreakdown) : undefined;
 
+  let creditPortionPaise = 0;
+  let settledPaidPaise = amountPaidPaise;
   if (method === "split") {
     const splitTotalPaise = (splitBreakdown || []).reduce(
       (sum, entry) => sum + entry.amountPaise,
@@ -2737,6 +2741,12 @@ function preparePaymentForTotal(payment: PaymentDto, expectedAmountPaise: number
     if (!splitBreakdown?.length || splitTotalPaise !== expectedAmountPaise) {
       throw new Error("payment-split-total-mismatch");
     }
+    creditPortionPaise = (splitBreakdown || [])
+      .filter((entry) => entry.method === "credit")
+      .reduce((sum, entry) => sum + entry.amountPaise, 0);
+    settledPaidPaise = (splitBreakdown || [])
+      .filter((entry) => entry.method !== "credit")
+      .reduce((sum, entry) => sum + entry.amountPaise, 0);
   } else if (amountPaidPaise < expectedAmountPaise) {
     throw new Error("payment-amount-too-low");
   }
@@ -2751,8 +2761,9 @@ function preparePaymentForTotal(payment: PaymentDto, expectedAmountPaise: number
   return {
     method,
     amountPaise: expectedAmountPaise,
-    amountPaidPaise,
+    amountPaidPaise: settledPaidPaise,
     changePaise,
+    creditPortionPaise,
     splitJson: splitBreakdown
       ? stringifyJson(
           splitBreakdown.map((entry) => ({
@@ -4852,7 +4863,7 @@ export const posService = {
 
       let customerIdForCredit: string | null = order.customerId || null;
       let creditDueDate: string | null = null;
-      if (preparedPayment.method === "credit") {
+      if (preparedPayment.creditPortionPaise > 0) {
         const creditConfig = getCreditConfigFromDb(database);
         if (!creditConfig.enabled) {
           throw new Error("credit-disabled");
@@ -4887,6 +4898,13 @@ export const posService = {
         }
       }
 
+      const txnRef = String(safePayment.txnRef || "")
+        .trim()
+        .replace(/\s+/g, " ");
+      if (txnRef.length > PAYMENT_TXN_REF_LIMIT) {
+        throw new Error("payment-txn-ref-too-long");
+      }
+
       const paymentId = `payment:${randomUUID()}`;
       const receivedAt = now();
       const invoice = nextInvoiceSnapshot(database, receivedAt);
@@ -4909,7 +4927,7 @@ export const posService = {
           preparedPayment.amountPaise,
           preparedPayment.amountPaidPaise,
           preparedPayment.changePaise,
-          safePayment.txnRef || null,
+          txnRef || null,
           preparedPayment.splitJson,
           safePayment.receivedBy || order.createdBy || null,
           receivedAt,
@@ -4922,11 +4940,11 @@ export const posService = {
         )
         .run(invoice.number, receivedAt, stringifyJson(nextMeta), receivedAt, orderId);
 
-      if (preparedPayment.method === "credit" && customerIdForCredit && creditDueDate) {
+      if (preparedPayment.creditPortionPaise > 0 && customerIdForCredit && creditDueDate) {
         createCreditSaleLedgerEntry(database, {
           customerId: customerIdForCredit,
           orderId,
-          amountPaise: preparedPayment.amountPaise,
+          amountPaise: preparedPayment.creditPortionPaise,
           invoiceNumber: invoice.number,
           description: buildCreditSaleDescription(order.items || []),
           dueDate: creditDueDate,
@@ -4944,6 +4962,7 @@ export const posService = {
           customerName: customerRowFull?.name || null,
           customerPhone: customerRowFull?.phone || null,
           dueDate: creditDueDate,
+          amount: paiseToRupees(preparedPayment.creditPortionPaise),
           accountBalance: paiseToRupees(customerRowFull?.outstanding_paise),
         };
         database
@@ -8172,7 +8191,7 @@ export const posService = {
   ) {
     const name = normalizeText(input.name);
     const phone = normalizePhone(input.phone);
-    if (!isValidPersonName(name)) {
+    if (!isValidPersonName(name, { max: CUSTOMER_NAME_LIMIT })) {
       throw new Error("customer-name-invalid");
     }
     if (!isValidIndianMobile(phone)) {
@@ -8232,7 +8251,7 @@ export const posService = {
     }
     const name = updates.name === undefined ? current.name : normalizeText(updates.name);
     const phone = updates.phone === undefined ? current.phone : normalizePhone(updates.phone);
-    if (!isValidPersonName(name)) {
+    if (!isValidPersonName(name, updates.name === undefined ? {} : { max: CUSTOMER_NAME_LIMIT })) {
       throw new Error("customer-name-invalid");
     }
     if (!isValidIndianMobile(phone)) {

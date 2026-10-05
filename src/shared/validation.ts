@@ -7,7 +7,8 @@ export const VALIDATION_MESSAGES: Record<string, string> = {
   "item-variant-name-required": "Each variant must have a name.",
   "item-variant-price-invalid": "Each variant price must be greater than zero.",
   "item-variant-duplicate": "Variant names must be unique for an item.",
-  "customer-name-invalid": "Name must be at least 2 characters and include a letter.",
+  "customer-name-invalid": "Name must be 2 to 80 characters and include a letter.",
+  "payment-txn-ref-too-long": "Transaction reference must be 40 characters or fewer.",
   "customer-phone-invalid": "Please enter a valid 10-digit Indian mobile number (starts with 6-9).",
   "customer-phone-duplicate": "This phone number is already added.",
   "customer-has-outstanding": "Clear this customer's outstanding balance before removing them.",
@@ -23,7 +24,7 @@ export const VALIDATION_MESSAGES: Record<string, string> = {
   "credit-due-date-invalid": "Enter a valid due date.",
   "credit-payment-method-invalid": "Choose cash, UPI, card, or other.",
   "credit-split-not-allowed":
-    "Credit cannot be combined with other payment methods on the same bill.",
+    "Only one part of a split can go on the customer's account.",
   "credit-reference-too-long": "Reference must be 80 characters or fewer.",
   "credit-notes-too-long": "Notes must be 500 characters or fewer.",
   "credit-manage-forbidden":
@@ -130,6 +131,11 @@ export const SYSTEM_MESSAGES: Record<string, string> = {
   "internal-error": "Something went wrong. Please try again.",
   "unknown-error": "Something went wrong. Please try again.",
 };
+
+export const CUSTOMER_NAME_LIMIT = 80;
+export const CUSTOMER_PHONE_LIMIT = 10;
+/** Card approval codes and UPI transaction ids are short. 40 covers a 35-character UPI id. */
+export const PAYMENT_TXN_REF_LIMIT = 40;
 
 export const STAFF_TEXT_LIMITS = {
   name: 80,

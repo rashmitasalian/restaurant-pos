@@ -1,5 +1,10 @@
 import React from "react";
-import { normalizePhone } from "../../../../shared/validation";
+import {
+  CUSTOMER_NAME_LIMIT,
+  CUSTOMER_PHONE_LIMIT,
+  PAYMENT_TXN_REF_LIMIT,
+  normalizePhone,
+} from "../../../../shared/validation";
 import { useFocusTrap } from "../../../hooks/useFocusTrap";
 import styles from "../Billing.module.css";
 import {
@@ -616,6 +621,7 @@ export function NewDeliveryModal({
                 }
               }}
               placeholder="Platform name…"
+              maxLength={CUSTOMER_NAME_LIMIT}
               autoFocus
               className={styles.modalInput}
               style={{ marginTop: 8 }}
@@ -642,6 +648,7 @@ export function NewDeliveryModal({
               }
             }}
             placeholder="e.g. ABC123"
+            maxLength={PAYMENT_TXN_REF_LIMIT}
             autoFocus={isPreset}
             className={`${styles.modalInput} ${styles.monoInput}`}
           />
@@ -658,6 +665,7 @@ export function NewDeliveryModal({
             value={customerName}
             onChange={(e) => onCustomerNameChange(e.target.value)}
             placeholder="e.g. Priya"
+            maxLength={CUSTOMER_NAME_LIMIT}
             className={styles.modalInput}
           />
         </div>
@@ -673,7 +681,9 @@ export function NewDeliveryModal({
             inputMode="tel"
             autoComplete="tel"
             value={customerPhone}
-            onChange={(e) => onCustomerPhoneChange(normalizePhone(e.target.value))}
+            onChange={(e) =>
+              onCustomerPhoneChange(normalizePhone(e.target.value).slice(0, CUSTOMER_PHONE_LIMIT))
+            }
             placeholder="e.g. 9876543210"
             className={styles.modalInput}
           />

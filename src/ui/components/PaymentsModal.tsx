@@ -2,6 +2,9 @@ import React from "react";
 import { useFocusTrap } from "../hooks/useFocusTrap";
 import { resolveCreditDueDate } from "../../shared/customerCredit";
 import {
+  CUSTOMER_NAME_LIMIT,
+  CUSTOMER_PHONE_LIMIT,
+  PAYMENT_TXN_REF_LIMIT,
   isValidIndianMobile,
   isValidPersonName,
   normalizePhone,
@@ -13,7 +16,7 @@ import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
 import styles from "./PaymentsModal.module.css";
 
-type SingleMethod = "cash" | "card" | "upi" | "voucher" | "other";
+type SingleMethod = "cash" | "card" | "upi" | "other";
 export type PaymentMethod = SingleMethod | "split" | "credit";
 
 export interface PaymentConfirm {
@@ -21,7 +24,7 @@ export interface PaymentConfirm {
   amountPaid: number;
   change?: number;
   txnRef?: string;
-  splitBreakdown?: Array<{ method: SingleMethod; amount: number }>;
+  splitBreakdown?: Array<{ method: SingleMethod | "credit"; amount: number }>;
   printReceipt: boolean;
   dueDate?: string;
   customerId?: string | null;
@@ -39,7 +42,7 @@ export type CreditCustomerOption = {
 };
 
 interface SplitEntry {
-  method: SingleMethod;
+  method: SingleMethod | "credit";
   amount: string;
 }
 
@@ -58,14 +61,14 @@ interface Props {
   onCustomersChanged?: (customers: CreditCustomerOption[]) => void;
 }
 
-const SINGLE_METHODS: SingleMethod[] = ["cash", "card", "upi", "voucher", "other"];
+const SINGLE_METHODS: SingleMethod[] = ["cash", "card", "upi", "other"];
 
-const QUICK_PAY: { method: SingleMethod; label: string; icon: string; shortcut: string }[] = [
-  { method: "cash", label: "Cash", icon: "C", shortcut: "1" },
-  { method: "card", label: "Card", icon: "R", shortcut: "2" },
-  { method: "upi", label: "UPI", icon: "U", shortcut: "3" },
-  { method: "other", label: "Other", icon: "O", shortcut: "4" },
-];
+const METHOD_SHORTCUTS: Partial<Record<PaymentMethod, string>> = {
+  cash: "1",
+  card: "2",
+  upi: "3",
+  other: "4",
+};
 
 export default function PaymentsModal({
   open,
@@ -81,7 +84,6 @@ export default function PaymentsModal({
   customers = [],
   onCustomersChanged,
 }: Props) {
-  const [expanded, setExpanded] = React.useState(false);
   const [method, setMethod] = React.useState<PaymentMethod>("cash");
   const [cashReceived, setCashReceived] = React.useState<string>("");
   const [txnRef, setTxnRef] = React.useState<string>("");
@@ -123,7 +125,6 @@ export default function PaymentsModal({
     if (!justOpened) {
       return;
     }
-    setExpanded(false);
     setMethod("cash");
     setCashReceived(String(amount));
     setTxnRef("");
@@ -208,13 +209,12 @@ export default function PaymentsModal({
   const effectivePrintReceipt = forcePrintReceipt || shouldPrintReceipt;
 
   const cashInputRef = React.useRef<HTMLInputElement>(null);
-  const quickPayDialogRef = useFocusTrap<HTMLDivElement>(open && !expanded);
-  const detailedPayDialogRef = useFocusTrap<HTMLDivElement>(open && expanded);
+  const payDialogRef = useFocusTrap<HTMLDivElement>(open);
   React.useEffect(() => {
-    if (open && expanded && method === "cash") {
+    if (open && method === "cash") {
       setTimeout(() => cashInputRef.current?.select(), 60);
     }
-  }, [open, expanded, method]);
+  }, [open, method]);
 
   const isCreditReady = React.useCallback(
     (c: CreditCustomerOption) =>
@@ -269,6 +269,14 @@ export default function PaymentsModal({
   const splitTotal = +(splitA + splitB).toFixed(2);
   const splitBalance = +(amount - splitTotal).toFixed(2);
   const splitExact = Math.abs(splitBalance) < 0.01;
+  const splitCreditLines = splits.filter((line) => line.method === "credit").length;
+  const splitCreditAmount = +splits
+    .reduce(
+      (sum, line) => sum + (line.method === "credit" ? parseFloat(line.amount) || 0 : 0),
+      0,
+    )
+    .toFixed(2);
+  const accountAmount = method === "credit" ? amount : splitCreditAmount;
 
   const creditCustomer = localCustomers.find((c) => c.id === creditCustomerId) || null;
   const creditOutstanding = Number(creditCustomer?.outstanding || 0);
@@ -283,7 +291,8 @@ export default function PaymentsModal({
     Boolean(creditCustomer?.creditEnabled) &&
     !creditCustomer?.creditBlocked &&
     creditLimit > 0 &&
-    amount <= availableCredit + 0.0001;
+    accountAmount > 0 &&
+    accountAmount <= availableCredit + 0.0001;
 
   const creditTermDays =
     creditCustomer?.defaultCreditDays === null || creditCustomer?.defaultCreditDays === undefined
@@ -312,7 +321,7 @@ export default function PaymentsModal({
     (method === "cash"
       ? numCash >= amount
       : method === "split"
-        ? splitExact
+        ? splitExact && splitCreditLines <= 1 && (splitCreditAmount <= 0 || creditOk)
         : method === "credit"
           ? creditOk
           : true);
@@ -339,7 +348,7 @@ export default function PaymentsModal({
     setNewError(null);
     const name = normalizeText(newName);
     const phone = normalizePhone(newPhone);
-    if (!isValidPersonName(name)) {
+    if (!isValidPersonName(name, { max: CUSTOMER_NAME_LIMIT })) {
       setNewError(validationMessage("customer-name-invalid"));
       return;
     }
@@ -410,15 +419,7 @@ export default function PaymentsModal({
     }
   };
 
-  // ── Quick pay — instant confirm with exact amount ──────────────────────────
-  const quickPay = (m: SingleMethod) => {
-    if (processing) {
-      return;
-    }
-    onConfirm({ method: m, amountPaid: amount, printReceipt: effectivePrintReceipt });
-  };
-
-  // ── Detailed confirm ───────────────────────────────────────────────────────
+  // ── Confirm ────────────────────────────────────────────────────────────────
   const handleConfirm = () => {
     if (!canConfirm || processing) {
       return;
@@ -426,13 +427,22 @@ export default function PaymentsModal({
     if (method === "cash") {
       onConfirm({ method, amountPaid: numCash, change, printReceipt: effectivePrintReceipt });
     } else if (method === "split") {
+      const collectedNow = +splits
+        .reduce(
+          (sum, line) => sum + (line.method === "credit" ? 0 : parseFloat(line.amount) || 0),
+          0,
+        )
+        .toFixed(2);
       onConfirm({
         method,
-        amountPaid: amount,
+        amountPaid: splitCreditAmount > 0 ? collectedNow : amount,
         splitBreakdown: splits.map((e) => ({
           method: e.method,
           amount: parseFloat(e.amount) || 0,
         })),
+        ...(splitCreditAmount > 0
+          ? { customerId: creditCustomerId, dueDate: creditDueDate }
+          : {}),
         printReceipt: effectivePrintReceipt,
       });
     } else if (method === "credit") {
@@ -461,16 +471,19 @@ export default function PaymentsModal({
       onClose();
       return;
     }
-    // In quick-pay view, number keys trigger instant payment
-    if (!expanded && (e.target as HTMLElement)?.tagName !== "INPUT") {
-      const qp = QUICK_PAY.find((q) => q.shortcut === e.key);
-      if (qp) {
+    const targetTag = (e.target as HTMLElement)?.tagName;
+    if (targetTag !== "INPUT" && targetTag !== "SELECT" && targetTag !== "TEXTAREA") {
+      const shortcutMethod = (Object.keys(METHOD_SHORTCUTS) as PaymentMethod[]).find(
+        (key) => METHOD_SHORTCUTS[key] === e.key,
+      );
+      if (shortcutMethod) {
         e.preventDefault();
-        quickPay(qp.method);
+        setMethod(shortcutMethod);
         return;
       }
     }
-    if (e.key === "Enter" && expanded && canConfirm) {
+    if (e.key === "Enter" && canConfirm && targetTag !== "BUTTON") {
+      e.preventDefault();
       handleConfirm();
     }
   };
@@ -519,219 +532,6 @@ export default function PaymentsModal({
     textAlign: "center" as const,
   });
 
-  // ── Quick-pay view (default) ───────────────────────────────────────────────
-  if (!expanded) {
-    return (
-      <div
-        onKeyDown={handleKeyDown}
-        style={{
-          position: "fixed",
-          inset: 0,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          background: "var(--pos-overlay)",
-          zIndex: 3000,
-        }}
-      >
-        <div
-          ref={quickPayDialogRef}
-          role="dialog"
-          aria-modal="true"
-          aria-label="Collect Payment"
-          tabIndex={-1}
-          style={{
-            width: 440,
-            maxWidth: "96vw",
-            background: "var(--pos-surface)",
-            borderRadius: 16,
-            boxShadow: "var(--pos-shadow-overlay)",
-            overflow: "hidden",
-          }}
-        >
-          {/* Header with amount */}
-          <div
-            style={{
-              padding: "20px 24px 16px",
-              borderBottom: "1px solid var(--pos-surface-sunken)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-            }}
-          >
-            <div>
-              <div
-                style={{
-                  fontSize: 12,
-                  color: "var(--pos-tx-muted)",
-                  fontWeight: 600,
-                  textTransform: "uppercase",
-                  letterSpacing: 0.5,
-                }}
-              >
-                Amount Due
-              </div>
-              <div
-                style={{
-                  fontSize: 32,
-                  fontWeight: 900,
-                  color: "var(--pos-tx)",
-                  lineHeight: 1.1,
-                  marginTop: 4,
-                }}
-              >
-                ₹{amount.toFixed(2)}
-              </div>
-            </div>
-            <button
-              onClick={onClose}
-              disabled={processing}
-              aria-label="Close"
-              style={{
-                background: "none",
-                border: "none",
-                fontSize: 22,
-                cursor: processing ? "not-allowed" : "pointer",
-                color: "var(--pos-tx-muted)",
-                lineHeight: 1,
-                padding: "0 4px",
-              }}
-            >
-              ×
-            </button>
-          </div>
-
-          {/* Quick-pay buttons */}
-          <div style={{ padding: "20px 24px" }}>
-            <div
-              style={{
-                fontSize: 12,
-                color: "var(--pos-tx-sub)",
-                fontWeight: 600,
-                marginBottom: 12,
-                textTransform: "uppercase",
-                letterSpacing: 0.5,
-              }}
-            >
-              Tap to settle full amount
-            </div>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(4, 1fr)",
-                gap: 10,
-              }}
-            >
-              {QUICK_PAY.map((qp) => (
-                <button
-                  key={qp.method}
-                  onClick={() => quickPay(qp.method)}
-                  disabled={processing}
-                  style={{
-                    padding: "18px 8px 14px",
-                    border: "1.5px solid var(--pos-line)",
-                    borderRadius: 12,
-                    background: "var(--pos-surface)",
-                    cursor: processing ? "not-allowed" : "pointer",
-                    opacity: processing ? 0.6 : 1,
-                    transition: "all 0.12s",
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    gap: 6,
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.borderColor = "var(--pos-success)";
-                    e.currentTarget.style.background = "var(--pos-success-tint)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.borderColor = "var(--pos-line)";
-                    e.currentTarget.style.background = "var(--pos-surface)";
-                  }}
-                >
-                  <span style={{ fontSize: 28 }}>{qp.icon}</span>
-                  <span style={{ fontSize: 14, fontWeight: 700, color: "var(--pos-tx)" }}>
-                    {qp.label}
-                  </span>
-                  <span style={{ fontSize: 10, color: "var(--pos-tx-muted)", fontWeight: 600 }}>
-                    [{qp.shortcut}]
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* More options link */}
-          <div
-            style={{
-              padding: "12px 24px 18px",
-              borderTop: "1px solid var(--pos-surface-sunken)",
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              flexWrap: "wrap",
-              gap: 8,
-            }}
-          >
-            <label
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                cursor: "pointer",
-                fontSize: 13,
-                color: "var(--pos-tx-sec)",
-                fontWeight: 600,
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={effectivePrintReceipt}
-                onChange={(e) => setShouldPrintReceipt(e.target.checked)}
-                disabled={processing || forcePrintReceipt}
-                style={{ width: 15, height: 15, cursor: processing ? "not-allowed" : "pointer" }}
-              />
-              {forcePrintReceipt ? "Print receipt (required by mode)" : "Print receipt"}
-            </label>
-            <button
-              onClick={() => setExpanded(true)}
-              disabled={processing}
-              style={{
-                background: "none",
-                border: "none",
-                color: "var(--pos-tx-sub)",
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: processing ? "not-allowed" : "pointer",
-                padding: 0,
-                textDecoration: "underline",
-                textUnderlineOffset: 2,
-              }}
-            >
-              Custom amount, Split, or Voucher →
-            </button>
-            <button
-              onClick={onClose}
-              disabled={processing}
-              style={{
-                padding: "8px 16px",
-                background: "transparent",
-                color: "var(--pos-tx-sub)",
-                border: "1.5px solid var(--pos-line)",
-                borderRadius: 8,
-                fontWeight: 600,
-                fontSize: 13,
-                cursor: processing ? "not-allowed" : "pointer",
-              }}
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   // ── Expanded / detailed view ───────────────────────────────────────────────
   return (
     <div
@@ -747,7 +547,7 @@ export default function PaymentsModal({
       }}
     >
       <div
-        ref={detailedPayDialogRef}
+        ref={payDialogRef}
         role="dialog"
         aria-modal="true"
         aria-label="Collect Payment"
@@ -764,25 +564,13 @@ export default function PaymentsModal({
             justifyContent: "space-between",
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <button
-              onClick={() => setExpanded(false)}
-              disabled={processing}
-              aria-label="Back to quick pay"
-              style={{
-                background: "none",
-                border: "none",
-                fontSize: 18,
-                cursor: processing ? "not-allowed" : "pointer",
-                color: "var(--pos-tx-sub)",
-                padding: "0 4px",
-              }}
-            >
-              ←
-            </button>
-            <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: "var(--pos-tx)" }}>
-              Settle Bill
+          <div>
+            <h3 style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "var(--pos-tx-muted)", letterSpacing: 0.4, textTransform: "uppercase" }}>
+              Amount due
             </h3>
+            <div style={{ marginTop: 2, fontSize: 28, fontWeight: 900, color: "var(--pos-tx)", lineHeight: 1.1 }}>
+              ₹{amount.toFixed(2)}
+            </div>
           </div>
           <button
             onClick={onClose}
@@ -808,37 +596,52 @@ export default function PaymentsModal({
           <div className={styles.mainCol}>
             {/* Method grid */}
             <label style={labelStyle}>Payment Method</label>
-            <div className={styles.methodGrid}>
+            <div className={styles.methods}>
               {(
-                (creditEnabled
-                  ? ["cash", "card", "upi", "split", "voucher", "other", "credit"]
-                  : ["cash", "card", "upi", "split", "voucher", "other"]) as PaymentMethod[]
-              ).map((m) => (
-                <button
-                  key={m}
-                  style={{ ...methodBtn(method === m), opacity: processing ? 0.6 : 1 }}
-                  onClick={() => setMethod(m)}
-                  disabled={processing}
+                [
+                  ["cash", "card", "upi"],
+                  creditEnabled ? ["split", "other", "credit"] : ["split", "other"],
+                ] as PaymentMethod[][]
+              ).map((row) => (
+                <div
+                  key={row.join("-")}
+                  className={styles.methodGrid}
+                  style={{ gridTemplateColumns: `repeat(${row.length > 3 ? 2 : row.length}, 1fr)` }}
                 >
-                  {m === "cash"
-                    ? "Cash"
-                    : m === "card"
-                      ? "Card"
-                      : m === "upi"
-                        ? "UPI"
-                        : m === "split"
-                          ? "Split"
-                          : m === "voucher"
-                            ? "Voucher"
-                            : m === "credit"
-                              ? "Credit"
-                              : "Other"}
-                </button>
+                  {row.map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      style={{ ...methodBtn(method === m), opacity: processing ? 0.6 : 1 }}
+                      onClick={() => setMethod(m)}
+                      disabled={processing}
+                    >
+                      {m === "cash"
+                        ? "Cash"
+                        : m === "card"
+                          ? "Card"
+                          : m === "upi"
+                            ? "UPI"
+                            : m === "split"
+                              ? "Split"
+                              : m === "credit"
+                                ? "Credit"
+                                : "Other"}
+                    </button>
+                  ))}
+                </div>
               ))}
             </div>
 
-            {method === "credit" && (
-              <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
+            {(method === "credit" || (method === "split" && splitCreditLines > 0)) && (
+              <div
+                style={{
+                  marginTop: 12,
+                  display: "grid",
+                  gap: 10,
+                  order: method === "split" ? 2 : undefined,
+                }}
+              >
                 {!creditCustomer && !showNewCustomer && (
                   <>
                     <div className="ui-field-row">
@@ -848,8 +651,9 @@ export default function PaymentsModal({
                           value={customerSearch}
                           onChange={(e) => setCustomerSearch(e.target.value)}
                           placeholder="Search name or phone"
+                          maxLength={CUSTOMER_NAME_LIMIT}
                           disabled={processing || savingCustomer}
-                          autoFocus
+                          autoFocus={method === "credit"}
                         />
                       </div>
                       <div className="ui-field-row-action">
@@ -915,7 +719,15 @@ export default function PaymentsModal({
                               cursor: processing ? "not-allowed" : "pointer",
                             }}
                           >
-                            <div style={{ fontWeight: 700, fontSize: 13, color: "var(--pos-tx)" }}>
+                            <div
+                              style={{
+                                fontWeight: 700,
+                                fontSize: 13,
+                                lineHeight: 1.35,
+                                color: "var(--pos-tx)",
+                                overflowWrap: "anywhere",
+                              }}
+                            >
                               {c.name}
                               <span
                                 style={{
@@ -961,7 +773,13 @@ export default function PaymentsModal({
                         unmatchedCreditSearch && (
                           <div style={{ padding: 12, fontSize: 13, color: "var(--pos-tx-sub)" }}>
                             <div
-                              style={{ fontWeight: 700, color: "var(--pos-tx)", marginBottom: 4 }}
+                              style={{
+                                fontWeight: 700,
+                                color: "var(--pos-tx)",
+                                marginBottom: 4,
+                                lineHeight: 1.35,
+                                overflowWrap: "anywhere",
+                              }}
                             >
                               {unmatchedCreditSearch.name}{" "}
                               <span
@@ -1070,14 +888,20 @@ export default function PaymentsModal({
                       label="Name"
                       value={newName}
                       onChange={(e) => setNewName(e.target.value)}
+                      maxLength={CUSTOMER_NAME_LIMIT}
                       disabled={processing || savingCustomer}
                       autoFocus
                     />
                     <Input
                       label="Phone"
                       value={newPhone}
-                      onChange={(e) => setNewPhone(e.target.value)}
+                      onChange={(e) =>
+                        setNewPhone(
+                          normalizePhone(e.target.value).slice(0, CUSTOMER_PHONE_LIMIT),
+                        )
+                      }
                       inputMode="tel"
+                      placeholder="10-digit mobile"
                       disabled={processing || savingCustomer}
                     />
                     {canManageCredit ? (
@@ -1129,6 +953,7 @@ export default function PaymentsModal({
                       background: "var(--pos-surface-hover)",
                       display: "grid",
                       gap: 8,
+                      minWidth: 0,
                     }}
                   >
                     <div
@@ -1137,10 +962,19 @@ export default function PaymentsModal({
                         justifyContent: "space-between",
                         gap: 8,
                         alignItems: "flex-start",
+                        minWidth: 0,
                       }}
                     >
-                      <div>
-                        <div style={{ fontWeight: 700, fontSize: 14, color: "var(--pos-tx)" }}>
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div
+                          style={{
+                            fontWeight: 700,
+                            fontSize: 14,
+                            lineHeight: 1.35,
+                            color: "var(--pos-tx)",
+                            overflowWrap: "anywhere",
+                          }}
+                        >
                           {creditCustomer.name}
                         </div>
                         <div
@@ -1158,6 +992,7 @@ export default function PaymentsModal({
                         variant="ghost"
                         size="sm"
                         disabled={processing}
+                        style={{ flexShrink: 0 }}
                         onClick={() => {
                           setCreditCustomerId("");
                           setCustomerSearch("");
@@ -1230,12 +1065,12 @@ export default function PaymentsModal({
                     {!creditCustomer.creditBlocked &&
                       creditCustomer.creditEnabled &&
                       creditLimit > 0 &&
-                      amount > availableCredit && (
+                      accountAmount > availableCredit && (
                         <div style={{ display: "grid", gap: 10 }}>
                           <div
                             style={{ color: "var(--pos-danger)", fontWeight: 700, fontSize: 13 }}
                           >
-                            Exceeds available credit (need ₹{amount.toFixed(0)}, available ₹
+                            Exceeds available credit (need ₹{accountAmount.toFixed(0)}, available ₹
                             {availableCredit.toFixed(0)})
                           </div>
                           {canManageCredit ? (
@@ -1386,6 +1221,7 @@ export default function PaymentsModal({
                   value={txnRef}
                   onChange={(e) => setTxnRef(e.target.value)}
                   placeholder="Last 4 digits or approval code"
+                  maxLength={PAYMENT_TXN_REF_LIMIT}
                   style={inputStyle}
                   autoFocus
                 />
@@ -1404,27 +1240,13 @@ export default function PaymentsModal({
                   value={txnRef}
                   onChange={(e) => setTxnRef(e.target.value)}
                   placeholder="e.g. UPI123456789012"
+                  maxLength={PAYMENT_TXN_REF_LIMIT}
                   style={inputStyle}
                   autoFocus
                 />
                 <p style={{ marginTop: 8, fontSize: 12, color: "var(--pos-tx-muted)" }}>
                   Full amount of ₹{amount.toFixed(2)} will be recorded.
                 </p>
-              </div>
-            )}
-
-            {/* Voucher */}
-            {method === "voucher" && (
-              <div>
-                <label style={labelStyle}>Voucher Code</label>
-                <input
-                  type="text"
-                  value={txnRef}
-                  onChange={(e) => setTxnRef(e.target.value)}
-                  placeholder="Enter voucher code"
-                  style={inputStyle}
-                  autoFocus
-                />
               </div>
             )}
 
@@ -1437,6 +1259,7 @@ export default function PaymentsModal({
                   value={txnRef}
                   onChange={(e) => setTxnRef(e.target.value)}
                   placeholder="Reference number or note"
+                  maxLength={PAYMENT_TXN_REF_LIMIT}
                   style={inputStyle}
                   autoFocus
                 />
@@ -1445,8 +1268,14 @@ export default function PaymentsModal({
 
             {/* Split */}
             {method === "split" && (
-              <div>
+              <div style={{ order: 1 }}>
                 <label style={labelStyle}>Split Between Two Methods</label>
+                {creditEnabled && (
+                  <div style={{ fontSize: 13, color: "var(--pos-tx-sec)", marginBottom: 10 }}>
+                    One line can be Credit. That amount goes on the customer's account. Collect the
+                    other line now.
+                  </div>
+                )}
                 {splits.map((s, idx) => (
                   <div
                     key={idx}
@@ -1455,14 +1284,21 @@ export default function PaymentsModal({
                     <select
                       value={s.method}
                       onChange={(e) => {
+                        const nextMethod = e.target.value as SingleMethod | "credit";
                         const updated: [SplitEntry, SplitEntry] = [
                           { ...splits[0] },
                           { ...splits[1] },
                         ];
                         updated[idx] = {
                           ...updated[idx],
-                          method: e.target.value as SingleMethod,
+                          method: nextMethod,
                         };
+                        if (nextMethod === "credit") {
+                          const other = idx === 0 ? 1 : 0;
+                          if (updated[other].method === "credit") {
+                            updated[other] = { ...updated[other], method: "cash" };
+                          }
+                        }
                         setSplits(updated);
                       }}
                       style={{
@@ -1474,11 +1310,13 @@ export default function PaymentsModal({
                         background: "var(--pos-surface)",
                       }}
                     >
-                      {SINGLE_METHODS.map((m) => (
-                        <option key={m} value={m}>
-                          {m.charAt(0).toUpperCase() + m.slice(1)}
-                        </option>
-                      ))}
+                      {(creditEnabled ? [...SINGLE_METHODS, "credit" as const] : SINGLE_METHODS).map(
+                        (m) => (
+                          <option key={m} value={m}>
+                            {m === "upi" ? "UPI" : m === "credit" ? "Credit" : m.charAt(0).toUpperCase() + m.slice(1)}
+                          </option>
+                        ),
+                      )}
                     </select>
                     <input
                       type="number"
@@ -1503,103 +1341,16 @@ export default function PaymentsModal({
                 )}
                 {splitBalance === 0 && splitTotal > 0 && (
                   <div style={{ color: "var(--pos-success)", fontSize: 13, fontWeight: 600 }}>
-                    Fully covered
+                    {splitCreditAmount > 0
+                      ? `Collect ₹${(splitTotal - splitCreditAmount).toFixed(2)} now · ₹${splitCreditAmount.toFixed(2)} on account`
+                      : "Fully covered"}
                   </div>
                 )}
               </div>
             )}
           </div>
 
-          {/* Right: summary + actions */}
           <div className={styles.summaryCol}>
-            <label style={labelStyle}>Summary</label>
-
-            {/* Amount due */}
-            <div
-              style={{
-                padding: 14,
-                background: "var(--pos-surface)",
-                border: "1.5px solid var(--pos-surface-sunken)",
-                borderRadius: 10,
-              }}
-            >
-              <div style={{ fontSize: 11, color: "var(--pos-tx-muted)", marginBottom: 4 }}>
-                Amount Due
-              </div>
-              <div style={{ fontSize: 26, fontWeight: 900, color: "var(--pos-tx)", lineHeight: 1 }}>
-                ₹{amount.toFixed(2)}
-              </div>
-            </div>
-
-            {/* Cash received / change */}
-            {method === "cash" && numCash > 0 && (
-              <>
-                <div
-                  style={{
-                    padding: "10px 14px",
-                    background: "var(--pos-surface)",
-                    border: "1.5px solid var(--pos-surface-sunken)",
-                    borderRadius: 8,
-                  }}
-                >
-                  <div style={{ fontSize: 11, color: "var(--pos-tx-muted)", marginBottom: 2 }}>
-                    Received
-                  </div>
-                  <div style={{ fontSize: 18, fontWeight: 800, color: "var(--pos-tx-sec)" }}>
-                    ₹{numCash.toFixed(2)}
-                  </div>
-                </div>
-                {change > 0 && (
-                  <div
-                    style={{
-                      padding: "10px 14px",
-                      background: "var(--pos-success-tint)",
-                      border: "1.5px solid var(--pos-success-line)",
-                      borderRadius: 8,
-                    }}
-                  >
-                    <div
-                      style={{ fontSize: 11, color: "var(--pos-success-text)", marginBottom: 2 }}
-                    >
-                      Change
-                    </div>
-                    <div
-                      style={{ fontSize: 20, fontWeight: 900, color: "var(--pos-success-text)" }}
-                    >
-                      ₹{change.toFixed(2)}
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
-
-            {/* Split totals */}
-            {method === "split" && (
-              <div
-                style={{
-                  padding: "10px 14px",
-                  background: "var(--pos-surface)",
-                  border: "1.5px solid var(--pos-surface-sunken)",
-                  borderRadius: 8,
-                }}
-              >
-                <div style={{ fontSize: 11, color: "var(--pos-tx-muted)", marginBottom: 2 }}>
-                  Collected
-                </div>
-                <div
-                  style={{
-                    fontSize: 18,
-                    fontWeight: 800,
-                    color: splitExact ? "var(--pos-success)" : "var(--pos-tx-sec)",
-                  }}
-                >
-                  ₹{splitTotal.toFixed(2)}
-                </div>
-              </div>
-            )}
-
-            <div style={{ flex: 1 }} />
-
             <label
               style={{
                 display: "flex",
@@ -1621,40 +1372,43 @@ export default function PaymentsModal({
               {forcePrintReceipt ? "Print receipt (required by mode)" : "Print receipt"}
             </label>
 
-            <button
-              onClick={handleConfirm}
-              disabled={!canConfirm}
-              style={{
-                padding: "13px",
-                background: canConfirm ? "var(--pos-success)" : "var(--pos-line-strong)",
-                color: canConfirm ? "var(--pos-surface)" : "var(--pos-tx-muted)",
-                border: "none",
-                borderRadius: 8,
-                fontWeight: 800,
-                fontSize: 15,
-                cursor: canConfirm ? "pointer" : "not-allowed",
-                transition: "background 0.15s",
-              }}
-            >
-              {processing ? "Processing..." : method === "credit" ? " Save to account" : " Settle"}
-            </button>
-
-            <button
-              onClick={onClose}
-              disabled={processing}
-              style={{
-                padding: "10px",
-                background: "transparent",
-                color: "var(--pos-tx-sub)",
-                border: "1.5px solid var(--pos-line)",
-                borderRadius: 8,
-                fontWeight: 600,
-                fontSize: 13,
-                cursor: processing ? "not-allowed" : "pointer",
-              }}
-            >
-              Cancel
-            </button>
+            <div className={styles.actionRow}>
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={processing}
+                style={{
+                  padding: "13px 16px",
+                  background: "transparent",
+                  color: "var(--pos-tx-sub)",
+                  border: "1.5px solid var(--pos-line)",
+                  borderRadius: 8,
+                  fontWeight: 600,
+                  fontSize: 15,
+                  cursor: processing ? "not-allowed" : "pointer",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirm}
+                disabled={!canConfirm}
+                style={{
+                  padding: "13px 16px",
+                  background: canConfirm ? "var(--pos-success)" : "var(--pos-line-strong)",
+                  color: canConfirm ? "var(--pos-surface)" : "var(--pos-tx-muted)",
+                  border: "none",
+                  borderRadius: 8,
+                  fontWeight: 800,
+                  fontSize: 15,
+                  cursor: canConfirm ? "pointer" : "not-allowed",
+                  transition: "background 0.15s",
+                }}
+              >
+                {processing ? "Processing..." : method === "credit" ? "Save to account" : "Settle"}
+              </button>
+            </div>
           </div>
         </div>
       </div>

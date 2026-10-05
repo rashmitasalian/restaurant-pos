@@ -11,6 +11,7 @@ declare global {
       exportReportPdf?: (
         html: string,
         defaultFileName: string,
+        landscape?: boolean,
       ) => Promise<{ ok: boolean; path?: string; reason?: string; error?: string }>;
       db?: {
         ready: () => Promise<{ ok: boolean }>;

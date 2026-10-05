@@ -58,8 +58,8 @@ contextBridge.exposeInMainWorld("pos", {
       .invoke("log:write", getSessionToken(), level, message, context)
       .catch(() => ({ ok: false })),
   copyText: (text) => ipcRenderer.invoke("clipboard:writeText", getSessionToken(), text),
-  exportReportPdf: (html, defaultFileName) =>
-    ipcRenderer.invoke("report:exportPdf", getSessionToken(), html, defaultFileName),
+  exportReportPdf: (html, defaultFileName, landscape) =>
+    ipcRenderer.invoke("report:exportPdf", getSessionToken(), html, defaultFileName, landscape),
   db: {
     ready: () => invoke("pos:db:ready"),
   },

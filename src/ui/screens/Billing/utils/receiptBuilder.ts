@@ -220,13 +220,37 @@ export function buildReceiptLines(
     "SEP",
     ...(() => {
       const payments = Array.isArray(ord?.payments) ? ord.payments : [];
+      const splitParts = payments.flatMap((p: any) =>
+        Array.isArray(p?.splitBreakdown) ? p.splitBreakdown : [],
+      );
+      const creditPart = splitParts.find(
+        (part: any) =>
+          String(part?.method || "").toLowerCase() === "credit" && Number(part?.amount) > 0,
+      );
       const creditPayment = payments.find(
         (p: any) => String(p?.method || "").toLowerCase() === "credit",
       );
       const creditMeta = ord?.meta?.credit;
-      if (!creditPayment && !creditMeta) {
+      if (!creditPayment && !creditPart && !creditMeta) {
         return [] as string[];
       }
+      const methodLabel = (value: string) => {
+        const raw = String(value || "").toLowerCase();
+        if (raw === "upi") return "UPI";
+        if (raw === "credit") return "Credit";
+        return raw ? raw.charAt(0).toUpperCase() + raw.slice(1) : "Payment";
+      };
+      const collectedLines = creditPart
+        ? splitParts
+            .filter(
+              (part: any) =>
+                String(part?.method || "").toLowerCase() !== "credit" && Number(part?.amount) > 0,
+            )
+            .map(
+              (part: any) =>
+                `LEFT:${PAD}Paid ${methodLabel(String(part.method || ""))}: Rs ${fmtAmt(Number(part.amount))}`,
+            )
+        : [];
       const dueDate = String(creditMeta?.dueDate || "").trim();
       const [y, m, d] = dueDate.split("-").map(Number);
       const dueLabel =
@@ -246,7 +270,10 @@ export function buildReceiptLines(
           ? null
           : Number(creditMeta.accountBalance);
       return [
-        `LEFTB:${PAD}Payment: ON ACCOUNT`,
+        ...collectedLines,
+        creditPart
+          ? `LEFTB:${PAD}On account: Rs ${fmtAmt(Number(creditPart.amount))}`
+          : `LEFTB:${PAD}Payment: ON ACCOUNT`,
         ...(customerName ? [`LEFT:${PAD}Customer: ${customerName}`] : []),
         ...(customerPhone ? [`LEFT:${PAD}Phone: ${customerPhone}`] : []),
         ...(dueLabel ? [`LEFT:${PAD}This bill due: ${dueLabel}`] : []),
