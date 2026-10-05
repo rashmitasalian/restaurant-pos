@@ -6,6 +6,8 @@ import type Database from "better-sqlite3";
 import { backupDatabase, getDb, inTransaction, restoreDatabaseFromBackup } from "../db/sqlite";
 import { buildGroceryPurchaseAnalysis, loadRecordedGroceryBills } from "./groceryPurchaseAnalysis";
 import { buildSalesFacts, type SalesBillInput } from "./salesReport";
+import { publishDomainEvent } from "./domainEvents";
+import { destroyLanSessionsForUser } from "./lanSessionManager";
 import { destroySessionsForUser } from "./sessionManager";
 import {
   createCredentialHash,
@@ -176,6 +178,12 @@ const ACTIVE_ORDER_STATUSES = ["open", "held", "ready", "assigned"] as const;
 
 const loginAttempts: Record<string, { count: number; lockedUntil: number }> = {};
 const recoveryAttempts: Record<string, { count: number; lockedUntil: number }> = {};
+
+function revokeLanUser(username: string, reason: "password-reset" | "signed-out") {
+  const key = username.trim().toLowerCase();
+  destroyLanSessionsForUser(key);
+  publishDomainEvent("lan-sessions-revoked", { username: key, reason });
+}
 
 function normalizeModeId(value: unknown) {
   return String(value || "")
@@ -2933,7 +2941,7 @@ export const posService = {
     actorPassword?: string | null,
   ) {
     const key = username.trim().toLowerCase();
-    return inTransaction((database) => {
+    const updated = inTransaction((database) => {
       const actor = assertActiveAdminPassword(database, actorUsername, actorPassword);
       const current = database.prepare("SELECT * FROM users WHERE username = ?").get(key) as any;
       if (!current) {
@@ -2964,8 +2972,16 @@ export const posService = {
       if (updates.active === false || (updates.role && updates.role !== current.role)) {
         destroySessionsForUser(key);
       }
-      return userFromRow(database.prepare("SELECT * FROM users WHERE username = ?").get(key));
+      return {
+        user: userFromRow(database.prepare("SELECT * FROM users WHERE username = ?").get(key)),
+        revokePhone:
+          updates.active === false || Boolean(updates.role && updates.role !== current.role),
+      };
     });
+    if (updated.revokePhone) {
+      revokeLanUser(key, "signed-out");
+    }
+    return updated.user;
   },
 
   changeOwnPassword(username: string, currentPassword: string, newPassword: string) {
@@ -2997,7 +3013,7 @@ export const posService = {
   ) {
     const key = username.trim().toLowerCase();
     assertPassword(newPassword);
-    return inTransaction((database) => {
+    const result = inTransaction((database) => {
       const actor = assertActiveAdminPassword(database, actorUsername, actorPassword);
       const current = database.prepare("SELECT * FROM users WHERE username = ?").get(key);
       if (!current) {
@@ -3011,6 +3027,8 @@ export const posService = {
       });
       return { ok: true };
     });
+    revokeLanUser(key, "password-reset");
+    return result;
   },
 
   logout(username: string) {

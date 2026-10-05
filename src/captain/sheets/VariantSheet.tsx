@@ -1,6 +1,7 @@
 import React from "react";
 import { Minus, Plus } from "lucide-react";
 import { Icon } from "../../ui/components/ui/Icon";
+import { useBackdropDismiss } from "../../ui/hooks/useBackdropDismiss";
 import { money } from "../money";
 
 export type Variant = {
@@ -25,6 +26,7 @@ export function VariantSheet({
   const price =
     picked && picked !== "regular" ? Number(picked.price || 0) : Number(item.price || 0);
   const canAdd = picked !== null;
+  const backdrop = useBackdropDismiss(onClose);
 
   return (
     <div
@@ -32,11 +34,7 @@ export function VariantSheet({
       role="dialog"
       aria-modal="true"
       aria-label={`Choose options for ${item.name}`}
-      onClick={(event) => {
-        if (event.target === event.currentTarget) {
-          onClose();
-        }
-      }}
+      {...backdrop}
     >
       <div className="cap-modal-card">
         <h3>{item.name}</h3>

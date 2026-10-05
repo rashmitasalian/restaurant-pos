@@ -120,7 +120,8 @@ Floor / KOTs / Me ← bottom tabs (order kept)
 
 - HTTP requests time out (20s; health/branding/logout 8s). SSE reconnects with backoff up to 30s.
 - Returning to the phone (`visibilitychange` / focus) refreshes tables, KOTs, and the open order from the gateway.
-- LAN sessions stay **in memory** on the POS. A POS/gateway restart invalidates tokens; Captain shows login again (401). That is intentional (Model A), not a reconnect bug.
+- LAN sessions stay **in memory** on the POS. A POS/gateway restart invalidates tokens. While the POS is unreachable the phone stays on the current screen and shows Reconnecting. Once the gateway answers again with 401, the phone returns to login: **You were signed out. Sign in again.**
+- An admin password reset ends that person's phone session immediately: **Your password was reset. Sign in with the new password.** Turning the account off, or changing its role, uses the signed-out line.
 
 ### Idempotency (`client_ops`)
 

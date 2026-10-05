@@ -1,4 +1,5 @@
 import React from "react";
+import { Eye, EyeOff } from "lucide-react";
 import {
   createUser,
   listUsers,
@@ -15,6 +16,7 @@ import { reportClientError } from "../../../app/utils/clientError";
 import { AuthContext } from "../../context/AuthContext";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { Button } from "../../components/ui/Button";
+import { Input } from "../../components/ui/Input";
 import { Modal } from "../../components/ui/Modal";
 import styles from "./Users.module.css";
 
@@ -66,12 +68,38 @@ function userListErrorMessage(message: string) {
   return "Could not load users. Please try again.";
 }
 
+export function AccountsSearch({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className={styles.searchField}>
+      <Input
+        label="Search accounts"
+        labelHidden
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder="Search name, username, or role"
+      />
+    </div>
+  );
+}
+
 export default function UsersScreen({
   embedded = false,
   registerAddUser,
+  query: queryProp,
+  onQueryChange,
+  onSearchVisible,
 }: {
   embedded?: boolean;
   registerAddUser?: (open: () => void) => void;
+  query?: string;
+  onQueryChange?: (value: string) => void;
+  onSearchVisible?: (visible: boolean) => void;
 }) {
   const auth = React.useContext(AuthContext);
   const [users, setUsers] = React.useState<UserDoc[]>([]);
@@ -80,6 +108,9 @@ export default function UsersScreen({
   const [showCreate, setShowCreate] = React.useState(false);
   const [resetTarget, setResetTarget] = React.useState<UserDoc | null>(null);
   const [toggleTarget, setToggleTarget] = React.useState<UserDoc | null>(null);
+  const [queryState, setQueryState] = React.useState("");
+  const query = queryProp ?? queryState;
+  const setQuery = onQueryChange ?? setQueryState;
 
   const load = React.useCallback(async () => {
     if (auth?.loading) {
@@ -140,10 +171,31 @@ export default function UsersScreen({
     registerAddUser?.(() => setShowCreate(true));
   }, [registerAddUser]);
 
+  const searchVisible = !loading && users.length > 0;
+  React.useEffect(() => {
+    if (!onSearchVisible) {
+      return;
+    }
+    onSearchVisible(searchVisible);
+    return () => onSearchVisible(false);
+  }, [onSearchVisible, searchVisible]);
+
   const isSelf = (user: UserDoc) => user.username === auth?.session?.username;
+  const needle = query.trim().toLowerCase();
+  const visibleUsers = needle
+    ? users.filter((user) => {
+        const role = ROLES[user.role]?.label || user.role;
+        return [user.displayName, user.username, role, user.linkedStaffName, user.staffId].some(
+          (part) =>
+            String(part || "")
+              .toLowerCase()
+              .includes(needle),
+        );
+      })
+    : users;
 
   return (
-    <div className={styles.container}>
+    <div className={embedded ? styles.containerEmbedded : styles.container}>
       {!embedded && (
         <PageHeader
           title="Accounts"
@@ -162,21 +214,23 @@ export default function UsersScreen({
         />
       )}
 
-      {embedded && (
-        <p style={{ margin: "0 0 16px", color: "var(--pos-tx-sub)", fontSize: 13 }}>
-          Create and manage RestoNiti login accounts and access permissions.
-        </p>
-      )}
-
       {error && <div className={styles.formError}>{error}</div>}
+
+      {!embedded && searchVisible ? (
+        <div className={styles.searchRow}>
+          <AccountsSearch value={query} onChange={setQuery} />
+        </div>
+      ) : null}
 
       {loading ? (
         <div className={styles.emptyState}>Loading users...</div>
       ) : users.length === 0 ? (
         <div className={styles.emptyState}>No users found.</div>
+      ) : visibleUsers.length === 0 ? (
+        <div className={styles.emptyState}>No accounts match “{query.trim()}”.</div>
       ) : (
         <div className={styles.userList}>
-          {users.map((user) => (
+          {visibleUsers.map((user) => (
             <div
               key={user.username}
               className={`${styles.userCard} ${user.active === false ? styles.inactive : ""}`}
@@ -491,42 +545,36 @@ function ResetPasswordModal({
         </div>
       ) : (
         <form onSubmit={handleSubmit}>
-          <FormField label="New password" htmlFor="reset-password">
-            <input
-              id="reset-password"
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              autoComplete="new-password"
-              autoFocus
-              placeholder="Minimum 8 characters"
-              disabled={isSubmitting}
-            />
-          </FormField>
+          <PasswordField
+            id="reset-password"
+            label="New password"
+            value={password}
+            onChange={setPassword}
+            autoComplete="new-password"
+            autoFocus
+            placeholder="Minimum 8 characters"
+            disabled={isSubmitting}
+          />
 
-          <FormField label="Confirm password" htmlFor="reset-confirm">
-            <input
-              id="reset-confirm"
-              type="password"
-              value={confirmPassword}
-              onChange={(event) => setConfirmPassword(event.target.value)}
-              autoComplete="new-password"
-              placeholder="Repeat new password"
-              disabled={isSubmitting}
-            />
-          </FormField>
+          <PasswordField
+            id="reset-confirm"
+            label="Confirm password"
+            value={confirmPassword}
+            onChange={setConfirmPassword}
+            autoComplete="new-password"
+            placeholder="Repeat new password"
+            disabled={isSubmitting}
+          />
 
-          <FormField label="Your admin password" htmlFor="reset-admin-password">
-            <input
-              id="reset-admin-password"
-              type="password"
-              value={adminPassword}
-              onChange={(event) => setAdminPassword(event.target.value)}
-              autoComplete="current-password"
-              placeholder="Required to reset passwords"
-              disabled={isSubmitting}
-            />
-          </FormField>
+          <PasswordField
+            id="reset-admin-password"
+            label="Your admin password"
+            value={adminPassword}
+            onChange={setAdminPassword}
+            autoComplete="current-password"
+            placeholder="Required to reset passwords"
+            disabled={isSubmitting}
+          />
 
           {error && <div className={styles.formError}>{error}</div>}
 
@@ -620,6 +668,54 @@ function ConfirmStatusModal({
         />
       </form>
     </Modal>
+  );
+}
+
+function PasswordField({
+  id,
+  label,
+  value,
+  onChange,
+  autoComplete,
+  placeholder,
+  disabled,
+  autoFocus,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  autoComplete: string;
+  placeholder: string;
+  disabled?: boolean;
+  autoFocus?: boolean;
+}) {
+  const [visible, setVisible] = React.useState(false);
+  return (
+    <FormField label={label} htmlFor={id}>
+      <div className={styles.passwordWrap}>
+        <input
+          id={id}
+          type={visible ? "text" : "password"}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          autoComplete={autoComplete}
+          autoFocus={autoFocus}
+          placeholder={placeholder}
+          disabled={disabled}
+        />
+        <button
+          type="button"
+          className={styles.passwordToggle}
+          onClick={() => setVisible((current) => !current)}
+          disabled={disabled}
+          aria-label={visible ? "Hide password" : "Show password"}
+          tabIndex={-1}
+        >
+          {visible ? <EyeOff size={18} strokeWidth={2} /> : <Eye size={18} strokeWidth={2} />}
+        </button>
+      </div>
+    </FormField>
   );
 }
 

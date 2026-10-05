@@ -56,6 +56,19 @@ export function destroyLanSession(token: string | null | undefined) {
   }
 }
 
+/** Ends every phone signed in as this user. Desktop sessions are a separate store. */
+export function destroyLanSessionsForUser(username: string) {
+  const key = username.trim().toLowerCase();
+  let removed = 0;
+  for (const [token, session] of sessions.entries()) {
+    if (session.username.trim().toLowerCase() === key) {
+      sessions.delete(token);
+      removed += 1;
+    }
+  }
+  return removed;
+}
+
 export function listLanSessions() {
   const now = Date.now();
   const phones: Array<{ username: string; displayName: string; deviceLabel: string }> = [];

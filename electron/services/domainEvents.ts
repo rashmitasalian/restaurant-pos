@@ -5,7 +5,8 @@ export type DomainEventType =
   | "orders-changed"
   | "activity-changed"
   | "tables-changed"
-  | "gateway-status";
+  | "gateway-status"
+  | "lan-sessions-revoked";
 
 export type DomainEvent = {
   type: DomainEventType;

@@ -26,6 +26,7 @@ import {
 } from "../../../shared/validation";
 import { AuthContext } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
+import { useBackdropDismiss } from "../../hooks/useBackdropDismiss";
 import { useFocusTrap } from "../../hooks/useFocusTrap";
 import { Button } from "../../components/ui/Button";
 import { PageHeader } from "../../components/ui/PageHeader";
@@ -711,6 +712,7 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
     Boolean(photoPreview),
     closePhotoPreview,
   );
+  const photoPreviewBackdrop = useBackdropDismiss(closePhotoPreview);
 
   const setField = (field: keyof StaffForm, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -1686,14 +1688,13 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
       )}
 
       {photoPreview && (
-        <div className="ui-overlay ui-overlay-front" onClick={closePhotoPreview}>
+        <div className="ui-overlay ui-overlay-front" {...photoPreviewBackdrop}>
           <div
             ref={photoPreviewDialogRef}
             role="dialog"
             aria-modal="true"
             aria-labelledby="staffPhotoPreviewTitle"
             tabIndex={-1}
-            onClick={(event) => event.stopPropagation()}
             style={{
               width: "min(560px, 96vw)",
               maxHeight: "92vh",

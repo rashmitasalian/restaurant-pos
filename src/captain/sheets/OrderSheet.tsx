@@ -2,6 +2,7 @@ import React from "react";
 import { Minus, Plus, X } from "lucide-react";
 import { Icon } from "../../ui/components/ui/Icon";
 import { pendingKotQty } from "../../shared/kot";
+import { useBackdropDismiss } from "../../ui/hooks/useBackdropDismiss";
 import { money } from "../money";
 
 export type KotSendPhase = "idle" | "confirm" | "sending" | "sent" | "failed";
@@ -41,6 +42,8 @@ export function OrderSheet({
   const newCount = pendingLines.reduce((sum, entry) => sum + entry.pending, 0);
   const sending = sendPhase === "sending";
   const confirming = sendPhase === "confirm";
+  const dismissReview = useBackdropDismiss(onClose, !sending);
+  const dismissPreview = useBackdropDismiss(onCancelSendConfirm);
 
   if (sendPhase === "sent") {
     return (
@@ -64,11 +67,7 @@ export function OrderSheet({
         role="dialog"
         aria-modal="true"
         aria-label="KOT preview"
-        onClick={(event) => {
-          if (event.target === event.currentTarget) {
-            onCancelSendConfirm();
-          }
-        }}
+        {...dismissPreview}
       >
         <div className="cap-modal-card cap-order-sheet">
           <div className="cap-sheet-head">
@@ -123,11 +122,7 @@ export function OrderSheet({
       role="dialog"
       aria-modal="true"
       aria-label="Review order"
-      onClick={(event) => {
-        if (event.target === event.currentTarget && !sending) {
-          onClose();
-        }
-      }}
+      {...dismissReview}
     >
       <div className="cap-modal-card cap-order-sheet">
         <div className="cap-sheet-head">

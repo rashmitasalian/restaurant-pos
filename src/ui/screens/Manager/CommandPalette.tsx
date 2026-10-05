@@ -1,6 +1,7 @@
 import React from "react";
 import { createPortal } from "react-dom";
 import { Input } from "../../components/ui/Input";
+import { useBackdropDismiss } from "../../hooks/useBackdropDismiss";
 import { useFocusTrap } from "../../hooks/useFocusTrap";
 import type { ManagerSection, PeopleTab } from "../../../shared/manageSections";
 import { MANAGER_SECTION_HASH } from "./managerSections";
@@ -24,6 +25,7 @@ export function CommandPalette({ open, onClose, items }: CommandPaletteProps) {
   const [query, setQuery] = React.useState("");
   const [highlight, setHighlight] = React.useState(0);
   const dialogRef = useFocusTrap<HTMLDivElement>(open, onClose);
+  const backdrop = useBackdropDismiss(onClose);
 
   React.useEffect(() => {
     if (!open) {
@@ -62,7 +64,7 @@ export function CommandPalette({ open, onClose, items }: CommandPaletteProps) {
   };
 
   return createPortal(
-    <div className={styles.overlay} onClick={onClose} role="presentation">
+    <div className={styles.overlay} role="presentation" {...backdrop}>
       <div
         ref={dialogRef}
         className={`ui-dialog ${styles.panel}`}
@@ -70,7 +72,6 @@ export function CommandPalette({ open, onClose, items }: CommandPaletteProps) {
         aria-modal="true"
         aria-label="Jump to"
         tabIndex={-1}
-        onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => {
           if (e.key === "ArrowDown") {
             e.preventDefault();

@@ -1,6 +1,7 @@
 import React from "react";
 import { X } from "lucide-react";
 import { Icon } from "../../ui/components/ui/Icon";
+import { useBackdropDismiss } from "../../ui/hooks/useBackdropDismiss";
 
 export function AreaSheet({
   areas,
@@ -13,17 +14,14 @@ export function AreaSheet({
   onSelect: (id: string | null) => void;
   onClose: () => void;
 }) {
+  const backdrop = useBackdropDismiss(onClose);
   return (
     <div
       className="cap-modal"
       role="dialog"
       aria-modal="true"
       aria-label="Select area"
-      onClick={(event) => {
-        if (event.target === event.currentTarget) {
-          onClose();
-        }
-      }}
+      {...backdrop}
     >
       <div className="cap-modal-card">
         <div className="cap-sheet-head">

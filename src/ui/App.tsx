@@ -21,6 +21,7 @@ import { Icon } from "./components/ui/Icon";
 import { LayoutGrid, Receipt, ChefHat, BarChart3, Users, Settings2 } from "lucide-react";
 import { AuthProvider, AuthContext } from "./context/AuthContext";
 import { ToastProvider } from "./context/ToastContext";
+import { useBackdropDismiss } from "./hooks/useBackdropDismiss";
 import { useFocusTrap } from "./hooks/useFocusTrap";
 import {
   ensureIndexes,
@@ -537,6 +538,7 @@ function MainContent({
   const [profileOpen, setProfileOpen] = React.useState(false);
   const closeProfile = React.useCallback(() => setProfileOpen(false), []);
   const profileDialogRef = useFocusTrap<HTMLDivElement>(profileOpen, closeProfile);
+  const profileBackdrop = useBackdropDismiss(closeProfile);
   React.useEffect(() => {
     const onDocClick = (e: MouseEvent) => {
       if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
@@ -776,7 +778,7 @@ function MainContent({
       </div>
 
       {profileOpen && (
-        <div className="ui-overlay" onClick={closeProfile}>
+        <div className="ui-overlay" {...profileBackdrop}>
           <div
             ref={profileDialogRef}
             role="dialog"
@@ -784,7 +786,6 @@ function MainContent({
             aria-labelledby="profileDialogTitle"
             tabIndex={-1}
             className="ui-dialog"
-            onClick={(e) => e.stopPropagation()}
           >
             <div className="pos-profile-head">
               <h3 id="profileDialogTitle" className="pos-profile-title">

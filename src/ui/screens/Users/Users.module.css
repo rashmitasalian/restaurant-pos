@@ -2,7 +2,23 @@
   padding: 22px 28px;
 }
 
-/* User card list */
+.containerEmbedded {
+  padding: 0;
+}
+
+.searchField {
+  width: min(100%, 360px);
+  max-width: 360px;
+}
+
+.searchField :global(.ui-field-error) {
+  display: none;
+}
+
+.searchRow {
+  margin-bottom: 12px;
+}
+
 .userList {
   display: flex;
   flex-direction: column;
@@ -188,6 +204,47 @@
 .formField select:focus {
   border-color: var(--pos-brand-deep, var(--pos-saffron-deep));
   box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.14);
+}
+
+.passwordWrap {
+  position: relative;
+}
+
+.passwordWrap input {
+  padding-right: 40px;
+}
+
+.passwordToggle {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  border-radius: var(--pos-r-sm);
+  cursor: pointer;
+  color: var(--pos-tx-muted);
+  padding: 0;
+}
+
+.passwordToggle:hover:not(:disabled) {
+  color: var(--pos-tx-sec);
+  background: var(--pos-surface-sunken);
+}
+
+.passwordToggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.passwordToggle:focus-visible {
+  outline: 2px solid var(--pos-focus-color);
+  outline-offset: 1px;
 }
 
 .formError {

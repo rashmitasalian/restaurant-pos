@@ -1,5 +1,6 @@
 import React from "react";
 import { CANCEL_REASON_OTHER, CANCEL_REASON_PRESETS } from "../../shared/cancelReasons";
+import { useBackdropDismiss } from "../../ui/hooks/useBackdropDismiss";
 
 export function VoidSheet({
   lineName,
@@ -26,6 +27,7 @@ export function VoidSheet({
 }) {
   const voidQty = Math.max(0, sentQty - targetQty);
   const canConfirm = Boolean(preset && (preset !== CANCEL_REASON_OTHER || other.trim()));
+  const backdrop = useBackdropDismiss(onClose, !busy);
 
   return (
     <div
@@ -33,11 +35,7 @@ export function VoidSheet({
       role="dialog"
       aria-modal="true"
       aria-label="Void sent KOT item"
-      onClick={(event) => {
-        if (event.target === event.currentTarget && !busy) {
-          onClose();
-        }
-      }}
+      {...backdrop}
     >
       <div className="cap-modal-card">
         <h3>Void Sent KOT Item</h3>

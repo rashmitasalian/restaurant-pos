@@ -231,6 +231,7 @@ export function CaptainApp() {
       return;
     }
     let cancelled = false;
+    let signedOut = false;
     let retryTimer: number | null = null;
     let stopEvents: () => void = () => {};
     let attempt = 0;
@@ -242,6 +243,11 @@ export function CaptainApp() {
       stopEvents = captainApi.openEvents(
         token,
         (event) => {
+          if (event?.type === "session-ended") {
+            signedOut = true;
+            void logout(event.reason === "password-reset" ? "password-reset" : "signed-out");
+            return;
+          }
           setConnection("live");
           attempt = 0;
           if (
@@ -254,8 +260,11 @@ export function CaptainApp() {
         },
         {
           onError: (err) => {
+            if (signedOut || cancelled) {
+              return;
+            }
             if (isAuthRequiredError({ message: err?.message, status: err.status })) {
-              void logout("pos-restart");
+              void logout("signed-out");
               return;
             }
             if (cancelled) {
@@ -283,7 +292,7 @@ export function CaptainApp() {
       } catch (err: any) {
         if (!cancelled) {
           if (isAuthRequiredError(err)) {
-            void logout("pos-restart");
+            void logout("signed-out");
             return;
           }
           setConnection("offline");
@@ -332,7 +341,7 @@ export function CaptainApp() {
           setConnection("live");
         } catch (err: any) {
           if (isAuthRequiredError(err)) {
-            void logout("pos-restart");
+            void logout("signed-out");
             return;
           }
           setConnection("offline");
@@ -382,7 +391,7 @@ export function CaptainApp() {
     }
   };
 
-  const logout = async (reason?: "pos-restart") => {
+  const logout = async (reason?: "pos-restart" | "password-reset" | "signed-out") => {
     if (token) {
       try {
         await captainApi.logout(token);
@@ -401,7 +410,11 @@ export function CaptainApp() {
     setSendPhase("idle");
     setScreen("login");
     setConnection("offline");
-    if (reason === "pos-restart") {
+    if (reason === "password-reset") {
+      setError("Your password was reset. Sign in with the new password.");
+    } else if (reason === "signed-out") {
+      setError("You were signed out. Sign in again.");
+    } else if (reason === "pos-restart") {
       setError("The restaurant POS was restarted. Sign in again when it is ready.");
     }
   };
@@ -434,7 +447,7 @@ export function CaptainApp() {
       setScreen("menu");
     } catch (err: any) {
       if (isAuthRequiredError(err)) {
-        void logout("pos-restart");
+        void logout("signed-out");
         return;
       }
       setError(mutationError(err, "Couldn’t open this table."));
@@ -518,7 +531,7 @@ export function CaptainApp() {
       setOrder(next);
     } catch (err: any) {
       if (isAuthRequiredError(err)) {
-        void logout("pos-restart");
+        void logout("signed-out");
         return;
       }
       if (isOrderConflictError(err)) {
@@ -572,7 +585,7 @@ export function CaptainApp() {
       setOrder(next);
     } catch (err: any) {
       if (isAuthRequiredError(err)) {
-        void logout("pos-restart");
+        void logout("signed-out");
         return;
       }
       if (isOrderConflictError(err)) {
@@ -608,7 +621,7 @@ export function CaptainApp() {
       setOrder(next);
     } catch (err: any) {
       if (isAuthRequiredError(err)) {
-        void logout("pos-restart");
+        void logout("signed-out");
         return;
       }
       if (isOrderConflictError(err)) {
@@ -668,7 +681,7 @@ export function CaptainApp() {
       }, 1400);
     } catch (err: any) {
       if (isAuthRequiredError(err)) {
-        void logout("pos-restart");
+        void logout("signed-out");
         return;
       }
       if (isOrderConflictError(err)) {
@@ -712,7 +725,7 @@ export function CaptainApp() {
       void refreshTables(token);
     } catch (err: any) {
       if (isAuthRequiredError(err)) {
-        void logout("pos-restart");
+        void logout("signed-out");
         return;
       }
       if (isOrderConflictError(err)) {
@@ -745,7 +758,7 @@ export function CaptainApp() {
       setError(null);
     } catch (err: any) {
       if (isAuthRequiredError(err)) {
-        void logout("pos-restart");
+        void logout("signed-out");
         return;
       }
       setConnection("offline");

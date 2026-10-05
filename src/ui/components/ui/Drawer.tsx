@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import styles from "./Drawer.module.css";
 import { Icon } from "./Icon";
+import { useBackdropDismiss } from "../../hooks/useBackdropDismiss";
 import { useFocusTrap } from "../../hooks/useFocusTrap";
 
 type DrawerProps = {
@@ -12,17 +13,28 @@ type DrawerProps = {
   children: React.ReactNode;
   footer?: React.ReactNode;
   wide?: boolean;
+  /** Close when the pointer is pressed and released on the dimmed page. */
+  closeOnBackdrop?: boolean;
 };
 
-export function Drawer({ open, title, onClose, children, footer, wide }: DrawerProps) {
+export function Drawer({
+  open,
+  title,
+  onClose,
+  children,
+  footer,
+  wide,
+  closeOnBackdrop = true,
+}: DrawerProps) {
   const panelRef = useFocusTrap<HTMLElement>(open, onClose);
+  const backdrop = useBackdropDismiss(onClose, closeOnBackdrop);
 
   if (!open) {
     return null;
   }
 
   return createPortal(
-    <div className={styles.overlay} onClick={onClose} role="presentation">
+    <div className={styles.overlay} role="presentation" {...backdrop}>
       <aside
         ref={panelRef}
         className={`${styles.panel} ${wide ? styles.wide : ""}`}
@@ -30,7 +42,6 @@ export function Drawer({ open, title, onClose, children, footer, wide }: DrawerP
         aria-modal="true"
         aria-label={title}
         tabIndex={-1}
-        onClick={(e) => e.stopPropagation()}
       >
         <header className={styles.header}>
           <h2 className={styles.title}>{title}</h2>

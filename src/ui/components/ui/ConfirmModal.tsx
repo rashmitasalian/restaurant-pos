@@ -31,6 +31,7 @@ export function ConfirmModal({
     <Modal
       open={open}
       front
+      closeOnBackdrop
       title={title}
       onClose={() => {
         if (!loading) {

@@ -888,6 +888,7 @@ export default function Customers() {
 
       <Drawer
         open={Boolean(selectedCustomer)}
+        closeOnBackdrop={!receiveOpen && !(canManageCredit && creditFeatureEnabled)}
         onClose={() => {
           setSelectedCustomer(null);
           setAccount(null);

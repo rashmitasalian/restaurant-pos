@@ -300,14 +300,13 @@ function RecoveryModal({
   };
 
   return (
-    <div onClick={isSubmitting ? undefined : onClose} className={authStyles.overlay}>
+    <div className={authStyles.overlay}>
       <div
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="recoveryDialogTitle"
         tabIndex={-1}
-        onClick={(event) => event.stopPropagation()}
         className={authStyles.overlayCard}
       >
         <h3

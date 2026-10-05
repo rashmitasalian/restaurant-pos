@@ -29,6 +29,7 @@ type JsonBody = Record<string, unknown>;
 type SseClient = {
   res: http.ServerResponse;
   token: string;
+  username: string;
 };
 
 type GatewayState = {
@@ -259,7 +260,32 @@ function serveCaptainStatic(req: http.IncomingMessage, res: http.ServerResponse,
   fs.createReadStream(filePath).pipe(res);
 }
 
+function endRevokedLanSessions(event: DomainEvent) {
+  const username = String(event.payload?.username || "").trim().toLowerCase();
+  const reason = String(event.payload?.reason || "signed-out");
+  if (!username) {
+    return;
+  }
+  const notice = `event: session-ended\ndata: ${JSON.stringify({ type: "session-ended", reason })}\n\n`;
+  for (const client of state.sseClients) {
+    if (client.username !== username) {
+      continue;
+    }
+    try {
+      client.res.write(notice);
+      client.res.end();
+    } catch {
+      // The phone will fail its next request and return to login.
+    }
+    state.sseClients.delete(client);
+  }
+}
+
 function broadcastSse(event: DomainEvent) {
+  if (event.type === "lan-sessions-revoked") {
+    endRevokedLanSessions(event);
+    return;
+  }
   if (!SSE_BROADCAST_TYPES.has(event.type)) {
     return;
   }
@@ -408,7 +434,11 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
         "Access-Control-Allow-Origin": "*",
       });
       res.write(`event: connected\ndata: ${JSON.stringify({ username: session.username })}\n\n`);
-      const client: SseClient = { res, token: session.token };
+      const client: SseClient = {
+        res,
+        token: session.token,
+        username: session.username.trim().toLowerCase(),
+      };
       state.sseClients.add(client);
       req.on("close", () => {
         state.sseClients.delete(client);

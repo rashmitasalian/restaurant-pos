@@ -5,7 +5,7 @@ import { getDefaultPeopleTab } from "../../../shared/permissions";
 import Attendance from "../Attendance/Attendance";
 import AttendanceHistory from "../Attendance/AttendanceHistory";
 import Staff from "../Staff/Staff";
-import UsersScreen from "../Users/UsersScreen";
+import UsersScreen, { AccountsSearch } from "../Users/UsersScreen";
 import SalaryAdvances from "../SalaryAdvances/SalaryAdvances";
 import { Button } from "../../components/ui/Button";
 
@@ -49,6 +49,8 @@ export default function People({ allowedPeopleTabs }: PeopleProps) {
   const addStaffRef = React.useRef<(() => void) | null>(null);
   const addUserRef = React.useRef<(() => void) | null>(null);
   const recordAdvanceRef = React.useRef<(() => void) | null>(null);
+  const [accountQuery, setAccountQuery] = React.useState("");
+  const [showAccountSearch, setShowAccountSearch] = React.useState(false);
 
   const effectiveTab = allowedPeopleTabs.includes(tab)
     ? tab
@@ -145,6 +147,11 @@ export default function People({ allowedPeopleTabs }: PeopleProps) {
             : undefined
       }
       width="operational"
+      toolbar={
+        effectiveTab === "accounts" && showAccountSearch ? (
+          <AccountsSearch value={accountQuery} onChange={setAccountQuery} />
+        ) : undefined
+      }
     >
       {effectiveTab === "attendance" && attendanceView === "daily" && <Attendance embedded />}
       {effectiveTab === "attendance" && attendanceView === "history" && (
@@ -171,6 +178,9 @@ export default function People({ allowedPeopleTabs }: PeopleProps) {
       {effectiveTab === "accounts" && (
         <UsersScreen
           embedded
+          query={accountQuery}
+          onQueryChange={setAccountQuery}
+          onSearchVisible={setShowAccountSearch}
           registerAddUser={(fn) => {
             addUserRef.current = fn;
           }}
