@@ -1,4 +1,5 @@
 import React from "react";
+import { createPortal } from "react-dom";
 import {
   createAudit,
   createStaff,
@@ -14,6 +15,11 @@ import {
   type StaffDoc,
 } from "../../../app/db/posRepository";
 import { WEEKDAY_OPTIONS } from "../../../shared/attendanceSchedule";
+import {
+  buildStaffRosterCsv,
+  buildStaffRosterPdfHtml,
+  type StaffExportOptions,
+} from "./staffRosterExport";
 import {
   STAFF_TEXT_LIMITS,
   isValidDateOnly,
@@ -276,179 +282,6 @@ function WeeklyOffField({
   );
 }
 
-function formatSalary(value: StaffDoc["salary"]) {
-  if (value === null || value === undefined) {
-    return "Not set";
-  }
-  return `Rs. ${Number(value).toLocaleString("en-IN", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-}
-
-type StaffExportOptions = {
-  includePhotos: boolean;
-  includeSalary: boolean;
-  includeInactive: boolean;
-};
-
-function escapeHtml(value: unknown) {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-function formatExportDate(value: string | number | null | undefined) {
-  if (!value) {
-    return "Not set";
-  }
-  const date = typeof value === "number" ? new Date(value) : new Date(`${value}T00:00:00`);
-  if (Number.isNaN(date.getTime())) {
-    return String(value);
-  }
-  return date.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
-}
-
-function exportPhotoHtml(member: StaffDoc, includePhotos: boolean) {
-  const initial = escapeHtml((member.name || "?").charAt(0).toUpperCase() || "?");
-  if (!includePhotos || !member.photoMime || !member.photoBase64) {
-    return `<div class="avatar">${initial}</div>`;
-  }
-  return `<img class="photo" src="data:${escapeHtml(member.photoMime)};base64,${member.photoBase64}" alt=""/>`;
-}
-
-function detailRow(label: string, value: unknown) {
-  const text = normalizeText(value);
-  if (!text) {
-    return "";
-  }
-  return `<div class="detail"><span>${escapeHtml(label)}</span><strong>${escapeHtml(text)}</strong></div>`;
-}
-
-function csvCell(value: unknown) {
-  const text = normalizeText(value);
-  const safeText = /^[=+\-@]/.test(text) ? `'${text}` : text;
-  if (
-    safeText.includes(",") ||
-    safeText.includes('"') ||
-    safeText.includes("\n") ||
-    safeText.includes("\r")
-  ) {
-    return `"${safeText.replace(/"/g, '""')}"`;
-  }
-  return safeText;
-}
-
-function buildStaffRosterCsv(records: StaffDoc[], options: StaffExportOptions) {
-  const header = ["Name", "Mobile Number", "Designation", "Joining Date", "Status"];
-  if (options.includeSalary) {
-    header.push("Monthly Salary");
-  }
-  header.push("Address", "Notes");
-
-  const rows = records.map((member) => {
-    const row: unknown[] = [
-      member.name,
-      member.phone,
-      member.designation || "",
-      formatExportDate(member.joiningDate),
-      member.active === false ? "Left" : "Active",
-    ];
-    if (options.includeSalary) {
-      row.push(formatSalary(member.salary));
-    }
-    row.push(member.address || "", member.notes || "");
-    return row;
-  });
-
-  return [header, ...rows].map((row) => row.map(csvCell).join(",")).join("\r\n");
-}
-
-function buildStaffRosterPdfHtml(
-  records: StaffDoc[],
-  options: StaffExportOptions,
-  exportedBy: string,
-) {
-  const generatedAt = new Date().toLocaleString("en-IN");
-  const rows = records
-    .map((member, index) => {
-      const salary = options.includeSalary
-        ? detailRow("Monthly Salary", formatSalary(member.salary))
-        : "";
-      const leftStatus = member.active === false ? `<span class="status inactive">Left</span>` : "";
-      return `<section class="staff-card">
-        <div class="photo-col">${exportPhotoHtml(member, options.includePhotos)}</div>
-        <div class="staff-body">
-          <div class="staff-top">
-            <div>
-              <div class="staff-name">${index + 1}. ${escapeHtml(member.name)}</div>
-              ${member.designation ? `<div class="designation">${escapeHtml(member.designation)}</div>` : ""}
-            </div>
-            ${leftStatus}
-          </div>
-          <div class="details">
-            ${detailRow("Mobile", member.phone)}
-            ${detailRow("Joining Date", formatExportDate(member.joiningDate))}
-            ${salary}
-            ${detailRow("Address", member.address)}
-            ${detailRow("Notes", member.notes)}
-          </div>
-        </div>
-      </section>`;
-    })
-    .join("");
-
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8"/>
-  <title>Confidential Staff Roster</title>
-  <style>
-    * { box-sizing: border-box; }
-    body { font-family: Arial, sans-serif; padding: 28px; color: var(--pos-tx); font-size: 12px; }
-    h1 { font-size: 20px; margin: 0 0 4px; }
-    .sub { color: var(--pos-tx-sub); margin: 0 0 18px; }
-    .meta { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 0 0 18px; }
-    .meta-box { border: 1px solid var(--pos-line); border-radius: 8px; padding: 9px 10px; }
-    .meta-box span { display: block; color: var(--pos-tx-sub); font-size: 9px; text-transform: uppercase; font-weight: 700; margin-bottom: 3px; }
-    .meta-box strong { font-size: 12px; }
-    .staff-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-    .staff-card { break-inside: avoid; border: 1px solid var(--pos-line); border-radius: 8px; padding: 10px; display: grid; grid-template-columns: 58px 1fr; gap: 10px; min-height: 82px; }
-    .photo, .avatar { width: 54px; height: 54px; border-radius: 7px; object-fit: cover; }
-    .avatar { background: var(--pos-teal); color: var(--pos-surface); display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 20px; }
-    .staff-top { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; }
-    .staff-name { font-weight: 900; font-size: 13px; }
-    .designation { color: var(--pos-teal); font-weight: 700; margin-top: 2px; }
-    .status { font-size: 9px; font-weight: 800; text-transform: uppercase; border-radius: 999px; padding: 3px 6px; background: var(--pos-danger-tint); color: var(--pos-danger-text); }
-    .details { margin-top: 7px; display: grid; gap: 4px; }
-    .detail { display: grid; grid-template-columns: 78px 1fr; gap: 6px; }
-    .detail span { color: var(--pos-tx-sub); }
-    .detail strong { font-weight: 600; overflow-wrap: anywhere; }
-    footer { margin-top: 20px; color: var(--pos-tx-muted); text-align: center; font-size: 10px; }
-    @media print {
-      body { padding: 0; }
-      .staff-card { page-break-inside: avoid; }
-    }
-  </style>
-</head>
-<body>
-  <h1>Confidential Staff Roster</h1>
-  <p class="sub">Generated ${escapeHtml(generatedAt)} by ${escapeHtml(exportedBy || "admin")}</p>
-  <div class="meta">
-    <div class="meta-box"><span>Records</span><strong>${records.length}</strong></div>
-    <div class="meta-box"><span>Photos</span><strong>${options.includePhotos ? "Included" : "Excluded"}</strong></div>
-    <div class="meta-box"><span>Salary</span><strong>${options.includeSalary ? "Included" : "Excluded"}</strong></div>
-    <div class="meta-box"><span>Left Staff</span><strong>${options.includeInactive ? "Included" : "Excluded"}</strong></div>
-  </div>
-  <div class="staff-grid">${rows}</div>
-  <footer>Personal data. Share only with authorized recipients.</footer>
-</body>
-</html>`;
-}
-
 const staffFieldGrid: React.CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
@@ -616,7 +449,7 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
     async (statusOverride?: StaffStatusFilter) => {
       try {
         const status = statusOverride ?? statusFilter;
-        setStaff(await listStaff({ status }));
+        setStaff(await listStaff({ status, includePhotos: true }));
       } catch (e) {
         showToast(validationMessage(e, "Failed to load staff"), "error");
         setStaff([]);
@@ -871,12 +704,7 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
     setStatusChangingId(member.id);
     try {
       await updateStaff(member.id, { active });
-      if (!active) {
-        setStatusFilter("left");
-        await loadStaff("left");
-      } else {
-        await loadStaff();
-      }
+      await loadStaff();
       if (!active && editingMember?.id === member.id) {
         cancelEdit();
       }
@@ -1695,7 +1523,8 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
         </Modal>
       )}
 
-      {photoPreview && (
+      {photoPreview &&
+        createPortal(
         <div className="ui-overlay ui-overlay-front" {...photoPreviewBackdrop}>
           <div
             ref={photoPreviewDialogRef}
@@ -1760,8 +1589,9 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
               />
             </div>
           </div>
-        </div>
-      )}
+        </div>,
+          document.body,
+        )}
 
       <DataTable
         dense
@@ -1787,29 +1617,64 @@ export default function Staff({ embedded = false, registerAddStaff }: StaffProps
         }
         rows={filteredStaff.map((member) => {
           const isActive = member.active !== false;
+          const photoSrc = imageSrc(member);
           const isConfirmingLeft = confirmLeftId === member.id;
           const isConfirmingDelete = confirmDeleteId === member.id;
           const isChangingStatus = statusChangingId === member.id;
           return [
             <div key="name" style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <div
-                aria-hidden
-                style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: 8,
-                  background: "var(--pos-teal)",
-                  color: "var(--pos-surface)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontWeight: 800,
-                  fontSize: 12,
-                  flexShrink: 0,
-                }}
-              >
-                {staffInitials(member.name)}
-              </div>
+              {photoSrc ? (
+                <button
+                  type="button"
+                  aria-label={`Open ${member.name} photo`}
+                  title="Open photo"
+                  onClick={() =>
+                    setPhotoPreview({
+                      src: photoSrc,
+                      name: member.name,
+                      mime: member.photoMime || "image/jpeg",
+                      memberId: member.id,
+                    })
+                  }
+                  style={{
+                    width: 36,
+                    height: 36,
+                    border: "none",
+                    borderRadius: 8,
+                    padding: 0,
+                    background: "transparent",
+                    cursor: "zoom-in",
+                    flexShrink: 0,
+                    overflow: "hidden",
+                    boxShadow: "0 0 0 1px var(--pos-line)",
+                  }}
+                >
+                  <img
+                    src={photoSrc}
+                    alt=""
+                    style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                  />
+                </button>
+              ) : (
+                <div
+                  aria-hidden
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 8,
+                    background: "var(--pos-teal)",
+                    color: "var(--pos-surface)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontWeight: 800,
+                    fontSize: 12,
+                    flexShrink: 0,
+                  }}
+                >
+                  {staffInitials(member.name)}
+                </div>
+              )}
               <span style={{ fontWeight: 700 }}>{member.name}</span>
             </div>,
             member.designation || "—",
