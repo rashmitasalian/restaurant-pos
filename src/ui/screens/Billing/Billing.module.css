@@ -229,6 +229,19 @@
   font-size: 15px;
   box-sizing: border-box;
 }
+.modalInput:focus,
+.modalInput:focus-visible,
+.modalInputSmall:focus,
+.modalInputSmall:focus-visible {
+  border-color: var(--pos-teal);
+  outline: 2px solid var(--pos-focus-color);
+  outline-offset: -3px;
+  box-shadow: none;
+}
+.modalInput + .textMuted,
+.modalInputSmall + .textMuted {
+  margin-top: 8px;
+}
 .modalInputSmall {
   width: 100%;
   padding: 9px 12px;
