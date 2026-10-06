@@ -1,7 +1,7 @@
 import React from "react";
 import { Minus, Plus, X } from "lucide-react";
 import { Icon } from "../../ui/components/ui/Icon";
-import { pendingKotQty } from "../../shared/kot";
+import { netKitchenDelta, pendingKotQty, pendingKotVoidsFromMeta } from "../../shared/kot";
 import { KITCHEN_NOTE_MAX } from "../../shared/kitchenNote";
 import { useBackdropDismiss } from "../../ui/hooks/useBackdropDismiss";
 import { money } from "../money";
@@ -37,10 +37,13 @@ export function OrderSheet({
   const pendingLines = items
     .map((line) => ({ line, pending: pendingKotQty(line) }))
     .filter((entry) => entry.pending > 0);
+  const delta = netKitchenDelta(pendingKotVoidsFromMeta(order?.meta), items);
   const sentLines = items.filter(
     (line) => Number(line.kotPrintedQty || 0) > 0 && pendingKotQty(line) === 0,
   );
-  const newCount = pendingLines.reduce((sum, entry) => sum + entry.pending, 0);
+  const newCount =
+    delta.stop.reduce((sum, row) => sum + row.qty, 0) +
+    delta.make.reduce((sum, line) => sum + line.qty, 0);
   const sending = sendPhase === "sending";
   const confirming = sendPhase === "confirm";
   const dismissReview = useBackdropDismiss(onClose, !sending);
@@ -90,16 +93,21 @@ export function OrderSheet({
           <div className="cap-ticket">
             <section className="cap-ticket-group cap-ticket-new">
               <div className="cap-ticket-label">Items to kitchen</div>
-              {pendingLines.map(({ line, pending }) => (
-                <div key={line.id} className="cap-line cap-line-new">
+              {delta.stop.map((row) => (
+                <div key={`stop-${row.name}`} className="cap-line cap-line-new">
+                  <div className="cap-line-copy">
+                    <strong>Stop {row.name}</strong>
+                  </div>
+                  <strong>×{row.qty}</strong>
+                </div>
+              ))}
+              {delta.make.map((line) => (
+                <div key={line.id || line.name} className="cap-line cap-line-new">
                   <div className="cap-line-copy">
                     <strong>{line.name}</strong>
-                    {line.note || line.kitchenNote ? (
-                      <div className="cap-meta">{line.kitchenNote || line.note}</div>
-                    ) : null}
-                    <div className="cap-meta">{money(Number(line.rate || 0))} each</div>
+                    {line.note ? <div className="cap-meta">{line.note}</div> : null}
                   </div>
-                  <strong>×{pending}</strong>
+                  <strong>×{line.qty}</strong>
                 </div>
               ))}
             </section>

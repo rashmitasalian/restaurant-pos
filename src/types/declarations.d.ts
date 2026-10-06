@@ -108,11 +108,24 @@ declare global {
         markKotSent: (
           orderId: string,
           sentLines?: Array<{ id: string; sentQty: number }>,
+          options?: { clearPendingKotVoidIds?: string[] },
         ) => Promise<any>;
         markKotFailed: (orderId: string, error?: string | null) => Promise<any>;
         voidKotLine: (
           orderId: string,
-          payload: { lineId: string; finalQty: number; reason: string },
+          payload: {
+            lineId: string;
+            finalQty: number;
+            reason: string;
+            replacement?: {
+              name: string;
+              qty: number;
+              rate: number;
+              menuItemId?: string | null;
+              categoryName?: string | null;
+              kitchenNote?: string | null;
+            } | null;
+          },
         ) => Promise<any>;
         markKotDone: (orderId: string) => Promise<any>;
         markKotPrinted: (orderId: string) => Promise<any>;

@@ -41,8 +41,8 @@ export function VoidSheet({
       <div className="cap-modal-card">
         <h3>Void Sent KOT Item</h3>
         <p className="cap-meta">
-          This item has already been sent to the kitchen. A void KOT will print before the order is
-          updated.
+          This item has already been sent to the kitchen. The order updates now. Send to kitchen
+          when the changes are ready, and they go out on one ticket.
         </p>
         <div className="cap-void-summary">
           <strong>{lineName}</strong>
@@ -82,7 +82,7 @@ export function VoidSheet({
           disabled={busy || !canConfirm || voidQty <= 0}
           onClick={onConfirm}
         >
-          {busy ? "Printing…" : "Print Void KOT"}
+          {busy ? "Saving…" : "Update order"}
         </button>
         <button type="button" className="cap-btn cap-btn-quiet" disabled={busy} onClick={onClose}>
           Keep item

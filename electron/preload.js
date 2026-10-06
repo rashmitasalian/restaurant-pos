@@ -135,7 +135,8 @@ contextBridge.exposeInMainWorld("pos", {
       authInvoke("pos:orders:set-discount", orderId, discount),
     setStatus: (orderId, status, payload) =>
       authInvoke("pos:orders:set-status", orderId, status, payload),
-    markKotSent: (orderId, sentLines) => authInvoke("pos:orders:mark-kot-sent", orderId, sentLines),
+    markKotSent: (orderId, sentLines, options) =>
+      authInvoke("pos:orders:mark-kot-sent", orderId, sentLines, options),
     markKotFailed: (orderId, error) => authInvoke("pos:orders:mark-kot-failed", orderId, error),
     voidKotLine: (orderId, payload) => authInvoke("pos:orders:void-kot-line", orderId, payload),
     markKotDone: (orderId) => authInvoke("pos:orders:mark-kot-done", orderId),

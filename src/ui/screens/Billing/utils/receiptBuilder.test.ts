@@ -51,6 +51,39 @@ function amountLines(lines: string[]) {
   return lines.filter((line) => line.includes("Rs "));
 }
 
+describe("receipt item names", () => {
+  it("wraps a long name in the item column and keeps qty, rate, and amount on the first line", () => {
+    const name = "Paneer Butter Masala Special";
+    const lines = buildReceiptLines(
+      {
+        items: [{ name, qty: 2, rate: 180 }],
+        orderType: "takeaway",
+        meta: { orderSeq: 1 },
+      },
+      null,
+      0,
+      { subtotal: 360, total: 360 },
+      null,
+      { hotelName: "RestoNiti" },
+    );
+    const itemLines = lines.filter(
+      (line) => line.startsWith("LEFTB:") && (line.includes("Paneer") || line.includes("Special")),
+    );
+    expect(itemLines).toHaveLength(2);
+    const first = itemLines[0].slice("LEFTB:".length);
+    const second = itemLines[1].slice("LEFTB:".length);
+    expect(first).toHaveLength(42);
+    expect(second).toHaveLength(42);
+    expect(first.slice(2, 22)).toBe("Paneer Butter Masala");
+    expect(first.slice(22, 26)).toBe("2".padStart(4));
+    expect(first.slice(26, 34)).toBe("180".padStart(8));
+    expect(first.slice(34)).toBe("360".padStart(8));
+    expect(second.slice(2, 22).trimEnd()).toBe("Special");
+    expect(second.slice(22)).toBe(" ".repeat(20));
+    expect(`${first.slice(2, 22).trimEnd()} ${second.slice(2, 22).trimEnd()}`).toBe(name);
+  });
+});
+
 describe("receipt GST layout", () => {
   it("prints half-rate labels from the bill rate and does not clip money", () => {
     const five = billLines(500).join("\n");

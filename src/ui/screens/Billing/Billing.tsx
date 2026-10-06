@@ -37,6 +37,7 @@ import {
   type GstConfig,
   type OrderDiscount,
 } from "../../../shared/gst";
+import { netKitchenDelta, pendingKotVoidsFromMeta } from "../../../shared/kot";
 import { printReceipt, printKOT } from "../../../app/services/printer";
 import { logger } from "../../../app/utils/logger";
 import { CrashRecovery } from "../../../app/utils/crashRecovery";
@@ -79,7 +80,7 @@ import {
   PrintFailedModal,
   VariantPickerModal,
 } from "./components/BillingModals";
-import { buildReceiptLines, buildKotLines, buildKotVoidLines } from "./utils/receiptBuilder";
+import { buildReceiptLines, buildKitchenUpdateLines } from "./utils/receiptBuilder";
 import { brandingWithPrintLogo } from "../../utils/logoProcessing";
 import type { ReceiptBranding } from "./utils/receiptBuilder";
 import {
@@ -334,14 +335,6 @@ async function resolveKitchenPrinter() {
   } catch {
     return DEFAULT_KOT_PRINTER;
   }
-}
-
-async function printKOTDirect(data: { lines: string[]; printer: string }) {
-  const result = await window.pos?.print?.({ type: "kot", data, printer: data.printer });
-  if (!result || result.ok === false) {
-    throw new Error(result?.error || "Print failed");
-  }
-  return result;
 }
 
 // ── Component ───────────────────────────────────────────────────────────────
@@ -600,6 +593,10 @@ export default function Billing() {
   }, [items]);
   const hasItems = Boolean(order && (order.items || []).length > 0);
   const unsentKotItems = React.useMemo(() => getUnsentKotItems(order), [order]);
+  const pendingKotVoids = React.useMemo(
+    () => pendingKotVoidsFromMeta(order?.meta),
+    [order],
+  );
   const isPaid = order?.status === "paid";
   const canCancel = hasItems && !isPaid;
   const allowsManualKot =
@@ -611,9 +608,9 @@ export default function Billing() {
     !Boolean(activeMode?.requiresTable);
   const canKot =
     allowsManualKot &&
-    hasItems &&
     !isPaid &&
-    unsentKotItems.length > 0 &&
+    (unsentKotItems.length > 0 || pendingKotVoids.length > 0) &&
+    (hasItems || pendingKotVoids.length > 0) &&
     !kotPrinting &&
     !kotPreviewOpen;
   // Delivery orders are paid through the aggregator app — no in-POS payment needed
@@ -1209,10 +1206,6 @@ export default function Billing() {
     if (!line || !line.menuItemId) {
       return;
     }
-    if (Math.max(0, Number(line.kotPrintedQty || 0)) > 0) {
-      showToast("Sent kitchen items cannot switch variant. Void and re-add this item.", "error");
-      return;
-    }
     const menuItem = menuItemsById[line.menuItemId];
     const variants = Array.isArray(menuItem?.variants) ? menuItem.variants : [];
     const nextVariant = variants.find(
@@ -1224,6 +1217,36 @@ export default function Billing() {
     const nextLineName = `${menuItem.name} (${nextVariant.name})`;
     const nextRate = Number(nextVariant.price);
     if (line.name === nextLineName && Number(line.rate) === nextRate) {
+      return;
+    }
+    if (Math.max(0, Number(line.kotPrintedQty || 0)) > 0) {
+      const qty = Math.max(0, Number(line.qty || 0));
+      try {
+        const updated = await voidOrderKotLine(order._id, {
+          lineId,
+          finalQty: 0,
+          reason: "Variant changed",
+          replacement: {
+            menuItemId: line.menuItemId,
+            name: nextLineName,
+            categoryName: line.categoryName || menuItem.category || null,
+            qty,
+            rate: nextRate,
+            kitchenNote: line.kitchenNote || null,
+          },
+        });
+        setOrder(updated);
+        window.dispatchEvent(new Event("orders-changed"));
+        showToast(
+          "Variant updated. Send KOT so the kitchen stops the old one and starts the new one.",
+        );
+      } catch (e: any) {
+        logger.error("Failed to switch sent line variant", e);
+        showToast(
+          reportClientError("billing.switch-variant", e, "Failed to switch variant"),
+          "error",
+        );
+      }
       return;
     }
     try {
@@ -1553,9 +1576,23 @@ export default function Billing() {
     if (latestOrder !== order) {
       setOrder(latestOrder);
     }
-    const pendingItems = getUnsentKotItems(latestOrder);
-    if (pendingItems.length === 0) {
-      return showToast("No new KOT items to send", "info");
+    const waitingVoids = pendingKotVoidsFromMeta(latestOrder?.meta);
+    const delta = netKitchenDelta(waitingVoids, latestOrder.items || []);
+    if (delta.stop.length === 0 && delta.make.length === 0) {
+      if (delta.clearVoidIds.length || delta.sentLines.length) {
+        try {
+          const updated = await markOrderKotSent(latestOrder._id, delta.sentLines, {
+            clearPendingKotVoidIds: delta.clearVoidIds,
+          });
+          setOrder(updated);
+          window.dispatchEvent(new Event("orders-changed"));
+        } catch (e) {
+          logger.warn("Could not settle a kitchen change that cancelled itself out", {
+            error: e instanceof Error ? e.message : String(e),
+          });
+        }
+      }
+      return showToast("Kitchen already has this. Nothing new to send.", "info");
     }
     let kotSeqNum: number | undefined;
     try {
@@ -1563,16 +1600,19 @@ export default function Billing() {
     } catch (e) {
       console.warn("Could not fetch KOT sequence number", e);
     }
-    setKotPreviewData(
-      buildKotPreview(
+    setKotPreviewData({
+      ...buildKotPreview(
         latestOrder,
         tableNum,
-        pendingItems,
+        delta.make,
         currentUserLabel,
         kotSeqNum,
         activeTableLabel,
       ),
-    );
+      voidItems: delta.stop,
+      clearPendingKotVoidIds: delta.clearVoidIds,
+      sentLines: delta.sentLines,
+    });
     setKotPreviewOpen(true);
   };
 
@@ -1585,17 +1625,24 @@ export default function Billing() {
       return;
     }
     const itemsToSend = kotPreviewData.items || [];
-    const sentLines = itemsToSend.map((it: any) => ({ id: it.id, sentQty: it.sentQty ?? it.qty }));
+    const sentLines =
+      Array.isArray(kotPreviewData.sentLines) && kotPreviewData.sentLines.length
+        ? kotPreviewData.sentLines
+        : itemsToSend.map((it: any) => ({ id: it.id, sentQty: it.sentQty ?? it.qty }));
+    const clearPendingKotVoidIds = Array.isArray(kotPreviewData.clearPendingKotVoidIds)
+      ? kotPreviewData.clearPendingKotVoidIds
+      : [];
     kotPrintingRef.current = true;
     setKotPrinting(true);
     try {
       try {
-        const lines = buildKotLines(kotPreviewData, order, tableNum, branding);
+        const lines = buildKitchenUpdateLines(kotPreviewData, order, tableNum, branding);
         await printKOT({
           lines,
           printer: await resolveKitchenPrinter(),
           orderId: order._id,
           sentLines,
+          clearPendingKotVoidIds,
         });
       } catch (e: any) {
         console.warn("KOT print failed", e);
@@ -1616,7 +1663,9 @@ export default function Billing() {
       }
 
       try {
-        const updated = await markOrderKotSent(order._id, sentLines);
+        const updated = await markOrderKotSent(order._id, sentLines, {
+          clearPendingKotVoidIds,
+        });
         setOrder(updated);
         window.dispatchEvent(new Event("orders-changed"));
       } catch (e: any) {
@@ -1676,64 +1725,29 @@ export default function Billing() {
       return;
     }
     try {
-      const lines = buildKotVoidLines(
-        {
-          orderType: activeOrderType,
-          tableNum,
-          tableLabel: activeTableLabel || undefined,
-          reason: cleanReason,
-          items: [{ name: line.name, qty: voidQty }],
-          sentBy: currentUserLabel,
-        },
-        branding,
+      const updated = await voidOrderKotLine(order._id, {
+        lineId: line.id,
+        finalQty,
+        reason: cleanReason,
+      });
+      setOrder(updated);
+      setKotVoidRequest(null);
+      setEditingQty((prev) => {
+        const next = { ...prev };
+        delete next[line.id];
+        return next;
+      });
+      if (lastAddedId === line.id && finalQty === 0) {
+        setLastAddedId(null);
+      }
+      window.dispatchEvent(new Event("orders-changed"));
+      showToast("Bill updated. Send KOT to tell the kitchen.");
+    } catch (e: any) {
+      logger.error("Failed to void sent KOT item", e);
+      showToast(
+        reportClientError("billing.kot-void-update", e, "Couldn't update the bill. Kitchen was not told."),
+        "error",
       );
-
-      // Step 1: Print first — bill is only changed after successful print
-      try {
-        await printKOTDirect({ lines, printer: await resolveKitchenPrinter() });
-      } catch (e: any) {
-        logger.error("Void KOT print failed", e);
-        showToast(
-          reportClientError(
-            "billing.kot-void-print",
-            e,
-            "Void KOT could not be sent to the printer. Bill was not changed.",
-          ),
-          "error",
-        );
-        return;
-      }
-
-      // Step 2: Update the bill (print already happened)
-      try {
-        const updated = await voidOrderKotLine(order._id, {
-          lineId: line.id,
-          finalQty,
-          reason: cleanReason,
-        });
-        setOrder(updated);
-        setKotVoidRequest(null);
-        setEditingQty((prev) => {
-          const next = { ...prev };
-          delete next[line.id];
-          return next;
-        });
-        if (lastAddedId === line.id && finalQty === 0) {
-          setLastAddedId(null);
-        }
-        window.dispatchEvent(new Event("orders-changed"));
-        showToast("Void KOT printed and bill updated");
-      } catch (e: any) {
-        logger.error("Void KOT printed but bill update failed", e);
-        showToast(
-          reportClientError(
-            "billing.kot-void-update",
-            e,
-            "Void KOT was printed but the bill could not be updated. Please refresh.",
-          ),
-          "error",
-        );
-      }
     } finally {
       endBusyAction("voidKot");
     }
@@ -1846,11 +1860,24 @@ export default function Billing() {
           return { printed: false, copiedToCounter: false };
         }
         const sequence = activeMode.paymentPrintSequence || "bill_only";
-        if (sequence === "bill_only") {
-          return { printed: false, copiedToCounter: false };
-        }
-        const pendingItems = getUnsentKotItems(paidOrder);
-        if (!pendingItems.length) {
+        const waitingVoids = pendingKotVoidsFromMeta(paidOrder?.meta);
+        const billLines =
+          sequence === "bill_only"
+            ? (paidOrder.items || [])
+                .filter((line: any) => Number(line.kotPrintedQty || 0) > 0)
+                .map((line: any) => ({ ...line, qty: Number(line.kotPrintedQty || 0) }))
+            : paidOrder.items || [];
+        const delta = netKitchenDelta(waitingVoids, billLines);
+        if (delta.stop.length === 0 && delta.make.length === 0) {
+          if (delta.clearVoidIds.length || delta.sentLines.length) {
+            try {
+              await markOrderKotSent(paidOrder._id, delta.sentLines, {
+                clearPendingKotVoidIds: delta.clearVoidIds,
+              });
+            } catch (markError) {
+              logger.error("Kitchen change cancelled itself out and could not be saved", markError as Error);
+            }
+          }
           return { printed: false, copiedToCounter: false };
         }
         let kotSeqNum: number | undefined;
@@ -1859,26 +1886,33 @@ export default function Billing() {
         } catch {
           kotSeqNum = undefined;
         }
-        const preview = buildKotPreview(
-          paidOrder,
-          snapTableNum,
-          pendingItems,
-          currentUserLabel,
-          kotSeqNum,
-          snapTableLabel,
-        );
-        const sentLines = pendingItems.map((it: any) => ({
-          id: it.id,
-          sentQty: it.sentQty ?? it.qty,
-        }));
-        const lines = buildKotLines(preview, paidOrder, snapTableNum, branding);
+        const preview = {
+          ...buildKotPreview(
+            paidOrder,
+            snapTableNum,
+            delta.make,
+            currentUserLabel,
+            kotSeqNum,
+            snapTableLabel,
+          ),
+          voidItems: delta.stop,
+        };
+        const sentLines = delta.sentLines;
+        const clearPendingKotVoidIds = delta.clearVoidIds;
+        const lines = buildKitchenUpdateLines(preview, paidOrder, snapTableNum, branding);
         const printerTargets = await resolvePrinterTargets();
         await printKOT({
           lines,
           printer: await resolveKitchenPrinter(),
           orderId: paidOrder._id,
           sentLines,
+          clearPendingKotVoidIds,
         });
+        try {
+          await markOrderKotSent(paidOrder._id, sentLines, { clearPendingKotVoidIds });
+        } catch (markError) {
+          logger.error("KOT printed at payment but status could not be saved", markError as Error);
+        }
 
         let copiedToCounter = false;
         if (
@@ -1901,8 +1935,9 @@ export default function Billing() {
         setPrintFailed(null); // close any existing print-failed modal before retry
         try {
           const sequence = activeMode?.paymentPrintSequence || "bill_only";
+          const voidsWaiting = pendingKotVoidsFromMeta(paidOrder?.meta).length > 0;
           let kotResult = { printed: false, copiedToCounter: false };
-          if (sequence === "kot_then_bill") {
+          if (sequence === "kot_then_bill" || (sequence === "bill_only" && voidsWaiting)) {
             kotResult = await printKotAfterPaymentIfNeeded();
           }
           const printBranding = await brandingWithPrintLogo(branding);
@@ -2633,7 +2668,11 @@ export default function Billing() {
                     onClick={sendKOT}
                     disabled={!canKot}
                     aria-disabled={!canKot}
-                    title={unsentKotItems.length > 0 ? "Send KOT (K)" : "No new KOT items to send"}
+                    title={
+                      unsentKotItems.length > 0 || pendingKotVoids.length > 0
+                        ? "Send KOT (K)"
+                        : "No new KOT items to send"
+                    }
                     className={`${styles.actionBtn} ${styles.actionPrimary}`}
                   >
                     {kotPrinting ? "Printing..." : "KOT"}

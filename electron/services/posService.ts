@@ -63,7 +63,8 @@ import type {
   UserDto,
   VendorDto,
 } from "../../src/shared/pos";
-import { getUnsentKotLines, isKotQueueTicket, kotLineCounts } from "../../src/shared/kot";
+import { getUnsentKotLines, isKotQueueTicket, kotLineCounts, pendingKotVoidQty, pendingKotVoidsFromMeta, settleKitchenOverlap } from "../../src/shared/kot";
+import type { PendingKotVoid } from "../../src/shared/kot";
 import { normalizeKitchenNote } from "../../src/shared/kitchenNote";
 import {
   FLOOR_LAYOUT_LIMITS,
@@ -1012,6 +1013,18 @@ function parseJson<T>(value: string | null | undefined, defaultValue: T, label =
     return JSON.parse(value) as T;
   } catch {
     throw new Error(`${label}-invalid`);
+  }
+}
+
+/** Floor refresh reads every open order. A bad meta blob must not blank the room. */
+function pendingVoidQtyFromStoredMeta(raw: string | null | undefined) {
+  if (!raw || raw === "{}" || !raw.includes("pendingKotVoids")) {
+    return 0;
+  }
+  try {
+    return pendingKotVoidQty(JSON.parse(raw));
+  } catch {
+    return 0;
   }
 }
 
@@ -2782,6 +2795,70 @@ function assertNoSentKotReduction(order: OrderDto, nextLines: OrderLineDto[]) {
   }
 }
 
+type KotLineReplacement = {
+  name: string;
+  qty: number;
+  rate: number;
+  menuItemId?: string | null;
+  categoryName?: string | null;
+  kitchenNote?: string | null;
+};
+
+/** Add the new variant in the same save as the cancel, so a failed follow-up cannot drop the item. */
+function appendKotReplacement(
+  database: Database.Database,
+  order: OrderDto,
+  lines: OrderLineDto[],
+  replacement: KotLineReplacement | null | undefined,
+  actor: string | null,
+) {
+  const name = String(replacement?.name || "").trim();
+  const addQty = Math.max(0, Number(replacement?.qty) || 0);
+  if (!name || addQty <= 0) {
+    return;
+  }
+  const existing = lines.find((line) => line.name.toLowerCase() === name.toLowerCase());
+  if (existing) {
+    existing.qty = Number(existing.qty || 0) + addQty;
+    if (!existing.menuItemId && replacement?.menuItemId) {
+      existing.menuItemId = replacement.menuItemId;
+    }
+    if (!existing.categoryName && replacement?.categoryName) {
+      existing.categoryName = normalizeCategoryName(replacement.categoryName) || null;
+    }
+    if (!existing.kitchenNote && replacement?.kitchenNote) {
+      existing.kitchenNote = normalizeKitchenNote(replacement.kitchenNote);
+    }
+    return;
+  }
+  const added: OrderLineDto = {
+    id: `line:${randomUUID()}`,
+    menuItemId: replacement?.menuItemId || null,
+    categoryName: normalizeCategoryName(replacement?.categoryName) || null,
+    name,
+    qty: addQty,
+    rate: Number(replacement?.rate) || 0,
+    taxRateBps: null,
+    kotPrintedQty: 0,
+    kitchenNote: normalizeKitchenNote(replacement?.kitchenNote),
+  };
+  lines.push(added);
+  recordMenuRateDifference(database, order, actor, added, null);
+}
+
+function metaWithPendingVoids(
+  meta: Record<string, unknown> | null | undefined,
+  voids: PendingKotVoid[],
+) {
+  const next = { ...(meta || {}) };
+  if (voids.length) {
+    next.pendingKotVoids = voids;
+  } else {
+    delete next.pendingKotVoids;
+  }
+  return next;
+}
+
 function kotStatusAfterLineChange(order: OrderDto, nextLines: OrderLineDto[]) {
   if (!nextLines.length) {
     return "pending";
@@ -3791,6 +3868,7 @@ export const posService = {
            o.status AS order_status,
            o.created_at AS order_created_at,
            o.updated_at AS order_updated_at,
+           o.meta_json AS order_meta_json,
            (
              SELECT COUNT(*)
              FROM order_lines ol
@@ -3828,18 +3906,22 @@ export const posService = {
       )
       .all(...ACTIVE_ORDER_STATUSES) as any[];
 
-    const tableRows = tables.map((row) => ({
-      ...tableFromRow(row),
-      status: row.order_status || "",
-      count: Number(row.item_count || 0),
-      total: paiseToRupees(Number(row.total_paise || 0)),
-      occupied: Boolean(row.order_id) && Number(row.item_count || 0) > 0,
-      orderId: row.order_id || null,
-      openedAt: Number(row.order_created_at || 0) || null,
-      activityAt: Number(row.order_updated_at || 0) || null,
-      unsentCount: Number(row.unsent_qty || 0),
-      sentCount: Number(row.sent_qty || 0),
-    }));
+    const tableRows = tables.map((row) => {
+      const pendingVoidQty = pendingVoidQtyFromStoredMeta(row.order_meta_json);
+      return {
+        ...tableFromRow(row),
+        status: row.order_status || "",
+        count: Number(row.item_count || 0),
+        total: paiseToRupees(Number(row.total_paise || 0)),
+        occupied:
+          Boolean(row.order_id) && (Number(row.item_count || 0) > 0 || pendingVoidQty > 0),
+        orderId: row.order_id || null,
+        openedAt: Number(row.order_created_at || 0) || null,
+        activityAt: Number(row.order_updated_at || 0) || null,
+        unsentCount: Number(row.unsent_qty || 0) + pendingVoidQty,
+        sentCount: Number(row.sent_qty || 0),
+      };
+    });
 
     const byArea: Record<string, Array<(typeof tableRows)[number]>> = {};
     for (const area of areas) {
@@ -4509,6 +4591,7 @@ export const posService = {
       .map((order) => {
         const items = order.items || [];
         const { sentCount, unsentCount } = kotLineCounts(items);
+        const pendingVoidQty = pendingKotVoidQty(order.meta);
         const sentLines = items.filter((line) => Number(line.kotPrintedQty || 0) > 0);
         const unsentLines = items.filter(
           (line) => Number(line.qty || 0) > Number(line.kotPrintedQty || 0),
@@ -4533,7 +4616,7 @@ export const posService = {
             .map((line) => line.name)
             .join(", "),
           sentCount,
-          unsentCount,
+          unsentCount: unsentCount + pendingVoidQty,
         };
       });
 
@@ -4603,11 +4686,25 @@ export const posService = {
         order.items.push(added);
         recordMenuRateDifference(database, order, actor || order.createdBy || null, added, null);
       }
-      upsertOrderLines(database, orderId, order.items);
-      database
-        .prepare("UPDATE orders SET kot_status = ?, updated_at = ? WHERE id = ?")
-        .run(kotStatusAfterLineChange(order, order.items), now(), orderId);
-      updateOrderTotals(database, orderId, order.items, discountFromOrder(order));
+      const beforeVoids = pendingKotVoidsFromMeta(order.meta);
+      const settled = settleKitchenOverlap(order.items, beforeVoids);
+      const voidsChanged = JSON.stringify(settled.voids) !== JSON.stringify(beforeVoids);
+      upsertOrderLines(database, orderId, settled.lines);
+      if (voidsChanged) {
+        database
+          .prepare("UPDATE orders SET kot_status = ?, meta_json = ?, updated_at = ? WHERE id = ?")
+          .run(
+            kotStatusAfterLineChange(order, settled.lines),
+            stringifyJson(metaWithPendingVoids(order.meta, settled.voids)),
+            now(),
+            orderId,
+          );
+      } else {
+        database
+          .prepare("UPDATE orders SET kot_status = ?, updated_at = ? WHERE id = ?")
+          .run(kotStatusAfterLineChange(order, settled.lines), now(), orderId);
+      }
+      updateOrderTotals(database, orderId, settled.lines, discountFromOrder(order));
       const auditActor = actor || order.createdBy || null;
       createAuditRow(
         database,
@@ -4636,14 +4733,28 @@ export const posService = {
       const anchored = anchorOrderLines(order.items || [], lines);
       const sanitized = sanitizeOrderLines(applyKitchenNotes(order.items || [], anchored));
       assertNoSentKotReduction(order, sanitized);
-      upsertOrderLines(database, orderId, sanitized);
-      database
-        .prepare("UPDATE orders SET kot_status = ?, updated_at = ? WHERE id = ?")
-        .run(kotStatusAfterLineChange(order, sanitized), now(), orderId);
-      updateOrderTotals(database, orderId, sanitized, discountFromOrder(order));
+      const beforeVoids = pendingKotVoidsFromMeta(order.meta);
+      const settled = settleKitchenOverlap(sanitized, beforeVoids);
+      const voidsChanged = JSON.stringify(settled.voids) !== JSON.stringify(beforeVoids);
+      upsertOrderLines(database, orderId, settled.lines);
+      if (voidsChanged) {
+        database
+          .prepare("UPDATE orders SET kot_status = ?, meta_json = ?, updated_at = ? WHERE id = ?")
+          .run(
+            kotStatusAfterLineChange(order, settled.lines),
+            stringifyJson(metaWithPendingVoids(order.meta, settled.voids)),
+            now(),
+            orderId,
+          );
+      } else {
+        database
+          .prepare("UPDATE orders SET kot_status = ?, updated_at = ? WHERE id = ?")
+          .run(kotStatusAfterLineChange(order, settled.lines), now(), orderId);
+      }
+      updateOrderTotals(database, orderId, settled.lines, discountFromOrder(order));
       const auditActor = actor || order.createdBy || null;
       const previousById = new Map((order.items || []).map((line) => [line.id, line]));
-      for (const line of sanitized) {
+      for (const line of settled.lines) {
         const previous = previousById.get(line.id);
         recordMenuRateDifference(
           database,
@@ -4671,7 +4782,12 @@ export const posService = {
 
   voidKotLine(
     orderId: string,
-    input: { lineId: string; finalQty: number; reason: string },
+    input: {
+      lineId: string;
+      finalQty: number;
+      reason: string;
+      replacement?: KotLineReplacement | null;
+    },
     actor?: string | null,
     options: { baseUpdatedAt?: number | null } = {},
   ) {
@@ -4709,12 +4825,30 @@ export const posService = {
             : candidate,
         )
         .filter((candidate) => Number(candidate.qty || 0) > 0);
-      upsertOrderLines(database, orderId, nextLines);
-      database
-        .prepare("UPDATE orders SET kot_status = ?, updated_at = ? WHERE id = ?")
-        .run(kotStatusAfterLineChange(order, nextLines), now(), orderId);
-      updateOrderTotals(database, orderId, nextLines, discountFromOrder(order));
       const auditActor = actor || order.createdBy || null;
+      appendKotReplacement(database, order, nextLines, input.replacement, auditActor);
+      const pending = pendingKotVoidsFromMeta(order.meta);
+      pending.push({
+        id: randomUUID(),
+        lineId,
+        name: String(line.name || "").trim() || "Item",
+        qty: voidQty,
+        reason,
+      });
+      const settled = settleKitchenOverlap(nextLines, pending);
+      upsertOrderLines(database, orderId, settled.lines);
+      const nextMeta = metaWithPendingVoids(order.meta, settled.voids);
+      database
+        .prepare("UPDATE orders SET kot_status = ?, meta_json = ?, updated_at = ? WHERE id = ?")
+        .run(
+          kotStatusAfterLineChange(order, settled.lines),
+          stringifyJson(nextMeta),
+          now(),
+          orderId,
+        );
+      updateOrderTotals(database, orderId, settled.lines, discountFromOrder(order));
+      const replacementName = String(input.replacement?.name || "").trim();
+      const replacementQty = Math.max(0, Number(input.replacement?.qty) || 0);
       createAuditRow(
         database,
         "order.kot.void",
@@ -4728,6 +4862,15 @@ export const posService = {
           finalQty,
           reason,
           amountPaise: voidAmountPaise,
+          ...(replacementName && replacementQty > 0
+            ? {
+                replacement: {
+                  name: replacementName,
+                  qty: replacementQty,
+                  rate: Number(input.replacement?.rate) || 0,
+                },
+              }
+            : {}),
         }),
       );
       return this.getOrderById(orderId)!;
@@ -4798,9 +4941,35 @@ export const posService = {
     orderId: string,
     sentLines: Array<{ id: string; sentQty: number }> = [],
     actor?: string | null,
+    options: { clearPendingKotVoidIds?: string[] } = {},
   ) {
     const updated = inTransaction((database) => {
       const order = this.getOrderById(orderId);
+      if (!order) {
+        throw new Error("order-not-found");
+      }
+      const clearIds = new Set(
+        (options.clearPendingKotVoidIds || []).map((id) => String(id || "").trim()).filter(Boolean),
+      );
+      const closed = order.status === "paid" || order.status === "cancelled";
+      if (closed) {
+        const pendingVoids = pendingKotVoidsFromMeta(order.meta);
+        const voidsToClear = pendingVoids.filter((row) => clearIds.has(row.id));
+        if (!voidsToClear.length) {
+          throw new Error("order-closed");
+        }
+        const remainingVoids = pendingVoids.filter((row) => !clearIds.has(row.id));
+        const nextMeta = { ...(order.meta || {}) } as Record<string, unknown>;
+        if (remainingVoids.length) {
+          nextMeta.pendingKotVoids = remainingVoids;
+        } else {
+          delete nextMeta.pendingKotVoids;
+        }
+        database
+          .prepare("UPDATE orders SET meta_json = ?, updated_at = ? WHERE id = ?")
+          .run(stringifyJson(nextMeta), now(), orderId);
+        return this.getOrderById(orderId)!;
+      }
       assertOrderCanBeEdited(order);
       const requested = new Map(
         (sentLines || [])
@@ -4810,9 +4979,16 @@ export const posService = {
       const targets =
         requested.size > 0
           ? order.items.filter((line) => requested.has(line.id))
-          : getUnsentKotLines(order.items).map((line) => ({ ...line, sentQty: line.qty }));
+          : clearIds.size > 0
+            ? []
+            : getUnsentKotLines(order.items).map((line) => ({ ...line, sentQty: line.qty }));
 
-      if (!targets.length) {
+      const pendingVoids = pendingKotVoidsFromMeta(order.meta);
+      const voidsToClear = pendingVoids.filter((row) => clearIds.has(row.id));
+      if (!targets.length && voidsToClear.length === 0) {
+        if (clearIds.size > 0) {
+          return order;
+        }
         throw new Error("kot-no-unsent-items");
       }
 
@@ -4834,9 +5010,26 @@ export const posService = {
         auditLines.push({ id: line.id, name: line.name, sentQty: safeSentQty });
       }
 
-      database
-        .prepare("UPDATE orders SET kot_status = 'sent', updated_at = ? WHERE id = ?")
-        .run(at, orderId);
+      const remainingVoids = pendingVoids.filter((row) => !clearIds.has(row.id));
+      const hasSentQty =
+        targets.length > 0 ||
+        order.items.some((line) => Number(line.kotPrintedQty || 0) > 0);
+      const nextStatus = hasSentQty ? "sent" : "pending";
+      if (voidsToClear.length) {
+        const nextMeta = { ...(order.meta || {}) } as Record<string, unknown>;
+        if (remainingVoids.length) {
+          nextMeta.pendingKotVoids = remainingVoids;
+        } else {
+          delete nextMeta.pendingKotVoids;
+        }
+        database
+          .prepare("UPDATE orders SET kot_status = ?, meta_json = ?, updated_at = ? WHERE id = ?")
+          .run(nextStatus, stringifyJson(nextMeta), at, orderId);
+      } else {
+        database
+          .prepare("UPDATE orders SET kot_status = ?, updated_at = ? WHERE id = ?")
+          .run(nextStatus, at, orderId);
+      }
       const auditActor = actor || order.createdBy || null;
       createAuditRow(
         database,
@@ -4846,6 +5039,7 @@ export const posService = {
         auditActor,
         mergeOrderAuditDetail(database, order, auditActor, {
           lines: auditLines,
+          voided: voidsToClear.map((row) => ({ name: row.name, qty: row.qty, reason: row.reason })),
         }),
       );
       return this.getOrderById(orderId)!;
@@ -4883,7 +5077,10 @@ export const posService = {
       if (!order.items.some((line) => Number(line.kotPrintedQty || 0) > 0)) {
         throw new Error("kot-not-sent");
       }
-      if (getUnsentKotLines(order.items).length > 0) {
+      if (
+        getUnsentKotLines(order.items).length > 0 ||
+        pendingKotVoidsFromMeta(order.meta).length > 0
+      ) {
         throw new Error("kot-has-unsent-items");
       }
       const at = now();

@@ -485,9 +485,9 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
   );
   ipcMain.handle(
     "pos:orders:mark-kot-sent",
-    (event, token: string | null, orderId: string, sentLines) => {
+    (event, token: string | null, orderId: string, sentLines, options) => {
       const user = requireSession(event, token);
-      return posService.markKotSent(orderId, sentLines, user.username);
+      return posService.markKotSent(orderId, sentLines, user.username, options);
     },
   );
   ipcMain.handle(

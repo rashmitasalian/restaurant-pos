@@ -109,7 +109,13 @@ export class PrinterOfflineQueue {
         Array.isArray((content as any)?.sentLines)
       ) {
         const order = await window.pos?.orders?.get((content as any).orderId);
-        if (!kotSentLinesNeedPrint(order, (content as any).sentLines)) {
+        if (
+          !kotSentLinesNeedPrint(
+            order,
+            (content as any).sentLines,
+            (content as any).clearPendingKotVoidIds,
+          )
+        ) {
           await queueApi().markCompleted(jobId);
           logger.info("Skipped duplicate KOT retry", { jobId });
           return true;
@@ -127,6 +133,9 @@ export class PrinterOfflineQueue {
             await window.pos?.orders?.markKotSent(
               (content as any).orderId,
               (content as any).sentLines,
+              {
+                clearPendingKotVoidIds: (content as any).clearPendingKotVoidIds,
+              },
             );
           } catch (error: any) {
             const message = String(error?.message || error || "");

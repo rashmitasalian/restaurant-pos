@@ -1136,9 +1136,28 @@
   border-radius: 8px;
   border: 1px solid var(--pos-surface-sunken);
 }
+.kotHead,
+.kotSection {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--pos-tx-muted);
+}
+.kotSection {
+  margin-top: 10px;
+}
 .kotItemTitle {
   font-weight: 700;
   color: var(--pos-tx);
+}
+.kotQty {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  min-width: 2.5ch;
+  text-align: right;
 }
 /* Platform buttons */
 .platformGroup {

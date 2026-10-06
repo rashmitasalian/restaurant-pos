@@ -269,8 +269,9 @@ export async function markOrderBillPrinted(orderId: string) {
 export async function markOrderKotSent(
   orderId: string,
   sentLines?: Array<{ id: string; sentQty: number }>,
+  options?: { clearPendingKotVoidIds?: string[] },
 ) {
-  return api().orders!.markKotSent(orderId, sentLines);
+  return api().orders!.markKotSent(orderId, sentLines, options);
 }
 
 export async function markOrderKotFailed(orderId: string, error?: string | null) {
@@ -279,7 +280,19 @@ export async function markOrderKotFailed(orderId: string, error?: string | null)
 
 export async function voidOrderKotLine(
   orderId: string,
-  payload: { lineId: string; finalQty: number; reason: string },
+  payload: {
+    lineId: string;
+    finalQty: number;
+    reason: string;
+    replacement?: {
+      name: string;
+      qty: number;
+      rate: number;
+      menuItemId?: string | null;
+      categoryName?: string | null;
+      kitchenNote?: string | null;
+    } | null;
+  },
 ) {
   return api().orders!.voidKotLine(orderId, payload);
 }
@@ -1356,7 +1369,7 @@ export async function retryPrintJob(jobId: string): Promise<boolean> {
       : (job.content as any) || {};
   if (job.jobType === "kot" && content?.orderId && Array.isArray(content?.sentLines)) {
     const order = await api().orders!.get(content.orderId);
-    if (!kotSentLinesNeedPrint(order, content.sentLines)) {
+    if (!kotSentLinesNeedPrint(order, content.sentLines, content.clearPendingKotVoidIds)) {
       await api().printQueue!.markCompleted(jobId);
       return true;
     }
@@ -1369,7 +1382,9 @@ export async function retryPrintJob(jobId: string): Promise<boolean> {
   if (result?.ok) {
     if (job.jobType === "kot" && content?.orderId && Array.isArray(content?.sentLines)) {
       try {
-        await api().orders!.markKotSent(content.orderId, content.sentLines);
+        await api().orders!.markKotSent(content.orderId, content.sentLines, {
+          clearPendingKotVoidIds: content.clearPendingKotVoidIds,
+        });
       } catch (error: any) {
         const message = String(error?.message || error || "");
         if (!message.includes("kot-no-unsent-items") && !message.includes("order-closed")) {

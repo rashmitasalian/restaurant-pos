@@ -1,5 +1,5 @@
-import { buildKotLines, buildKotVoidLines } from "../../src/shared/kotTicket";
-import { getUnsentKotLines, pendingKotQty } from "../../src/shared/kot";
+import { buildKitchenUpdateLines } from "../../src/shared/kotTicket";
+import { getUnsentKotLines, netKitchenDelta, pendingKotVoidsFromMeta } from "../../src/shared/kot";
 import { formatTableTileLabel } from "../../src/shared/floorLayout";
 import {
   DEFAULT_USB_PRINTER_NAME,
@@ -103,9 +103,23 @@ export const kotPrintService = {
         throw new Error("order-conflict");
       }
     }
+    const pendingVoids = pendingKotVoidsFromMeta(order.meta);
     const unsent = getUnsentKotLines(order.items || []);
-    if (!unsent.length) {
+    if (!unsent.length && !pendingVoids.length) {
       throw new Error("kot-no-unsent-items");
+    }
+    const delta = netKitchenDelta(pendingVoids, order.items || []);
+    if (!delta.stop.length && !delta.make.length) {
+      const updated = posService.markKotSent(orderId, delta.sentLines, actorUsername, {
+        clearPendingKotVoidIds: delta.clearVoidIds,
+      });
+      return {
+        replay: false as const,
+        ok: true as const,
+        order: updated,
+        kotSeq: null,
+        sentLines: delta.sentLines,
+      };
     }
 
     const kotSeq = posService.getNextKotSeq();
@@ -117,23 +131,15 @@ export const kotPrintService = {
       orderType: order.orderType || (order.tableId ? "table" : "takeaway"),
       tableNum: order.tableId,
       tableLabel: tableLabelForOrder(order),
-      items: unsent.map((line) => ({
-        id: line.id,
-        name: line.name,
-        qty: pendingKotQty(line),
-        sentQty: Number(line.qty || 0),
-        note: line.kitchenNote || null,
-      })),
+      items: delta.make,
+      voidItems: delta.stop,
       platform: String(meta.platform || meta.orderSource || meta.source || ""),
       platformCode: String(meta.code || meta.orderCode || meta.reference || ""),
       customerName: String(meta.parcelName || meta.customerName || ""),
       customerPhone: String(meta.customerPhone || ""),
     };
-    const lines = buildKotLines(preview, order, order.tableId, branding);
-    const sentLines = preview.items.map((item) => ({
-      id: String(item.id),
-      sentQty: Number(item.sentQty || item.qty || 0),
-    }));
+    const lines = buildKitchenUpdateLines(preview, order, order.tableId, branding);
+    const sentLines = delta.sentLines;
 
     try {
       await printKitchenLines(lines);
@@ -142,7 +148,9 @@ export const kotPrintService = {
       throw error;
     }
 
-    const updated = posService.markKotSent(orderId, sentLines, actorUsername);
+    const updated = posService.markKotSent(orderId, sentLines, actorUsername, {
+      clearPendingKotVoidIds: delta.clearVoidIds,
+    });
     const result = {
       ok: true as const,
       order: updated,
@@ -206,23 +214,9 @@ export const kotPrintService = {
       throw new Error("kot-void-not-required");
     }
 
-    const branding = getBranding();
-    const lines = buildKotVoidLines(
-      {
-        orderType: order.orderType || (order.tableId ? "table" : "takeaway"),
-        tableNum: order.tableId,
-        tableLabel: tableLabelForOrder(order),
-        reason: input.reason,
-        items: [{ name: line.name, qty: voidQty }],
-        sentBy: displayNameFor(actorUsername),
-      },
-      branding,
-    );
-
-    await printKitchenLines(lines);
-    // Version already checked above; skip re-check after await so a concurrent
-    // edit during print I/O cannot leave a printed void without a DB update.
-    const updated = posService.voidKotLine(orderId, input, actorUsername);
+    const updated = posService.voidKotLine(orderId, input, actorUsername, {
+      baseUpdatedAt: options.baseUpdatedAt,
+    });
     const result = { ok: true as const, order: updated, voidQty };
     if (clientOpId) {
       posService.rememberClientOp({

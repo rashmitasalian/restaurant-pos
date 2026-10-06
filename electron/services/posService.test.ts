@@ -719,6 +719,114 @@ describe("posService strict SQLite APIs", () => {
     const audit = mockDb.calls.find((call: any) => call.sql.includes("INSERT INTO audit_logs"));
     expect(audit?.params[1]).toBe("order.kot.void");
     expect(String(audit?.params[5])).toContain("Customer changed order");
+    const metaUpdate = mockDb.calls.find(
+      (call: any) => call.sql.includes("UPDATE orders SET kot_status") && call.sql.includes("meta_json"),
+    );
+    expect(String(metaUpdate?.params[1])).toContain("pendingKotVoids");
+    expect(String(metaUpdate?.params[1])).toContain("Dosa");
+  });
+
+  it("replaces a sent line in the same save as the cancel", () => {
+    mockDb.orderById = {
+      id: "order:1",
+      order_type: "table",
+      table_id: 3,
+      status: "open",
+      kot_status: "sent",
+      discount_percent: 0,
+      subtotal_paise: 16000,
+      tax_total_paise: 0,
+      discount_total_paise: 0,
+      total_paise: 16000,
+      invoice_number: null,
+      paid_at: null,
+      meta_json: "{}",
+      created_at: 1000,
+      updated_at: 1000,
+      created_by: "admin",
+    };
+    mockDb.lineRows.set("order:1", [
+      {
+        id: "line:1",
+        menu_item_id: "item:dosa",
+        item_name: "Dosa (Half)",
+        quantity: 2,
+        rate_paise: 8000,
+        tax_rate_bps: 0,
+        kot_printed_qty: 2,
+        kitchen_note: "extra ghee",
+      },
+    ]);
+
+    posService.voidKotLine(
+      "order:1",
+      {
+        lineId: "line:1",
+        finalQty: 0,
+        reason: "Variant changed",
+        replacement: {
+          name: "Dosa (Full)",
+          qty: 2,
+          rate: 120,
+          menuItemId: "item:dosa",
+          kitchenNote: "extra ghee",
+        },
+      },
+      "admin",
+    );
+
+    const inserts = mockDb.calls.filter((call: any) => call.sql.includes("INSERT INTO order_lines"));
+    expect(inserts).toHaveLength(1);
+    expect(inserts[0].params[3]).toBe("Dosa (Full)");
+    expect(inserts[0].params[5]).toBe(2);
+    expect(inserts[0].params[9]).toBe(0);
+    expect(inserts[0].params[13]).toBe("extra ghee");
+    const metaUpdate = mockDb.calls.find(
+      (call: any) => call.sql.includes("UPDATE orders SET kot_status") && call.sql.includes("meta_json"),
+    );
+    expect(String(metaUpdate?.params[1])).toContain("Dosa (Half)");
+    expect(String(metaUpdate?.params[1])).not.toContain("Dosa (Full)");
+  });
+
+  it("marks sent lines without rewriting order meta", () => {
+    mockDb.orderById = {
+      id: "order:1",
+      order_type: "table",
+      table_id: 3,
+      status: "open",
+      kot_status: "pending",
+      discount_percent: 0,
+      subtotal_paise: 8000,
+      tax_total_paise: 0,
+      discount_total_paise: 0,
+      total_paise: 8000,
+      invoice_number: null,
+      paid_at: null,
+      meta_json: JSON.stringify({ parcelName: "Ravi" }),
+      created_at: 1000,
+      updated_at: 1000,
+      created_by: "admin",
+    };
+    mockDb.lineRows.set("order:1", [
+      {
+        id: "line:1",
+        menu_item_id: null,
+        item_name: "Dosa",
+        quantity: 1,
+        rate_paise: 8000,
+        tax_rate_bps: 0,
+        kot_printed_qty: 0,
+      },
+    ]);
+
+    posService.markKotSent("order:1", [{ id: "line:1", sentQty: 1 }], "admin");
+
+    const statusUpdates = mockDb.calls.filter((call: any) =>
+      call.sql.includes("UPDATE orders SET kot_status"),
+    );
+    expect(statusUpdates).toHaveLength(1);
+    expect(statusUpdates[0].sql.includes("meta_json")).toBe(false);
+    expect(statusUpdates[0].params[0]).toBe("sent");
   });
 
   it("hashes client-op requests independently of object key order", () => {

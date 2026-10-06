@@ -281,14 +281,25 @@ export function KotPreviewModal({ data, onClose, onPrint, printing = false }: Ko
     >
       <h3 className={styles.modalTitle}>KOT Preview</h3>
       <div className={styles.modalGrid}>
-        <div className={styles.textMuted}>
-          <div style={{ marginBottom: 8 }}>Items</div>
-        </div>
         <div className={styles.kotList}>
-          {data.items.map((it: any, idx: number) => (
+          <div className={styles.kotHead}>
+            <span>Item</span>
+            <span>Qty</span>
+          </div>
+          {(data.voidItems || []).length > 0 && <div className={styles.kotSection}>Stop</div>}
+          {(data.voidItems || []).map((it: any, idx: number) => (
+            <div key={`void-${idx}`} className={styles.kotItem}>
+              <div className={styles.kotItemTitle}>{it.name}</div>
+              <span className={styles.kotQty}>{it.qty}</span>
+            </div>
+          ))}
+          {(data.items || []).length > 0 && (data.voidItems || []).length > 0 && (
+            <div className={styles.kotSection}>Make</div>
+          )}
+          {(data.items || []).map((it: any, idx: number) => (
             <div key={idx} className={styles.kotItem}>
               <div className={styles.kotItemTitle}>{it.name}</div>
-              <div className={styles.textMuted}>x{it.qty}</div>
+              <span className={styles.kotQty}>{it.qty}</span>
             </div>
           ))}
         </div>
@@ -339,8 +350,8 @@ export function KotVoidModal({
     >
       <h3 className={styles.modalTitle}>Void Sent KOT Item</h3>
       <p className={styles.modalPara}>
-        This item has already been sent to the kitchen. A void KOT will print before the bill is
-        updated.
+        This item has already been sent to the kitchen. The bill updates now. Send KOT when the
+        changes are ready, and the kitchen gets them on one ticket.
       </p>
       <div className={styles.kotList}>
         <div className={styles.kotItem}>
@@ -395,7 +406,7 @@ export function KotVoidModal({
           disabled={!cleanReason || processing}
           className={styles.btnDanger}
         >
-          {processing ? "Printing..." : "Print Void KOT"}
+          {processing ? "Saving..." : "Update bill"}
         </button>
       </div>
     </DialogShell>

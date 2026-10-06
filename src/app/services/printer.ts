@@ -39,6 +39,7 @@ export async function printKOT(data: {
   printer?: string;
   orderId?: string;
   sentLines?: Array<{ id: string; sentQty: number }>;
+  clearPendingKotVoidIds?: string[];
 }) {
   try {
     const payload: any = { type: "kot", data };

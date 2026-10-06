@@ -4,6 +4,7 @@ import { Icon } from "../../ui/components/ui/Icon";
 import { money } from "../money";
 import { CategorySheet } from "../sheets/CategorySheet";
 import { TEXT_LIMITS } from "../../shared/textLimits";
+import { netKitchenDelta, pendingKotVoidsFromMeta } from "../../shared/kot";
 
 const PINNED_NAMED_CATEGORIES = 2;
 
@@ -185,11 +186,10 @@ export function MenuScreen({
 
   const items: any[] = order?.items || [];
   const itemCount = items.reduce((sum: number, line: any) => sum + Number(line.qty || 0), 0);
-  const unsentCount = items.reduce(
-    (sum: number, line: any) =>
-      sum + Math.max(0, Number(line.qty || 0) - Number(line.kotPrintedQty || 0)),
-    0,
-  );
+  const kitchenDelta = netKitchenDelta(pendingKotVoidsFromMeta(order?.meta), items);
+  const unsentCount =
+    kitchenDelta.stop.reduce((sum, row) => sum + row.qty, 0) +
+    kitchenDelta.make.reduce((sum, line) => sum + line.qty, 0);
   const orderTotal = Number(order?.total || 0);
 
   const filtered = menuItems.filter((item) => {

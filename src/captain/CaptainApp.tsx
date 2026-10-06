@@ -9,6 +9,7 @@ import {
   type CaptainUser,
 } from "./captainApi";
 import { formatTableLabel } from "../shared/floorLayout";
+import { pendingKotVoidsFromMeta } from "../shared/kot";
 import { isAuthRequiredError, isOrderConflictError, waiterError, type ConnectionState } from "./copy";
 import { CaptainShell, type CaptainTab } from "./CaptainShell";
 import { LoginScreen } from "./screens/LoginScreen";
@@ -643,7 +644,8 @@ export function CaptainApp() {
         sum + Math.max(0, Number(line.qty || 0) - Number(line.kotPrintedQty || 0)),
       0,
     );
-    if (pending <= 0) {
+    const waitingVoids = pendingKotVoidsFromMeta(order.meta);
+    if (pending <= 0 && waitingVoids.length === 0) {
       showToast("No new KOT items to send");
       return;
     }
@@ -720,7 +722,7 @@ export function CaptainApp() {
       );
       setOrder(result.order || (await captainApi.getOrder(token, order._id)));
       setVoidLine(null);
-      showToast("Void KOT printed and order updated");
+      showToast("Bill updated. Send to kitchen when the changes are ready.");
       void refreshKots(token);
       void refreshTables(token);
     } catch (err: any) {
@@ -733,7 +735,7 @@ export function CaptainApp() {
         setVoidLine(null);
         return;
       }
-      setError(mutationError(err, "Void KOT could not be printed. Order was not changed."));
+      setError(mutationError(err, "Couldn't update that item. The kitchen was not told."));
     } finally {
       setBusy(false);
     }

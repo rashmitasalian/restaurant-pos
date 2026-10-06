@@ -7,6 +7,7 @@ import {
   type GstConfig,
   type GstTotals,
 } from "../../../../shared/gst";
+import { formatWrappedColumnRows } from "../../../../shared/printColumns";
 import { buildReceiptQrFooterLines, type ReceiptQrConfig } from "./receiptQr";
 import { RECEIPT_TEXT_WIDTH, wrapText } from "./receiptWrap";
 
@@ -197,12 +198,16 @@ export function buildReceiptLines(
     "SEP",
     `LEFT:${PAD}${rpad("Item", COL_ITEM)}${lpad("Qty", COL_QTY)}${lpad("Rate", COL_RATE)}${lpad("Amt", COL_AMT)}`,
     "SEP",
-    ...(ord?.items || []).map((it: any) => {
-      const name = rpad(String(it.name || ""), COL_ITEM);
+    ...(ord?.items || []).flatMap((it: any) => {
       const qty = lpad(String(it.qty || 1), COL_QTY);
       const rate = lpad(fmtAmt(it.rate || 0), COL_RATE);
       const amt = lpad(fmtAmt((it.qty || 1) * (it.rate || 0)), COL_AMT);
-      return `LEFTB:${PAD}${name}${qty}${rate}${amt}`;
+      return formatWrappedColumnRows(
+        `LEFTB:${PAD}`,
+        String(it.name || ""),
+        COL_ITEM,
+        `${qty}${rate}${amt}`,
+      );
     }),
     "SEP",
     totalRow("Sub Total", itemSubtotal),
@@ -302,6 +307,8 @@ export function buildReceiptLines(
 export {
   buildKotLines,
   buildKotVoidLines,
+  buildKitchenUpdateLines,
+  describeKotVoids,
   type KotPreviewData,
   type KotPreviewItem,
   type KotTicketBranding,

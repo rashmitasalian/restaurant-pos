@@ -11,7 +11,7 @@ import {
 } from "../../../app/db/posRepository";
 import { printKOT } from "../../../app/services/printer";
 import { AuthContext } from "../../context/AuthContext";
-import { isKotQueueTicket } from "../../../shared/kot";
+import { isKotQueueTicket, netKitchenDelta, pendingKotVoidsFromMeta } from "../../../shared/kot";
 import { formatKotAge, kotAgeTone } from "../../../shared/kotAge";
 import { formatTableTileLabel } from "../../../shared/floorLayout";
 import { validationMessage } from "../../../shared/validation";
@@ -19,7 +19,7 @@ import { PageHeader } from "../../components/ui/PageHeader";
 import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
-import { buildKotLines } from "../Billing/utils/receiptBuilder";
+import { buildKitchenUpdateLines } from "../Billing/utils/receiptBuilder";
 import styles from "./KOTQueue.module.css";
 
 type KotQueueLine = {
@@ -36,6 +36,7 @@ type KOTItem = {
   order: OrderDoc;
   sentItems: KotQueueLine[];
   pendingItems: Array<KotQueueLine & { id: string; sentQty: number }>;
+  pendingVoids: Array<{ id: string; name: string; qty: number; reason: string }>;
   time: number;
 };
 
@@ -136,6 +137,7 @@ export default function KOTQueue() {
         .map((o) => {
           const printedItems = getPrintedItems(o);
           const pendingItems = getPendingItems(o);
+          const pendingVoids = pendingKotVoidsFromMeta(o.meta);
           const tableId = o.tableId ?? 0;
           return {
             orderId: o._id,
@@ -145,6 +147,7 @@ export default function KOTQueue() {
             order: o,
             sentItems: printedItems,
             pendingItems,
+            pendingVoids,
             time: o.updatedAt || o.createdAt,
           };
         });
@@ -222,63 +225,74 @@ export default function KOTQueue() {
     try {
       const currentUserLabel = auth?.session?.displayName || auth?.session?.username || "";
       const label = k.tableLabel || (k.table ? `Table ${k.table}` : "Order");
-      const itemsToPrint = k.pendingItems.length > 0 ? k.pendingItems : k.sentItems;
+      const delta = netKitchenDelta(k.pendingVoids, k.order.items || []);
+      const hasKitchenUpdate = delta.stop.length > 0 || delta.make.length > 0;
+      if (!hasKitchenUpdate && (delta.clearVoidIds.length > 0 || delta.sentLines.length > 0)) {
+        await markOrderKotSent(k.orderId, delta.sentLines, {
+          clearPendingKotVoidIds: delta.clearVoidIds,
+        });
+        await loadKOTs();
+        return;
+      }
+      const itemsToPrint = hasKitchenUpdate ? delta.make : k.sentItems;
       let kotSeqNum: number | undefined;
-      if (k.pendingItems.length > 0) {
+      if (hasKitchenUpdate) {
         try {
           kotSeqNum = await nextKotSeq();
         } catch {
           /* fallback to timestamp */
         }
       }
-      const preview = buildPreview(
-        k.order,
-        itemsToPrint,
-        currentUserLabel,
-        kotSeqNum,
-        k.tableLabel,
-      );
-      const lines =
-        k.pendingItems.length > 0
-          ? buildKotLines(preview, { ...k.order, items: itemsToPrint }, k.table || null)
-          : [
-              "BIGBOLD:KOT - REPRINT",
-              `CENTER:${label}`,
-              ...(currentUserLabel ? [`LEFT:  Reprinted by: ${currentUserLabel}`] : []),
-              "SEP",
-              ...itemsToPrint.flatMap((it) => {
-                const row = `LEFT:  ${String(it.qty).padStart(3)} x ${it.name}`;
-                const note = String(it.note || "").trim();
-                return note ? [row, `LEFT:    ${note}`] : [row];
-              }),
-              "BLANK",
-              "CUT",
-            ];
-      const sentLines = k.pendingItems.map((it) => ({ id: it.id, sentQty: it.sentQty }));
+      const preview = {
+        ...buildPreview(k.order, delta.make, currentUserLabel, kotSeqNum, k.tableLabel),
+        voidItems: delta.stop,
+      };
+      const clearPendingKotVoidIds = delta.clearVoidIds;
+      const lines = hasKitchenUpdate
+        ? buildKitchenUpdateLines(preview, { ...k.order, items: k.pendingItems }, k.table || null)
+        : [
+            "BIGBOLD:KOT - REPRINT",
+            `CENTER:${label}`,
+            ...(currentUserLabel ? [`LEFT:  Reprinted by: ${currentUserLabel}`] : []),
+            "SEP",
+            ...itemsToPrint.flatMap((it) => {
+              const row = `LEFT:  ${String(it.qty).padStart(3)} x ${it.name}`;
+              const note = String(it.note || "").trim();
+              return note ? [row, `LEFT:    ${note}`] : [row];
+            }),
+            "BLANK",
+            "CUT",
+          ];
+      const sentLines = hasKitchenUpdate
+        ? delta.sentLines
+        : k.pendingItems.map((it) => ({ id: it.id, sentQty: it.sentQty }));
       await printKOT({
         lines,
         printer: await resolveKitchenPrinter(),
         orderId: k.orderId,
         sentLines,
+        clearPendingKotVoidIds: hasKitchenUpdate ? clearPendingKotVoidIds : undefined,
       });
-      if (k.pendingItems.length > 0) {
-        await markOrderKotSent(k.orderId, sentLines);
+      if (hasKitchenUpdate) {
+        await markOrderKotSent(k.orderId, sentLines, {
+          clearPendingKotVoidIds,
+        });
         window.dispatchEvent(new Event("orders-changed"));
         await loadKOTs();
       }
     } catch (e: any) {
       console.error("Reprint failed:", e);
-      if (k.pendingItems.length > 0) {
+      const hadUpdate = k.pendingItems.length > 0 || k.pendingVoids.length > 0;
+      if (hadUpdate) {
         try {
           await markOrderKotFailed(k.orderId, validationMessage(e, "print-failed"));
         } catch {}
       }
       setOrderErrors((prev) => ({
         ...prev,
-        [k.orderId]:
-          k.pendingItems.length > 0
-            ? "KOT print failed. Check printer connection."
-            : "Reprint failed. Check printer connection.",
+        [k.orderId]: hadUpdate
+          ? "KOT print failed. Check printer connection."
+          : "Reprint failed. Check printer connection.",
       }));
     } finally {
       endOrderAction(actionKey);
@@ -315,7 +329,12 @@ export default function KOTQueue() {
       <div className={styles.grid}>
         {pending.map((k) => {
           const tone = kotAgeTone(k.time);
-          const hasPendingItems = k.pendingItems.length > 0;
+          const delta = netKitchenDelta(k.pendingVoids, k.order.items || []);
+          const hasPendingItems =
+            delta.stop.length > 0 ||
+            delta.make.length > 0 ||
+            delta.clearVoidIds.length > 0 ||
+            delta.sentLines.length > 0;
           const canMarkDone = k.status === "sent" && !hasPendingItems && k.sentItems.length > 0;
           const isMarkingDone = Boolean(markingDone[k.orderId]);
           const isReprinting = Boolean(reprinting[k.orderId]);
@@ -344,7 +363,15 @@ export default function KOTQueue() {
                 {hasPendingItems && (
                   <>
                     <div className="ui-overline">Pending to print</div>
-                    {k.pendingItems.map((it) => (
+                    {delta.stop.map((it) => (
+                      <div key={`void-${it.name}`} className={styles.line}>
+                        <div className={styles.lineMain}>
+                          <div>Stop {it.name}</div>
+                        </div>
+                        <span className={`${styles.qty} ${styles.qtyPending}`}>x{it.qty}</span>
+                      </div>
+                    ))}
+                    {delta.make.map((it) => (
                       <div key={`pending-${it.id}`} className={styles.line}>
                         <div className={styles.lineMain}>
                           <div>{it.name}</div>
