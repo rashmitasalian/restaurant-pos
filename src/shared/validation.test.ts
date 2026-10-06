@@ -1,3 +1,4 @@
+import { logger } from "../app/utils/logger";
 import {
   clipAttendanceQueryRange,
   hasLetter,
@@ -5,6 +6,7 @@ import {
   isTechnicalErrorMessage,
   isValidIndianMobile,
   isValidPersonName,
+  logSanitizedClientError,
   normalizeClientErrorMessage,
   normalizePhone,
   normalizeText,
@@ -68,6 +70,19 @@ describe("shared validation", () => {
     tomorrow.setDate(tomorrow.getDate() + 1);
     const text = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, "0")}-${String(tomorrow.getDate()).padStart(2, "0")}`;
     expect(isFutureDateOnly(text)).toBe(true);
+  });
+
+  it("logs an unknown failure without throwing", () => {
+    const logs = (logger as unknown as { logs: Array<{ message: string; context?: { errorMsg?: string } }> })
+      .logs;
+    logs.length = 0;
+
+    expect(() => logSanitizedClientError("printer-offline", "Bill printed but could not record it")).not.toThrow();
+    expect(() => logSanitizedClientError(new Error("disk full"), "Could not save")).not.toThrow();
+
+    expect(logs[0]?.message).toBe("[ui] Bill printed but could not record it");
+    expect(logs[0]?.context?.errorMsg).toBe("printer-offline");
+    expect(logs[1]?.context?.errorMsg).toBe("disk full");
   });
 
   it("clips attendance history ranges to today", () => {

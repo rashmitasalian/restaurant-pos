@@ -458,7 +458,7 @@ export function BackupSettingsSection() {
         title="Cloud Backup Recovery Key"
         confirmLabel="I've Saved It"
         cancelLabel="Close"
-        onCancel={() => setRecoveryKey(null)}
+        onClose={() => setRecoveryKey(null)}
         onConfirm={() => setRecoveryKey(null)}
       >
         <p>
@@ -489,7 +489,7 @@ export function BackupSettingsSection() {
         confirmLabel="Restore Backup"
         cancelLabel="Cancel"
         loading={busy === "restore"}
-        onCancel={() => setConfirm(null)}
+        onClose={() => setConfirm(null)}
         onConfirm={() => void runRestore()}
       >
         <p>

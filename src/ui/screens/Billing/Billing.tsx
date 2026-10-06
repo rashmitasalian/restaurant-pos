@@ -46,6 +46,7 @@ import {
   normalizePhone,
   normalizeText,
   parseNonNegativeMoney,
+  logSanitizedClientError,
   validationMessage,
 } from "../../../shared/validation";
 import { TEXT_LIMITS } from "../../../shared/textLimits";
@@ -1759,9 +1760,9 @@ export default function Billing() {
       try {
         await markOrderBillPrinted(order._id);
       } catch (recordError) {
-        logger.error(
+        logSanitizedClientError(
+          recordError,
           "Bill printed but could not record it for review",
-          recordError instanceof Error ? recordError : String(recordError),
         );
       }
       showToast("Bill printed");
