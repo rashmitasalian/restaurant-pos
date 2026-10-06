@@ -11,6 +11,8 @@ export const VALIDATION_MESSAGES: Record<string, string> = {
   "payment-txn-ref-too-long": "Transaction reference must be 40 characters or fewer.",
   "customer-phone-invalid": "Please enter a valid 10-digit Indian mobile number (starts with 6-9).",
   "customer-phone-duplicate": "This phone number is already added.",
+  "customer-address-too-long": "Address must be 250 characters or fewer.",
+  "customer-notes-too-long": "Notes must be 500 characters or fewer.",
   "customer-has-outstanding": "Clear this customer's outstanding balance before removing them.",
   "cannot-delete-order-with-credit":
     "This bill still has unpaid customer credit and cannot be deleted.",

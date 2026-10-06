@@ -8264,8 +8264,8 @@ export const posService = {
         id,
         name,
         phone,
-        input.address || null,
-        input.notes || null,
+        optionalLimitedText(input.address, TEXT_LIMITS.address, "customer-address-too-long"),
+        optionalLimitedText(input.notes, TEXT_LIMITS.notes, "customer-notes-too-long"),
         input.creditEnabled ? 1 : 0,
         input.creditBlocked ? 1 : 0,
         Math.max(0, creditLimitPaise || 0),
@@ -8339,8 +8339,12 @@ export const posService = {
       .run(
         name,
         phone,
-        updates.address ?? current.address,
-        updates.notes ?? current.notes,
+        updates.address === undefined
+          ? current.address
+          : optionalLimitedText(updates.address, TEXT_LIMITS.address, "customer-address-too-long"),
+        updates.notes === undefined
+          ? current.notes
+          : optionalLimitedText(updates.notes, TEXT_LIMITS.notes, "customer-notes-too-long"),
         updates.active === undefined ? current.active : updates.active ? 1 : 0,
         creditEnabled,
         creditBlocked,

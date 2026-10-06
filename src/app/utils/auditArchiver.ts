@@ -3,6 +3,7 @@
  * Archive and manage long-term audit history through the main-process SQLite service.
  */
 
+import { csvCell } from "../../shared/csv";
 import { logger } from "../utils/logger";
 
 export interface AuditArchive {
@@ -75,11 +76,11 @@ export class AuditArchiver {
 
       const headers = ["timestamp", "action", "userId", "orderId", "details"];
       const rows = data.map((log: any) => [
-        new Date(log.timestamp).toISOString(),
-        log.action,
-        log.user || log.userId || "",
-        log.orderId || log.entityId || "",
-        `"${JSON.stringify(log.detail || log.details || {}).replace(/"/g, '""')}"`,
+        csvCell(new Date(log.timestamp).toISOString()),
+        csvCell(log.action),
+        csvCell(log.user || log.userId || ""),
+        csvCell(log.orderId || log.entityId || ""),
+        csvCell(JSON.stringify(log.detail || log.details || {})),
       ]);
 
       return [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");

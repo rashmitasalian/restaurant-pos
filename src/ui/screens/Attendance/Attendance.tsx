@@ -12,6 +12,7 @@ import {
   type StaffDoc,
 } from "../../../app/db/posRepository";
 import { isHolidayDate, isWeeklyOffDay } from "../../../shared/attendanceSchedule";
+import { csvCell } from "../../../shared/csv";
 import { normalizeText, todayDateOnly, validationMessage } from "../../../shared/validation";
 import { TEXT_LIMITS } from "../../../shared/textLimits";
 import type { AttendanceStatus } from "../../../shared/pos";
@@ -191,14 +192,6 @@ function buildInitialRows(staff: StaffDoc[], records: AttendanceDoc[], attendanc
       overtimeMinutes: Number(record?.overtimeMinutes || 0),
     };
   });
-}
-
-function csvCell(value: unknown) {
-  const text = String(value ?? "");
-  if (text.includes(",") || text.includes("\n") || text.includes('"')) {
-    return `"${text.replace(/"/g, '""')}"`;
-  }
-  return text;
 }
 
 function downloadTextFile(fileName: string, content: string, mime: string) {

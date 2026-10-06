@@ -5,6 +5,12 @@ import path from "path";
 const POWERSHELL = "powershell.exe";
 const JOB_TIMEOUT_MS = 20_000;
 
+export function assertRawPrintJob(printerName: string, dataPath: string) {
+  if (!printerName.trim() || /[|\r\n\0]/.test(printerName) || /[|\r\n\0]/.test(dataPath)) {
+    throw new Error("windows-raw-print-invalid-job");
+  }
+}
+
 function buildWorkerScript() {
   return String.raw`
 $ErrorActionPreference = "Stop"
@@ -289,6 +295,7 @@ class WindowsRawPrintWorker {
   }
 
   private async runJob(printerName: string, dataPath: string) {
+    assertRawPrintJob(printerName, dataPath);
     await this.ensureStarted();
     const process = this.process;
     if (!process?.stdin) {

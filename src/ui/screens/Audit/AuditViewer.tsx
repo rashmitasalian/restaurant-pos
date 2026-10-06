@@ -3,6 +3,7 @@ import { countAudits, getAudits } from "../../../app/db/posRepository";
 import { Icon } from "../../components/ui/Icon";
 import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui/Input";
+import { csvCell } from "../../../shared/csv";
 import { TEXT_LIMITS } from "../../../shared/textLimits";
 import { Select } from "../../components/ui/Select";
 import { DataTable } from "../../components/ui/DataTable";
@@ -110,16 +111,14 @@ export default function AuditViewer() {
 
   const toCSV = (rows: any[]) => {
     const header = ["timestamp", "action", "orderId", "user", "detail"];
-    const esc = (s: any) => {
-      if (s === null || s === undefined) {
-        return "";
-      }
-      const str = typeof s === "string" ? s : JSON.stringify(s);
-      if (str.includes(",") || str.includes("\n") || str.includes('"')) {
-        return '"' + str.replace(/"/g, '""') + '"';
-      }
-      return str;
-    };
+    const esc = (value: unknown) =>
+      csvCell(
+        value === null || value === undefined
+          ? ""
+          : typeof value === "string"
+            ? value
+            : JSON.stringify(value),
+      );
     const lines = [header.join(",")];
     for (const r of rows) {
       lines.push(

@@ -1,4 +1,5 @@
 import { parseWindowsPrinterListOutput } from "./windowsRaw";
+import { assertRawPrintJob } from "./windowsRawWorker";
 
 describe("Windows printer list parsing", () => {
   it("parses a single printer name from ConvertTo-Json", () => {
@@ -29,5 +30,17 @@ describe("Windows printer list parsing", () => {
 
   it("returns an empty list for blank PowerShell output", () => {
     expect(parseWindowsPrinterListOutput("   ")).toEqual([]);
+  });
+});
+
+describe("raw print job lines", () => {
+  it("rejects printer names that would split the worker command", () => {
+    expect(() => assertRawPrintJob("Kitchen", "C:\\temp\\job.bin")).not.toThrow();
+    expect(() => assertRawPrintJob("Kitchen|C:\\secret.txt", "C:\\temp\\job.bin")).toThrow(
+      "windows-raw-print-invalid-job",
+    );
+    expect(() => assertRawPrintJob("Kitchen\nEPSON", "C:\\temp\\job.bin")).toThrow(
+      "windows-raw-print-invalid-job",
+    );
   });
 });

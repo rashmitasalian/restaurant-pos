@@ -1,4 +1,5 @@
 import { parse } from "csv-parse/sync";
+import { restoreSpreadsheetText, neutralizeSpreadsheetFormula } from "./csv";
 import { TEXT_LIMITS } from "./textLimits";
 
 export const MENU_IMPORT_HEADERS = [
@@ -292,10 +293,10 @@ export function validateMenuCsv(
 
   for (const { record, info } of records) {
     const row = info.lines;
-    const category = menuDisplayName(record.category);
-    const name = menuDisplayName(record.item);
-    const variant = menuDisplayName(record.variant);
-    const sku = menuDisplayName(record.sku) || null;
+    const category = restoreSpreadsheetText(menuDisplayName(record.category));
+    const name = restoreSpreadsheetText(menuDisplayName(record.item));
+    const variant = restoreSpreadsheetText(menuDisplayName(record.variant));
+    const sku = restoreSpreadsheetText(menuDisplayName(record.sku)) || null;
     let priceText = String(record.price ?? "").trim();
     const legacyVariantPrice = String(record[LEGACY_VARIANT_PRICE] ?? "").trim();
 
@@ -790,8 +791,8 @@ export type MenuExportItem = {
 };
 
 function csvCell(value: unknown) {
-  const text = String(value ?? "");
-  return /[",\r\n]|^\s|\s$/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+  const safe = neutralizeSpreadsheetFormula(String(value ?? ""));
+  return /[",\r\n]|^\s|\s$/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
 }
 
 function exportMoney(value: number) {

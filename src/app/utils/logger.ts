@@ -3,6 +3,8 @@
  * Structured logging with file persistence for audit trail
  */
 
+import { csvCell } from "../../shared/csv";
+
 interface LogEntry {
   timestamp: string;
   level: "info" | "warn" | "error" | "debug";
@@ -134,10 +136,10 @@ class Logger {
 
     const headers = ["timestamp", "level", "message", "context"];
     const rows = this.logs.map((log) => [
-      log.timestamp,
-      log.level,
-      `"${log.message.replace(/"/g, '""')}"`,
-      log.context ? `"${JSON.stringify(log.context).replace(/"/g, '""')}"` : "",
+      csvCell(log.timestamp),
+      csvCell(log.level),
+      csvCell(log.message),
+      log.context ? csvCell(JSON.stringify(log.context)) : "",
     ]);
 
     return [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");

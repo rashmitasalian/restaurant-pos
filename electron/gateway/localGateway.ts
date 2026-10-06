@@ -18,6 +18,9 @@ import {
   type LanSession,
 } from "../services/lanSessionManager";
 import { onDomainEvent, publishDomainEvent, type DomainEvent } from "../services/domainEvents";
+import { resolveCaptainStaticPath } from "./captainStaticPath";
+import { publicGatewayError } from "./gatewayError";
+import { pairingAttempts } from "./pairingThrottle";
 
 export const GATEWAY_DEFAULT_PORT = Number(process.env.POS_GATEWAY_PORT || 4747);
 const SSE_HEARTBEAT_MS = 20_000;
@@ -96,6 +99,10 @@ function bearerToken(req: http.IncomingMessage) {
   const header = String(req.headers.authorization || "");
   const match = /^Bearer\s+(.+)$/i.exec(header);
   return match ? match[1].trim() : null;
+}
+
+function gatewayClientKey(req: http.IncomingMessage) {
+  return String(req.socket.remoteAddress || "unknown").replace(/^::ffff:/i, "");
 }
 
 function requireLanAuth(req: http.IncomingMessage, permission?: Permission): LanSession {
@@ -237,20 +244,17 @@ function serveCaptainStatic(req: http.IncomingMessage, res: http.ServerResponse,
     });
     return;
   }
-  let rel = decodeURIComponent(url.pathname);
-  if (rel === "/" || rel === "") {
-    rel = "/captain/index.html";
-  } else if (!rel.startsWith("/assets/") && !rel.startsWith("/captain/")) {
-    rel = `/captain${rel.startsWith("/") ? rel : `/${rel}`}`;
-  }
-  const safeRel = path.normalize(rel).replace(/^(\.\.[/\\])+/, "");
-  let filePath = path.join(root, safeRel);
-  if (!filePath.startsWith(root)) {
+  let filePath = resolveCaptainStaticPath(root, url.pathname);
+  if (!filePath) {
     json(res, 403, { ok: false, error: "forbidden" });
     return;
   }
   if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
-    filePath = path.join(root, "captain", "index.html");
+    filePath = resolveCaptainStaticPath(root, "/captain/index.html");
+  }
+  if (!filePath) {
+    json(res, 403, { ok: false, error: "forbidden" });
+    return;
   }
   res.writeHead(200, {
     "Content-Type": contentTypeFor(filePath),
@@ -388,11 +392,23 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
 
     if (method === "POST" && url.pathname === "/api/auth/login") {
       const body = await readBody(req);
+      const clientKey = gatewayClientKey(req);
+      const pairingGate = pairingAttempts.status(clientKey);
+      if (!pairingGate.ok) {
+        json(res, 429, {
+          ok: false,
+          error: "pairing-locked",
+          retryAfterSeconds: pairingGate.retryAfterSeconds,
+        });
+        return;
+      }
       const pairingCode = normalizeText(body.pairingCode);
       if (!pairingCode || pairingCode.toLowerCase() !== state.pairingCode.toLowerCase()) {
+        pairingAttempts.recordFailure(clientKey);
         json(res, 403, { ok: false, error: "invalid-pairing-code" });
         return;
       }
+      pairingAttempts.recordSuccess(clientKey);
       const result = posService.loginForGateway(
         String(body.username || ""),
         String(body.password || ""),
@@ -618,7 +634,7 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
                 message === "invalid-json"
               ? 400
               : 500;
-    json(res, status, { ok: false, error: message });
+    json(res, status, { ok: false, error: publicGatewayError(message) });
   }
 }
 
