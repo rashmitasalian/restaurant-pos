@@ -160,6 +160,7 @@ export default function OwnerReview({ onOpenHistory }: { onOpenHistory?: () => v
     { id: "all", label: "All", count: itemCounts.needsReview },
     { id: "item_void", label: "Item voids", count: itemCounts.itemVoids },
     { id: "discount_applied", label: "Discount applied", count: itemCounts.discountsApplied },
+    { id: "line_price_changed", label: "Price changed", count: itemCounts.priceChanges },
     {
       id: "cancellation_after_kot",
       label: "Cancelled after KOT",
@@ -170,7 +171,7 @@ export default function OwnerReview({ onOpenHistory }: { onOpenHistory?: () => v
   return (
     <ManageShell
       title="Owner Review"
-      description="Review voids, discounts, and cancellations after KOT"
+      description="Review voids, discounts, price changes, and cancellations after KOT"
       width="full"
       primaryAction={
         <Button variant="secondary" onClick={() => void load()} loading={loading}>
@@ -252,7 +253,7 @@ export default function OwnerReview({ onOpenHistory }: { onOpenHistory?: () => v
             text={
               selectedStaffName
                 ? `No matching activity for ${selectedStaffName} in this period.`
-                : "No item voids, discounts, or cancellation after KOT in this period."
+                : "No item voids, discounts, price changes, or cancellation after KOT in this period."
             }
           />
         ) : (

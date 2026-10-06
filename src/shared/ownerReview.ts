@@ -13,6 +13,7 @@ export const ORDER_LIFECYCLE_AUDIT_ACTIONS = [
   "order.kot.done",
   "order.kot.printed",
   "order.discount.updated",
+  "order.line.rate_override",
   "order.bill.printed",
   "order.status.updated",
   "order.paid",
@@ -25,12 +26,14 @@ export type ReviewRuleId =
   | "cancellation_after_kot"
   | "item_void"
   | "discount_applied"
+  | "line_price_changed"
   | "repeated_cancellations";
 
 export const REVIEW_RULE_LABELS: Record<ReviewRuleId, string> = {
   cancellation_after_kot: "Cancelled after KOT",
   item_void: "Item void",
   discount_applied: "Discount applied",
+  line_price_changed: "Price changed",
   repeated_cancellations: "Repeated cancellations",
 };
 
@@ -38,6 +41,7 @@ export const REVIEW_RULE_SHORT_LABELS: Record<ReviewRuleId, string> = {
   cancellation_after_kot: "After KOT",
   item_void: "Item void",
   discount_applied: "Discount",
+  line_price_changed: "Price",
   repeated_cancellations: "Repeated",
 };
 
@@ -45,6 +49,7 @@ export const REVIEW_RULE_WHY: Record<ReviewRuleId, string> = {
   cancellation_after_kot: "The order was cancelled after kitchen items had already been sent.",
   item_void: "A sent kitchen item was voided or reduced after KOT was sent.",
   discount_applied: "A discount was applied to this order.",
+  line_price_changed: "A menu item was charged at a different price than the menu.",
   repeated_cancellations: "This staff member cancelled multiple orders in this period.",
 };
 
@@ -52,6 +57,7 @@ export const REVIEW_RULE_WHY: Record<ReviewRuleId, string> = {
 export const PRIMARY_REVIEW_RULES: ReviewRuleId[] = [
   "item_void",
   "discount_applied",
+  "line_price_changed",
   "cancellation_after_kot",
 ];
 
@@ -65,6 +71,7 @@ export const TIMELINE_ACTION_LABELS: Record<string, string> = {
   "order.kot.done": "KOT completed",
   "order.kot.printed": "KOT printed",
   "order.discount.updated": "Discount applied",
+  "order.line.rate_override": "Price changed",
   "order.bill.printed": "Bill printed",
   "order.status.updated": "Status updated",
   "order.paid": "Payment recorded",
@@ -130,6 +137,23 @@ export type ReviewDiscountEvent = {
   meta?: Record<string, unknown>;
 };
 
+export type ReviewRateEvent = {
+  auditId: string;
+  orderId: string;
+  lineId: string;
+  timestamp: number;
+  actor: string | null;
+  itemName?: string | null;
+  menuPrice: number;
+  chargedRate: number;
+  active: boolean;
+  amount?: number;
+  tableId?: number | null;
+  tableName?: string | null;
+  createdAt?: number | null;
+  meta?: Record<string, unknown>;
+};
+
 export type ReviewItemDto = {
   id: string;
   rule: ReviewRuleId;
@@ -155,6 +179,8 @@ export type ReviewItemDto = {
   discountAmount?: number | null;
   previousDiscountMode?: "percent" | "amount" | null;
   previousDiscountAmount?: number | null;
+  menuPrice?: number | null;
+  chargedRate?: number | null;
 };
 
 export type ReviewSummaryDto = {
@@ -163,6 +189,7 @@ export type ReviewSummaryDto = {
   needsReview: number;
   itemVoids: number;
   discountsApplied: number;
+  priceChanges: number;
   cancellationAfterKot: number;
   repeatedCancellations: number;
 };
@@ -201,6 +228,7 @@ const OWNER_TIMELINE_ACTIONS = new Set([
   "order.kot.failed",
   "order.kot.void",
   "order.discount.updated",
+  "order.line.rate_override",
   "order.bill.printed",
   "order.paid",
   "order.cancelled",
@@ -299,6 +327,8 @@ export function reviewWhatHappened(
     | "discountAmount"
     | "previousDiscountMode"
     | "previousDiscountAmount"
+    | "menuPrice"
+    | "chargedRate"
   >,
 ): string {
   if (item.rule === "item_void") {
@@ -319,6 +349,12 @@ export function reviewWhatHappened(
     }
     return "Discount applied";
   }
+  if (item.rule === "line_price_changed") {
+    const menu = formatInrAmount(Number(item.menuPrice));
+    const charged = formatInrAmount(Number(item.chargedRate));
+    const name = String(item.itemName || "").trim();
+    return [name, `menu ${menu}`, `charged ${charged}`].filter(Boolean).join(" · ");
+  }
   if (item.rule === "cancellation_after_kot") {
     return "Cancelled after kitchen ticket";
   }
@@ -335,6 +371,8 @@ export function reviewHeadline(
     | "discountPercent"
     | "discountMode"
     | "discountAmount"
+    | "menuPrice"
+    | "chargedRate"
   >,
   actorDisplay?: string | null,
 ): string {
@@ -347,6 +385,10 @@ export function reviewHeadline(
     const label = formatDiscountLabel(item.discountMode, item.discountPercent, item.discountAmount);
     const amount = label ? ` a ${label} discount` : " a discount";
     return `${who} applied${amount}.`;
+  }
+  if (item.rule === "line_price_changed") {
+    const name = String(item.itemName || "a menu item").trim() || "a menu item";
+    return `${who} charged ${name} at ${formatInrAmount(Number(item.chargedRate))}. The menu price is ${formatInrAmount(Number(item.menuPrice))}.`;
   }
   if (item.rule === "cancellation_after_kot") {
     return `${who} cancelled this order after KOT was sent. No payment was recorded.`;
@@ -366,6 +408,8 @@ export function reviewQueueFact(
     | "billPrintedAt"
     | "discountPercent"
     | "previousDiscountPercent"
+    | "menuPrice"
+    | "chargedRate"
   >,
   actorDisplay?: string | null,
 ): string {
@@ -373,7 +417,7 @@ export function reviewQueueFact(
   if (item.rule === "item_void") {
     return [who, namedItem(item.itemName, item.voidQty), item.reason].filter(Boolean).join(" · ");
   }
-  if (item.rule === "discount_applied") {
+  if (item.rule === "discount_applied" || item.rule === "line_price_changed") {
     return [who, reviewWhatHappened(item)].filter(Boolean).join(" · ");
   }
   return [
@@ -396,6 +440,7 @@ export function buildReviewItems(input: {
   cancelledOrders: ReviewOrderSnapshot[];
   voidEvents: ReviewVoidEvent[];
   discountEvents?: ReviewDiscountEvent[];
+  rateEvents?: ReviewRateEvent[];
   cancelCountsByActor: Record<string, number>;
   actorFilter?: string | null;
   threshold?: number;
@@ -516,6 +561,60 @@ export function buildReviewItems(input: {
     });
   }
 
+  const rateByLine = new Map<string, ReviewRateEvent>();
+  for (const event of input.rateEvents || []) {
+    if (filter && actorKey(event.actor) !== filter) {
+      continue;
+    }
+    const orderKey = String(event.orderId || "").trim();
+    const lineKey = String(event.lineId || "").trim();
+    if (!orderKey || !lineKey) {
+      continue;
+    }
+    const key = `${orderKey}:${lineKey}`;
+    const existing = rateByLine.get(key);
+    if (!existing || Number(event.timestamp || 0) >= Number(existing.timestamp || 0)) {
+      rateByLine.set(key, event);
+    }
+  }
+
+  for (const event of rateByLine.values()) {
+    if (!event.active) {
+      continue;
+    }
+    const menuPrice = Number(event.menuPrice);
+    const chargedRate = Number(event.chargedRate);
+    if (!Number.isFinite(menuPrice) || !Number.isFinite(chargedRate)) {
+      continue;
+    }
+    if (Math.round(menuPrice * 100) === Math.round(chargedRate * 100)) {
+      continue;
+    }
+    items.push({
+      id: `line_price_changed:${event.auditId}`,
+      rule: "line_price_changed",
+      label: REVIEW_RULE_LABELS.line_price_changed,
+      why: REVIEW_RULE_WHY.line_price_changed,
+      orderId: event.orderId,
+      orderLabel: reviewOrderLabel({
+        _id: event.orderId,
+        meta: event.meta,
+        tableName: event.tableName,
+        tableId: event.tableId,
+      }),
+      tableId: event.tableId ?? null,
+      tableName: event.tableName || null,
+      actor: event.actor,
+      createdAt: Number(event.createdAt || event.timestamp || 0),
+      occurredAt: Number(event.timestamp || 0),
+      cancelledAt: null,
+      amount: Number(event.amount || 0),
+      itemName: event.itemName || null,
+      menuPrice,
+      chargedRate,
+    });
+  }
+
   return items.sort((a, b) => b.occurredAt - a.occurredAt || a.orderId.localeCompare(b.orderId));
 }
 
@@ -528,6 +627,7 @@ export function summarizeReviewItems(
   | "repeatedCancellations"
   | "itemVoids"
   | "discountsApplied"
+  | "priceChanges"
 > {
   return {
     needsReview: items.length,
@@ -535,13 +635,18 @@ export function summarizeReviewItems(
     repeatedCancellations: items.filter((item) => item.rule === "repeated_cancellations").length,
     itemVoids: items.filter((item) => item.rule === "item_void").length,
     discountsApplied: items.filter((item) => item.rule === "discount_applied").length,
+    priceChanges: items.filter((item) => item.rule === "line_price_changed").length,
   };
 }
 
 export function reviewCountForRule(
   counts: Pick<
     ReviewSummaryDto,
-    "cancellationAfterKot" | "itemVoids" | "discountsApplied" | "repeatedCancellations"
+    | "cancellationAfterKot"
+    | "itemVoids"
+    | "discountsApplied"
+    | "priceChanges"
+    | "repeatedCancellations"
   >,
   rule: ReviewRuleId,
 ): number {
@@ -553,6 +658,9 @@ export function reviewCountForRule(
   }
   if (rule === "discount_applied") {
     return counts.discountsApplied;
+  }
+  if (rule === "line_price_changed") {
+    return counts.priceChanges;
   }
   return counts.repeatedCancellations;
 }
@@ -612,6 +720,20 @@ export function timelineEventDetail(
   const detail = detailObject(event.detail);
   if (event.action === "item.added") {
     return timelineItemLine(detail);
+  }
+  if (event.action === "order.line.rate_override") {
+    const name = detail.name != null ? String(detail.name) : "";
+    const menu =
+      detail.menuPrice != null && Number.isFinite(Number(detail.menuPrice))
+        ? formatInrAmount(Number(detail.menuPrice))
+        : "";
+    const charged =
+      detail.chargedRate != null && Number.isFinite(Number(detail.chargedRate))
+        ? formatInrAmount(Number(detail.chargedRate))
+        : "";
+    return [name, menu ? `menu ${menu}` : "", charged ? `charged ${charged}` : ""]
+      .filter(Boolean)
+      .join(" · ");
   }
   if (event.action === "order.discount.updated") {
     const previous = formatDiscountLabel(
@@ -673,6 +795,9 @@ function highlightActionForRule(rule: ReviewRuleId): string {
   }
   if (rule === "discount_applied") {
     return "order.discount.updated";
+  }
+  if (rule === "line_price_changed") {
+    return "order.line.rate_override";
   }
   return "order.cancelled";
 }
@@ -772,6 +897,9 @@ export function reviewMilestones(
   }
   if (item.rule === "discount_applied" && item.occurredAt) {
     milestones.push({ label: "Discount", timestamp: item.occurredAt });
+  }
+  if (item.rule === "line_price_changed" && item.occurredAt) {
+    milestones.push({ label: "Price changed", timestamp: item.occurredAt });
   }
   if (item.cancelledAt) {
     milestones.push({ label: "Cancelled", timestamp: item.cancelledAt });

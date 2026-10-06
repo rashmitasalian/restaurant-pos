@@ -92,6 +92,9 @@ function createMockDb() {
             if (sql.includes("action = 'order.discount.updated'")) {
               return db.auditRows.filter((row: any) => row.action === "order.discount.updated");
             }
+            if (sql.includes("action = 'order.line.rate_override'")) {
+              return db.auditRows.filter((row: any) => row.action === "order.line.rate_override");
+            }
             if (sql.includes("action = 'order.kot.void'")) {
               return db.auditRows.filter((row: any) => row.action === "order.kot.void");
             }
@@ -625,6 +628,52 @@ describe("posService strict SQLite APIs", () => {
     );
   });
 
+  it("keeps the server kitchen-sent quantity when a line update tries to clear it", () => {
+    mockDb.orderById = {
+      id: "order:1",
+      order_type: "table",
+      table_id: 3,
+      status: "open",
+      kot_status: "sent",
+      discount_percent: 0,
+      subtotal_paise: 16000,
+      tax_total_paise: 0,
+      discount_total_paise: 0,
+      total_paise: 16000,
+      invoice_number: null,
+      paid_at: null,
+      meta_json: "{}",
+      created_at: 1000,
+      updated_at: 1000,
+    };
+    mockDb.lineRows.set("order:1", [
+      {
+        id: "line:1",
+        menu_item_id: "item:dosa",
+        item_name: "Dosa",
+        quantity: 2,
+        rate_paise: 8000,
+        tax_rate_bps: 0,
+        kot_printed_qty: 2,
+      },
+    ]);
+
+    posService.updateOrderLines("order:1", [
+      {
+        id: "line:1",
+        menuItemId: null,
+        name: "Dosa",
+        qty: 2,
+        rate: 80,
+        kotPrintedQty: 0,
+      },
+    ]);
+
+    const insert = mockDb.calls.find((call: any) => call.sql.includes("INSERT INTO order_lines"));
+    expect(insert?.params[2]).toBe("item:dosa");
+    expect(insert?.params[9]).toBe(2);
+  });
+
   it("voids sent KOT quantity with a reason and adjusts the line", () => {
     mockDb.orderById = {
       id: "order:1",
@@ -1036,6 +1085,51 @@ describe("posService strict SQLite APIs", () => {
     expect(posService.getStaffActivity({ from: 500, to: 4000 })[0]?.discounts).toBe(1);
   });
 
+  it("lists a table price change in Owner Review from the rate audit", () => {
+    mockDb.orderById = {
+      id: "order:g1",
+      order_type: "table",
+      table_id: 1,
+      status: "open",
+      kot_status: "pending",
+      discount_percent: 0,
+      subtotal_paise: 3000,
+      tax_total_paise: 0,
+      discount_total_paise: 0,
+      total_paise: 3000,
+      invoice_number: null,
+      paid_at: null,
+      meta_json: "{}",
+      created_at: 1000,
+      updated_at: 1500,
+      created_by: "rahul",
+    };
+    mockDb.lineRows.set("order:g1", []);
+    mockDb.auditRows = [
+      {
+        id: "audit:rate-1",
+        action: "order.line.rate_override",
+        entity_type: "order",
+        entity_id: "order:g1",
+        user: "rahul",
+        detail_json: JSON.stringify({
+          lineId: "line:naan",
+          name: "Butter Naan",
+          menuPrice: 40,
+          chargedRate: 30,
+          active: true,
+        }),
+        timestamp: 1500,
+      },
+    ];
+
+    const items = posService.listReviewItems({ from: 500, to: 4000 });
+    const price = items.find((item) => item.rule === "line_price_changed");
+    expect(price?.itemName).toBe("Butter Naan");
+    expect(price?.menuPrice).toBe(40);
+    expect(price?.chargedRate).toBe(30);
+  });
+
   it("does not prune order-lifecycle audit events", () => {
     posService.pruneAuditLogs();
     const prune = mockDb.calls.find((call: any) => call.sql.includes("DELETE FROM audit_logs"));
@@ -1044,5 +1138,6 @@ describe("posService strict SQLite APIs", () => {
     expect(prune!.params).toContain("order.cancelled");
     expect(prune!.params).toContain("order.kot.void");
     expect(prune!.params).toContain("order.bill.printed");
+    expect(prune!.params).toContain("order.line.rate_override");
   });
 });

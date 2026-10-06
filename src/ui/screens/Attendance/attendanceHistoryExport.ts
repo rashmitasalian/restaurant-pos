@@ -1,5 +1,5 @@
-import * as XLSX from "xlsx";
 import type { HistoryMatrix, HistoryPeriod } from "./historyUtils";
+import { writeXlsxFile, type XlsxSheet } from "../../../shared/xlsxWrite";
 import { exportStatusCode, formatDayHeader, formatOtHoursTotal } from "./historyUtils";
 
 const SUMMARY_HEADER = [
@@ -96,33 +96,26 @@ export function exportAttendanceHistoryExcel(input: {
   period?: HistoryPeriod;
 }) {
   const period = input.period ?? "month";
-  const workbook = XLSX.utils.book_new();
-
-  XLSX.utils.book_append_sheet(
-    workbook,
-    XLSX.utils.aoa_to_sheet(
-      buildSummarySheetRows({
+  const sheets: XlsxSheet[] = [
+    {
+      name: "Summary",
+      rows: buildSummarySheetRows({
         scopeLabel: input.scopeLabel,
         shiftLabel: input.shiftLabel,
         matrix: input.matrix,
       }),
-    ),
-    "Summary",
-  );
-
-  XLSX.utils.book_append_sheet(
-    workbook,
-    XLSX.utils.aoa_to_sheet(
-      buildRegisterSheetRows({
+    },
+    {
+      name: sanitizeSheetName(registerTitle(period)),
+      rows: buildRegisterSheetRows({
         scopeLabel: input.scopeLabel,
         shiftLabel: input.shiftLabel,
         matrix: input.matrix,
         period,
       }),
-    ),
-    sanitizeSheetName(registerTitle(period)),
-  );
+    },
+  ];
 
   const fileName = input.fileName.replace(/\.csv$/i, ".xlsx");
-  XLSX.writeFile(workbook, fileName);
+  writeXlsxFile(fileName, sheets);
 }

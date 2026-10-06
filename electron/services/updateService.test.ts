@@ -32,7 +32,7 @@ jest.mock("./posService", () => ({
 
 import { app, shell } from "electron";
 import { execFileSync } from "child_process";
-import { createHash } from "crypto";
+import { createHash, generateKeyPairSync } from "crypto";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -44,6 +44,8 @@ import {
   validateSqliteBackup,
 } from "../db/sqlite";
 import { posService } from "./posService";
+import { rawPublicKeyFromPem } from "../licensing/licenseCrypto";
+import { signUpdateManifest } from "../licensing/updateManifest";
 import {
   compareVersions,
   UpdateService,
@@ -69,6 +71,13 @@ function sha256(data: string | Buffer) {
   return createHash("sha256").update(data).digest("hex");
 }
 
+const updateKeyPair = generateKeyPairSync("ed25519");
+const updatePrivatePem = updateKeyPair.privateKey.export({ type: "pkcs8", format: "pem" });
+if (typeof updatePrivatePem !== "string") {
+  throw new Error("update-test-key");
+}
+const updatePublicKey = rawPublicKeyFromPem(updatePrivatePem);
+
 function createService() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "pos-update-"));
   process.env.LOCALAPPDATA = root;
@@ -76,7 +85,7 @@ function createService() {
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });
   fs.writeFileSync(dbPath, "database");
   getDatabasePathMock.mockReturnValue(dbPath);
-  const service = new UpdateService();
+  const service = new UpdateService(updatePublicKey);
   service.ensureUpdateDirs();
   return { service, root, dbPath, paths: service.getPaths() };
 }
@@ -93,8 +102,8 @@ function restoreEnv(name: string, value: string | undefined) {
   }
 }
 
-function validManifest(overrides: Partial<UpdateManifest> = {}): UpdateManifest {
-  return {
+function validManifest(overrides: Partial<UpdateManifest> = {}): UpdateManifest & { signature: string } {
+  const body = {
     version: "1.1.0",
     installerUrl: "https://updates.example.com/RestaurantPOS-1.1.0.exe",
     sha256: sha256("target-installer"),
@@ -103,6 +112,10 @@ function validManifest(overrides: Partial<UpdateManifest> = {}): UpdateManifest 
     installerSizeBytes: 20,
     notes: ["Improved printing"],
     ...overrides,
+  };
+  return {
+    ...body,
+    signature: signUpdateManifest(body, updatePrivatePem),
   };
 }
 
@@ -174,17 +187,25 @@ describe("updateService", () => {
   });
 
   it("validates manifest version, HTTPS installer URL, and SHA256 presence", () => {
-    expect(validateManifest(validManifest())).toMatchObject({
+    expect(validateManifest(validManifest(), updatePublicKey)).toMatchObject({
       version: "1.1.0",
       installerUrl: "https://updates.example.com/RestaurantPOS-1.1.0.exe",
       sha256: sha256("target-installer"),
     });
 
-    expect(() => validateManifest(validManifest({ version: "latest" }))).toThrow("invalid-version");
+    const tampered = validManifest();
+    tampered.installerUrl = "https://evil.example/app.exe";
+    expect(() => validateManifest(tampered, updatePublicKey)).toThrow("manifest-signature-invalid");
+    expect(() => validateManifest({ version: "latest", signature: "not-a-signature" }, updatePublicKey)).toThrow(
+      "manifest-signature-invalid",
+    );
+    expect(() => validateManifest(validManifest({ version: "latest" }), updatePublicKey)).toThrow(
+      "invalid-version",
+    );
     expect(() =>
-      validateManifest(validManifest({ installerUrl: "http://updates.example.com/app.exe" })),
+      validateManifest(validManifest({ installerUrl: "http://updates.example.com/app.exe" }), updatePublicKey),
     ).toThrow("installer-url-must-use-https");
-    expect(() => validateManifest(validManifest({ sha256: "" }))).toThrow(
+    expect(() => validateManifest(validManifest({ sha256: "" }), updatePublicKey)).toThrow(
       "installer-sha256-required",
     );
   });

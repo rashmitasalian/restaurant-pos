@@ -123,8 +123,14 @@ export function inTransaction<T>(fn: (database: SqliteDatabase) => T): T {
 }
 
 async function openDatabase(): Promise<SqliteDatabase> {
-  const BetterSqlite3 = require("better-sqlite3");
-  return new BetterSqlite3(getDatabasePath());
+  const databasePath = getDatabasePath();
+  // Jest and maintenance scripts keep a plaintext file. The installed app does not.
+  if (process.env.POS_DB_PATH_OVERRIDE?.trim()) {
+    const BetterSqlite3 = require("better-sqlite3");
+    return new BetterSqlite3(databasePath);
+  }
+  const { openPosDatabase } = require("./sqlcipher") as typeof import("./sqlcipher");
+  return openPosDatabase(databasePath);
 }
 
 export function validateSqliteBackup(filePath: string) {
@@ -1748,6 +1754,16 @@ function runSchema(database: SqliteDatabase) {
     "line_status",
     "TEXT NOT NULL DEFAULT 'pending'",
   );
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS login_lockouts (
+      subject TEXT NOT NULL,
+      kind TEXT NOT NULL CHECK (kind IN ('password', 'recovery')),
+      failed_count INTEGER NOT NULL DEFAULT 0,
+      locked_until INTEGER NOT NULL DEFAULT 0,
+      updated_at INTEGER NOT NULL,
+      PRIMARY KEY (subject, kind)
+    );
+  `);
 }
 
 function runMigration(

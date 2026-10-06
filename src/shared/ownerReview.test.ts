@@ -170,6 +170,7 @@ describe("owner review rules", () => {
       repeatedCancellations: 0,
       itemVoids: 1,
       discountsApplied: 0,
+      priceChanges: 0,
     });
     expect(reviewCountForRule(summarizeReviewItems(items), "item_void")).toBe(1);
   });
@@ -239,6 +240,86 @@ describe("owner review rules", () => {
     expect(items[0].rule).toBe("discount_applied");
     expect(items[0].actor).toBe("admin");
     expect(items[0].occurredAt).toBe(20);
+  });
+
+  it("flags a menu line charged at a different price and drops it when the rate is restored", () => {
+    const items = buildReviewItems({
+      cancelledOrders: [],
+      voidEvents: [],
+      rateEvents: [
+        {
+          auditId: "audit:rate-1",
+          orderId: "order:g1",
+          lineId: "line:naan",
+          timestamp: 10,
+          actor: "rahul",
+          itemName: "Butter Naan",
+          menuPrice: 40,
+          chargedRate: 30,
+          active: true,
+          amount: 30,
+          tableName: "G1",
+          tableId: 1,
+        },
+        {
+          auditId: "audit:rate-2",
+          orderId: "order:g1",
+          lineId: "line:naan",
+          timestamp: 20,
+          actor: "rahul",
+          itemName: "Butter Naan",
+          menuPrice: 40,
+          chargedRate: 40,
+          active: false,
+          amount: 40,
+          tableName: "G1",
+        },
+        {
+          auditId: "audit:rate-3",
+          orderId: "order:g2",
+          lineId: "line:naan-2",
+          timestamp: 15,
+          actor: "priya",
+          itemName: "Butter Naan",
+          menuPrice: 40,
+          chargedRate: 40,
+          active: true,
+          tableName: "G2",
+        },
+      ],
+      cancelCountsByActor: {},
+    });
+    expect(items).toEqual([]);
+
+    const open = buildReviewItems({
+      cancelledOrders: [],
+      voidEvents: [],
+      rateEvents: [
+        {
+          auditId: "audit:rate-1",
+          orderId: "order:g1",
+          lineId: "line:naan",
+          timestamp: 10,
+          actor: "rahul",
+          itemName: "Butter Naan",
+          menuPrice: 40,
+          chargedRate: 30,
+          active: true,
+          amount: 30,
+          tableName: "G1",
+          tableId: 1,
+        },
+      ],
+      cancelCountsByActor: {},
+    });
+    expect(open).toHaveLength(1);
+    expect(open[0].rule).toBe("line_price_changed");
+    expect(open[0].orderLabel).toBe("G1");
+    expect(reviewWhatHappened(open[0])).toBe("Butter Naan · menu ₹40 · charged ₹30");
+    expect(reviewHeadline(open[0], "Rahul")).toBe(
+      "Rahul charged Butter Naan at ₹30. The menu price is ₹40.",
+    );
+    expect(summarizeReviewItems(open).priceChanges).toBe(1);
   });
 
   it("uses operational timeline labels", () => {

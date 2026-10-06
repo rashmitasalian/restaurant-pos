@@ -14,6 +14,8 @@ import {
   validateSqliteBackup,
 } from "../db/sqlite";
 import { posService } from "./posService";
+import { updatePublicKeyRaw } from "../licensing/publicKey";
+import { verifyUpdateManifestSignature } from "../licensing/updateManifest";
 
 export type UpdateManifest = {
   version: string;
@@ -199,11 +201,22 @@ async function downloadFile(url: string, targetPath: string) {
   fs.writeFileSync(targetPath, data);
 }
 
-export function validateManifest(input: unknown): UpdateManifest {
-  const manifest = input as Partial<UpdateManifest>;
-  if (!manifest || typeof manifest !== "object") {
+export function validateManifest(
+  input: unknown,
+  publicKey: Buffer = updatePublicKeyRaw(),
+): UpdateManifest {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
     throw new Error("manifest-invalid");
   }
+  const signed = input as Record<string, unknown>;
+  const signature = signed.signature;
+  if (
+    typeof signature !== "string" ||
+    !verifyUpdateManifestSignature(signed, signature, publicKey)
+  ) {
+    throw new Error("manifest-signature-invalid");
+  }
+  const manifest = signed as Partial<UpdateManifest>;
   parseVersion(String(manifest.version || ""));
   assertHttpsUrl(String(manifest.installerUrl || ""), "installer-url");
   if (!normalizeHash(String(manifest.sha256 || ""))) {
@@ -348,6 +361,12 @@ function createZip(entries: Array<{ name: string; data: Buffer | string }>) {
 }
 
 export class UpdateService {
+  private readonly manifestPublicKey: Buffer;
+
+  constructor(manifestPublicKey?: Buffer) {
+    this.manifestPublicKey = manifestPublicKey || updatePublicKeyRaw();
+  }
+
   getUpdateRoot() {
     const localAppData = process.env.LOCALAPPDATA || path.dirname(app.getPath("userData"));
     return path.join(localAppData, "RestaurantPOS", "Updates");
@@ -418,8 +437,9 @@ export class UpdateService {
       };
     }
     assertHttpsUrl(manifestUrl, "manifest-url");
-    const manifest = validateManifest(await downloadJson<unknown>(manifestUrl));
-    writeJson(this.getPaths().manifest, manifest);
+    const downloaded = await downloadJson<unknown>(manifestUrl);
+    const manifest = validateManifest(downloaded, this.manifestPublicKey);
+    writeJson(this.getPaths().manifest, downloaded);
     const currentVersion = app.getVersion();
     const updateAvailable = compareVersions(manifest.version, currentVersion) > 0;
     this.appendHistory("update.check", {
@@ -515,7 +535,7 @@ export class UpdateService {
     if (!manifest) {
       throw new Error("update-manifest-not-checked");
     }
-    const validManifest = validateManifest(manifest);
+    const validManifest = validateManifest(manifest, this.manifestPublicKey);
     if (compareVersions(validManifest.version, app.getVersion()) <= 0) {
       throw new Error("update-not-newer");
     }

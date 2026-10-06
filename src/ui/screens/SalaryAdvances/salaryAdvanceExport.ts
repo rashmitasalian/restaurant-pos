@@ -1,5 +1,5 @@
-import * as XLSX from "xlsx";
 import type { SalaryAdvanceDto } from "../../../shared/pos";
+import { writeXlsxFile, type XlsxSheet } from "../../../shared/xlsxWrite";
 import type { EmployeeAdvanceSummary } from "./salaryAdvanceUtils";
 import { formatMoneyPlain } from "./salaryAdvanceUtils";
 
@@ -81,36 +81,30 @@ export function exportSalaryAdvancesExcel(input: {
   summaries: EmployeeAdvanceSummary[];
   transactions: SalaryAdvanceDto[];
 }) {
-  const workbook = XLSX.utils.book_new();
   const fileName = input.fileName.replace(/\.csv$/i, ".xlsx");
+  const sheets: XlsxSheet[] = [];
 
   if (input.mode === "summary" || input.mode === "both") {
-    XLSX.utils.book_append_sheet(
-      workbook,
-      XLSX.utils.aoa_to_sheet(
-        buildSummarySheetRows({
-          scopeLabel: input.scopeLabel,
-          summaries: input.summaries,
-        }),
-      ),
-      sanitizeSheetName("Summary"),
-    );
+    sheets.push({
+      name: sanitizeSheetName("Summary"),
+      rows: buildSummarySheetRows({
+        scopeLabel: input.scopeLabel,
+        summaries: input.summaries,
+      }),
+    });
   }
 
   if (input.mode === "transactions" || input.mode === "both") {
-    XLSX.utils.book_append_sheet(
-      workbook,
-      XLSX.utils.aoa_to_sheet(
-        buildTransactionsSheetRows({
-          scopeLabel: input.scopeLabel,
-          transactions: input.transactions,
-        }),
-      ),
-      sanitizeSheetName("Transactions"),
-    );
+    sheets.push({
+      name: sanitizeSheetName("Transactions"),
+      rows: buildTransactionsSheetRows({
+        scopeLabel: input.scopeLabel,
+        transactions: input.transactions,
+      }),
+    });
   }
 
-  XLSX.writeFile(workbook, fileName);
+  writeXlsxFile(fileName, sheets);
 }
 
 export { formatMoneyPlain };

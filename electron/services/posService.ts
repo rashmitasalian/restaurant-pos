@@ -86,6 +86,7 @@ import {
   type ReviewRangeQuery,
   type ReviewSummaryDto,
   type ReviewDiscountEvent,
+  type ReviewRateEvent,
   type ReviewVoidEvent,
   type StaffActivityRowDto,
 } from "../../src/shared/ownerReview";
@@ -182,8 +183,7 @@ const DEFAULT_SEATING_AREA_ID = "area:main";
 const DEFAULT_SEATING_AREA_NAME = "Main Dining";
 const ACTIVE_ORDER_STATUSES = ["open", "held", "ready", "assigned"] as const;
 
-const loginAttempts: Record<string, { count: number; lockedUntil: number }> = {};
-const recoveryAttempts: Record<string, { count: number; lockedUntil: number }> = {};
+type LockoutKind = "password" | "recovery";
 
 function revokeLanUser(username: string, reason: "password-reset" | "signed-out") {
   const key = username.trim().toLowerCase();
@@ -2248,6 +2248,106 @@ function discountEventFromAudit(
   };
 }
 
+function sameMoney(left: number, right: number) {
+  return rupeesToPaise(left) === rupeesToPaise(right);
+}
+
+function menuRateSnapshot(
+  database: Database.Database,
+  line: { menuItemId?: string | null; name?: string | null; rate: number },
+): { menuPrice: number; matchesCatalog: boolean } | null {
+  const menuItemId = String(line.menuItemId || "").trim();
+  if (!menuItemId) {
+    return null;
+  }
+  const item = database.prepare("SELECT price_paise FROM menu_items WHERE id = ?").get(menuItemId) as
+    | { price_paise?: number }
+    | undefined;
+  if (!item || item.price_paise == null) {
+    return null;
+  }
+  const variants = database
+    .prepare("SELECT name, price_paise FROM menu_item_variants WHERE menu_item_id = ?")
+    .all(menuItemId) as Array<{ name?: string; price_paise?: number }>;
+  const lineName = String(line.name || "").trim().toLowerCase();
+  const matched = variants.find((variant) =>
+    lineName.endsWith(`(${String(variant.name || "").trim().toLowerCase()})`),
+  );
+  const menuPrice = paiseToRupees(
+    matched && matched.price_paise != null ? matched.price_paise : item.price_paise,
+  );
+  const chargedPaise = rupeesToPaise(Number(line.rate) || 0);
+  const catalogPaise = new Set<number>([
+    Number(item.price_paise),
+    ...variants.map((variant) => Number(variant.price_paise)),
+  ]);
+  const matchesCatalog = matched
+    ? sameMoney(Number(line.rate) || 0, menuPrice)
+    : catalogPaise.has(chargedPaise);
+  return { menuPrice, matchesCatalog };
+}
+
+function recordMenuRateDifference(
+  database: Database.Database,
+  order: OrderDto,
+  actor: string | null,
+  line: { id?: string; menuItemId?: string | null; name: string; rate: number },
+  previousRate: number | null,
+) {
+  const charged = Number(line.rate) || 0;
+  if (previousRate != null && sameMoney(previousRate, charged)) {
+    return;
+  }
+  const snapshot = menuRateSnapshot(database, line);
+  if (!snapshot) {
+    return;
+  }
+  if (snapshot.matchesCatalog && previousRate == null) {
+    return;
+  }
+  createAuditRow(
+    database,
+    "order.line.rate_override",
+    "order",
+    order._id,
+    actor,
+    mergeOrderAuditDetail(database, order, actor, {
+      lineId: line.id || null,
+      name: line.name,
+      menuItemId: line.menuItemId || null,
+      menuPrice: snapshot.menuPrice,
+      chargedRate: charged,
+      active: !snapshot.matchesCatalog,
+    }),
+  );
+}
+
+function rateEventFromAudit(
+  database: Database.Database,
+  audit: AuditDto,
+  order: OrderDto | null,
+): ReviewRateEvent {
+  const detail = detailRecord(audit.detail);
+  const context = orderTableAuditContext(database, order, audit.user);
+  const amountPaise = Number(detail.amountPaise);
+  return {
+    auditId: audit._id,
+    orderId: String(audit.entityId || audit.orderId || order?._id || ""),
+    lineId: detail.lineId != null ? String(detail.lineId) : "",
+    timestamp: Number(audit.timestamp || 0),
+    actor: audit.user || null,
+    itemName: detail.name != null ? String(detail.name) : null,
+    menuPrice: Number(detail.menuPrice),
+    chargedRate: Number(detail.chargedRate),
+    active: detail.active !== false,
+    amount: Number.isFinite(amountPaise) ? paiseToRupees(amountPaise) : Number(order?.total || 0),
+    tableId: order?.tableId ?? context.tableId,
+    tableName: context.tableName,
+    createdAt: order?.createdAt || null,
+    meta: order?.meta,
+  };
+}
+
 function discountEventFromOrder(database: Database.Database, order: OrderDto): ReviewDiscountEvent {
   const context = orderTableAuditContext(database, order, order.createdBy);
   const occurredAt = Number(order.paidAt || order.updatedAt || order.createdAt || 0);
@@ -2519,13 +2619,10 @@ function assertActiveAdminPassword(
   if (!key || !password) {
     throw new Error("admin-verification-required");
   }
-  const attempt = loginAttempts[key];
+  const attempt = readLockout(database, key, "password");
   if (attempt && Date.now() < attempt.lockedUntil) {
     createAuditRow(database, "admin.verify.failed", "user", key, null, { reason: "locked" });
     throw new Error("admin-verification-failed");
-  }
-  if (attempt && Date.now() >= attempt.lockedUntil) {
-    delete loginAttempts[key];
   }
   const row = database.prepare("SELECT * FROM users WHERE username = ?").get(key) as any;
   if (!row || row.role !== "admin" || !row.active) {
@@ -2536,11 +2633,10 @@ function assertActiveAdminPassword(
   }
   const verified = verifyCredential(password, row);
   if (!verified.ok) {
-    recordFailedLogin(key);
     createAuditRow(database, "admin.verify.failed", "user", key, null, {});
-    throw new Error("admin-verification-failed");
+    throw passwordLockoutError("admin-verification-failed", key);
   }
-  delete loginAttempts[key];
+  clearLockout(database, key, "password");
   return key;
 }
 
@@ -2606,6 +2702,22 @@ function assertOrderBaseUpdatedAt(order: OrderDto, baseUpdatedAt?: number | null
   if (Number(order.updatedAt) !== expected) {
     throw new Error("order-conflict");
   }
+}
+
+/** Existing lines keep the server menu link and kitchen-sent quantity. */
+function anchorOrderLines(current: OrderLineDto[], next: OrderLineDto[]) {
+  const byId = new Map(current.map((line) => [line.id, line]));
+  return next.map((line) => {
+    const previous = byId.get(line.id);
+    if (!previous) {
+      return { ...line, kotPrintedQty: 0 };
+    }
+    return {
+      ...line,
+      menuItemId: previous.menuItemId ?? null,
+      kotPrintedQty: Math.max(0, Number(previous.kotPrintedQty || 0)),
+    };
+  });
 }
 
 function sanitizeOrderLines(lines: OrderLineDto[]) {
@@ -2932,16 +3044,14 @@ export const posService = {
 
   verifyUser(username: string, password: string) {
     const key = username.trim().toLowerCase();
-    const attempt = loginAttempts[key];
+    const database = getDb();
+    const attempt = readLockout(database, key, "password");
     if (attempt && Date.now() < attempt.lockedUntil) {
       return {
         ok: false,
         reason: "locked",
         lockedSeconds: Math.ceil((attempt.lockedUntil - Date.now()) / 1000),
       };
-    }
-    if (attempt && Date.now() >= attempt.lockedUntil) {
-      delete loginAttempts[key];
     }
 
     const row = getDb().prepare("SELECT * FROM users WHERE username = ?").get(key) as any;
@@ -2954,21 +3064,25 @@ export const posService = {
       : null;
     const verified = verifyCredentialAgainstStored(password, stored);
     if (!row) {
-      recordFailedLogin(key);
+      recordLockoutFailure(database, key, "password");
       return { ok: false, reason: "not-found" };
     }
     if (!row.active) {
-      createAuditRow(getDb(), "auth.login.blocked", "user", key, null, { reason: "inactive" });
-      return { ok: false, reason: "inactive" };
-    }
-    if (!verified.ok) {
-      recordFailedLogin(key);
-      createAuditRow(getDb(), "auth.login.failed", "user", key, null, {
-        attempt: loginAttempts[key]?.count ?? 1,
+      const failure = recordLockoutFailure(database, key, "password");
+      createAuditRow(database, "auth.login.blocked", "user", key, null, {
+        reason: "inactive",
+        attempt: failure.count,
       });
       return { ok: false, reason: "wrong-password" };
     }
-    delete loginAttempts[key];
+    if (!verified.ok) {
+      const failure = recordLockoutFailure(database, key, "password");
+      createAuditRow(database, "auth.login.failed", "user", key, null, {
+        attempt: failure.count,
+      });
+      return { ok: false, reason: "wrong-password" };
+    }
+    clearLockout(database, key, "password");
     const user = userFromRow(row);
     createAuditRow(getDb(), "auth.login.success", "user", key, key, { role: user.role });
     return { ok: true, user };
@@ -2977,12 +3091,7 @@ export const posService = {
   login(username: string, password: string) {
     const res = this.verifyUser(username, password) as any;
     if (!res.ok || !res.user) {
-      const reason =
-        res.reason === "inactive"
-          ? "inactive"
-          : res.reason === "locked"
-            ? "locked"
-            : "invalid-credentials";
+      const reason = res.reason === "locked" ? "locked" : "invalid-credentials";
       return { ok: false, reason, lockedSeconds: res.lockedSeconds };
     }
     if (!isDesktopLoginRole(res.user.role)) {
@@ -3003,12 +3112,7 @@ export const posService = {
   loginForGateway(username: string, password: string) {
     const res = this.verifyUser(username, password) as any;
     if (!res.ok || !res.user) {
-      const reason =
-        res.reason === "inactive"
-          ? "inactive"
-          : res.reason === "locked"
-            ? "locked"
-            : "invalid-credentials";
+      const reason = res.reason === "locked" ? "locked" : "invalid-credentials";
       return { ok: false, reason, lockedSeconds: res.lockedSeconds };
     }
     return {
@@ -3075,22 +3179,26 @@ export const posService = {
   changeOwnPassword(username: string, currentPassword: string, newPassword: string) {
     const key = username.trim().toLowerCase();
     assertPassword(newPassword);
-    return inTransaction((database) => {
-      const current = database.prepare("SELECT * FROM users WHERE username = ?").get(key) as any;
-      if (!current || !current.active) {
-        throw new Error("user-not-found");
-      }
-      const verified = verifyCredential(currentPassword, current);
-      if (!verified.ok) {
-        recordFailedLogin(key);
-        createAuditRow(database, "user.password.change.failed", "user", key, key, {});
-        throw new Error("invalid-current-password");
-      }
-      updateUserPasswordRow(database, key, newPassword, false);
-      delete loginAttempts[key];
-      createAuditRow(database, "user.password.changed", "user", key, key, {});
-      return { ok: true };
-    });
+    try {
+      return inTransaction((database) => {
+        const current = database.prepare("SELECT * FROM users WHERE username = ?").get(key) as any;
+        if (!current || !current.active) {
+          throw new Error("user-not-found");
+        }
+        const verified = verifyCredential(currentPassword, current);
+        if (!verified.ok) {
+          createAuditRow(database, "user.password.change.failed", "user", key, key, {});
+          throw passwordLockoutError("invalid-current-password", key);
+        }
+        updateUserPasswordRow(database, key, newPassword, false);
+        clearLockout(database, key, "password");
+        createAuditRow(database, "user.password.changed", "user", key, key, {});
+        return { ok: true };
+      });
+    } catch (error) {
+      rememberLockoutAfterRollback(error);
+      throw error;
+    }
   },
 
   resetUserPassword(
@@ -3101,20 +3209,26 @@ export const posService = {
   ) {
     const key = username.trim().toLowerCase();
     assertPassword(newPassword);
-    const result = inTransaction((database) => {
-      const actor = assertActiveAdminPassword(database, actorUsername, actorPassword);
-      const current = database.prepare("SELECT * FROM users WHERE username = ?").get(key);
-      if (!current) {
-        throw new Error("user-not-found");
-      }
-      updateUserPasswordRow(database, key, newPassword, actor !== key);
-      delete loginAttempts[key];
-      destroySessionsForUser(key);
-      createAuditRow(database, "user.password.reset", "user", key, actor, {
-        requirePasswordChange: actor !== key,
+    let result: { ok: true };
+    try {
+      result = inTransaction((database) => {
+        const actor = assertActiveAdminPassword(database, actorUsername, actorPassword);
+        const current = database.prepare("SELECT * FROM users WHERE username = ?").get(key);
+        if (!current) {
+          throw new Error("user-not-found");
+        }
+        updateUserPasswordRow(database, key, newPassword, actor !== key);
+        clearLockout(database, key, "password");
+        destroySessionsForUser(key);
+        createAuditRow(database, "user.password.reset", "user", key, actor, {
+          requirePasswordChange: actor !== key,
+        });
+        return { ok: true };
       });
-      return { ok: true };
-    });
+    } catch (error) {
+      rememberLockoutAfterRollback(error);
+      throw error;
+    }
     revokeLanUser(key, "password-reset");
     return result;
   },
@@ -3153,8 +3267,7 @@ export const posService = {
     const username = input.username.trim().toLowerCase();
     assertUsername(username);
     assertPassword(input.newPassword);
-    const attemptKey = `recovery:${username}`;
-    const attempt = recoveryAttempts[attemptKey];
+    const attempt = readLockout(getDb(), username, "recovery");
     if (attempt && Date.now() < attempt.lockedUntil) {
       return {
         ok: false,
@@ -3162,16 +3275,13 @@ export const posService = {
         lockedSeconds: Math.ceil((attempt.lockedUntil - Date.now()) / 1000),
       };
     }
-    if (attempt && Date.now() >= attempt.lockedUntil) {
-      delete recoveryAttempts[attemptKey];
-    }
 
     return inTransaction((database) => {
       const admins = database
         .prepare("SELECT * FROM users WHERE role = 'admin' AND active = 1 ORDER BY created_at ASC")
         .all() as any[];
       if (admins.length !== 1 || admins[0].username !== username) {
-        recordFailedRecovery(attemptKey);
+        recordLockoutFailure(database, username, "recovery");
         createAuditRow(database, "auth.recovery.failed", "user", username, null, {
           reason: "not-last-admin",
         });
@@ -3192,7 +3302,7 @@ export const posService = {
       );
 
       if (!matched) {
-        recordFailedRecovery(attemptKey);
+        recordLockoutFailure(database, username, "recovery");
         createAuditRow(database, "auth.recovery.failed", "user", username, null, {
           reason: "invalid-code",
         });
@@ -3205,8 +3315,8 @@ export const posService = {
         )
         .run(now(), username);
       updateUserPasswordRow(database, username, input.newPassword, false);
-      delete loginAttempts[username];
-      delete recoveryAttempts[attemptKey];
+      clearLockout(database, username, "password");
+      clearLockout(database, username, "recovery");
       destroySessionsForUser(username);
       createAuditRow(database, "auth.recovery.success", "user", username, username, {});
       return { ok: true };
@@ -4479,7 +4589,7 @@ export const posService = {
           existing.categoryName = normalizeCategoryName(item.categoryName) || null;
         }
       } else {
-        order.items.push({
+        const added = {
           id: `line:${randomUUID()}`,
           menuItemId: item.menuItemId || null,
           categoryName: normalizeCategoryName(item.categoryName) || null,
@@ -4489,7 +4599,9 @@ export const posService = {
           taxRateBps: null,
           kotPrintedQty: 0,
           kitchenNote: normalizeKitchenNote(item.kitchenNote),
-        });
+        };
+        order.items.push(added);
+        recordMenuRateDifference(database, order, actor || order.createdBy || null, added, null);
       }
       upsertOrderLines(database, orderId, order.items);
       database
@@ -4521,7 +4633,8 @@ export const posService = {
       const order = this.getOrderById(orderId);
       assertOrderCanBeEdited(order);
       assertOrderBaseUpdatedAt(order, options.baseUpdatedAt);
-      const sanitized = sanitizeOrderLines(applyKitchenNotes(order.items || [], lines));
+      const anchored = anchorOrderLines(order.items || [], lines);
+      const sanitized = sanitizeOrderLines(applyKitchenNotes(order.items || [], anchored));
       assertNoSentKotReduction(order, sanitized);
       upsertOrderLines(database, orderId, sanitized);
       database
@@ -4529,6 +4642,17 @@ export const posService = {
         .run(kotStatusAfterLineChange(order, sanitized), now(), orderId);
       updateOrderTotals(database, orderId, sanitized, discountFromOrder(order));
       const auditActor = actor || order.createdBy || null;
+      const previousById = new Map((order.items || []).map((line) => [line.id, line]));
+      for (const line of sanitized) {
+        const previous = previousById.get(line.id);
+        recordMenuRateDifference(
+          database,
+          order,
+          auditActor,
+          line,
+          previous ? Number(previous.rate) : null,
+        );
+      }
       createAuditRow(
         database,
         "order.lines.updated",
@@ -5758,6 +5882,25 @@ export const posService = {
       .map(auditFromRow);
   },
 
+  listRateOverrideAuditsInRange(opts: ReviewRangeQuery = {}): AuditDto[] {
+    const clauses = ["action = 'order.line.rate_override'"];
+    const params: unknown[] = [];
+    appendReviewRange(clauses, params, "timestamp", opts);
+    const actor = actorKey(opts.actor);
+    if (actor) {
+      clauses.push("LOWER(COALESCE(user, '')) = ?");
+      params.push(actor);
+    }
+    return getDb()
+      .prepare(
+        `SELECT * FROM audit_logs
+         WHERE ${clauses.join(" AND ")}
+         ORDER BY timestamp DESC`,
+      )
+      .all(...params)
+      .map(auditFromRow);
+  },
+
   /** Orders that still carry a positive discount in-range (History truth), even if audit rows are missing. */
   listDiscountedOrdersInRange(opts: ReviewRangeQuery = {}): OrderDto[] {
     const database = getDb();
@@ -5786,6 +5929,7 @@ export const posService = {
     const cancelled = this.listCancelledOrdersInRange(opts);
     const voidAudits = this.listVoidAuditsInRange(opts);
     const discountAudits = this.listDiscountAuditsInRange(opts);
+    const rateAudits = this.listRateOverrideAuditsInRange(opts);
     const discountedOrders = this.listDiscountedOrdersInRange(opts);
     const voidOrderIds = voidAudits
       .map((audit) => String(audit.entityId || audit.orderId || ""))
@@ -5884,10 +6028,15 @@ export const posService = {
     for (const order of discountedOrders) {
       rememberDiscount(discountEventFromOrder(database, order));
     }
+    const rateEvents: ReviewRateEvent[] = rateAudits.map((audit) => {
+      const orderId = String(audit.entityId || audit.orderId || "");
+      return rateEventFromAudit(database, audit, orderId ? this.getOrderById(orderId) : null);
+    });
     return buildReviewItems({
       cancelledOrders: cancelledSnapshots,
       voidEvents,
       discountEvents: Array.from(discountEventsByOrder.values()),
+      rateEvents,
       cancelCountsByActor,
       actorFilter: opts.actor,
       threshold: REPEATED_CANCELLATION_THRESHOLD,
@@ -9291,24 +9440,62 @@ export const posService = {
   },
 };
 
-function recordFailedLogin(key: string) {
-  if (!loginAttempts[key]) {
-    loginAttempts[key] = { count: 0, lockedUntil: 0 };
-  }
-  loginAttempts[key].count += 1;
-  if (loginAttempts[key].count >= MAX_ATTEMPTS) {
-    loginAttempts[key].lockedUntil = Date.now() + LOCKOUT_MS;
-  }
+function passwordLockoutError(message: string, subject: string) {
+  const error = new Error(message) as Error & { lockoutSubject?: string };
+  error.lockoutSubject = subject;
+  return error;
 }
 
-function recordFailedRecovery(key: string) {
-  if (!recoveryAttempts[key]) {
-    recoveryAttempts[key] = { count: 0, lockedUntil: 0 };
+function rememberLockoutAfterRollback(error: unknown) {
+  const subject = (error as { lockoutSubject?: string } | null)?.lockoutSubject;
+  if (!subject) {
+    return;
   }
-  recoveryAttempts[key].count += 1;
-  if (recoveryAttempts[key].count >= MAX_ATTEMPTS) {
-    recoveryAttempts[key].lockedUntil = Date.now() + LOCKOUT_MS;
+  recordLockoutFailure(getDb(), subject, "password");
+}
+
+function readLockout(database: Database.Database, subject: string, kind: LockoutKind) {
+  const row = database
+    .prepare(
+      "SELECT failed_count, locked_until FROM login_lockouts WHERE subject = ? AND kind = ?",
+    )
+    .get(subject, kind) as { failed_count?: number; locked_until?: number } | undefined;
+  if (!row) {
+    return null;
   }
+  const lockedUntil = Number(row.locked_until || 0);
+  if (lockedUntil > 0 && Date.now() >= lockedUntil) {
+    clearLockout(database, subject, kind);
+    return null;
+  }
+  return { count: Number(row.failed_count || 0), lockedUntil };
+}
+
+function recordLockoutFailure(database: Database.Database, subject: string, kind: LockoutKind) {
+  const existing = database
+    .prepare(
+      "SELECT failed_count, locked_until FROM login_lockouts WHERE subject = ? AND kind = ?",
+    )
+    .get(subject, kind) as { failed_count?: number; locked_until?: number } | undefined;
+  const lockedUntil = Number(existing?.locked_until || 0);
+  const expired = lockedUntil > 0 && Date.now() >= lockedUntil;
+  const count = (expired ? 0 : Number(existing?.failed_count || 0)) + 1;
+  const nextLockedUntil = count >= MAX_ATTEMPTS ? Date.now() + LOCKOUT_MS : 0;
+  database
+    .prepare(
+      `INSERT INTO login_lockouts (subject, kind, failed_count, locked_until, updated_at)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(subject, kind) DO UPDATE SET
+         failed_count = excluded.failed_count,
+         locked_until = excluded.locked_until,
+         updated_at = excluded.updated_at`,
+    )
+    .run(subject, kind, count, nextLockedUntil, Date.now());
+  return { count, lockedUntil: nextLockedUntil };
+}
+
+function clearLockout(database: Database.Database, subject: string, kind: LockoutKind) {
+  database.prepare("DELETE FROM login_lockouts WHERE subject = ? AND kind = ?").run(subject, kind);
 }
 
 function ensureNotLastActiveAdmin(database: Database.Database, username: string) {
