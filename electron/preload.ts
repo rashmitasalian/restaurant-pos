@@ -86,6 +86,10 @@ contextBridge.exposeInMainWorld("pos", {
   },
   branding: {
     getPublic: () => invoke("pos:branding:get-public"),
+    pickLogo: () =>
+      authInvoke("pos:branding:pick-logo") as Promise<
+        { ok: true; dataUrl: string } | { ok: false; reason?: string }
+      >,
   },
   users: {
     list: () => authInvoke("pos:users:list"),

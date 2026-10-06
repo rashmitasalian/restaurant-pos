@@ -77,6 +77,7 @@ contextBridge.exposeInMainWorld("pos", {
   },
   branding: {
     getPublic: () => invoke("pos:branding:get-public"),
+    pickLogo: () => authInvoke("pos:branding:pick-logo"),
   },
   users: {
     list: () => authInvoke("pos:users:list"),

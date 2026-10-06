@@ -19,6 +19,7 @@ import { GstTaxReport } from "./GstTaxReport";
 import { DEFAULT_GST_CONFIG, formatGstRate, normalizeGstConfig } from "../../../shared/gst";
 import { CATEGORY_CHART_COLORS } from "../../theme/external-brands";
 import { PRINT } from "../../theme/print-html";
+import { prepareRestaurantLogo } from "../../utils/logoProcessing";
 import { DataTable } from "../../components/ui/DataTable";
 import { Button } from "../../components/ui/Button";
 import { PageHeader } from "../../components/ui/PageHeader";
@@ -377,8 +378,16 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
     setExporting(true);
     const dateStr = rangeLabel;
     const businessName = branding?.hotelName || ENV.HOTEL_NAME || "Restaurant";
-    const businessLogoHtml = branding?.logoDataUrl
-      ? `<img class="brand-logo" src="${escapeHtml(branding.logoDataUrl)}" alt=""/>`
+    let reportLogoUrl = typeof branding?.logoDataUrl === "string" ? branding.logoDataUrl : "";
+    if (reportLogoUrl) {
+      try {
+        reportLogoUrl = (await prepareRestaurantLogo(reportLogoUrl)).logoDataUrl;
+      } catch {
+        // Keep the stored image if it cannot be cropped.
+      }
+    }
+    const businessLogoHtml = reportLogoUrl
+      ? `<img class="brand-logo" src="${escapeHtml(reportLogoUrl)}" alt=""/>`
       : "";
     const businessContactHtml = [branding?.phone, branding?.email]
       .map((value) => String(value || "").trim())
@@ -423,7 +432,7 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
     footer { margin-top: 40px; font-size: 11px; color: ${PRINT.faint}; text-align: center; }
     .report-header { display: flex; justify-content: space-between; gap: 24px; align-items: flex-start; margin-bottom: 28px; padding-bottom: 16px; border-bottom: 1px solid var(--pos-line); }
     .brand { display: flex; gap: 12px; align-items: center; min-width: 0; }
-    .brand-logo { width: 52px; height: 52px; border-radius: 10px; object-fit: contain; border: 1px solid var(--pos-line); background: var(--pos-surface); padding: 4px; flex: 0 0 auto; }
+    .brand-logo { width: 56px; height: 56px; border-radius: 10px; object-fit: contain; border: 1px solid var(--pos-line); background: #fff; padding: 4px; flex: 0 0 auto; }
     .brand-name { font-size: 18px; font-weight: 900; color: ${PRINT.ink}; }
     .brand-contact { margin-top: 3px; font-size: 11px; color: ${PRINT.sub}; }
     .report-title { text-align: right; }

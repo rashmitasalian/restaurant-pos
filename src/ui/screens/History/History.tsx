@@ -16,6 +16,7 @@ import { useFocusTrap } from "../../hooks/useFocusTrap";
 import { useBusinessDateRange } from "../../hooks/useBusinessDateRange";
 import { BusinessRangeControls } from "../../components/BusinessRangeControls";
 import { buildReceiptLines } from "../Billing/utils/receiptBuilder";
+import { brandingWithPrintLogo } from "../../utils/logoProcessing";
 import type { ReceiptBranding } from "../Billing/utils/receiptBuilder";
 import {
   DEFAULT_GST_CONFIG,
@@ -633,13 +634,14 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
       const tableNum: number | null = full.tableId ?? full.table ?? null;
       const discPct: number = full.discountPercent ?? 0;
       const tableLabel = formatTableLabel(tableNum, full.tableName);
+      const printBranding = await brandingWithPrintLogo(branding);
       const lines = buildReceiptLines(
         full,
         tableNum,
         discPct,
         computeTotals(full),
         gstConfig,
-        branding,
+        printBranding,
         {
           tableLabel,
         },

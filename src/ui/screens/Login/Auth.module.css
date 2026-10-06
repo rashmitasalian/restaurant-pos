@@ -163,13 +163,13 @@
 }
 
 .hotelLogo {
-  width: 36px;
-  height: 36px;
+  width: 56px;
+  height: 56px;
   border-radius: var(--pos-r-sm);
   object-fit: contain;
-  background: var(--pos-surface-sunken);
+  background: #fff;
   border: 1px solid var(--pos-line);
-  padding: 3px;
+  padding: 4px;
   flex-shrink: 0;
   box-sizing: border-box;
 }

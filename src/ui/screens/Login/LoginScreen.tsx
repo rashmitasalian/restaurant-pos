@@ -9,6 +9,7 @@ import { Button } from "../../components/ui/Button";
 import { Eye, EyeOff } from "lucide-react";
 import authStyles from "./Auth.module.css";
 import { TEXT_LIMITS } from "../../../shared/textLimits";
+import { prepareRestaurantLogo } from "../../utils/logoProcessing";
 
 export default function LoginScreen() {
   const auth = React.useContext(AuthContext);
@@ -31,9 +32,25 @@ export default function LoginScreen() {
     let alive = true;
     window.pos?.branding
       ?.getPublic()
-      .then((cfg) => {
-        if (alive) {
-          setBranding(cfg || null);
+      .then(async (cfg) => {
+        if (!alive) {
+          return;
+        }
+        const next = cfg || null;
+        const logoDataUrl = typeof next?.logoDataUrl === "string" ? next.logoDataUrl : "";
+        if (!next || !logoDataUrl) {
+          setBranding(next);
+          return;
+        }
+        try {
+          const prepared = await prepareRestaurantLogo(logoDataUrl);
+          if (alive) {
+            setBranding({ ...next, logoDataUrl: prepared.logoDataUrl });
+          }
+        } catch {
+          if (alive) {
+            setBranding(next);
+          }
         }
       })
       .catch(() => {

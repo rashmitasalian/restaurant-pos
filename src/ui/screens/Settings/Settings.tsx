@@ -81,7 +81,12 @@ import {
   PRINTER_SELECT_SAME_AS_KITCHEN,
   printerDropdownValue,
 } from "../../../shared/printerConfig";
-import { processRestaurantLogoFile, type ReceiptLogoRaster } from "../../utils/logoProcessing";
+import {
+  prepareRestaurantLogo,
+  processRestaurantLogoFromDataUrl,
+  receiptRasterPreviewDataUrl,
+  type ReceiptLogoRaster,
+} from "../../utils/logoProcessing";
 import { ReceiptQrPreview } from "./ReceiptQrPreview";
 import {
   buildReceiptQrPayload,
@@ -204,6 +209,8 @@ export default function Settings({
   const [hotelEmail, setHotelEmail] = React.useState(ENV.HOTEL_EMAIL);
   const [hotelLogoDataUrl, setHotelLogoDataUrl] = React.useState<string | null>(null);
   const [receiptLogoRaster, setReceiptLogoRaster] = React.useState<ReceiptLogoRaster | null>(null);
+  const [displayLogoUrl, setDisplayLogoUrl] = React.useState<string | null>(null);
+  const [billLogoPreviewUrl, setBillLogoPreviewUrl] = React.useState<string | null>(null);
   const [brandingStatus, setBrandingStatus] = React.useState<string | null>(null);
   const [savingBranding, setSavingBranding] = React.useState(false);
   const [processingLogo, setProcessingLogo] = React.useState(false);
@@ -634,8 +641,45 @@ export default function Settings({
     endAction("printers.save");
   };
 
-  const handleLogoUpload = async (file: File | undefined) => {
-    if (!file) {
+  React.useEffect(() => {
+    if (!hotelLogoDataUrl) {
+      setDisplayLogoUrl(null);
+      setBillLogoPreviewUrl(null);
+      return;
+    }
+    setDisplayLogoUrl(hotelLogoDataUrl);
+    if (receiptLogoRaster && receiptLogoRaster.width > 0 && receiptLogoRaster.dataBase64) {
+      try {
+        setBillLogoPreviewUrl(receiptRasterPreviewDataUrl(receiptLogoRaster));
+      } catch {
+        setBillLogoPreviewUrl(null);
+      }
+    } else {
+      setBillLogoPreviewUrl(null);
+    }
+  }, [hotelLogoDataUrl, receiptLogoRaster]);
+
+  const handleLogoUpload = async () => {
+    if (processingLogo) {
+      return;
+    }
+    if (!window.pos?.branding?.pickLogo) {
+      setBrandingStatus("Restart the app, then try Upload Logo again.");
+      return;
+    }
+    let picked: { ok: true; dataUrl: string } | { ok: false; reason?: string };
+    try {
+      picked = await window.pos.branding.pickLogo();
+    } catch (e: any) {
+      setBrandingStatus(reportClientError("settings.branding.logo", e, "Could not open the file window"));
+      return;
+    }
+    if (!picked?.ok) {
+      if (picked?.reason === "too-large") {
+        setBrandingStatus("Logo must be 3 MB or smaller");
+      } else if (picked?.reason === "type") {
+        setBrandingStatus("Use a PNG, JPG, or WebP logo");
+      }
       return;
     }
     if (!beginAction("branding.logo")) {
@@ -644,7 +688,7 @@ export default function Settings({
     setProcessingLogo(true);
     setBrandingStatus(null);
     try {
-      const processed = await processRestaurantLogoFile(file);
+      const processed = await processRestaurantLogoFromDataUrl(picked.dataUrl);
       setHotelLogoDataUrl(processed.logoDataUrl);
       setReceiptLogoRaster(processed.receiptLogoRaster);
       setBrandingStatus("Logo ready. Save Business Identity to apply it.");
@@ -701,15 +745,26 @@ export default function Settings({
           .join("")
           .slice(0, 3)
           .toUpperCase();
+      let logoDataUrl = hotelLogoDataUrl;
+      let logoRaster = receiptLogoRaster;
+      if (hotelLogoDataUrl) {
+        try {
+          const prepared = await prepareRestaurantLogo(hotelLogoDataUrl);
+          logoDataUrl = prepared.logoDataUrl;
+          logoRaster = prepared.receiptLogoRaster;
+        } catch {
+          // Keep the current logo if it cannot be reprocessed.
+        }
+      }
       const saved = await setConfigBranding({
         hotelName: name,
         hotelInitials: initials,
         tagline: hotelTagline.trim() || "POINT OF SALE",
         phone: hotelPhone.trim(),
         email: hotelEmail.trim(),
-        logoDataUrl: hotelLogoDataUrl,
-        receiptLogoRaster,
-        logoUpdatedAt: hotelLogoDataUrl ? Date.now() : 0,
+        logoDataUrl,
+        receiptLogoRaster: logoRaster,
+        logoUpdatedAt: logoDataUrl ? Date.now() : 0,
         receiptQr,
       });
       setHotelName(saved.hotelName || name);
@@ -1929,7 +1984,7 @@ export default function Settings({
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "96px 1fr",
+                    gridTemplateColumns: "auto 1fr",
                     gap: 14,
                     alignItems: "center",
                     padding: 14,
@@ -1938,55 +1993,102 @@ export default function Settings({
                     background: "var(--pos-surface-sunken)",
                   }}
                 >
-                  <div
-                    style={{
-                      width: 84,
-                      height: 84,
-                      borderRadius: 12,
-                      border: "1px solid var(--pos-line)",
-                      background: "var(--pos-surface)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      overflow: "hidden",
-                      color: "var(--pos-tx-muted)",
-                      fontSize: 12,
-                      fontWeight: 800,
-                    }}
-                  >
-                    {hotelLogoDataUrl ? (
-                      <img
-                        src={hotelLogoDataUrl}
-                        alt="Restaurant logo preview"
+                  <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                    <div>
+                      <div
                         style={{
-                          maxWidth: "100%",
-                          maxHeight: "100%",
-                          objectFit: "contain",
-                          padding: 6,
+                          width: 84,
+                          height: 84,
+                          borderRadius: 12,
+                          border: "1px solid var(--pos-line)",
+                          background: "#fff",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          overflow: "hidden",
+                          color: "var(--pos-tx-muted)",
+                          fontSize: 12,
+                          fontWeight: 800,
                         }}
-                      />
-                    ) : (
-                      hotelInitials || "LOGO"
-                    )}
+                      >
+                        {displayLogoUrl ? (
+                          <img
+                            src={displayLogoUrl}
+                            alt="Restaurant logo preview"
+                            style={{
+                              maxWidth: "100%",
+                              maxHeight: "100%",
+                              objectFit: "contain",
+                              padding: 6,
+                            }}
+                          />
+                        ) : hotelLogoDataUrl ? null : (
+                          hotelInitials || "LOGO"
+                        )}
+                      </div>
+                      {hotelLogoDataUrl ? (
+                        <div
+                          style={{
+                            marginTop: 4,
+                            fontSize: 11,
+                            fontWeight: 700,
+                            color: "var(--pos-tx-sub)",
+                            textAlign: "center",
+                          }}
+                        >
+                          In the app
+                        </div>
+                      ) : null}
+                    </div>
+                    {billLogoPreviewUrl ? (
+                      <div>
+                        <div
+                          style={{
+                            width: 84,
+                            height: 84,
+                            borderRadius: 12,
+                            border: "1px solid var(--pos-line)",
+                            background: "#fff",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            overflow: "hidden",
+                          }}
+                        >
+                          <img
+                            src={billLogoPreviewUrl}
+                            alt="Receipt logo preview"
+                            style={{
+                              maxWidth: "100%",
+                              maxHeight: "100%",
+                              objectFit: "contain",
+                              padding: 6,
+                            }}
+                          />
+                        </div>
+                        <div
+                          style={{
+                            marginTop: 4,
+                            fontSize: 11,
+                            fontWeight: 700,
+                            color: "var(--pos-tx-sub)",
+                            textAlign: "center",
+                          }}
+                        >
+                          On the bill
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                   <div>
-                    <input
-                      id="restaurant-logo-upload"
-                      type="file"
-                      accept="image/png,image/jpeg,image/webp"
-                      onChange={(event) => {
-                        handleLogoUpload(event.target.files?.[0]);
-                        event.currentTarget.value = "";
-                      }}
-                      style={{ display: "none" }}
-                    />
                     <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                      <label
-                        htmlFor="restaurant-logo-upload"
-                        className="ui-btn ui-btn-secondary ui-btn-sm"
-                        style={{
-                          cursor: processingLogo ? "not-allowed" : "pointer",
-                          opacity: processingLogo ? 0.65 : 1,
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        disabled={processingLogo}
+                        onClick={() => {
+                          void handleLogoUpload();
                         }}
                       >
                         {processingLogo
@@ -1994,7 +2096,7 @@ export default function Settings({
                           : hotelLogoDataUrl
                             ? "Replace Logo"
                             : "Upload Logo"}
-                      </label>
+                      </Button>
                       {hotelLogoDataUrl && (
                         <Button type="button" variant="secondary" size="sm" onClick={removeLogo}>
                           Remove Logo
@@ -2009,8 +2111,8 @@ export default function Settings({
                         lineHeight: 1.5,
                       }}
                     >
-                      PNG, JPG, or WebP up to 3 MB. The app will create a small UI logo and a
-                      receipt-safe monochrome version.
+                      PNG, JPG, or WebP up to 3 MB. In the app shows the cropped color mark. On the
+                      bill shows the black-and-white version the printer will use.
                     </div>
                   </div>
                 </div>

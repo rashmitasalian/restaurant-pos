@@ -80,6 +80,7 @@ import {
   VariantPickerModal,
 } from "./components/BillingModals";
 import { buildReceiptLines, buildKotLines, buildKotVoidLines } from "./utils/receiptBuilder";
+import { brandingWithPrintLogo } from "../../utils/logoProcessing";
 import type { ReceiptBranding } from "./utils/receiptBuilder";
 import {
   findServiceModeById,
@@ -1747,13 +1748,14 @@ export default function Billing() {
     }
     try {
       await persistDiscountIfNeeded();
+      const printBranding = await brandingWithPrintLogo(branding);
       const lines = buildReceiptLines(
         order,
         tableNum,
         discountPercent,
         totals,
         undefined,
-        branding,
+        printBranding,
         { preview: true, tableLabel: activeTableLabel || undefined, discountMode },
       );
       await printReceipt({ lines });
@@ -1903,13 +1905,14 @@ export default function Billing() {
           if (sequence === "kot_then_bill") {
             kotResult = await printKotAfterPaymentIfNeeded();
           }
+          const printBranding = await brandingWithPrintLogo(branding);
           const lines = buildReceiptLines(
             paidOrder,
             snapTableNum,
             snapDiscount.percent,
             snapTotals,
             undefined,
-            branding,
+            printBranding,
             {
               tableLabel: snapTableLabel || paidOrder?.tableName || undefined,
               discountMode: snapDiscount.mode,
@@ -2028,13 +2031,14 @@ export default function Billing() {
       const attemptPrint = async () => {
         setPrintFailed(null);
         try {
+          const printBranding = await brandingWithPrintLogo(branding);
           const lines = buildReceiptLines(
             paidOrder,
             snapTableNum,
             snapDiscount.percent,
             snapTotals,
             undefined,
-            branding,
+            printBranding,
             {
               tableLabel: snapTableLabel || paidOrder?.tableName || undefined,
               discountMode: snapDiscount.mode,

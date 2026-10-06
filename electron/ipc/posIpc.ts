@@ -206,6 +206,40 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
       logoDataUrl: sanitizeLogoDataUrl(cfg.logoDataUrl),
     };
   });
+  ipcMain.handle("pos:branding:pick-logo", async (event, token?: string | null) => {
+    requirePermission(event, token, "system:settings");
+    const options: OpenDialogOptions = {
+      title: "Choose restaurant logo",
+      filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "webp"] }],
+      properties: ["openFile"],
+    };
+    const win = getMainWindow();
+    const result = win
+      ? await dialog.showOpenDialog(win, options)
+      : await dialog.showOpenDialog(options);
+    const filePath = result.filePaths?.[0];
+    if (result.canceled || !filePath) {
+      return { ok: false, reason: "cancelled" };
+    }
+    const ext = path.extname(filePath).toLowerCase();
+    const mime =
+      ext === ".png"
+        ? "image/png"
+        : ext === ".webp"
+          ? "image/webp"
+          : ext === ".jpg" || ext === ".jpeg"
+            ? "image/jpeg"
+            : "";
+    if (!mime) {
+      return { ok: false, reason: "type" };
+    }
+    const stat = fs.statSync(filePath);
+    if (stat.size > 3 * 1024 * 1024) {
+      return { ok: false, reason: "too-large" };
+    }
+    const bytes = fs.readFileSync(filePath);
+    return { ok: true, dataUrl: `data:${mime};base64,${bytes.toString("base64")}` };
+  });
   ipcMain.handle("pos:auth:regenerate-recovery-codes", (event, token: string | null, payload) => {
     const user = requirePermission(event, token, "system:settings");
     return posService.regenerateRecoveryCodes({

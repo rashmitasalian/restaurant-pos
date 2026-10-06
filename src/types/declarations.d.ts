@@ -38,6 +38,7 @@ declare global {
           tagline?: string;
           logoDataUrl?: string | null;
         }>;
+        pickLogo: () => Promise<{ ok: true; dataUrl: string } | { ok: false; reason?: string }>;
       };
       users?: {
         list: () => Promise<any[]>;
