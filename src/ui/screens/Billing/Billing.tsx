@@ -1759,7 +1759,10 @@ export default function Billing() {
       try {
         await markOrderBillPrinted(order._id);
       } catch (recordError) {
-        logger.error("Bill printed but could not record it for review", recordError);
+        logger.error(
+          "Bill printed but could not record it for review",
+          recordError instanceof Error ? recordError : String(recordError),
+        );
       }
       showToast("Bill printed");
     } catch (e: any) {
