@@ -10,10 +10,10 @@ RestoNiti 2026 is a visual and component-system modernization, not a redesign of
 - **Dark** is a low-glare charcoal workspace on the same `--pos-*` names (`html[data-theme="dark"]` in `tokens.css`). It is not pure black, and it does not use pure white text. Teal and saffron stay distinguishable for Available, Send KOT, KOT sent, and Pending.
 - **System** follows the operating system. The device preference lives in `localStorage` key `pos-appearance` (`light` | `dark` | `system`), default `light`. Desktop and Captain each store it on their own device. It is not restaurant data and is not stored in SQLite. Print and export HTML stay light.
 - Shape language max **10px** (`--pos-r-sm/md/lg/dialog` = 6 / 8 / 10 / 10).
-- Billing center IA: **Search → Quick Add (favorites) → Categories → Menu grid**. Quick Add never horizontally scrolls; overflow uses **More**.
-- Shared tiles: `MenuTile`, `FavoriteTile`, `TableTile`, `OrderItemRow`.
+- Billing center IA: **Search → Diet → Categories → Menu grid**. Diet is All, Veg, Non-veg, or Egg. It is not part of the category row. Favorites stay on the category row. Category overflow uses **More**.
+- Shared tiles: `MenuTile`, `FavoriteTile`, `TableTile`, `OrderItemRow`. `DietMark` draws the diet: a green circle for veg, a muted brown triangle for non-veg, and that triangle plus the word Egg. Colors are `--pos-diet-veg` and `--pos-diet-nonveg`, not success or danger.
 - **Green** means completed / success. It never means idle or available.
-- **Red** means error or destructive only.
+- **Red** means error or destructive only. It is not a diet color.
 - No gradients in product chrome.
 - No emoji in product UI. Use the `Icon` primitive (`lucide-react` wrapper).
 - One teal primary button per view.

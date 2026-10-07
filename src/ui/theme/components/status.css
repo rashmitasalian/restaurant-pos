@@ -54,6 +54,57 @@
   border-color: var(--pos-teal-line);
 }
 
+.ui-diet {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  min-width: max-content;
+  line-height: 1;
+}
+
+.ui-diet-veg {
+  color: var(--pos-diet-veg);
+}
+
+.ui-diet-nonveg {
+  color: var(--pos-diet-nonveg);
+}
+
+.ui-diet-box {
+  width: 14px;
+  height: 14px;
+  box-sizing: border-box;
+  border: 1.5px solid currentColor;
+  border-radius: 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.ui-diet-circle {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.ui-diet-triangle {
+  width: 0;
+  height: 0;
+  border-left: 3.5px solid transparent;
+  border-right: 3.5px solid transparent;
+  border-bottom: 6px solid currentColor;
+}
+
+.ui-diet-egg {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--pos-tx-sec);
+  letter-spacing: 0.01em;
+}
+
 .ui-dot {
   width: 8px;
   height: 8px;

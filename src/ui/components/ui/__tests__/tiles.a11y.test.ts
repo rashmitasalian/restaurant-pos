@@ -17,6 +17,27 @@ describe("ui tile accessibility", () => {
       }),
     );
     expect(html).toContain('aria-label="Add Chicken Hyderabadi Dum Biryani Family Pack, ₹380"');
+    const veg = renderToStaticMarkup(
+      React.createElement(MenuTile, {
+        name: "Paneer Butter Masala",
+        priceLabel: "₹240",
+        diet: "veg",
+        onClick: () => undefined,
+      }),
+    );
+    expect(veg).toContain('aria-label="Add Paneer Butter Masala, Veg, ₹240"');
+    expect(veg).toContain("ui-diet-circle");
+    const egg = renderToStaticMarkup(
+      React.createElement(MenuTile, {
+        name: "Egg Bhurji",
+        priceLabel: "₹120",
+        diet: "egg",
+        onClick: () => undefined,
+      }),
+    );
+    expect(egg).toContain('aria-label="Add Egg Bhurji, Egg, ₹120"');
+    expect(egg).toContain("ui-diet-triangle");
+    expect(egg).toContain(">Egg<");
     expect(html).toContain('title="Chicken Hyderabadi Dum Biryani Family Pack"');
     expect(html).toContain('type="button"');
   });

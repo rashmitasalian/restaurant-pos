@@ -37,6 +37,7 @@ import { ConfirmModal } from "../../components/ui/ConfirmModal";
 import { SegmentedControl } from "../../components/ui/SegmentedControl";
 import { PortalMenu, PortalMenuItem } from "../../components/ui/PortalMenu";
 import { Icon } from "../../components/ui/Icon";
+import { DietMark } from "../../components/ui/DietMark";
 import { ChevronDown, ChevronUp, Pencil, Star, X } from "lucide-react";
 
 type VariantDraft = {
@@ -1329,38 +1330,6 @@ function ReorderButtons({
       >
         <Icon icon={ChevronDown} size="sm" />
       </button>
-    </span>
-  );
-}
-
-function DietMark({ diet }: { diet?: string | null }) {
-  if (!diet) {
-    return null;
-  }
-  const color =
-    diet === "non-veg"
-      ? "var(--pos-danger)"
-      : diet === "egg"
-        ? "var(--pos-saffron-deep)"
-        : "var(--pos-success)";
-  const label = diet === "non-veg" ? "Non-veg" : diet === "egg" ? "Egg" : "Veg";
-  return (
-    <span
-      role="img"
-      aria-label={label}
-      title={label}
-      style={{
-        width: 14,
-        height: 14,
-        flexShrink: 0,
-        border: `1.5px solid ${color}`,
-        borderRadius: 3,
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-      }}
-    >
-      <span style={{ width: 6, height: 6, borderRadius: "50%", background: color }} />
     </span>
   );
 }

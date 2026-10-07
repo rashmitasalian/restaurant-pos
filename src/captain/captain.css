@@ -443,6 +443,25 @@ html[data-theme="dark"] .cap-btn-danger:disabled {
   box-shadow: none;
 }
 
+.cap-diet-filter {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.cap-diet-filter .cap-chip {
+  width: 100%;
+  justify-content: center;
+  padding: 6px 4px;
+  font-size: 12px;
+}
+
+.cap-menu-row-name .ui-diet,
+.cap-menu-row-name .ui-diet span {
+  min-width: max-content;
+  flex-shrink: 0;
+}
+
 .cap-cats {
   display: flex;
   gap: 8px;
@@ -1657,37 +1676,6 @@ html[data-theme="dark"] .cap-btn-danger:disabled {
 
 .cap-floor-head .cap-search-wrap {
   margin-top: 4px;
-}
-
-.cap-diet {
-  width: 14px;
-  height: 14px;
-  flex-shrink: 0;
-  border: 1.5px solid currentColor;
-  border-radius: 3px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.cap-diet::after {
-  content: "";
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: currentColor;
-}
-
-.cap-diet-veg {
-  color: var(--pos-success);
-}
-
-.cap-diet-non-veg {
-  color: var(--pos-danger);
-}
-
-.cap-diet-egg {
-  color: var(--pos-saffron-deep);
 }
 
 .cap-menu-code {

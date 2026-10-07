@@ -984,6 +984,19 @@
   overflow: hidden;
   word-break: break-word;
 }
+.itemTitleSearch {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  -webkit-line-clamp: unset;
+}
+.itemTitleSearchText {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-width: 0;
+}
 .itemVariant {
   margin-top: 6px;
 }
@@ -1418,6 +1431,9 @@
   background: var(--pos-chrome-active);
   color: var(--pos-chrome-tx);
   border-color: var(--pos-saffron);
+}
+.dietFilter {
+  margin: 0 0 8px;
 }
 .categoryRail {
   display: flex;

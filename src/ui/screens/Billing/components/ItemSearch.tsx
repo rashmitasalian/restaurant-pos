@@ -1,6 +1,8 @@
 import React from "react";
 import styles from "../Billing.module.css";
 import { TEXT_LIMITS } from "../../../../shared/textLimits";
+import { dietName } from "../../../../shared/menuDiet";
+import { DietMark } from "../../../components/ui/DietMark";
 
 // ── Fuzzy match logic ───────────────────────────────────────────────────────
 
@@ -233,21 +235,27 @@ export default function ItemSearch({ items, onSelect, inputRef }: ItemSearchProp
               className={`${styles.autocompleteItem} ${
                 highlighted === idx ? styles.autocompleteItemActive : ""
               }`}
+              aria-label={[f.item.name, dietName(f.item.diet), getItemPriceLabel(f.item)]
+                .filter(Boolean)
+                .join(", ")}
             >
               <div>
-                <div className={styles.itemTitle}>
-                  {f.parts
-                    ? f.parts.map((p, i) =>
-                        p.match ? (
-                          <span key={i} className={styles.matchHighlight}>
-                            {p.text}
-                          </span>
-                        ) : (
-                          <span key={i}>{p.text}</span>
-                        ),
-                      )
-                    : f.item.name}
-                  {f.item.sku && <small className={styles.skuSmall}>#{f.item.sku}</small>}
+                <div className={`${styles.itemTitle} ${styles.itemTitleSearch}`}>
+                  <DietMark diet={f.item.diet} decorative />
+                  <span className={styles.itemTitleSearchText}>
+                    {f.parts
+                      ? f.parts.map((p, i) =>
+                          p.match ? (
+                            <span key={i} className={styles.matchHighlight}>
+                              {p.text}
+                            </span>
+                          ) : (
+                            <span key={i}>{p.text}</span>
+                          ),
+                        )
+                      : f.item.name}
+                    {f.item.sku ? <small className={styles.skuSmall}>#{f.item.sku}</small> : null}
+                  </span>
                 </div>
                 {Array.isArray(f.item.variants) && f.item.variants.length > 0 && (
                   <div className={styles.itemSub}>

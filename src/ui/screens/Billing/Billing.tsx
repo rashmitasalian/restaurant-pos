@@ -69,6 +69,13 @@ import BillingSidebar from "./components/BillingSidebar";
 import { BillingMenuBoard, BillingTicketPane } from "./components/BillingPanes";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { MenuTile } from "../../components/ui/MenuTile";
+import { SegmentedControl } from "../../components/ui/SegmentedControl";
+import {
+  DIET_FILTERS,
+  dietFilterEmptyText,
+  matchesDiet,
+  type DietFilter,
+} from "../../../shared/menuDiet";
 import { formatKotAge } from "../../../shared/kotAge";
 import {
   ConfirmCancelModal,
@@ -348,6 +355,15 @@ export default function Billing() {
   const [tableNum, setTableNum] = React.useState<number | null>(null);
   const [items, setItems] = React.useState<any[]>([]);
   const [menuCategory, setMenuCategory] = React.useState("favorites");
+  const [dietFilter, setDietFilter] = React.useState<DietFilter>("all");
+  const orderDietKey = order?._id ? String(order._id) : "";
+  const dietOrderKeyRef = React.useRef(orderDietKey);
+  if (dietOrderKeyRef.current !== orderDietKey) {
+    dietOrderKeyRef.current = orderDietKey;
+    if (dietFilter !== "all") {
+      setDietFilter("all");
+    }
+  }
   const [categoryMoreOpen, setCategoryMoreOpen] = React.useState(false);
   const [qty, setQty] = React.useState(1);
   const [lastAddedId, setLastAddedId] = React.useState<string | null>(null);
@@ -561,7 +577,9 @@ export default function Billing() {
     return [...ordered, ...extras];
   }, [items, categoryOrder]);
   const visibleMenuItems = React.useMemo(() => {
-    const available = (items || []).filter((it) => it.available !== false);
+    const available = (items || []).filter(
+      (it) => it.available !== false && matchesDiet(it.diet, dietFilter),
+    );
     if (menuCategory === "favorites") {
       return available.filter((it) => it.favorite === true);
     }
@@ -569,10 +587,15 @@ export default function Billing() {
       return available;
     }
     return available.filter((it) => String(it.category || "").trim() === menuCategory);
-  }, [items, menuCategory]);
+  }, [items, menuCategory, dietFilter]);
+  const searchableItems = React.useMemo(
+    () => (items || []).filter((it) => matchesDiet(it.diet, dietFilter)),
+    [items, dietFilter],
+  );
   const quickFavoriteShortcuts = React.useMemo(
-    () => favorites.slice(0, QUICK_FAVORITE_SHORTCUT_LIMIT),
-    [favorites],
+    () =>
+      favorites.filter((it) => matchesDiet(it.diet, dietFilter)).slice(0, QUICK_FAVORITE_SHORTCUT_LIMIT),
+    [favorites, dietFilter],
   );
   const visibleCategories = React.useMemo(
     () => menuCategories.slice(0, CATEGORY_VISIBLE),
@@ -2329,10 +2352,19 @@ export default function Billing() {
             {order && (
               <>
                 <ItemSearch
-                  items={items}
+                  items={searchableItems}
                   onSelect={(item) => addToOrder(item, qty)}
                   inputRef={searchRef}
                 />
+
+                <div className={styles.dietFilter}>
+                  <SegmentedControl
+                    ariaLabel="Diet"
+                    value={dietFilter}
+                    onChange={(id) => setDietFilter(id as DietFilter)}
+                    options={DIET_FILTERS}
+                  />
+                </div>
 
                 <div className={styles.categoryRail} role="tablist" aria-label="Menu categories">
                   <button
@@ -2424,29 +2456,22 @@ export default function Billing() {
                       <MenuTile
                         key={f._id}
                         name={f.name}
+                        diet={f.diet}
                         priceLabel={itemPriceSummary(f, formatCurrency)}
                         meta={
-                          [
-                            f.diet === "veg"
-                              ? "Veg"
-                              : f.diet === "non-veg"
-                                ? "Non-veg"
-                                : f.diet === "egg"
-                                  ? "Egg"
-                                  : "",
-                            Array.isArray(f.variants) && f.variants.length > 0
-                              ? `${f.variants.length} option${f.variants.length !== 1 ? "s" : ""}`
-                              : String(f.category || "").trim(),
-                          ]
-                            .filter(Boolean)
-                            .join(" · ") || undefined
+                          (Array.isArray(f.variants) && f.variants.length > 0
+                            ? `${f.variants.length} option${f.variants.length !== 1 ? "s" : ""}`
+                            : String(f.category || "").trim()) || undefined
                         }
                         onClick={() => addToOrder(f, qty)}
                       />
                     ))}
                   </div>
                 ) : (
-                  <EmptyState title="No items" text="Nothing in this category yet" />
+                  <EmptyState
+                    title="No items"
+                    text={dietFilterEmptyText(dietFilter)}
+                  />
                 )}
               </>
             )}

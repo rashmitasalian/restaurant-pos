@@ -15,6 +15,7 @@ export { DataTable } from "./DataTable";
 export { Stat } from "./Stat";
 export { Skeleton } from "./Skeleton";
 export { MenuTile } from "./MenuTile";
+export { DietMark } from "./DietMark";
 export { FavoriteTile } from "./FavoriteTile";
 export { TableTile } from "./TableTile";
 export { OrderItemRow } from "./OrderItemRow";

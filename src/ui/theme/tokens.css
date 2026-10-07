@@ -57,6 +57,10 @@
   --pos-success-text: #14532d;
   --pos-success-light: var(--pos-success-tint);
 
+  /* Diet marks. Independent of success green and danger red. */
+  --pos-diet-veg: #1f7a46;
+  --pos-diet-nonveg: #7a6548;
+
   --pos-info: #0f5e68;
   --pos-info-light: var(--pos-teal-tint);
 
@@ -225,6 +229,9 @@ html[data-theme="dark"] {
   --pos-success-tint: #1c3326;
   --pos-success-line: #3d6b4e;
   --pos-success-text: #b7e0c4;
+
+  --pos-diet-veg: #5aaa78;
+  --pos-diet-nonveg: #c4ae92;
 
   --pos-info: #6eafb8;
 

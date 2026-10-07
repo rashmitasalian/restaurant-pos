@@ -5,6 +5,14 @@ import { money } from "../money";
 import { CategorySheet } from "../sheets/CategorySheet";
 import { TEXT_LIMITS } from "../../shared/textLimits";
 import { netKitchenDelta, pendingKotVoidsFromMeta } from "../../shared/kot";
+import {
+  DIET_FILTERS,
+  dietFilterEmptyText,
+  dietName,
+  matchesDiet,
+  type DietFilter,
+} from "../../shared/menuDiet";
+import { DietMark } from "../../ui/components/ui/DietMark";
 
 const PINNED_NAMED_CATEGORIES = 2;
 
@@ -14,14 +22,6 @@ function lineMatchesItem(line: any, item: any) {
     return true;
   }
   return String(line.name || "") === String(item?.name || "");
-}
-
-function DietMark({ diet }: { diet?: string | null }) {
-  if (diet !== "veg" && diet !== "non-veg" && diet !== "egg") {
-    return null;
-  }
-  const label = diet === "veg" ? "Veg" : diet === "egg" ? "Egg" : "Non-veg";
-  return <span className={`cap-diet cap-diet-${diet}`} title={label} aria-label={label} />;
 }
 
 function groupMenuItems(items: any[], categoryOrder: string[]) {
@@ -79,13 +79,14 @@ function MenuItemRow({
   primaryLineForItem: (item: any) => any;
 }) {
   const hasVariants = Array.isArray(item.variants) && item.variants.length > 0;
+  const named = dietName(item.diet) ? `${item.name}, ${dietName(item.diet)}` : String(item.name || "");
   return (
     <div
       className={`cap-menu-row ${flashed ? "cap-menu-tile-flash" : ""} ${qty > 0 ? "is-in-order" : ""}`}
     >
       <div className="cap-menu-row-copy">
-        <p className="cap-menu-row-name">
-          <DietMark diet={item.diet} />
+        <p className="cap-menu-row-name" aria-label={named}>
+          <DietMark diet={item.diet} decorative />
           <span>{item.name}</span>
         </p>
         <span className="cap-menu-row-meta">
@@ -99,7 +100,7 @@ function MenuItemRow({
           type="button"
           className="cap-add-btn"
           disabled={busy && pending}
-          aria-label={`Choose ${item.name} variant`}
+          aria-label={`Choose ${named} variant`}
           onClick={() => {
             onFlash(item._id);
             onAddItem(item);
@@ -112,7 +113,7 @@ function MenuItemRow({
           <button
             type="button"
             disabled={busy}
-            aria-label={`Decrease ${item.name}`}
+            aria-label={`Decrease ${named}`}
             onClick={() => {
               const line = primaryLineForItem(item);
               if (!line) {
@@ -127,7 +128,7 @@ function MenuItemRow({
           <button
             type="button"
             disabled={busy && pending}
-            aria-label={`Increase ${item.name}`}
+            aria-label={`Increase ${named}`}
             onClick={() => {
               onFlash(item._id);
               onAddItem(item);
@@ -180,7 +181,25 @@ export function MenuScreen({
   onRegisterBack?: (handler: (() => boolean) | null) => void;
 }) {
   const [query, setQuery] = React.useState("");
+  const [dietFilter, setDietFilter] = React.useState<DietFilter>("all");
   const [category, setCategory] = React.useState<string>("all");
+  const orderDietId = order?._id ? String(order._id) : "";
+  const dietScopeRef = React.useRef({ tableName, orderDietId });
+  const tableChanged = dietScopeRef.current.tableName !== tableName;
+  const orderSwitched =
+    dietScopeRef.current.orderDietId !== "" &&
+    orderDietId !== "" &&
+    dietScopeRef.current.orderDietId !== orderDietId;
+  if (
+    tableChanged ||
+    orderSwitched ||
+    dietScopeRef.current.orderDietId !== orderDietId
+  ) {
+    dietScopeRef.current = { tableName, orderDietId };
+    if ((tableChanged || orderSwitched) && dietFilter !== "all") {
+      setDietFilter("all");
+    }
+  }
   const [categoryOpen, setCategoryOpen] = React.useState(false);
   const [flashId, setFlashId] = React.useState<string | null>(null);
 
@@ -201,6 +220,9 @@ export function MenuScreen({
         return false;
       }
     } else if (category !== "all" && String(item.category || "") !== category) {
+      return false;
+    }
+    if (!matchesDiet(item.diet, dietFilter)) {
       return false;
     }
     if (query.trim()) {
@@ -284,6 +306,20 @@ export function MenuScreen({
             aria-label="Search name or code"
           />
         </label>
+        <div className="cap-diet-filter" role="radiogroup" aria-label="Diet">
+          {DIET_FILTERS.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              role="radio"
+              aria-checked={dietFilter === option.id}
+              className={`cap-chip ${dietFilter === option.id ? "active" : ""}`}
+              onClick={() => setDietFilter(option.id)}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
         <div className="cap-cats cap-cats-pinned" role="tablist" aria-label="Menu categories">
           {hasFavorites ? (
             <button
@@ -336,6 +372,8 @@ export function MenuScreen({
               <button type="button" className="cap-text-btn" onClick={() => setQuery("")}>
                 Clear search
               </button>
+            ) : dietFilter !== "all" ? (
+              <span>{dietFilterEmptyText(dietFilter)}</span>
             ) : (
               <span>Menu is empty or still loading.</span>
             )}
