@@ -2,6 +2,12 @@ import React from "react";
 import { RefreshCw } from "lucide-react";
 import { Icon } from "../../ui/components/ui/Icon";
 import { StatusDot } from "../../ui/components/ui/StatusDot";
+import {
+  APPEARANCE_OPTIONS,
+  readAppearanceChoice,
+  setAppearanceChoice,
+  type AppearanceChoice,
+} from "../../ui/theme/appearance";
 import { connectionLabel, type ConnectionState } from "../copy";
 
 export function MeScreen({
@@ -29,6 +35,7 @@ export function MeScreen({
     "Captain";
   const live = connection === "live";
   const [confirmOut, setConfirmOut] = React.useState(false);
+  const [appearance, setAppearance] = React.useState<AppearanceChoice>(() => readAppearanceChoice());
 
   return (
     <div className="cap-stack cap-me">
@@ -62,6 +69,29 @@ export function MeScreen({
           <dd>{pairingNeeds ? "Needs pairing" : pairingCode ? "Paired" : "Not saved"}</dd>
         </div>
       </dl>
+
+      <div className="cap-appearance">
+        <div className="cap-appearance-label" id="cap-appearance-label">
+          Appearance
+        </div>
+        <div className="cap-appearance-choices" role="radiogroup" aria-labelledby="cap-appearance-label">
+          {APPEARANCE_OPTIONS.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              role="radio"
+              aria-checked={appearance === option.id}
+              className="cap-appearance-choice"
+              onClick={() => {
+                setAppearanceChoice(option.id);
+                setAppearance(option.id);
+              }}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {!live ? (
         <button type="button" className="cap-btn cap-btn-quiet" onClick={onRetry}>

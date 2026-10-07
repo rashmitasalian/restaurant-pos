@@ -362,7 +362,7 @@ export default function KOTQueue() {
               <div className={styles.lines}>
                 {hasPendingItems && (
                   <>
-                    <div className="ui-overline">Pending to print</div>
+                    <div className={`${styles.sectionLabel} ${styles.sectionPending}`}>Pending to print</div>
                     {delta.stop.map((it) => (
                       <div key={`void-${it.name}`} className={styles.line}>
                         <div className={styles.lineMain}>
@@ -385,7 +385,7 @@ export default function KOTQueue() {
                 {k.sentItems.length > 0 && (
                   <>
                     {hasPendingItems && <div style={{ height: 4 }} />}
-                    <div className="ui-overline">Already sent</div>
+                    <div className={`${styles.sectionLabel} ${styles.sectionSent}`}>Already sent</div>
                     {k.sentItems.map((it, index) => (
                       <div key={`sent-${it.name}-${index}`} className={styles.line}>
                         <div className={styles.lineMain}>

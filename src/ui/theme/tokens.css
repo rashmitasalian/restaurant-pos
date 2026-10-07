@@ -197,8 +197,8 @@ html[data-theme="dark"] {
 
   --pos-tx: #e8e6e1;
   --pos-tx-sec: #c5cbc8;
-  --pos-tx-sub: #a3aba8;
-  --pos-tx-muted: #8f9995;
+  --pos-tx-sub: #c2cac6;
+  --pos-tx-muted: #b4beb9;
   --pos-tx-inverse: #142226;
   --pos-logo-well: #e7e4de;
 
@@ -231,7 +231,7 @@ html[data-theme="dark"] {
   --pos-state-available-dot: #8f9995;
   --pos-state-available-tint: #262c30;
   --pos-state-available-line: #5e6a70;
-  --pos-state-available-text: #a3aba8;
+  --pos-state-available-text: #b4beb9;
 
   --pos-state-occupied-dot: #6eafb8;
   --pos-state-occupied-tint: #1a3336;

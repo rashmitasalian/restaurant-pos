@@ -8,7 +8,10 @@ import "@fontsource/inter/latin-800.css";
 import "../ui/theme/base.css";
 import "../ui/theme/components/index.css";
 import "./captain.css";
+import { bootAppearance } from "../ui/theme/appearance";
 import { CaptainApp } from "./CaptainApp";
+
+bootAppearance();
 
 const root = document.getElementById("root");
 if (root) {

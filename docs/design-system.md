@@ -8,7 +8,7 @@ RestoNiti 2026 is a visual and component-system modernization, not a redesign of
 - **Saffron** (`--pos-saffron`) is a spark: one accent action per view, attention / held only.
 - **Light** is the default workspace: `--pos-bg: #F9F8F6`, `--pos-surface: #FFFFFF`. Text ramp: `#17202A` / `#3F4A56` / `#64748B` / `#94A3B8`. Borders: `#E3E5E4` / `#CBD2D0`.
 - **Dark** is a low-glare charcoal workspace on the same `--pos-*` names (`html[data-theme="dark"]` in `tokens.css`). It is not pure black, and it does not use pure white text. Teal and saffron stay distinguishable for Available, Send KOT, KOT sent, and Pending.
-- **System** follows the operating system. The device preference lives in `localStorage` key `pos-appearance` (`light` | `dark` | `system`), default `light`. It is not restaurant data and is not stored in SQLite. Print and export HTML stay light.
+- **System** follows the operating system. The device preference lives in `localStorage` key `pos-appearance` (`light` | `dark` | `system`), default `light`. Desktop and Captain each store it on their own device. It is not restaurant data and is not stored in SQLite. Print and export HTML stay light.
 - Shape language max **10px** (`--pos-r-sm/md/lg/dialog` = 6 / 8 / 10 / 10).
 - Billing center IA: **Search → Quick Add (favorites) → Categories → Menu grid**. Quick Add never horizontally scrolls; overflow uses **More**.
 - Shared tiles: `MenuTile`, `FavoriteTile`, `TableTile`, `OrderItemRow`.

@@ -2,6 +2,7 @@ import {
   APPEARANCE_STORAGE_KEY,
   parseAppearanceChoice,
   resolveAppearance,
+  THEME_CHROME,
   type AppearanceChoice,
   type ResolvedTheme,
 } from "../../shared/appearance";
@@ -34,6 +35,9 @@ export function readAppearanceChoice(): AppearanceChoice {
 export function applyAppearance(choice: AppearanceChoice): ResolvedTheme {
   const theme = resolveAppearance(choice, prefersDark());
   document.documentElement.setAttribute("data-theme", theme);
+  document
+    .querySelector('meta[name="theme-color"]')
+    ?.setAttribute("content", THEME_CHROME[theme]);
   const setBackground = window.pos?.appearance?.set;
   if (setBackground) {
     void setBackground(choice).catch(() => undefined);

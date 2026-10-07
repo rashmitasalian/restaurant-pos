@@ -82,7 +82,23 @@
 }
 
 .qtySent {
-  color: var(--pos-tx-muted);
+  color: var(--pos-state-occupied-text);
+}
+
+.sectionLabel {
+  font-size: var(--pos-type-11);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 4px;
+}
+
+.sectionPending {
+  color: var(--pos-saffron-text);
+}
+
+.sectionSent {
+  color: var(--pos-state-occupied-text);
 }
 
 .actions {

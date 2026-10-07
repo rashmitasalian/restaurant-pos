@@ -7,6 +7,12 @@ export type AppearanceChoice = (typeof APPEARANCE_CHOICES)[number];
 
 export type ResolvedTheme = "light" | "dark";
 
+/** Browser status-bar color. Matches `--pos-chrome` in tokens.css. */
+export const THEME_CHROME: Record<ResolvedTheme, string> = {
+  light: "#0f5e68",
+  dark: "#12383d",
+};
+
 /** Must match --pos-bg in src/ui/theme/tokens.css for each theme. */
 export const THEME_WINDOW_BACKGROUND: Record<ResolvedTheme, string> = {
   light: "#f9f8f6",

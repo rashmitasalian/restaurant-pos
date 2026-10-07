@@ -39,6 +39,17 @@
   cursor: not-allowed;
 }
 
+html[data-theme="dark"] .ui-btn:disabled,
+html[data-theme="dark"] .ui-btn[disabled],
+html[data-theme="dark"] .pos-btn:disabled,
+html[data-theme="dark"] .pos-btn[disabled],
+html[data-theme="dark"] .ui-btn[aria-disabled="true"] {
+  opacity: 1;
+  background: var(--pos-surface-sunken);
+  color: var(--pos-tx-muted);
+  border-color: var(--pos-line);
+}
+
 .ui-btn-sm,
 .pos-btn-sm {
   min-height: 28px;

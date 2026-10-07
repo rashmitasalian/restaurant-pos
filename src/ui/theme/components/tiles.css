@@ -239,6 +239,14 @@
   margin-top: 1px;
 }
 
+.ui-table-tile-occupied .ui-table-tile-state {
+  color: var(--pos-state-occupied-text);
+}
+
+.ui-table-tile-attention .ui-table-tile-state {
+  color: var(--pos-state-attention-text);
+}
+
 .ui-table-tile-meta {
   font-size: 10px;
   font-weight: 600;
