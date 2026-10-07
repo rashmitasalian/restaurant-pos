@@ -9,7 +9,10 @@ import "@fontsource/inter/latin-700.css";
 import "@fontsource/inter/latin-800.css";
 import "./ui/theme/base.css";
 import "./ui/theme/components/index.css";
+import { bootAppearance } from "./ui/theme/appearance";
 import App from "./ui/App";
+
+bootAppearance();
 
 const rendererStartupT0 = typeof performance !== "undefined" ? performance.now() : Date.now();
 (window as any).__posStartupT0 = rendererStartupT0;

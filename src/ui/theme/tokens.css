@@ -1,4 +1,6 @@
 :root {
+  color-scheme: light;
+
   --pos-teal: #0f5e68;
   --pos-teal-strong: #0b4a52;
   --pos-teal-tint: #e8f1f2;
@@ -23,6 +25,8 @@
   --pos-tx-sub: #64748b;
   --pos-tx-muted: #94a3b8;
   --pos-tx-inverse: #ffffff;
+  /* Small light well behind logos so artwork stays readable. Not a page surface. */
+  --pos-logo-well: #ffffff;
 
   --pos-line: #e3e5e4;
   --pos-line-strong: #cbd2d0;
@@ -136,7 +140,15 @@
 
   --pos-focus-ring: 0 0 0 3px rgba(15, 94, 104, 0.22);
   --pos-focus-color: var(--pos-teal);
+  --pos-focus-saffron: 0 0 0 3px rgba(217, 119, 6, 0.14);
   --pos-overlay: rgba(11, 47, 52, 0.45);
+  --pos-glow-danger: 0 2px 10px rgba(239, 68, 68, 0.3);
+  --pos-glow-success: 0 2px 10px rgba(22, 163, 74, 0.3);
+  --pos-glow-violet: 0 2px 10px rgba(124, 58, 237, 0.3);
+  --pos-shadow-hover: 0 2px 8px rgba(23, 32, 42, 0.08);
+  --pos-shadow-float: 0 18px 48px rgba(15, 23, 42, 0.18);
+  --pos-shadow-float-sm: 0 10px 28px rgba(15, 23, 42, 0.14);
+  --pos-shadow-float-xs: 0 1px 3px rgba(15, 23, 42, 0.12);
   --pos-online: var(--pos-success);
 
   --pos-motion-fast: 140ms;
@@ -144,16 +156,8 @@
   --pos-motion-overlay: 240ms;
   --pos-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
 
-  --pos-loader-mark-fill: linear-gradient(
-    135deg,
-    var(--pos-teal),
-    color-mix(in srgb, var(--pos-teal) 65%, #000)
-  );
-  --pos-loader-bar-fill: linear-gradient(
-    90deg,
-    var(--pos-teal),
-    color-mix(in srgb, var(--pos-teal) 55%, white)
-  );
+  --pos-loader-mark-fill: linear-gradient(135deg, var(--pos-teal), var(--pos-teal-strong));
+  --pos-loader-bar-fill: linear-gradient(90deg, var(--pos-teal), var(--pos-teal-line));
 
   --pos-hit-pos: 40px;
   --pos-hit-dense: 32px;
@@ -168,4 +172,100 @@
 
   /* Responsive breakpoints (use literal values in @media; documented here for consistency):
      sm: 480px | md: 640px | lg: 768px | xl: 1024px | 2xl: 1280px */
+}
+
+/* Low-glare dark workspace. --pos-bg must match THEME_WINDOW_BACKGROUND.dark in src/shared/appearance.ts. */
+html[data-theme="dark"] {
+  color-scheme: dark;
+
+  --pos-teal: #6eafb8;
+  --pos-teal-strong: #8ac6ce;
+  --pos-teal-tint: #1a3336;
+  --pos-teal-line: #3e666d;
+  --pos-teal-soft: #243c40;
+
+  --pos-saffron: #d4a24a;
+  --pos-saffron-deep: #e2b86a;
+  --pos-saffron-tint: #332c1c;
+  --pos-saffron-line: #6d5a32;
+  --pos-saffron-text: #e6c27a;
+
+  --pos-bg: #1c2124;
+  --pos-surface: #262c30;
+  --pos-surface-sunken: #1a1f22;
+  --pos-surface-hover: #31383c;
+
+  --pos-tx: #e8e6e1;
+  --pos-tx-sec: #c5cbc8;
+  --pos-tx-sub: #a3aba8;
+  --pos-tx-muted: #8f9995;
+  --pos-tx-inverse: #142226;
+  --pos-logo-well: #e7e4de;
+
+  --pos-line: #5e6a70;
+  --pos-line-strong: #6e7a80;
+
+  --pos-chrome: #12383d;
+  --pos-chrome-rail: #0e2f33;
+  --pos-chrome-line: rgba(232, 230, 225, 0.12);
+  --pos-chrome-tx: #e7f2f2;
+  --pos-chrome-tx-muted: rgba(231, 242, 242, 0.72);
+  --pos-chrome-hover: rgba(231, 242, 242, 0.08);
+  --pos-chrome-active: rgba(231, 242, 242, 0.16);
+  --pos-focus-ring-inverse: 0 0 0 3px rgba(232, 230, 225, 0.45);
+
+  --pos-danger: #e07a72;
+  --pos-danger-strong: #ef9a94;
+  --pos-danger-tint: #3a2424;
+  --pos-danger-line: #7a4542;
+  --pos-danger-text: #f3c0bc;
+
+  --pos-success: #6db889;
+  --pos-success-strong: #8dceb0;
+  --pos-success-tint: #1c3326;
+  --pos-success-line: #3d6b4e;
+  --pos-success-text: #b7e0c4;
+
+  --pos-info: #6eafb8;
+
+  --pos-state-available-dot: #8f9995;
+  --pos-state-available-tint: #262c30;
+  --pos-state-available-line: #5e6a70;
+  --pos-state-available-text: #a3aba8;
+
+  --pos-state-occupied-dot: #6eafb8;
+  --pos-state-occupied-tint: #1a3336;
+  --pos-state-occupied-line: #6eafb8;
+  --pos-state-occupied-text: #c5e4e8;
+
+  --pos-state-attention-dot: #d4a24a;
+  --pos-state-attention-tint: #332c1c;
+  --pos-state-attention-line: #d4a24a;
+  --pos-state-attention-text: #e6c27a;
+
+  --pos-state-success-dot: #6db889;
+  --pos-state-success-tint: #1c3326;
+  --pos-state-success-line: #6db889;
+  --pos-state-success-text: #b7e0c4;
+
+  --pos-state-danger-dot: #e07a72;
+  --pos-state-danger-tint: #3a2424;
+  --pos-state-danger-line: #e07a72;
+  --pos-state-danger-text: #f3c0bc;
+
+  --pos-shadow-1: 0 1px 3px rgba(8, 12, 14, 0.45);
+  --pos-shadow-2: 0 4px 14px rgba(8, 12, 14, 0.5);
+  --pos-shadow-accent: 0 3px 12px rgba(212, 162, 74, 0.18);
+  --pos-shadow-accent-strong: 0 4px 14px rgba(212, 162, 74, 0.28);
+  --pos-shadow-overlay: 0 16px 40px rgba(6, 10, 12, 0.6);
+  --pos-focus-ring: 0 0 0 3px rgba(110, 175, 184, 0.45);
+  --pos-focus-saffron: 0 0 0 3px rgba(212, 162, 74, 0.28);
+  --pos-overlay: rgba(8, 12, 14, 0.66);
+  --pos-glow-danger: 0 2px 10px rgba(224, 122, 114, 0.35);
+  --pos-glow-success: 0 2px 10px rgba(109, 184, 137, 0.35);
+  --pos-glow-violet: 0 2px 10px rgba(176, 150, 220, 0.35);
+  --pos-shadow-hover: 0 2px 8px rgba(8, 12, 14, 0.45);
+  --pos-shadow-float: 0 18px 48px rgba(6, 10, 12, 0.55);
+  --pos-shadow-float-sm: 0 10px 28px rgba(6, 10, 12, 0.45);
+  --pos-shadow-float-xs: 0 1px 3px rgba(8, 12, 14, 0.45);
 }

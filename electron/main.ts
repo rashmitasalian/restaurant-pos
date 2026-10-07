@@ -7,6 +7,7 @@ import {
   dialog,
   session,
   Menu,
+  nativeTheme,
   protocol,
   type IpcMainInvokeEvent,
   type WebContents,
@@ -56,11 +57,12 @@ import {
   rendererFileFromRequestUrl,
   RENDERER_PROTOCOL,
 } from "./rendererProtocol";
+import { closeBootSplash, openBootSplash, windowBackgroundColor } from "./bootSplash";
 import {
-  BOOT_WINDOW_BACKGROUND,
-  closeBootSplash,
-  openBootSplash,
-} from "./bootSplash";
+  acceptAppearanceChoice,
+  readAppearanceChoice,
+  writeAppearanceChoice,
+} from "./appearancePreference";
 import type { Role } from "../src/shared/pos";
 
 const startupHrStart = process.hrtime.bigint();
@@ -340,7 +342,7 @@ async function createWindow() {
     width: 1280,
     height: 800,
     show: false,
-    backgroundColor: BOOT_WINDOW_BACKGROUND,
+    backgroundColor: windowBackgroundColor(),
     autoHideMenuBar: true,
     ...(icon ? { icon } : {}),
     webPreferences: {
@@ -557,6 +559,12 @@ app.whenReady().then(async () => {
   if (!isDev) {
     Menu.setApplicationMenu(null);
   }
+  nativeTheme.on("updated", () => {
+    if (readAppearanceChoice() !== "system" || !mainWindow || mainWindow.isDestroyed()) {
+      return;
+    }
+    mainWindow.setBackgroundColor(windowBackgroundColor());
+  });
   try {
     openBootSplash(resolveAppIconPath());
     const gateEnabled = isLicenseGateEnabled({
@@ -767,6 +775,25 @@ async function loadHtmlIntoPdfWindow(pdfWin: BrowserWindow, htmlFile: string) {
     void pdfWin.loadFile(htmlFile);
   });
 }
+
+// Device appearance is available before login, so this handler does not require a session.
+ipcMain.handle("pos:appearance:set", (_event, choice: unknown) => {
+  const parsed = acceptAppearanceChoice(choice);
+  if (!parsed) {
+    return { ok: false };
+  }
+  try {
+    writeAppearanceChoice(parsed);
+  } catch (error: any) {
+    writeLogToFile("warn", `Could not store appearance preference: ${error?.message || error}`);
+    return { ok: false };
+  }
+  const backgroundColor = windowBackgroundColor();
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.setBackgroundColor(backgroundColor);
+  }
+  return { ok: true, backgroundColor };
+});
 
 // navigator.clipboard loses user activation after awaits in the renderer; write from main.
 ipcMain.handle("clipboard:writeText", (event, token: string | null, text: string) => {

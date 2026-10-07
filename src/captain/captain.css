@@ -1,7 +1,3 @@
-:root {
-  color-scheme: light;
-}
-
 html,
 body,
 #root {
@@ -232,6 +228,10 @@ body,
 .cap-btn-accent {
   background: var(--pos-saffron);
   color: var(--pos-saffron-text);
+}
+
+html[data-theme="dark"] .cap-btn-accent {
+  color: var(--pos-tx-inverse);
 }
 
 .cap-btn-primary:disabled,

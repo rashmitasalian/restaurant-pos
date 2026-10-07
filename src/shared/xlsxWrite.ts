@@ -1,5 +1,3 @@
-import { deflateRawSync } from "zlib";
-
 export type XlsxCell = string | number | Date | null | undefined;
 
 export type XlsxSheet = {
@@ -19,12 +17,29 @@ const CRC_TABLE = (() => {
   return table;
 })();
 
-function crc32(data: Buffer) {
+function crc32(data: Uint8Array) {
   let crc = 0xffffffff;
   for (const byte of data) {
     crc = CRC_TABLE[(crc ^ byte) & 0xff] ^ (crc >>> 8);
   }
   return (crc ^ 0xffffffff) >>> 0;
+}
+
+const textEncoder = new TextEncoder();
+
+function encodeUtf8(value: string) {
+  return textEncoder.encode(value);
+}
+
+function concatBytes(parts: Uint8Array[]) {
+  const total = parts.reduce((sum, part) => sum + part.length, 0);
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const part of parts) {
+    out.set(part, offset);
+    offset += part.length;
+  }
+  return out;
 }
 
 function xmlEscape(value: string) {
@@ -140,62 +155,48 @@ const ROOT_RELS = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
 </Relationships>`;
 
-function zipStored(files: Array<{ name: string; data: Buffer }>) {
-  const locals: Buffer[] = [];
-  const centrals: Buffer[] = [];
+function zipStored(files: Array<{ name: string; data: Uint8Array }>) {
+  const locals: Uint8Array[] = [];
+  const centrals: Uint8Array[] = [];
   let offset = 0;
   for (const file of files) {
-    const name = Buffer.from(file.name, "utf8");
-    const compressed = deflateRawSync(file.data);
+    const name = encodeUtf8(file.name);
     const checksum = crc32(file.data);
-    const local = Buffer.alloc(30);
-    local.writeUInt32LE(0x04034b50, 0);
-    local.writeUInt16LE(20, 4);
-    local.writeUInt16LE(0, 6);
-    local.writeUInt16LE(8, 8);
-    local.writeUInt16LE(0, 10);
-    local.writeUInt16LE(0, 12);
-    local.writeUInt32LE(checksum, 14);
-    local.writeUInt32LE(compressed.length, 18);
-    local.writeUInt32LE(file.data.length, 22);
-    local.writeUInt16LE(name.length, 26);
-    local.writeUInt16LE(0, 28);
-    locals.push(local, name, compressed);
-    const central = Buffer.alloc(46);
-    central.writeUInt32LE(0x02014b50, 0);
-    central.writeUInt16LE(20, 4);
-    central.writeUInt16LE(20, 6);
-    central.writeUInt16LE(0, 8);
-    central.writeUInt16LE(8, 10);
-    central.writeUInt16LE(0, 12);
-    central.writeUInt16LE(0, 14);
-    central.writeUInt32LE(checksum, 16);
-    central.writeUInt32LE(compressed.length, 20);
-    central.writeUInt32LE(file.data.length, 24);
-    central.writeUInt16LE(name.length, 28);
-    central.writeUInt16LE(0, 30);
-    central.writeUInt16LE(0, 32);
-    central.writeUInt16LE(0, 34);
-    central.writeUInt16LE(0, 36);
-    central.writeUInt32LE(0, 38);
-    central.writeUInt32LE(offset, 42);
+    const local = new Uint8Array(30);
+    const localView = new DataView(local.buffer);
+    localView.setUint32(0, 0x04034b50, true);
+    localView.setUint16(4, 20, true);
+    localView.setUint16(8, 0, true);
+    localView.setUint32(14, checksum, true);
+    localView.setUint32(18, file.data.length, true);
+    localView.setUint32(22, file.data.length, true);
+    localView.setUint16(26, name.length, true);
+    locals.push(local, name, file.data);
+    const central = new Uint8Array(46);
+    const centralView = new DataView(central.buffer);
+    centralView.setUint32(0, 0x02014b50, true);
+    centralView.setUint16(4, 20, true);
+    centralView.setUint16(6, 20, true);
+    centralView.setUint32(16, checksum, true);
+    centralView.setUint32(20, file.data.length, true);
+    centralView.setUint32(24, file.data.length, true);
+    centralView.setUint16(28, name.length, true);
+    centralView.setUint32(42, offset, true);
     centrals.push(central, name);
-    offset += local.length + name.length + compressed.length;
+    offset += local.length + name.length + file.data.length;
   }
   const centralSize = centrals.reduce((sum, part) => sum + part.length, 0);
-  const end = Buffer.alloc(22);
-  end.writeUInt32LE(0x06054b50, 0);
-  end.writeUInt16LE(0, 4);
-  end.writeUInt16LE(0, 6);
-  end.writeUInt16LE(files.length, 8);
-  end.writeUInt16LE(files.length, 10);
-  end.writeUInt32LE(centralSize, 12);
-  end.writeUInt32LE(offset, 16);
-  end.writeUInt16LE(0, 20);
-  return Buffer.concat([...locals, ...centrals, end]);
+  const end = new Uint8Array(22);
+  const endView = new DataView(end.buffer);
+  endView.setUint32(0, 0x06054b50, true);
+  endView.setUint16(8, files.length, true);
+  endView.setUint16(10, files.length, true);
+  endView.setUint32(12, centralSize, true);
+  endView.setUint32(16, offset, true);
+  return concatBytes([...locals, ...centrals, end]);
 }
 
-export function buildXlsx(sheets: XlsxSheet[]): Buffer {
+export function buildXlsx(sheets: XlsxSheet[]): Uint8Array {
   const used = new Set<string>();
   const names = sheets.map((sheet, index) => {
     let name = sanitizeSheetName(sheet.name);
@@ -206,15 +207,15 @@ export function buildXlsx(sheets: XlsxSheet[]): Buffer {
     used.add(name.toLowerCase());
     return name;
   });
-  const files: Array<{ name: string; data: Buffer }> = [
-    { name: "[Content_Types].xml", data: Buffer.from(contentTypes(sheets.length), "utf8") },
-    { name: "_rels/.rels", data: Buffer.from(ROOT_RELS, "utf8") },
-    { name: "xl/workbook.xml", data: Buffer.from(workbookXml(names), "utf8") },
-    { name: "xl/_rels/workbook.xml.rels", data: Buffer.from(workbookRels(sheets.length), "utf8") },
-    { name: "xl/styles.xml", data: Buffer.from(STYLES_XML, "utf8") },
+  const files: Array<{ name: string; data: Uint8Array }> = [
+    { name: "[Content_Types].xml", data: encodeUtf8(contentTypes(sheets.length)) },
+    { name: "_rels/.rels", data: encodeUtf8(ROOT_RELS) },
+    { name: "xl/workbook.xml", data: encodeUtf8(workbookXml(names)) },
+    { name: "xl/_rels/workbook.xml.rels", data: encodeUtf8(workbookRels(sheets.length)) },
+    { name: "xl/styles.xml", data: encodeUtf8(STYLES_XML) },
     ...sheets.map((sheet, index) => ({
       name: `xl/worksheets/sheet${index + 1}.xml`,
-      data: Buffer.from(worksheetXml(sheet.rows), "utf8"),
+      data: encodeUtf8(worksheetXml(sheet.rows)),
     })),
   ];
   return zipStored(files);
@@ -222,7 +223,9 @@ export function buildXlsx(sheets: XlsxSheet[]): Buffer {
 
 export function writeXlsxFile(fileName: string, sheets: XlsxSheet[]) {
   const bytes = buildXlsx(sheets);
-  const blob = new Blob([Uint8Array.from(bytes)], {
+  const packed = new Uint8Array(bytes.byteLength);
+  packed.set(bytes);
+  const blob = new Blob([packed], {
     type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   });
   const url = URL.createObjectURL(blob);

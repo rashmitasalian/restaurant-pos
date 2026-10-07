@@ -42,6 +42,12 @@ import {
   screenImports,
   type ScreenPrefetchKey,
 } from "./screenPrefetch";
+import {
+  APPEARANCE_OPTIONS,
+  readAppearanceChoice,
+  setAppearanceChoice,
+  type AppearanceChoice,
+} from "./theme/appearance";
 
 const Tables = React.lazy(screenImports.tables);
 const Billing = React.lazy(screenImports.billing);
@@ -535,6 +541,7 @@ function MainContent({
   // User menu (dropdown) state + outside click handler
   const userMenuRef = React.useRef<HTMLDivElement | null>(null);
   const [userMenuOpen, setUserMenuOpen] = React.useState(false);
+  const [appearance, setAppearance] = React.useState<AppearanceChoice>(() => readAppearanceChoice());
   const [profileOpen, setProfileOpen] = React.useState(false);
   const closeProfile = React.useCallback(() => setProfileOpen(false), []);
   const profileDialogRef = useFocusTrap<HTMLDivElement>(profileOpen, closeProfile);
@@ -711,6 +718,29 @@ function MainContent({
                 >
                   My Profile
                 </button>
+                <div className="hdr-dd-sep" />
+                <div className="hdr-dd-appearance">
+                  <div className="hdr-dd-meta-label" role="presentation">
+                    Appearance
+                  </div>
+                  {APPEARANCE_OPTIONS.map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      className="hdr-dd-item hdr-dd-choice"
+                      role="menuitemradio"
+                      aria-checked={appearance === option.id}
+                      aria-label={`Appearance, ${option.label}`}
+                      onClick={() => {
+                        setAppearanceChoice(option.id);
+                        setAppearance(option.id);
+                      }}
+                    >
+                      <span className="hdr-dd-radio" aria-hidden="true" />
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
                 <div className="hdr-dd-sep" />
                 <button
                   className="hdr-dd-item hdr-dd-danger"

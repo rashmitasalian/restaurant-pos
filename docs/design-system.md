@@ -6,8 +6,9 @@ RestoNiti 2026 is a visual and component-system modernization, not a redesign of
 
 - **Deep teal** (`--pos-teal` / `--pos-chrome`) is structure: top bar, Billing rail, primary actions, occupied state.
 - **Saffron** (`--pos-saffron`) is a spark: one accent action per view, attention / held only.
-- **Warm light** workspace: `--pos-bg: #F9F8F6`, `--pos-surface: #FFFFFF`.
-- Text ramp: `#17202A` / `#3F4A56` / `#64748B` / `#94A3B8`. Borders: `#E3E5E4` / `#CBD2D0`.
+- **Light** is the default workspace: `--pos-bg: #F9F8F6`, `--pos-surface: #FFFFFF`. Text ramp: `#17202A` / `#3F4A56` / `#64748B` / `#94A3B8`. Borders: `#E3E5E4` / `#CBD2D0`.
+- **Dark** is a low-glare charcoal workspace on the same `--pos-*` names (`html[data-theme="dark"]` in `tokens.css`). It is not pure black, and it does not use pure white text. Teal and saffron stay distinguishable for Available, Send KOT, KOT sent, and Pending.
+- **System** follows the operating system. The device preference lives in `localStorage` key `pos-appearance` (`light` | `dark` | `system`), default `light`. It is not restaurant data and is not stored in SQLite. Print and export HTML stay light.
 - Shape language max **10px** (`--pos-r-sm/md/lg/dialog` = 6 / 8 / 10 / 10).
 - Billing center IA: **Search → Quick Add (favorites) → Categories → Menu grid**. Quick Add never horizontally scrolls; overflow uses **More**.
 - Shared tiles: `MenuTile`, `FavoriteTile`, `TableTile`, `OrderItemRow`.
@@ -53,11 +54,11 @@ Shape: `--pos-r-sm/md/lg/dialog` = 6 / 8 / 10 / 12. Pills (`--pos-r-badge`) only
 | success | Completed | `--pos-state-success-*` (green) |
 | danger | Error / cancel | `--pos-state-danger-*` (red) |
 
-Communicate state with **accent edge + status dot + light tint + label**, never by filling the whole card. On the teal Billing rail, table tiles stay light surfaces; the rail is chrome, the tiles are content.
+Communicate state with **accent edge + status dot + tint + label**, never by filling the whole card. On the Billing rail, table tiles stay content surfaces; the rail is chrome, the tiles are content. In the Light theme those tiles stay light.
 
 ## Tokens
 
-Application UI color lives in `src/ui/theme/tokens.css`. External identity (Swiggy, Zomato) and `CHART_RAMP` live in `src/ui/theme/external-brands.ts`. Print-window ink lives in `src/ui/theme/print-html.ts`.
+Application UI color lives in `src/ui/theme/tokens.css`. `:root` is the Light theme. Dark overrides only the color tokens under `html[data-theme="dark"]`. External identity (Swiggy, Zomato) and chart hues live in `src/ui/theme/external-brands.ts` and stay brand-true in both themes. Print-window ink lives in `src/ui/theme/print-html.ts` and stays light.
 
 Shared CSS: `src/ui/theme/base.css` plus `src/ui/theme/components/*.css`. Theme is imported from `src/main.tsx`.
 
@@ -125,7 +126,7 @@ Do not change these without updating `scripts/perf-ui.cjs` in the same commit.
 
 Preserve window events `select-table`, `orders-changed`, `branding-changed`, `service-modes-changed`, `hashchange`.
 
-Preserve localStorage keys `currentOrderId`, `currentTable`, `lastPage`, `tablesLayoutMode`.
+Preserve localStorage keys `currentOrderId`, `currentTable`, `lastPage`, `tablesLayoutMode`, `pos-appearance`.
 
 Preserve Billing shortcuts `T`, `K`, `P`, `B`, `C`, `U`, `Ctrl+K` (Manage command palette; must not steal plain `K` on Billing), `Ctrl+Z`, and `1-6` favorites.
 
@@ -133,7 +134,7 @@ Reports live under Manage (`#reports`); top-nav Reports appears only for reports
 
 ## Manage back-office contract (frozen)
 
-Manage extends Billing/Tables — it does not invent a second visual language. Tables, Billing and KOT Queue are not modified by Manage work. Existing token values are read-only; shared primitives are extended additively only.
+Manage extends Billing/Tables — it does not invent a second visual language. Tables, Billing and KOT Queue are not modified by Manage work. Light-theme token values in `:root` stay as they are. Dark values belong only in `tokens.css`. Shared primitives are extended additively only.
 
 ### Visual identity
 

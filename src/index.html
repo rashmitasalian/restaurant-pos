@@ -4,6 +4,22 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>RestoNiti</title>
+    <script>
+      (function () {
+        try {
+          var choice = localStorage.getItem("pos-appearance");
+          var theme = "light";
+          if (choice === "dark") theme = "dark";
+          else if (
+            choice === "system" &&
+            window.matchMedia("(prefers-color-scheme: dark)").matches
+          ) {
+            theme = "dark";
+          }
+          document.documentElement.setAttribute("data-theme", theme);
+        } catch (e) {}
+      })();
+    </script>
     <style>
       * {
         margin: 0;
@@ -103,6 +119,25 @@
           transform: scale(0.96);
           opacity: 0.88;
         }
+      }
+      html[data-theme="dark"] body {
+        background: #1c2124;
+        color: #e8e6e1;
+      }
+      html[data-theme="dark"] .boot-mark {
+        background: linear-gradient(135deg, #6eafb8, #3d7f88);
+      }
+      html[data-theme="dark"] .boot-wordmark span:last-child {
+        color: #6eafb8;
+      }
+      html[data-theme="dark"] .boot-track {
+        background: #1a1f22;
+      }
+      html[data-theme="dark"] .boot-bar {
+        background: linear-gradient(90deg, #6eafb8, #8ac6ce);
+      }
+      html[data-theme="dark"] .boot-caption {
+        color: #9aa3a1;
       }
     </style>
   </head>

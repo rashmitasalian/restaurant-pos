@@ -1,15 +1,33 @@
 import { BrowserWindow, app } from "electron";
 import path from "path";
 import fs from "fs";
+import { currentWindowBackground, resolvedTheme } from "./appearancePreference";
 
-/** Matches src/ui/theme tokens used by PageLoadingFallback auth variant. */
-const BOOT_BG = "#f9f8f6";
-const BOOT_TEAL = "#0f5e68";
-const BOOT_TX = "#17202a";
-const BOOT_MUTED = "#64748b";
-const BOOT_TRACK = "#f4f5f3";
+/** Splash ink. Light matches the warm workspace; dark matches html[data-theme="dark"] tokens. */
+const BOOT_PALETTES = {
+  light: {
+    bg: "#f9f8f6",
+    teal: "#0f5e68",
+    tealDeep: "#0b4a52",
+    barEnd: "#5f9ea5",
+    tx: "#17202a",
+    muted: "#64748b",
+    track: "#f4f5f3",
+  },
+  dark: {
+    bg: "#1c2124",
+    teal: "#6eafb8",
+    tealDeep: "#3d7f88",
+    barEnd: "#8ac6ce",
+    tx: "#e8e6e1",
+    muted: "#9aa3a1",
+    track: "#1a1f22",
+  },
+} as const;
 
-export const BOOT_WINDOW_BACKGROUND = BOOT_BG;
+export function windowBackgroundColor(): string {
+  return currentWindowBackground();
+}
 
 function resolveBootMarkDataUrl(): string {
   const candidates = [
@@ -35,6 +53,7 @@ function resolveBootMarkDataUrl(): string {
 }
 
 export function buildBootSplashHtml(caption = "Starting RestoNiti") {
+  const palette = BOOT_PALETTES[resolvedTheme()];
   const mark = resolveBootMarkDataUrl();
   const markHtml = mark
     ? `<img class="mark-img" src="${mark}" alt="" width="42" height="42" />`
@@ -52,8 +71,8 @@ export function buildBootSplashHtml(caption = "Starting RestoNiti") {
       width: 100%;
       height: 100%;
       overflow: hidden;
-      background: ${BOOT_BG};
-      color: ${BOOT_TX};
+      background: ${palette.bg};
+      color: ${palette.tx};
       font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
       -webkit-font-smoothing: antialiased;
     }
@@ -78,7 +97,7 @@ export function buildBootSplashHtml(caption = "Starting RestoNiti") {
       flex: 0 0 auto;
     }
     .mark {
-      background: linear-gradient(135deg, ${BOOT_TEAL}, #0b4a52);
+      background: linear-gradient(135deg, ${palette.teal}, ${palette.tealDeep});
       box-shadow: 0 10px 24px rgba(15, 94, 104, 0.28);
       animation: pulse 1.4s ease-in-out infinite;
     }
@@ -93,26 +112,26 @@ export function buildBootSplashHtml(caption = "Starting RestoNiti") {
       font-weight: 800;
       letter-spacing: -0.03em;
     }
-    .wordmark span:last-child { color: ${BOOT_TEAL}; }
+    .wordmark span:last-child { color: ${palette.teal}; }
     .track {
       width: min(220px, 70vw);
       height: 4px;
       border-radius: 999px;
-      background: ${BOOT_TRACK};
+      background: ${palette.track};
       overflow: hidden;
     }
     .bar {
       width: 42%;
       height: 100%;
       border-radius: inherit;
-      background: linear-gradient(90deg, ${BOOT_TEAL}, #5f9ea5);
+      background: linear-gradient(90deg, ${palette.teal}, ${palette.barEnd});
       animation: slide 1.1s ease-in-out infinite;
     }
     .caption {
       font-size: 13px;
       font-weight: 600;
       letter-spacing: 0.02em;
-      color: ${BOOT_MUTED};
+      color: ${palette.muted};
     }
     @keyframes slide {
       0% { transform: translateX(-120%); }
@@ -153,7 +172,7 @@ export function openBootSplash(iconPath?: string | null) {
     fullscreenable: false,
     show: true,
     center: true,
-    backgroundColor: BOOT_BG,
+    backgroundColor: windowBackgroundColor(),
     autoHideMenuBar: true,
     ...(iconPath ? { icon: iconPath } : {}),
     webPreferences: {

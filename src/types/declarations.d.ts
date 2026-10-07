@@ -293,6 +293,12 @@ declare global {
         stop: () => Promise<any>;
         rotatePairing: () => Promise<any>;
       };
+      appearance?: {
+        set: (choice: "light" | "dark" | "system") => Promise<{
+          ok: boolean;
+          backgroundColor?: string;
+        }>;
+      };
       license?: {
         getStatus: () => Promise<{
           status: "licensed" | "unlicensed";

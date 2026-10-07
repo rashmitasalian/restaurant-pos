@@ -276,6 +276,7 @@
 }
 .btnPrimary[disabled] {
   background: var(--pos-teal-line);
+  color: var(--pos-tx);
   cursor: not-allowed;
 }
 .btnDanger {
@@ -286,7 +287,7 @@
   color: var(--pos-surface);
   font-weight: 700;
   cursor: pointer;
-  box-shadow: 0 2px 10px rgba(239, 68, 68, 0.3);
+  box-shadow: var(--pos-glow-danger);
 }
 /* small responsive tweak */
 @media (max-width: 420px) {
@@ -938,7 +939,7 @@
     border-color var(--pos-motion-fast) var(--pos-ease);
 }
 .orderItem:hover {
-  box-shadow: 0 2px 8px rgba(23, 32, 42, 0.08);
+  box-shadow: var(--pos-shadow-hover);
   border-color: var(--pos-line-strong);
 }
 .removeBtn {
@@ -1322,10 +1323,10 @@
   margin-top: 2px;
 }
 .modalShadowGreen {
-  box-shadow: 0 2px 10px rgba(22, 163, 74, 0.3);
+  box-shadow: var(--pos-glow-success);
 }
 .modalShadowPurple {
-  box-shadow: 0 2px 10px rgba(124, 58, 237, 0.3);
+  box-shadow: var(--pos-glow-violet);
 }
 /* Utilities added for migrated inline styles */
 .scrollArea {

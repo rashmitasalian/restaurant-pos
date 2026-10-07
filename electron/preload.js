@@ -297,6 +297,9 @@ contextBridge.exposeInMainWorld("pos", {
     stop: () => authInvoke("pos:gateway:stop"),
     rotatePairing: () => authInvoke("pos:gateway:rotate-pairing"),
   },
+  appearance: {
+    set: (choice) => invoke("pos:appearance:set", choice),
+  },
   license: {
     getStatus: () => invoke("license:get-status"),
     getInstallationCode: () => invoke("license:get-installation-code"),

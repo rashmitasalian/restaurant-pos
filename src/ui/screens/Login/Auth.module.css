@@ -167,7 +167,7 @@
   height: 56px;
   border-radius: var(--pos-r-sm);
   object-fit: contain;
-  background: #fff;
+  background: var(--pos-logo-well);
   border: 1px solid var(--pos-line);
   padding: 4px;
   flex-shrink: 0;
@@ -307,7 +307,7 @@
 }
 
 .submitBtn:hover:not(:disabled) {
-  background: var(--pos-chrome-rail);
+  background: var(--pos-teal);
   box-shadow: var(--pos-shadow-2);
 }
 
@@ -317,6 +317,11 @@
   box-shadow: none;
   cursor: not-allowed;
   opacity: 1;
+}
+
+html[data-theme="dark"] .submitBtn:disabled {
+  background: var(--pos-surface-sunken);
+  color: var(--pos-tx-muted);
 }
 
 .submitBtn:focus-visible {
