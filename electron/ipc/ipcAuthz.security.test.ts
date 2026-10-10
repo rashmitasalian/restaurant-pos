@@ -14,6 +14,7 @@ const PUBLIC_CHANNELS = new Set([
   "pos:auth:recovery-status",
   "pos:auth:recover-last-admin",
   "pos:branding:get-public",
+  "pos:appearance:set",
   "log:write",
   "license:get-status",
   "license:get-installation-code",
