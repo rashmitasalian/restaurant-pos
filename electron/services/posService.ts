@@ -4372,6 +4372,9 @@ export const posService = {
         .run(JSON.stringify({ categories: categoryNames }), ts);
 
       const keptIds: string[] = [];
+      const usedIds = new Set<string>();
+      let created = 0;
+      let updated = 0;
       const lastSortOrder = database.prepare(
         "SELECT MAX(sort_order) AS value FROM menu_items WHERE active = 1 AND category_id IS ?",
       );
@@ -4397,13 +4400,21 @@ export const posService = {
       };
       for (const item of preview.items) {
         const categoryId = ensureCategory(database, item.category);
-        const id = item.existingId || slugId("item", item.sku || item.name);
+        let id = item.existingId || slugId("item", item.sku || item.name);
+        const claimed = existingById.get(id);
+        const updating = Boolean(item.existingId || claimed);
+        if (!item.existingId && claimed) {
+          id = claimed.id;
+        } else if (!updating && usedIds.has(id)) {
+          id = `${id}-${randomUUID().slice(0, 8)}`;
+        }
         const price = item.price;
         if (price === null) {
           throw new Error("item-price-invalid");
         }
         const sortOrder = sortOrderFor(item, categoryId);
-        if (item.existingId) {
+        if (updating) {
+          updated += 1;
           database
             .prepare(
               `UPDATE menu_items
@@ -4424,6 +4435,7 @@ export const posService = {
               id,
             );
         } else {
+          created += 1;
           database
             .prepare(
               `INSERT INTO menu_items (
@@ -4456,6 +4468,7 @@ export const posService = {
           })),
         );
         keptIds.push(id);
+        usedIds.add(id);
       }
 
       if (replacing && keptIds.length) {
@@ -4475,8 +4488,8 @@ export const posService = {
         .run(JSON.stringify({ options: variantNames }), ts);
       const result = {
         mode,
-        created: preview.created,
-        updated: preview.updated,
+        created,
+        updated,
         deactivatedItems: preview.deactivatedItems,
         deactivatedCategories: preview.deactivatedCategories,
         variantChanges: preview.variantsReplaced,

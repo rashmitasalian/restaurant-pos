@@ -621,7 +621,7 @@ export default function Billing() {
     [order],
   );
   const isPaid = order?.status === "paid";
-  const canCancel = hasItems && !isPaid;
+  const canCancel = Boolean(order) && !isPaid && order.status !== "cancelled";
   const allowsManualKot =
     Boolean(activeMode?.supportsKOT) && !Boolean(activeMode?.immediateBilling);
   const allowsManualBillPrint = !Boolean(activeMode?.immediateBilling);
@@ -1238,73 +1238,11 @@ export default function Billing() {
       return;
     }
     const nextLineName = `${menuItem.name} (${nextVariant.name})`;
-    const nextRate = Number(nextVariant.price);
-    if (line.name === nextLineName && Number(line.rate) === nextRate) {
+    if (String(line.name || "").toLowerCase() === nextLineName.toLowerCase()) {
       return;
     }
-    if (Math.max(0, Number(line.kotPrintedQty || 0)) > 0) {
-      const qty = Math.max(0, Number(line.qty || 0));
-      try {
-        const updated = await voidOrderKotLine(order._id, {
-          lineId,
-          finalQty: 0,
-          reason: "Variant changed",
-          replacement: {
-            menuItemId: line.menuItemId,
-            name: nextLineName,
-            categoryName: line.categoryName || menuItem.category || null,
-            qty,
-            rate: nextRate,
-            kitchenNote: line.kitchenNote || null,
-          },
-        });
-        setOrder(updated);
-        window.dispatchEvent(new Event("orders-changed"));
-        showToast(
-          "Variant updated. Send KOT so the kitchen stops the old one and starts the new one.",
-        );
-      } catch (e: any) {
-        logger.error("Failed to switch sent line variant", e);
-        showToast(
-          reportClientError("billing.switch-variant", e, "Failed to switch variant"),
-          "error",
-        );
-      }
-      return;
-    }
-    try {
-      const mergeTarget = (order.items || []).find(
-        (entry: any) =>
-          entry.id !== lineId &&
-          String(entry.name || "").toLowerCase() === nextLineName.toLowerCase() &&
-          Number(entry.rate) === nextRate &&
-          String(entry.menuItemId || "") === String(line.menuItemId || ""),
-      );
-
-      const nextLines = mergeTarget
-        ? order.items
-            .map((entry: any) => {
-              if (entry.id === mergeTarget.id) {
-                return { ...entry, qty: Number(entry.qty || 0) + Number(line.qty || 0) };
-              }
-              return entry;
-            })
-            .filter((entry: any) => entry.id !== lineId)
-        : order.items.map((entry: any) =>
-            entry.id === lineId ? { ...entry, name: nextLineName, rate: nextRate } : entry,
-          );
-
-      const updated = await updateOrderLines(order._id, nextLines);
-      setOrder(updated);
-      window.dispatchEvent(new Event("orders-changed"));
-      setTimeout(() => searchRef.current?.focus(), 10);
-    } catch (e: any) {
-      logger.error("Failed to switch line variant", e);
-      showToast(
-        reportClientError("billing.switch-variant", e, "Failed to switch variant"),
-        "error",
-      );
-    }
+    // Another size is a new bill line. Do not rewrite this line or move its quantity.
+    await addToOrder(menuItem, 1, true, nextVariant);
   };
 
   const undoLast = async () => {

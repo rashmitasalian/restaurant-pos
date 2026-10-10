@@ -197,9 +197,12 @@ The first launch must be the Windows account that will run RestoNiti every day. 
 3. On the vendor machine, issue a perpetual license. Paste the full code. Do not shorten it.
 
 ```powershell
-npm run license:issue -- --customer "Restaurant Name" --code "RN1-...." --out "$env:USERPROFILE\Desktop\Restaurant-Name.rnlc"
-npm run license:verify -- --file "$env:USERPROFILE\Desktop\Restaurant-Name.rnlc"
+$desktop = [Environment]::GetFolderPath("Desktop")
+npm run license:issue -- --customer "Restaurant Name" --code "RN1-...." --out "$desktop\Restaurant-Name.rnlc"
+npm run license:verify -- --file "$desktop\Restaurant-Name.rnlc"
 ```
+
+Do not use `%USERPROFILE%\Desktop`. On a PC whose Desktop is in OneDrive, that folder does not exist and issue fails with `ENOENT` after the ledger row is written. Run the command again with the path above and import the new file.
 
 4. On the restaurant PC, choose that `.rnlc` file. After it verifies, first-admin setup continues.
 5. The license is stored at `%APPDATA%\Restaurant POS\license\license.rnlc`. It is not inside the SQLite database and is not part of a database backup.
@@ -211,7 +214,8 @@ Only one RestoNiti window runs at a time. Opening it again brings the running wi
 A normal reinstall that leaves `%APPDATA%\Restaurant POS\license\` in place stays licensed. A Windows reinstall, a different Windows user, a deleted identity file, or a wiped AppData folder needs a replacement license. Ask for the new installation code and issue a new file with `--replaces` set to the old license id, so the ledger marks the old one replaced:
 
 ```powershell
-npm run license:issue -- --customer "Restaurant Name" --code "RN1-...." --replaces RN-2026-000001 --out "$env:USERPROFILE\Desktop\Restaurant-Name.rnlc"
+$desktop = [Environment]::GetFolderPath("Desktop")
+npm run license:issue -- --customer "Restaurant Name" --code "RN1-...." --replaces RN-2026-000001 --out "$desktop\Restaurant-Name.rnlc"
 ```
 
 The issuer warns if the restaurant name already has an active license and you did not pass `--replaces`, or if that installation code was already issued. A second restaurant with the same name is allowed; read the warning and continue. The old PC is not remotely disabled. A damaged identity file is a support case: do not delete it unless you are ready to issue a new license.

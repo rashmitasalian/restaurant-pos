@@ -209,8 +209,8 @@ export function ConfirmCancelModal({
     >
       <h3 className={styles.modalTitle}>Cancel Order?</h3>
       <p className={styles.modalPara}>
-        This will cancel all items for <strong>{targetLabel}</strong>. The order stays in records
-        for review and is no longer active on the floor.
+        This cancels <strong>{targetLabel}</strong>. The order stays in records for review and is
+        no longer active on the floor.
       </p>
       <label className={styles.modalLabel} style={{ marginTop: 14 }}>
         Reason

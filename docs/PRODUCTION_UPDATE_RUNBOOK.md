@@ -4,7 +4,7 @@
 **This upgrade:** installed **0.6.0** → **0.7.0**  
 **Last updated:** 2026-10-10
 
-`package.json` and `manifest.json` are still `0.6.0`. The app will not offer an update until both are bumped. Git tag `v0.6.0` is commit `72887f0` (2026-09-05). `main` is 42 commits ahead of that tag and still reports version `0.6.0`.
+`package.json` is `0.7.0` on this PC and is not committed yet. `manifest.json` on `main` is still `0.6.0`. The app will not offer an update until that manifest is published, and it must stay at `0.6.0` until the restaurant is licensed. Git tag `v0.6.0` is commit `72887f0` (2026-09-05). There is no `v0.7.0` tag yet.
 
 Related: `docs/FIRST_TIME_INSTALLATION_RUNBOOK.md` (new PCs and license issuance).
 
@@ -78,26 +78,47 @@ $env:NODE_OPTIONS="--use-system-ca"
 npm run build
 ```
 
-Expected file:
+Built file:
 
 ```text
 release\RestoNiti Setup 0.7.0.exe
 ```
 
-If you have the code-signing certificate, set `WIN_CSC_LINK` and `WIN_CSC_KEY_PASSWORD` before `npm run build`, then run `npm run verify:win-sign`. Never commit the PFX or the password.
+There is no code-signing certificate for this release. Do not set `WIN_CSC_LINK` or `WIN_CSC_KEY_PASSWORD`, and do not rebuild. On the restaurant PC, if Windows says the app is protected, choose **More info**, then **Run anyway**.
 
-### 3. Hash the new installer and the 0.6.0 rollback installer
+### 3. Retrieve the installer hashes and sizes
 
-Keep the installer that is actually on the restaurant PC. That is the GitHub asset for tag `v0.6.0`, not `v0.5.6`.
+You need four numbers: hash and size of the new installer, and hash and size of the installer the restaurant is running now. That current installer becomes the rollback. Do not look in `archive\`. That folder is gitignored and is usually empty. A missing file there is expected, and a `0` printed after that error is not a file size.
+
+**New installer.** Hash the exe you just built. Replace `0.7.0` with the version in `package.json`.
 
 ```powershell
-Get-FileHash "release\RestoNiti Setup 0.7.0.exe" -Algorithm SHA256 | Select-Object Hash
-(Get-Item "release\RestoNiti Setup 0.7.0.exe").Length
-Get-FileHash "archive\RestoNiti Setup 0.6.0.exe" -Algorithm SHA256 | Select-Object Hash
-(Get-Item "archive\RestoNiti Setup 0.6.0.exe").Length
+$new = Get-Item "release\RestoNiti Setup 0.7.0.exe"
+Get-FileHash $new.FullName -Algorithm SHA256 | Select-Object Hash
+$new.Length
 ```
 
-If `archive\RestoNiti Setup 0.6.0.exe` is not the file that was installed, download the asset from the `v0.6.0` GitHub Release and hash that file instead.
+`Hash` is `sha256`. `Length` is `installerSizeBytes`.
+
+**Rollback installer.** Read the manifest that is live on `main`. Its `sha256` and `installerSizeBytes` describe the installer the restaurant can already download. Copy those two fields into the new manifest as `rollbackSha256` and `rollbackInstallerSizeBytes`. Copy `installerUrl` into `rollbackInstallerUrl`.
+
+```powershell
+$live = Invoke-RestMethod "https://raw.githubusercontent.com/rashmitasalian/restaurant-pos/main/manifest.json"
+$live | Select-Object version, sha256, installerSizeBytes, installerUrl
+```
+
+Use `sha256` and `installerSizeBytes` from that output. Do not copy `rollbackSha256` or `rollbackInstallerSizeBytes`. Those belong to the installer before the one on the restaurant PC.
+
+To confirm the GitHub file matches the published hash, download it and hash it:
+
+```powershell
+$out = Join-Path $env:TEMP "RestoNiti-rollback.exe"
+Invoke-WebRequest -Uri $live.installerUrl -OutFile $out
+Get-FileHash $out -Algorithm SHA256 | Select-Object Hash
+(Get-Item $out).Length
+```
+
+The hash and length must match `$live.sha256` and `$live.installerSizeBytes`. If they do not, stop. The restaurant is not running the file described in the live manifest.
 
 ### 4. Tag and publish the installer, but not the live manifest
 
@@ -111,19 +132,21 @@ git push origin v0.7.0
 
 Create the GitHub Release for existing tag `v0.7.0`. Attach `release\RestoNiti Setup 0.7.0.exe`. Do not commit the exe. Copy the asset URL from the release page (GitHub turns spaces into dots). Confirm the `v0.6.0` release still has its installer attached.
 
-Leave `manifest.json` on `main` at version `0.6.0` until step 8.
+Leave `manifest.json` on `main` at version `0.6.0` until step 9. You may edit the file locally before then. Do not commit or push that edit.
 
-### 5. Prepare the manifest locally and sign it
+### 5. Write the manifest, then sign it
 
-Save this as a file **outside** the repo, for example `%USERPROFILE%\Desktop\manifest-0.7.0.json`. Fill in the hashes and sizes from step 3. Use the asset URLs you copied.
+`npm run update:sign` only signs a file that already exists. It does not create one. A path such as `%USERPROFILE%\Desktop\manifest-0.7.0.json` fails with `ENOENT` when that file was never saved. On this PC the Desktop folder is also not under `%USERPROFILE%\Desktop`; OneDrive moves it, and the real folder is `[Environment]::GetFolderPath("Desktop")`.
+
+Edit `manifest.json` in the repo. Paste the four numbers from step 3. `sha256` and `installerSizeBytes` come from the new exe. `rollbackSha256`, `rollbackInstallerSizeBytes`, and `rollbackInstallerUrl` come from the live manifest. Hash case does not matter; the app compares hashes in lowercase.
 
 ```json
 {
   "version": "0.7.0",
   "installerUrl": "https://github.com/rashmitasalian/restaurant-pos/releases/download/v0.7.0/RestoNiti.Setup.0.7.0.exe",
-  "sha256": "<0.7.0 SHA256>",
-  "rollbackInstallerUrl": "https://github.com/rashmitasalian/restaurant-pos/releases/download/v0.6.0/RestoNiti.Setup.0.6.0.exe",
-  "rollbackSha256": "<0.6.0 SHA256>",
+  "sha256": "<Hash from the new exe>",
+  "rollbackInstallerUrl": "<installerUrl from the live manifest>",
+  "rollbackSha256": "<sha256 from the live manifest>",
   "installerSizeBytes": 0,
   "rollbackInstallerSizeBytes": 0,
   "notes": [
@@ -138,11 +161,13 @@ Save this as a file **outside** the repo, for example `%USERPROFILE%\Desktop\man
 }
 ```
 
+Save the file, then sign that same path:
+
 ```powershell
-npm run update:sign -- --manifest "$env:USERPROFILE\Desktop\manifest-0.7.0.json"
+npm run update:sign -- --manifest .\manifest.json
 ```
 
-The file should now contain a `signature` field. Do not push it yet.
+`manifest.json` must now contain a `signature` field. Do not commit or push it until step 9. Pushing it now would make the restaurant's 0.6.0 app offer 0.7.0 before a license is ready.
 
 Take to the restaurant:
 
@@ -174,15 +199,18 @@ The `-wal` and `-shm` files may be absent. Copy them if they exist. Leave the or
 
 ### 7. Install, activate, then let the database migrate
 
-1. Run `RestoNiti Setup 0.7.0.exe` as administrator. Approve UAC. Install over `C:\Program Files\RestoNiti\`.
+1. Run `RestoNiti Setup 0.7.0.exe` as administrator. This build is unsigned: if Windows says it protected the PC, choose **More info**, then **Run anyway**. Approve UAC. Install over `C:\Program Files\RestoNiti\`.
 2. Start RestoNiti. It shows **Installation Code** and does not open the POS. Captain does not start. The database is still the plaintext file.
 3. Copy the full code. On your laptop:
 
 ```powershell
 cd "C:\Users\rashm\Documents\RestoNiti\restaurant-pos"
-npm run license:issue -- --customer "Restaurant Name" --code "RN1-...." --out "$env:USERPROFILE\Desktop\Restaurant-Name.rnlc"
-npm run license:verify -- --file "$env:USERPROFILE\Desktop\Restaurant-Name.rnlc"
+$desktop = [Environment]::GetFolderPath("Desktop")
+npm run license:issue -- --customer "Restaurant Name" --code "RN1-...." --out "$desktop\Restaurant-Name.rnlc"
+npm run license:verify -- --file "$desktop\Restaurant-Name.rnlc"
 ```
+
+Use the restaurant’s real name in `--customer`. Do not use `%USERPROFILE%\Desktop`. On this PC that folder does not exist; OneDrive keeps the Desktop at the path `[Environment]::GetFolderPath("Desktop")` returns. If issue fails with `ENOENT`, the `.rnlc` was not written. The ledger may still contain the license id. Run the command again with the Desktop path above. A warning that the installation code already has a license is expected, and the new file is the one to import.
 
 4. On their PC, choose that `.rnlc`. It is stored at `%APPDATA%\Restaurant POS\license\license.rnlc`.
 5. Log in with the existing admin account. Do not run first-time setup again.
@@ -206,7 +234,7 @@ If activation cannot be finished in this visit, close the app and leave 0.7.0 un
 
 ### 9. Publish the signed manifest only after the smoke test
 
-Copy the signed desktop manifest over `manifest.json` in the repo. Commit and push to `main`.
+`manifest.json` in the repo is already signed from step 5. Commit and push that file to `main`. Do this only after the smoke test.
 
 ```powershell
 Invoke-WebRequest -Uri "https://github.com/rashmitasalian/restaurant-pos/releases/download/v0.7.0/RestoNiti.Setup.0.7.0.exe" -Method Head
@@ -236,8 +264,8 @@ Restart RestoNiti on the restaurant PC. Settings → Update & Support → **Chec
 | Previous installer | `v0.6.0` |
 | Release commit | `git rev-parse v0.7.0` |
 | GitHub release | `https://github.com/rashmitasalian/restaurant-pos/releases/tag/v0.7.0` |
-| SHA256 (0.7.0) | |
-| SHA256 (0.6.0 rollback) | |
+| SHA256 (new installer) | from step 3 |
+| SHA256 (rollback installer) | from step 3 |
 | License id | |
 | Database copy location | |
 | Deployed by | |
@@ -256,7 +284,7 @@ Use this only if 0.7.0 cannot bill. Rollback returns to the plaintext database f
 2. Replace `%APPDATA%\Restaurant POS\data\restaurant-pos.sqlite` with the USB copy from step 6.
 3. Delete `restaurant-pos.sqlite-wal` and `restaurant-pos.sqlite-shm` if they exist.
 4. Leave `restaurant-pos.sqlite.key` and the `license` folder. 0.6.0 ignores them.
-5. Run the 0.6.0 installer (`archive\RestoNiti Setup 0.6.0.exe` or the `v0.6.0` GitHub asset).
+5. Download the rollback installer from `rollbackInstallerUrl` in the live manifest (step 3) and run it. Do not look for a copy under `archive\`.
 6. Start RestoNiti, log in, and confirm the last pre-upgrade bill is in History.
 
 Do not restore a backup taken by 0.7.0 after encryption and then expect 0.6.0 to open it.
@@ -283,19 +311,37 @@ npm run lint
 npm test -- --runInBand
 npm version <NEW_VERSION> --no-git-tag-version
 npm run build
-Get-FileHash "release\RestoNiti Setup <NEW_VERSION>.exe" -Algorithm SHA256 | Select-Object Hash
-(Get-Item "release\RestoNiti Setup <NEW_VERSION>.exe").Length
 ```
 
-Commit the version bump, tag `v<NEW_VERSION>`, push the tag, and upload the exe to that GitHub Release. Keep the previous release’s exe. That previous exe is the rollback installer.
+Skip `WIN_CSC_LINK` unless you have a code-signing certificate. An unsigned installer needs **More info** → **Run anyway** on the restaurant PC.
 
-### Manifest
+Commit the version bump, tag `v<NEW_VERSION>`, push the tag, and upload `release\RestoNiti Setup <NEW_VERSION>.exe` to that GitHub Release. Copy the asset URL from the release page.
 
-Update `manifest.json`:
+### Retrieve the four numbers
 
-- `version`, `installerUrl`, `sha256`, `installerSizeBytes` → the new installer
-- `rollbackInstallerUrl`, `rollbackSha256`, `rollbackInstallerSizeBytes` → the previous installer
-- `notes` → what changed
+Same method as step 3. The new exe supplies the new hash and size. The manifest already on `main` supplies the rollback hash, size, and URL.
+
+```powershell
+$new = Get-Item "release\RestoNiti Setup <NEW_VERSION>.exe"
+Get-FileHash $new.FullName -Algorithm SHA256 | Select-Object Hash
+$new.Length
+
+$live = Invoke-RestMethod "https://raw.githubusercontent.com/rashmitasalian/restaurant-pos/main/manifest.json"
+$live | Select-Object version, sha256, installerSizeBytes, installerUrl
+```
+
+| New manifest field | Where the value comes from |
+| --- | --- |
+| `version` | `<NEW_VERSION>` |
+| `installerUrl` | Asset URL copied from the new GitHub Release |
+| `sha256` | `Hash` of the new exe |
+| `installerSizeBytes` | `Length` of the new exe |
+| `rollbackInstallerUrl` | `installerUrl` from the live manifest |
+| `rollbackSha256` | `sha256` from the live manifest |
+| `rollbackInstallerSizeBytes` | `installerSizeBytes` from the live manifest |
+| `notes` | What changed in this release |
+
+`rollbackSha256` in the live manifest is the installer before the one the restaurant is running. Leave it behind. After this release is published, its `sha256` and `installerSizeBytes` become the rollback values for the release after that.
 
 Remove any old `signature` before signing. Then:
 

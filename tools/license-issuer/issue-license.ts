@@ -1,5 +1,6 @@
 /* eslint-disable no-console */
 import fs from "fs";
+import path from "path";
 import { decodeInstallationCode } from "../../electron/licensing/installationCode";
 import { buildLicenseDocument, LicenseInputError } from "../../electron/licensing/licenseDocument";
 import {
@@ -50,6 +51,13 @@ try {
   decoded = decodeInstallationCode(code);
 } catch {
   fail("Installation code could not be decoded. Paste the full code from the POS.");
+}
+
+const outputDirectory = path.dirname(path.resolve(outPath));
+if (!fs.existsSync(outputDirectory)) {
+  fail(
+    `Output folder does not exist: ${outputDirectory}. Do not use %USERPROFILE%\\Desktop when OneDrive hosts the Desktop. In PowerShell, set $desktop = [Environment]::GetFolderPath("Desktop") and pass --out "$desktop\\file.rnlc".`,
+  );
 }
 
 const privateKeyPem = loadMatchingPrivateKey(defaultPrivateKeyPath());

@@ -1,14 +1,19 @@
 {
-  "version": "0.6.0",
-  "installerUrl": "https://github.com/rashmitasalian/restaurant-pos/releases/download/v0.6.0/RestoNiti.Setup.0.6.0.exe",
-  "sha256": "8A820F9010A962193A28C81855ACBA3B4AF0ED6537CB6C7F1F4BF0B0ECB935DB",
-  "rollbackInstallerUrl": "https://github.com/rashmitasalian/restaurant-pos/releases/download/v0.5.6/RestoNiti.Setup.0.5.6.exe",
-  "rollbackSha256": "B273ECB4A2F5E136A8F75B7D521141BADFE3113007369F7B35BC2E0856A40495",
-  "installerSizeBytes": 112649576,
-  "rollbackInstallerSizeBytes": 112293336,
+  "version": "0.7.0",
+  "installerUrl": "https://github.com/rashmitasalian/restaurant-pos/releases/download/v0.7.0/RestoNiti.Setup.0.7.0.exe",
+  "sha256": "1C7D0D2329250BB91612DBF19BE06F068385755E470D9AB44B64A268536692F5",
+  "rollbackInstallerUrl": "https://github.com/rashmitasalian/restaurant-pos/releases/download/v0.6.0/RestoNiti.Setup.0.6.0.exe",
+  "rollbackSha256": "8a820f9010a962193a28c81855acba3b4af0ed6537cb6c7f1f4bf0b0ecb935db",
+  "installerSizeBytes": 144680981,
+  "rollbackInstallerSizeBytes": 112649576,
   "notes": [
-    "Created Captain App",
-    "QR menu feature",
-    "Bug fixes and improvements"
-  ]
+    "One-time license activation for this PC",
+    "Database encrypted on first open",
+    "Kitchen notes on order lines and KOT",
+    "Percent and fixed-amount discounts",
+    "Customer credit ledger and split-payment credit",
+    "QR code on the bill, menu import, diet labels, logo and appearance",
+    "Staff roster export, table filters, Captain QR pairing"
+  ],
+  "signature": "J+KAuv3CFnGETuqEWfWBtKYHw9QfltVZKRZOKZHw6+Xnf0nkFZpUsyjeo/fc43v3AznXCIWpG/E6yl+fvf6vCA=="
 }

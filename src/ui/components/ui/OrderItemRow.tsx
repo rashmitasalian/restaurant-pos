@@ -76,22 +76,33 @@ export function OrderItemRow({
         <div className="ui-order-row-name" title={name}>
           {name}
         </div>
-        {hasVariants && onChangeVariant ? (
-          <select
-            value={selectedVariantName || ""}
-            onChange={(e) => onChangeVariant(e.target.value)}
-            title="Switch variant"
-            aria-label={`Variant for ${name}`}
-            style={{ marginTop: 4, maxWidth: "100%" }}
-            className="pos-input"
-          >
-            {variantChoices!.map((variant) => (
-              <option key={variant.id || variant.name} value={variant.name}>
-                {variant.name} · ₹{variant.price}
-              </option>
-            ))}
-          </select>
-        ) : null}
+        {hasVariants && onChangeVariant
+          ? variantChoices!
+              .filter(
+                (variant) =>
+                  variant.name.trim().toLowerCase() !==
+                  String(selectedVariantName || "").trim().toLowerCase(),
+              )
+              .map((variant) => (
+                <button
+                  key={variant.id || variant.name}
+                  type="button"
+                  onClick={() => onChangeVariant(variant.name)}
+                  title={`Add ${variant.name} as its own line`}
+                  aria-label={`Add ${variant.name} for ${name}`}
+                  className="pos-input"
+                  style={{
+                    marginTop: 4,
+                    width: "auto",
+                    maxWidth: "100%",
+                    padding: "2px 8px",
+                    fontSize: 12,
+                  }}
+                >
+                  Add {variant.name} · ₹{variant.price}
+                </button>
+              ))
+          : null}
         {modifiers && modifiers.length > 0 ? (
           <ul className="ui-order-row-mod">
             {modifiers.map((mod) => (

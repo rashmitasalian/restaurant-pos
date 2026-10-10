@@ -258,6 +258,23 @@ describe("menu GST, order, and import", () => {
     expect(posService.getVariantOptions()).toEqual(["Regular", "Small", "Large"]);
   });
 
+  it("updates an item that already owns the id when the file puts it in another category", () => {
+    const tea = posService.createItem({ name: "Tea", category: "Drinks", price: 20 });
+    const csv = [
+      "category,item,variant,price,diet,available,favorite,sku",
+      "Hot Beverages,Tea,,25,veg,yes,,",
+    ].join("\n");
+
+    const result = posService.importMenu({ csv, fileName: "vatika.csv" }, "owner");
+
+    expect(result.created).toBe(0);
+    expect(result.updated).toBe(1);
+    const saved = posService.getItemById(tea._id)!;
+    expect(saved.category).toBe("Hot Beverages");
+    expect(saved.price).toBe(25);
+    expect(posService.getItems().filter((item) => item.name === "Tea")).toHaveLength(1);
+  });
+
   it("reorders items within a category", () => {
     const soup = posService.createItem({ name: "Soup", category: "Mains", price: 80 });
     const kebab = posService.createItem({ name: "Kebab", category: "Mains", price: 260 });
