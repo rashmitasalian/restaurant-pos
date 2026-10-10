@@ -6,4 +6,10 @@ export const PRINT = {
   faint: "#aaaaaa",
   line: "#e5e5e5",
   dangerRow: "#fff5f5",
+  paper: "#ffffff",
+  avatar: "#0f5e68",
+  badgeActiveBg: "#dcfce7",
+  badgeActiveInk: "#14532d",
+  badgeLeftBg: "#fee2e2",
+  badgeLeftInk: "#991b1b",
 } as const;

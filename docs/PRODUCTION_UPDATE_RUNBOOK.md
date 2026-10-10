@@ -1,188 +1,223 @@
 # Production Update Runbook
 
 **Repo:** `https://github.com/rashmitasalian/restaurant-pos`  
-**Last updated:** 2026-07-14
+**This upgrade:** installed **0.6.0** → **0.7.0**  
+**Last updated:** 2026-10-10
+
+`package.json` and `manifest.json` are still `0.6.0`. The app will not offer an update until both are bumped. Git tag `v0.6.0` is commit `72887f0` (2026-09-05). `main` is 42 commits ahead of that tag and still reports version `0.6.0`.
+
+Related: `docs/FIRST_TIME_INSTALLATION_RUNBOOK.md` (new PCs and license issuance).
 
 ---
 
 ## How the update system works
 
-The POS app compares the **version embedded in the installed `.exe`** (set by `package.json` at build time) against the **`version` field in `manifest.json`**. If the manifest version is higher, the update is offered. Git tags play no role in this check — they are used only for GitHub Releases and human tracking.
+The installed `.exe` version comes from `package.json` at build time. Settings → **Update & Support** compares that version with the `version` field in `manifest.json` at `POS_UPDATE_MANIFEST_URL`. A higher manifest version is offered. Git tags are only for GitHub Releases.
+
+From **0.7.0** onward, Check for Updates rejects a manifest that has no valid Ed25519 `signature`. The 0.6.0 app ignores that field, so a signed manifest is still readable by 0.6.0.
 
 ---
 
-## Part A — Deploy v0.2.0 (Current Release)
+## Why this upgrade is not a normal in-app update
 
-### Current state at time of writing
+0.7.0 is the first build that requires a license, and the first build that encrypts the database.
 
-| Item | Status |
-|---|---|
-| All code changes committed and pushed | ✓ Done (`57793c9` on `origin/main`) |
-| `v0.1.0` git tag created and pushed | ✓ Done |
-| Rollback installer built | ✓ Done (`archive\RestoNiti Setup 0.1.0.exe`) |
-| `package.json` version bumped to `0.2.0` | ✗ Still needed |
-| `v0.2.0` git tag | ✗ Still needed |
-| `0.2.0` installer built | ✗ Still needed |
-| GitHub Releases created | ✗ Still needed |
-| `manifest.json` published | ✗ Still needed |
-| Update applied at restaurant | ✗ Still needed |
+- Until a `.rnlc` file is imported, the POS and Captain do not start. The database is not opened yet, so a failed license visit does not encrypt or migrate it.
+- The first successful open copies `restaurant-pos.sqlite` to SQLCipher, writes `restaurant-pos.sqlite.key` beside it, and deletes the plaintext file. The key is wrapped with the Windows login secret in `%APPDATA%\Restaurant POS\Local State`.
+- 0.6.0 cannot open that encrypted file. Rollback only works from a plaintext copy taken **before** the new app opens the database.
+- Do **not** publish `manifest.json` version `0.7.0` before the restaurant is licensed. The live URL is `main` on GitHub. The 0.6.0 app would download 0.7.0, restart into the activation screen, and could not bill until you issue a license.
+
+Install this build on site, with the license issuer on your laptop, in the same visit.
 
 ---
 
-### Step 1 — Bump the version to 0.2.0
+## Before you leave home
 
-Open PowerShell in the repo root:
+### 1. Confirm the keys match this source tree
 
-```powershell
-cd "C:\Users\Rashmita.Salian\OneDrive - Wolters Kluwer\Pictures\restaurant-pos"
-npm version 0.2.0 --no-git-tag-version
-git add package.json package-lock.json
-git commit -m "chore: bump version to 0.2.0"
-git push origin main
+License private key (already used for this app’s embedded license public key):
+
+```text
+%USERPROFILE%\.restoniti\license-ed25519.pem
+%USERPROFILE%\.restoniti\license-ledger.jsonl
 ```
 
-Verify:
+Update-manifest private key (separate from the license key):
 
-```powershell
-Get-Content package.json | Select-String '"version"'
-# Expected: "version": "0.2.0"
+```text
+%USERPROFILE%\.restoniti\update-ed25519.pem
 ```
 
----
-
-### Step 2 — Create and push the v0.2.0 git tag
-
 ```powershell
-git tag v0.2.0
-git push origin v0.2.0
+cd "C:\Users\rashm\Documents\RestoNiti\restaurant-pos"
+npm run license:keygen
+npm run update:keygen
 ```
 
-Verify on GitHub: `https://github.com/rashmitasalian/restaurant-pos/tags`
+Both commands must say the existing key **matches** the public key in `electron/licensing/publicKey.ts`. If `update:keygen` creates a new key, it prints a public key that is not in the app yet. Paste that value into `UPDATE_PUBLIC_KEY_BASE64`, then build. Do not sign a manifest with a key that does not match the exe you are about to install.
 
----
+Do not commit private keys, the ledger, or `.rnlc` files.
 
-### Step 3 — Build the v0.2.0 installer
+### 2. Build 0.7.0
 
-> Run on a Windows machine with Node.js 22, Visual Studio 2022 Build Tools (C++ workload + MSVC + Windows SDK) installed.
+Node.js **24.x** (see `package.json` `engines`). Visual Studio 2022 Build Tools with the C++ workload, MSVC, and the Windows SDK.
 
 ```powershell
+git status --short --branch
 npm ci
+npm run lint
+npm test -- --runInBand
+npm version 0.7.0 --no-git-tag-version
 npm run build
 ```
 
-Expected output:
-
-```
-release\RestoNiti Setup 0.2.0.exe
-```
-
-If you get a TLS error on a corporate network, prepend:
+On a network that intercepts TLS:
 
 ```powershell
 $env:NODE_OPTIONS="--use-system-ca"
 npm run build
 ```
 
----
+Expected file:
 
-### Step 4 — Compute SHA256 hashes for both installers
-
-```powershell
-Get-FileHash "release\RestoNiti Setup 0.2.0.exe"    -Algorithm SHA256 | Select-Object Hash
-Get-FileHash "archive\RestoNiti Setup 0.1.0.exe"    -Algorithm SHA256 | Select-Object Hash
+```text
+release\RestoNiti Setup 0.7.0.exe
 ```
 
-Note both values — you will need them in Steps 6 and 7.
+If you have the code-signing certificate, set `WIN_CSC_LINK` and `WIN_CSC_KEY_PASSWORD` before `npm run build`, then run `npm run verify:win-sign`. Never commit the PFX or the password.
 
-Also note the file sizes in bytes:
+### 3. Hash the new installer and the 0.6.0 rollback installer
+
+Keep the installer that is actually on the restaurant PC. That is the GitHub asset for tag `v0.6.0`, not `v0.5.6`.
 
 ```powershell
-(Get-Item "release\RestoNiti Setup 0.2.0.exe").Length
-(Get-Item "archive\RestoNiti Setup 0.1.0.exe").Length
+Get-FileHash "release\RestoNiti Setup 0.7.0.exe" -Algorithm SHA256 | Select-Object Hash
+(Get-Item "release\RestoNiti Setup 0.7.0.exe").Length
+Get-FileHash "archive\RestoNiti Setup 0.6.0.exe" -Algorithm SHA256 | Select-Object Hash
+(Get-Item "archive\RestoNiti Setup 0.6.0.exe").Length
 ```
 
----
+If `archive\RestoNiti Setup 0.6.0.exe` is not the file that was installed, download the asset from the `v0.6.0` GitHub Release and hash that file instead.
 
-### Step 5 — Create GitHub Releases and upload the installers
+### 4. Tag and publish the installer, but not the live manifest
 
-> ⚠️ Do **not** commit `.exe` files to git. Electron installers exceed 100 MB. The `archive/` and `release/` folders are gitignored. GitHub Releases supports up to 2 GB per asset and serves files over HTTPS.
+```powershell
+git add package.json package-lock.json
+git commit -m "chore: bump version to 0.7.0"
+git push origin main
+git tag v0.7.0
+git push origin v0.7.0
+```
 
-**Create the v0.1.0 release (rollback installer):**
+Create the GitHub Release for existing tag `v0.7.0`. Attach `release\RestoNiti Setup 0.7.0.exe`. Do not commit the exe. Copy the asset URL from the release page (GitHub turns spaces into dots). Confirm the `v0.6.0` release still has its installer attached.
 
-1. Go to `https://github.com/rashmitasalian/restaurant-pos/releases/new`
-2. Choose existing tag `v0.1.0`
-3. Title: `v0.1.0 — Initial production release`
-4. Attach `archive\RestoNiti Setup 0.1.0.exe`
-5. Click **Publish release**
-6. Click the uploaded asset and copy the download URL — it will look like:
-   ```
-   https://github.com/rashmitasalian/restaurant-pos/releases/download/v0.1.0/RestoNiti.Setup.0.1.0.exe
-   ```
+Leave `manifest.json` on `main` at version `0.6.0` until step 8.
 
-**Create the v0.2.0 release (new installer):**
+### 5. Prepare the manifest locally and sign it
 
-1. Go to `https://github.com/rashmitasalian/restaurant-pos/releases/new`
-2. Choose existing tag `v0.2.0`
-3. Title: `v0.2.0`
-4. Add release notes:
-   ```
-   - Separate Print Bill and Pay buttons — bill can be printed before payment is recorded
-   - Pay button records payment mode and clears the table only
-   - Print receipt checkbox on payment modal (unchecked by default)
-   - Order item +/- buttons are keyboard accessible; minus disabled at minimum quantity
-   - Delivery bill button renamed to Print Bill for consistency
-   ```
-5. Attach `release\RestoNiti Setup 0.2.0.exe`
-6. Click **Publish release**
-7. Click the uploaded asset and copy the download URL — it will look like:
-   ```
-   https://github.com/rashmitasalian/restaurant-pos/releases/download/v0.2.0/RestoNiti.Setup.0.2.0.exe
-   ```
-
-> **Note:** GitHub replaces spaces with `.` in asset download URLs. Always copy the URL by clicking the asset rather than constructing it manually.
-
----
-
-### Step 6 — Publish the update manifest
-
-Do **not** publish the first licensed build (the first installer that requires a `.rnlc`) to this manifest for a restaurant that is still on an unlicensed build. That update would restart them into the activation screen with no license ready, and they could not bill until you issue a file. Hand-install that build and import the license first. After the PC is licensed, later versions can go through this manifest because the license stays in `%APPDATA%\Restaurant POS`.
-
-Create `manifest.json` with the values collected above and publish it at a stable HTTPS URL that the POS app is configured to check.
+Save this as a file **outside** the repo, for example `%USERPROFILE%\Desktop\manifest-0.7.0.json`. Fill in the hashes and sizes from step 3. Use the asset URLs you copied.
 
 ```json
 {
-  "version": "0.2.0",
-  "installerUrl": "https://github.com/rashmitasalian/restaurant-pos/releases/download/v0.2.0/RestoNiti.Setup.0.2.0.exe",
-  "sha256": "<PASTE_0.2.0_SHA256_HERE>",
-  "rollbackInstallerUrl": "https://github.com/rashmitasalian/restaurant-pos/releases/download/v0.1.0/RestoNiti.Setup.0.1.0.exe",
-  "rollbackSha256": "<PASTE_0.1.0_SHA256_HERE>",
-  "installerSizeBytes": <PASTE_0.2.0_SIZE_IN_BYTES>,
-  "rollbackInstallerSizeBytes": <PASTE_0.1.0_SIZE_IN_BYTES>,
+  "version": "0.7.0",
+  "installerUrl": "https://github.com/rashmitasalian/restaurant-pos/releases/download/v0.7.0/RestoNiti.Setup.0.7.0.exe",
+  "sha256": "<0.7.0 SHA256>",
+  "rollbackInstallerUrl": "https://github.com/rashmitasalian/restaurant-pos/releases/download/v0.6.0/RestoNiti.Setup.0.6.0.exe",
+  "rollbackSha256": "<0.6.0 SHA256>",
+  "installerSizeBytes": 0,
+  "rollbackInstallerSizeBytes": 0,
   "notes": [
-    "Separate Print Bill and Pay buttons — bill can be printed before payment is recorded",
-    "Pay button records payment mode and clears the table only",
-    "Print receipt checkbox on payment modal (unchecked by default)",
-    "Order item +/- buttons are keyboard accessible; minus disabled at minimum quantity",
-    "Delivery bill button renamed to Print Bill for consistency"
+    "One-time license activation for this PC",
+    "Database encrypted on first open",
+    "Kitchen notes on order lines and KOT",
+    "Percent and fixed-amount discounts",
+    "Customer credit ledger and split-payment credit",
+    "QR code on the bill, menu import, diet labels, logo and appearance",
+    "Staff roster export, table filters, Captain QR pairing"
   ]
 }
 ```
 
-Before going to the restaurant, verify both installer URLs are reachable:
-
 ```powershell
-Invoke-WebRequest -Uri "https://github.com/rashmitasalian/restaurant-pos/releases/download/v0.2.0/RestoNiti.Setup.0.2.0.exe" -Method Head
-Invoke-WebRequest -Uri "https://github.com/rashmitasalian/restaurant-pos/releases/download/v0.1.0/RestoNiti.Setup.0.1.0.exe" -Method Head
-# Both must return StatusCode 200
+npm run update:sign -- --manifest "$env:USERPROFILE\Desktop\manifest-0.7.0.json"
 ```
+
+The file should now contain a `signature` field. Do not push it yet.
+
+Take to the restaurant:
+
+- `RestoNiti Setup 0.7.0.exe` on USB (do not rely on the in-app updater)
+- This laptop, with the license private key, so you can issue the `.rnlc` on the spot
+- A blank USB folder for the database copy
 
 ---
 
-### Step 6b — Configure the update manifest URL on the restaurant machine
+## At the restaurant
 
-> Do this **once** on the restaurant machine. It survives app reinstalls and future updates.
+Do this after close, or with no open orders. Windows admin is required for UAC. Use the same Windows account that runs RestoNiti every day.
 
-Open PowerShell **as Administrator** on the restaurant machine and run:
+### 6. Two-minute check, then copy the database
+
+1. Open the current app and log in as admin.
+2. If it already shows **Installation Code**, or Settings already has **License**, this PC is not the unlicensed 0.6.0 path. Stop and use **Already licensed** at the bottom.
+3. Confirm there are no open tables you still need.
+4. Close RestoNiti completely. Confirm it is gone in Task Manager.
+5. Copy these files to the USB. The app must stay closed.
+
+```text
+%APPDATA%\Restaurant POS\data\restaurant-pos.sqlite
+%APPDATA%\Restaurant POS\data\restaurant-pos.sqlite-wal
+%APPDATA%\Restaurant POS\data\restaurant-pos.sqlite-shm
+```
+
+The `-wal` and `-shm` files may be absent. Copy them if they exist. Leave the originals in place. Do not delete `%APPDATA%\Restaurant POS`, `Local State`, or anything under `license\`.
+
+### 7. Install, activate, then let the database migrate
+
+1. Run `RestoNiti Setup 0.7.0.exe` as administrator. Approve UAC. Install over `C:\Program Files\RestoNiti\`.
+2. Start RestoNiti. It shows **Installation Code** and does not open the POS. Captain does not start. The database is still the plaintext file.
+3. Copy the full code. On your laptop:
+
+```powershell
+cd "C:\Users\rashm\Documents\RestoNiti\restaurant-pos"
+npm run license:issue -- --customer "Restaurant Name" --code "RN1-...." --out "$env:USERPROFILE\Desktop\Restaurant-Name.rnlc"
+npm run license:verify -- --file "$env:USERPROFILE\Desktop\Restaurant-Name.rnlc"
+```
+
+4. On their PC, choose that `.rnlc`. It is stored at `%APPDATA%\Restaurant POS\license\license.rnlc`.
+5. Log in with the existing admin account. Do not run first-time setup again.
+6. The first successful open encrypts the database and applies schema migrations 27 through 33 (customer credit, grocery bill lines, menu diet, kitchen notes, discount amount). No manual SQL.
+
+If activation cannot be finished in this visit, close the app and leave 0.7.0 unopened against the database. You can reinstall the 0.6.0 exe from the USB or the GitHub release; the plaintext file is unchanged until a licensed launch.
+
+### 8. Smoke test
+
+- [ ] Login works with the existing admin
+- [ ] Settings → License shows the license id, Perpetual, and the restaurant name
+- [ ] Old bills are still in History and Reports
+- [ ] Open a table, add an item, add a kitchen note, send a KOT, and confirm the note prints
+- [ ] Print Bill does not mark the order paid
+- [ ] Pay with the method they use most, and confirm the table clears
+- [ ] If they use percent or fixed discounts, or customer credit, run one of each on the test order before voiding or paying it
+- [ ] A Captain phone can still open the floor. Re-pair only if that phone fails
+- [ ] The usual bill printer and KOT printer still print
+- [ ] `%APPDATA%\Restaurant POS\data\restaurant-pos.sqlite.key` exists
+- [ ] Do not delete that `.key` file, `license\`, or `Local State`
+
+### 9. Publish the signed manifest only after the smoke test
+
+Copy the signed desktop manifest over `manifest.json` in the repo. Commit and push to `main`.
+
+```powershell
+Invoke-WebRequest -Uri "https://github.com/rashmitasalian/restaurant-pos/releases/download/v0.7.0/RestoNiti.Setup.0.7.0.exe" -Method Head
+Invoke-WebRequest -Uri "https://github.com/rashmitasalian/restaurant-pos/releases/download/v0.6.0/RestoNiti.Setup.0.6.0.exe" -Method Head
+```
+
+Both must return status 200.
+
+Restart RestoNiti on the restaurant PC. Settings → Update & Support → **Check for Updates** should report that 0.7.0 is current. It must not offer another install. If it says the manifest signature is invalid, the signing key does not match the exe you installed. Re-sign with the matching key and push again. Do not generate a new update key after this exe is installed.
+
+`POS_UPDATE_MANIFEST_URL` should already be the machine-wide value below. Set it only if it is missing, then restart the app:
 
 ```powershell
 [System.Environment]::SetEnvironmentVariable(
@@ -192,167 +227,106 @@ Open PowerShell **as Administrator** on the restaurant machine and run:
 )
 ```
 
-Verify it was saved:
-
-```powershell
-[System.Environment]::GetEnvironmentVariable("POS_UPDATE_MANIFEST_URL", "Machine")
-# Expected: https://raw.githubusercontent.com/rashmitasalian/restaurant-pos/main/manifest.json
-```
-
-> ⚠️ **Restart the POS app** after setting this — environment variables set at Machine scope are only picked up when the process starts fresh.
-
----
-
-### Step 7 — Apply the update at the restaurant
-
-Do this during a quiet period (after close or between service periods).
-
-**Before starting:**
-- [ ] Restaurant is closed or quiet — no active orders
-- [ ] Windows admin credentials available for UAC prompt
-- [ ] Machine has internet access to GitHub
-- [ ] Step 6b completed — `POS_UPDATE_MANIFEST_URL` is set
-- [ ] This is not the first licensed build on an unlicensed site (if it is, stop and use `docs/FIRST_TIME_INSTALLATION_RUNBOOK.md` instead)
-
-**At the POS machine:**
-
-1. Log in as **admin**
-2. Open **Settings → Update & Support**
-3. Click **Check for Updates** — confirm version `0.2.0` and the release notes appear
-4. Click **Prepare Update** — the app will:
-   - back up the database to `pre-update.sqlite`
-   - download and verify both installers
-   - verify SHA256 checksums
-5. Once preparation is complete and **Launch Installer** becomes active, click it
-6. Confirm the POS will close
-7. Approve the Windows UAC prompt
-8. Complete the installer wizard
-9. Reopen **Restaurant POS**
-
-Expected status after restart: **Update Successful** (or **Update Successful With Warnings** — warnings are non-critical, e.g. missing printer config)
-
----
-
-### Step 8 — Smoke test
-
-1. Log in
-2. Open the Tables screen
-3. Add a test order to a table
-4. Send a KOT
-5. Click **Print Bill** — verify it prints without recording payment
-6. Click **Pay** → select a method → confirm — verify the table clears
-7. Check **History** — confirm the order appears
-8. Check **Reports** — confirm totals update
-9. Verify the printer queue is readable
-
----
-
-### Step 9 — Record the release
+### 10. Write down the release
 
 | Field | Value |
 |---|---|
-| Version | `0.2.0` |
-| Baseline (rollback) commit | `6ce2770` → tag `v0.1.0` |
-| Release commit | run `git rev-parse v0.2.0` after tagging |
-| GitHub release | `https://github.com/rashmitasalian/restaurant-pos/releases/tag/v0.2.0` |
+| Version | `0.7.0` |
+| Installed from | USB hand install, not the in-app updater |
+| Previous installer | `v0.6.0` |
+| Release commit | `git rev-parse v0.7.0` |
+| GitHub release | `https://github.com/rashmitasalian/restaurant-pos/releases/tag/v0.7.0` |
+| SHA256 (0.7.0) | |
+| SHA256 (0.6.0 rollback) | |
+| License id | |
+| Database copy location | |
 | Deployed by | |
 | Deployed at | |
-| Smoke test result | |
+| Smoke test | |
 
 ---
 
-## Part B — Rollback
+## Rollback
 
-Use rollback only if the updated app is not usable after installation. Rollback is one generation only.
+Use this only if 0.7.0 cannot bill. Rollback returns to the plaintext database from step 6. Orders and payments taken after that copy are lost.
 
-### Option 1 — Rollback from inside the app
+0.6.0 cannot read the encrypted database. Restoring the installer without restoring the plaintext file leaves the POS unable to open.
 
-1. Log in as **admin**
-2. Open **Settings → Update & Support**
-3. Click **Roll Back Last Update**
-4. Review the warning about orders and payments created since the update
-5. Confirm only if losing those records is acceptable
+1. Close RestoNiti completely.
+2. Replace `%APPDATA%\Restaurant POS\data\restaurant-pos.sqlite` with the USB copy from step 6.
+3. Delete `restaurant-pos.sqlite-wal` and `restaurant-pos.sqlite-shm` if they exist.
+4. Leave `restaurant-pos.sqlite.key` and the `license` folder. 0.6.0 ignores them.
+5. Run the 0.6.0 installer (`archive\RestoNiti Setup 0.6.0.exe` or the `v0.6.0` GitHub asset).
+6. Start RestoNiti, log in, and confirm the last pre-upgrade bill is in History.
 
-The app will restore `pre-update.sqlite`, launch `rollback-installer.exe`, and close. Complete the installer and restart.
-
-### Option 2 — Break-glass rollback (app will not start)
-
-1. Close the POS process completely
-2. Open `%LOCALAPPDATA%\RestaurantPOS\Updates`
-3. Open `ROLLBACK-INSTRUCTIONS.txt` and follow it exactly
-4. Critical order: **restore `pre-update.sqlite` before running `rollback-installer.exe`**
-5. Run `rollback-installer.exe`
-6. Restart the POS
+Do not restore a backup taken by 0.7.0 after encryption and then expect 0.6.0 to open it.
 
 ---
 
-## Part C — Future Releases
+## Already licensed
 
-For every subsequent release, follow this checklist:
+If this PC already imported a `.rnlc` and Settings → License is populated, the database is already encrypted. Do not hand-copy the sqlite file and do not treat 0.6.0 as a usable rollback of the data file.
 
-### C.1 Prepare code
+Use **Later releases** below. Rollback is one generation, and only the plaintext or encrypted snapshot that this app saved as `pre-update.sqlite` during **Prepare Update**.
+
+---
+
+## Later releases
+
+After this PC is licensed, the next versions can go through Settings → Update & Support. The license stays in `%APPDATA%\Restaurant POS`.
+
+### Prepare
 
 ```powershell
 git status --short --branch
 npm run lint
 npm test -- --runInBand
-npm run build:renderer
-```
-
-Fix all failures before packaging.
-
-### C.2 Bump version, commit, tag
-
-```powershell
 npm version <NEW_VERSION> --no-git-tag-version
-git add package.json package-lock.json
-git commit -m "chore: bump version to <NEW_VERSION>"
-git push origin main
-git tag v<NEW_VERSION>
-git push origin v<NEW_VERSION>
-```
-
-### C.3 Build
-
-```powershell
-npm ci
 npm run build
-```
-
-### C.4 Compute hashes
-
-```powershell
 Get-FileHash "release\RestoNiti Setup <NEW_VERSION>.exe" -Algorithm SHA256 | Select-Object Hash
 (Get-Item "release\RestoNiti Setup <NEW_VERSION>.exe").Length
 ```
 
-### C.5 Create GitHub Release
+Commit the version bump, tag `v<NEW_VERSION>`, push the tag, and upload the exe to that GitHub Release. Keep the previous release’s exe. That previous exe is the rollback installer.
 
-Upload `release\RestoNiti Setup <NEW_VERSION>.exe` as an asset on the new release. Keep the previous release and its installer for use as the rollback.
-
-### C.6 Publish manifest
+### Manifest
 
 Update `manifest.json`:
-- `version` → new version
-- `installerUrl` → new installer GitHub asset URL
-- `sha256` → new installer hash
-- `rollbackInstallerUrl` → previous release's installer URL
-- `rollbackSha256` → previous release's installer hash
+
+- `version`, `installerUrl`, `sha256`, `installerSizeBytes` → the new installer
+- `rollbackInstallerUrl`, `rollbackSha256`, `rollbackInstallerSizeBytes` → the previous installer
 - `notes` → what changed
 
-### C.7 Deploy and smoke test
+Remove any old `signature` before signing. Then:
 
-Follow **Part A Steps 7–9** above.
+```powershell
+npm run update:sign -- --manifest .\manifest.json
+git add manifest.json package.json package-lock.json
+git commit -m "chore: publish <NEW_VERSION> update manifest"
+git push origin main
+```
 
-### C.8 Archive record
+### On the POS
 
-| Field | Value |
-|---|---|
-| Version | |
-| Release commit / tag | |
-| GitHub release URL | |
-| SHA256 (new installer) | |
-| SHA256 (rollback installer) | |
-| Deployed by | |
-| Deployed at | |
-| Smoke test result | |
+Quiet period. Admin login. Settings → Update & Support.
+
+1. **Check for Updates** shows the new version and notes.
+2. **Prepare Update** backs up the database to `pre-update.sqlite`, then downloads and hashes both installers.
+3. **Launch Installer**, confirm the app will close, approve UAC, finish the wizard.
+4. Reopen RestoNiti. Expected status is **Update Successful**. Warnings such as a missing printer config are non-critical.
+5. Log in, open a table, send a KOT, print a bill, take a payment, and check History.
+
+Record version, tag, both SHA256 values, who deployed, when, and the smoke-test result.
+
+### Rollback from inside the app
+
+Settings → Update & Support → **Roll Back Last Update**. Read the warning. Confirm only if losing orders taken since the update is acceptable. The app restores `pre-update.sqlite`, launches `rollback-installer.exe`, and closes. Finish the installer and restart.
+
+### Rollback when the app will not start
+
+1. Close the POS process.
+2. Open `%LOCALAPPDATA%\RestaurantPOS\Updates`.
+3. Follow `ROLLBACK-INSTRUCTIONS.txt`.
+4. Restore `pre-update.sqlite` onto the live database **before** running `rollback-installer.exe`.
+5. Delete the `-wal` and `-shm` files beside the database.
+6. Restart RestoNiti.

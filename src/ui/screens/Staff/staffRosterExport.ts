@@ -137,29 +137,29 @@ export function buildStaffRosterPdfHtml(
   <title>Confidential Staff Roster</title>
   <style>
     * { box-sizing: border-box; }
-    html, body { background: #ffffff; color: ${PRINT.ink}; color-scheme: light; }
+    html, body { background: ${PRINT.paper}; color: ${PRINT.ink}; color-scheme: light; }
     body { margin: 0; font-family: Arial, Helvetica, sans-serif; font-size: 11px; }
     h1 { font-size: 18px; margin: 0 0 4px; }
     .sub { color: ${PRINT.sub}; margin: 0 0 14px; font-size: 11px; }
     table { width: 100%; border-collapse: collapse; }
     .meta { margin: 0 0 16px; }
-    .meta td { width: 25%; border: 1px solid ${PRINT.line}; background: #ffffff; padding: 8px 10px; vertical-align: top; }
+    .meta td { width: 25%; border: 1px solid ${PRINT.line}; background: ${PRINT.paper}; padding: 8px 10px; vertical-align: top; }
     .meta span { display: block; color: ${PRINT.sub}; font-size: 9px; letter-spacing: 0.05em; text-transform: uppercase; font-weight: 700; margin-bottom: 3px; }
     .meta strong { font-size: 13px; }
     table.person { width: 100%; border-collapse: collapse; border: 1px solid ${PRINT.line}; margin: 0 0 10px; break-inside: avoid; page-break-inside: avoid; }
-    table.person td.photo { width: 100px; padding: 10px; vertical-align: top; background: #ffffff; }
-    table.person td.body { padding: 8px 12px 10px 0; vertical-align: top; background: #ffffff; }
+    table.person td.photo { width: 100px; padding: 10px; vertical-align: top; background: ${PRINT.paper}; }
+    table.person td.body { padding: 8px 12px 10px 0; vertical-align: top; background: ${PRINT.paper}; }
     table.person.left td.photo, table.person.left td.body { background: ${PRINT.dangerRow}; }
     .avatar, .photo-img { width: 84px; height: 84px; border-radius: 6px; display: block; }
-    .avatar { background: #0f5e68; color: #ffffff; font-size: 28px; font-weight: 700; line-height: 84px; text-align: center; }
+    .avatar { background: ${PRINT.avatar}; color: ${PRINT.paper}; font-size: 28px; font-weight: 700; line-height: 84px; text-align: center; }
     .photo-img { object-fit: cover; }
     table.facts { width: 100%; border-collapse: collapse; table-layout: fixed; }
     table.facts td { padding: 2px 0; vertical-align: top; background: transparent; font-size: 12px; overflow-wrap: anywhere; }
     .name { font-size: 15px; font-weight: 700; margin: 0 0 6px; }
     table.facts td.label { width: 108px; color: ${PRINT.sub}; font-weight: 700; padding-right: 8px; }
     .badge { display: inline-block; margin-left: 8px; font-size: 10px; font-weight: 700; line-height: 1; padding: 3px 6px; border-radius: 4px; vertical-align: 2px; }
-    .badge.active { background: #dcfce7; color: #14532d; }
-    .badge.left { background: #fee2e2; color: #991b1b; }
+    .badge.active { background: ${PRINT.badgeActiveBg}; color: ${PRINT.badgeActiveInk}; }
+    .badge.left { background: ${PRINT.badgeLeftBg}; color: ${PRINT.badgeLeftInk}; }
     .empty-roster { margin: 0; color: ${PRINT.sub}; }
     footer { margin-top: 8px; color: ${PRINT.muted}; text-align: center; font-size: 10px; }
   </style>

@@ -241,8 +241,12 @@ export function buildReceiptLines(
       }
       const methodLabel = (value: string) => {
         const raw = String(value || "").toLowerCase();
-        if (raw === "upi") return "UPI";
-        if (raw === "credit") return "Credit";
+        if (raw === "upi") {
+return "UPI";
+}
+        if (raw === "credit") {
+return "Credit";
+}
         return raw ? raw.charAt(0).toUpperCase() + raw.slice(1) : "Payment";
       };
       const collectedLines = creditPart

@@ -36,7 +36,9 @@ function decodeInk(raster: { width: number; height: number; dataBase64: string }
     for (let x = 0; x < raster.width; x += 1) {
       const on = (bytes[y * widthBytes + (x >> 3)] & (0x80 >> (x & 7))) !== 0;
       row.push(on);
-      if (on) ink += 1;
+      if (on) {
+ink += 1;
+}
     }
     rows.push(row);
   }
@@ -49,7 +51,9 @@ function hasOpenSlit(rows: boolean[][]) {
     let seenGap = false;
     for (const on of row) {
       if (on) {
-        if (seenGap) return true;
+        if (seenGap) {
+return true;
+}
         seenInk = true;
       } else if (seenInk) {
         seenGap = true;
@@ -62,9 +66,13 @@ function hasOpenSlit(rows: boolean[][]) {
 function hasSolidInkRun(row: boolean[]) {
   const first = row.indexOf(true);
   const last = row.lastIndexOf(true);
-  if (first < 0 || last - first < 16) return false;
+  if (first < 0 || last - first < 16) {
+return false;
+}
   for (let x = first; x <= last; x += 1) {
-    if (!row[x]) return false;
+    if (!row[x]) {
+return false;
+}
   }
   return true;
 }
@@ -78,8 +86,12 @@ function greenDiscWithSlit(): RgbaBuffer {
     for (let x = center - radius; x <= center + radius; x += 1) {
       const dx = x - center;
       const dy = y - center;
-      if (dx * dx + dy * dy > radius * radius) continue;
-      if (Math.abs(dx) <= 1) continue;
+      if (dx * dx + dy * dy > radius * radius) {
+continue;
+}
+      if (Math.abs(dx) <= 1) {
+continue;
+}
       setPixel(image, x, y, GREEN[0], GREEN[1], GREEN[2]);
     }
   }
@@ -181,8 +193,11 @@ describe("restaurant logo raster", () => {
     let paper = 0;
     for (const row of decoded.rows) {
       for (let x = midStart; x < midEnd; x += 1) {
-        if (row[x]) ink += 1;
-        else paper += 1;
+        if (row[x]) {
+ink += 1;
+} else {
+paper += 1;
+}
       }
     }
     expect(ink).toBeGreaterThan(0);

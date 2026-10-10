@@ -432,7 +432,7 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
     footer { margin-top: 40px; font-size: 11px; color: ${PRINT.faint}; text-align: center; }
     .report-header { display: flex; justify-content: space-between; gap: 24px; align-items: flex-start; margin-bottom: 28px; padding-bottom: 16px; border-bottom: 1px solid var(--pos-line); }
     .brand { display: flex; gap: 12px; align-items: center; min-width: 0; }
-    .brand-logo { width: 56px; height: 56px; border-radius: 10px; object-fit: contain; border: 1px solid var(--pos-line); background: #fff; padding: 4px; flex: 0 0 auto; }
+    .brand-logo { width: 56px; height: 56px; border-radius: 10px; object-fit: contain; border: 1px solid var(--pos-line); background: ${PRINT.paper}; padding: 4px; flex: 0 0 auto; }
     .brand-name { font-size: 18px; font-weight: 900; color: ${PRINT.ink}; }
     .brand-contact { margin-top: 3px; font-size: 11px; color: ${PRINT.sub}; }
     .report-title { text-align: right; }

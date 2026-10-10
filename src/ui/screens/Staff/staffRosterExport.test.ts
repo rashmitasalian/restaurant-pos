@@ -1,4 +1,5 @@
 import type { StaffDoc } from "../../../app/db/posRepository";
+import { PRINT } from "../../theme/print-html";
 import { buildStaffRosterCsv, buildStaffRosterPdfHtml } from "./staffRosterExport";
 
 function member(overrides: Partial<StaffDoc> & Pick<StaffDoc, "id" | "name" | "phone">): StaffDoc {
@@ -35,8 +36,8 @@ describe("staff roster PDF", () => {
     expect(html).not.toMatch(/var\(--/);
     expect(html).toContain('<table class="person active">');
     expect(html).toContain('<table class="person left">');
-    expect(html).toContain("background: #0f5e68");
-    expect(html).toContain("border: 1px solid #e5e5e5");
+    expect(html).toContain(`background: ${PRINT.avatar}`);
+    expect(html).toContain(`border: 1px solid ${PRINT.line}`);
     expect(html).toContain("width: 84px");
     expect(html).toContain("1. Amit");
     expect(html).toContain(">Captain</td>");

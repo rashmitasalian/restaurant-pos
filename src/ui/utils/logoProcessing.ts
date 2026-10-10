@@ -217,10 +217,18 @@ function noteArtworkRow(
     if (!isArtworkPixel(luminance(data[index], data[index + 1], data[index + 2]), field)) {
       continue;
     }
-    if (x < state.minX) state.minX = x;
-    if (y < state.minY) state.minY = y;
-    if (x > state.maxX) state.maxX = x;
-    if (y > state.maxY) state.maxY = y;
+    if (x < state.minX) {
+state.minX = x;
+}
+    if (y < state.minY) {
+state.minY = y;
+}
+    if (x > state.maxX) {
+state.maxX = x;
+}
+    if (y > state.maxY) {
+state.maxY = y;
+}
   }
 }
 
@@ -409,10 +417,18 @@ function toInkMask(gray: Uint8Array, width: number, height: number, field: LogoF
       work[index] = black ? 0 : 255;
       ink[index] = black ? 1 : 0;
       const error = oldValue - work[index];
-      if (x + 1 < width) work[index + 1] += (error * 7) / 16;
-      if (y + 1 < height && x > 0) work[index + width - 1] += (error * 3) / 16;
-      if (y + 1 < height) work[index + width] += (error * 5) / 16;
-      if (y + 1 < height && x + 1 < width) work[index + width + 1] += error / 16;
+      if (x + 1 < width) {
+work[index + 1] += (error * 7) / 16;
+}
+      if (y + 1 < height && x > 0) {
+work[index + width - 1] += (error * 3) / 16;
+}
+      if (y + 1 < height) {
+work[index + width] += (error * 5) / 16;
+}
+      if (y + 1 < height && x + 1 < width) {
+work[index + width + 1] += error / 16;
+}
     }
   }
   for (let i = 0; i < gray.length; i += 1) {

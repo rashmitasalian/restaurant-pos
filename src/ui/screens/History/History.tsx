@@ -82,18 +82,32 @@ type UIOrder = {
 
 function labelPaymentMethod(value: string) {
   const raw = String(value || "").toLowerCase();
-  if (raw === "upi") return "UPI";
-  if (raw === "cash") return "Cash";
-  if (raw === "card") return "Card";
-  if (raw === "split") return "Split";
-  if (raw === "credit") return "Credit";
+  if (raw === "upi") {
+return "UPI";
+}
+  if (raw === "cash") {
+return "Cash";
+}
+  if (raw === "card") {
+return "Card";
+}
+  if (raw === "split") {
+return "Split";
+}
+  if (raw === "credit") {
+return "Credit";
+}
   return raw ? raw.charAt(0).toUpperCase() + raw.slice(1) : "–";
 }
 
 function paymentReferenceLabel(method: string) {
   const raw = String(method || "").toLowerCase();
-  if (raw === "upi") return "UPI ID";
-  if (raw === "card") return "Txn ref";
+  if (raw === "upi") {
+return "UPI ID";
+}
+  if (raw === "card") {
+return "Txn ref";
+}
   return "Reference";
 }
 
@@ -853,7 +867,7 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
     .total { width: 12%; text-align: right; font-weight: 700; white-space: nowrap; }
     th.items { text-align: center; }
     th.col-discount, th.total { text-align: right; }
-    .total-row td { font-weight: 800; border-top: 1.5px solid ${PRINT.ink}; border-bottom: none; font-size: 12px; background: #fff; }
+    .total-row td { font-weight: 800; border-top: 1.5px solid ${PRINT.ink}; border-bottom: none; font-size: 12px; background: ${PRINT.paper}; }
     footer { margin-top: 14px; font-size: 9px; color: ${PRINT.muted}; text-align: center; }
   </style>
 </head>
