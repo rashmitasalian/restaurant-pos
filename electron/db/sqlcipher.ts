@@ -132,6 +132,51 @@ export function migratePlaintextDatabase(databasePath: string, key: Buffer) {
   removeSidecars(plaintextHold);
 }
 
+function sqliteString(value: string) {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
+function removeSnapshotFiles(filePath: string) {
+  for (const suffix of ["", "-wal", "-shm"]) {
+    const file = `${filePath}${suffix}`;
+    if (fs.existsSync(file)) {
+      fs.unlinkSync(file);
+    }
+  }
+}
+
+/**
+ * The online backup API refuses an encrypted source and a plaintext destination.
+ * VACUUM INTO copies the open database with its current key. Rekeying that copy
+ * with an empty key produces the plaintext snapshot the backup file expects.
+ */
+export function exportPlaintextSnapshot(database: SqliteDatabase, targetPath: string, key: Buffer) {
+  const resolved = path.resolve(targetPath);
+  const staging = `${resolved}.encrypted-snapshot`;
+  fs.mkdirSync(path.dirname(resolved), { recursive: true });
+  removeSnapshotFiles(resolved);
+  removeSnapshotFiles(staging);
+  const sqlPath = staging.replace(/\\/g, "/");
+  database.exec(`VACUUM INTO ${sqliteString(sqlPath)}`);
+  const Cipher = loadCipherDatabase();
+  const snapshot = new Cipher(staging);
+  try {
+    applySqlCipherKey(snapshot, key);
+    snapshot.pragma("rekey=''");
+  } catch (error) {
+    snapshot.close();
+    removeSnapshotFiles(staging);
+    throw error;
+  }
+  snapshot.close();
+  try {
+    fs.renameSync(staging, resolved);
+  } catch (error) {
+    removeSnapshotFiles(staging);
+    throw error;
+  }
+}
+
 export function openPosDatabase(databasePath: string): SqliteDatabase {
   const Cipher = loadCipherDatabase();
   const key = loadOrCreateDatabaseKey(databasePath);

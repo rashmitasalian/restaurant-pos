@@ -3,6 +3,7 @@ import { app } from "electron";
 import { randomUUID } from "crypto";
 import fs from "fs";
 import path from "path";
+import { assertWriteAdmitted } from "../services/operationsAdmission";
 
 type SqliteDatabase = any;
 
@@ -33,8 +34,12 @@ export async function initializeDatabase() {
     db.pragma("foreign_keys = ON");
     db.pragma("journal_mode = WAL");
     db.pragma("busy_timeout = 5000");
+    installMutationGuard(db);
     runSchema(db);
     seedDatabase(db);
+    const { adoptExistingBillingAsLive, reconcileOperationsFiles } = require("../services/liveOperations") as typeof import("../services/liveOperations");
+    adoptExistingBillingAsLive(db);
+    reconcileOperationsFiles();
   }
   return db;
 }
@@ -53,10 +58,29 @@ export function closeDb() {
   }
 }
 
+function isSqlcipherConnection(database: SqliteDatabase) {
+  try {
+    return String(database.pragma("cipher", { simple: true }) || "").toLowerCase() === "sqlcipher";
+  } catch {
+    return false;
+  }
+}
+
 /** Snapshots the open SQLite database only. License files under userData/license are not included. */
 export async function backupDatabase(targetPath: string) {
   const database = getDb();
-  await database.backup(targetPath);
+  const resolved = path.resolve(targetPath);
+  fs.mkdirSync(path.dirname(resolved), { recursive: true });
+  if (isSqlcipherConnection(database)) {
+    const { exportPlaintextSnapshot } = require("./sqlcipher") as typeof import("./sqlcipher");
+    const { loadOrCreateDatabaseKey } = require("./databaseKey") as typeof import("./databaseKey");
+    exportPlaintextSnapshot(database, resolved, loadOrCreateDatabaseKey(getDatabasePath()));
+    return;
+  }
+  if (fs.existsSync(resolved)) {
+    fs.unlinkSync(resolved);
+  }
+  await database.backup(resolved);
 }
 
 export async function restoreDatabaseFromBackup(sourcePath: string) {
@@ -117,9 +141,53 @@ export function replaceDatabaseFromBackupWithoutReopen(sourcePath: string) {
   return { ok: true, path: target };
 }
 
+function isMutatingSql(sql: string) {
+  const trimmed = sql
+    .trim()
+    .replace(/^\/\*[\s\S]*?\*\//, "")
+    .trim();
+  return /^(insert|update|delete|replace)\b/i.test(trimmed);
+}
+
+function installMutationGuard(database: SqliteDatabase) {
+  if (database.__mutationGuard) {
+    return;
+  }
+  const originalPrepare = database.prepare.bind(database);
+  database.prepare = (sql: string) => {
+    const statement = originalPrepare(sql);
+    if (!isMutatingSql(String(sql)) || typeof statement.run !== "function") {
+      return statement;
+    }
+    const originalRun = statement.run.bind(statement);
+    statement.run = (...args: unknown[]) => {
+      assertWriteAdmitted();
+      return originalRun(...args);
+    };
+    return statement;
+  };
+  if (typeof database.exec === "function") {
+    const originalExec = database.exec.bind(database);
+    database.exec = (sql: string) => {
+      if (isMutatingSql(String(sql))) {
+        assertWriteAdmitted();
+      }
+      return originalExec(sql);
+    };
+  }
+  database.__mutationGuard = true;
+}
+
 export function inTransaction<T>(fn: (database: SqliteDatabase) => T): T {
+  assertWriteAdmitted();
   const database = getDb();
   return database.transaction(() => fn(database))();
+}
+
+export function inImmediateTransaction<T>(fn: (database: SqliteDatabase) => T): T {
+  assertWriteAdmitted();
+  const database = getDb();
+  return database.transaction(() => fn(database)).immediate();
 }
 
 async function openDatabase(): Promise<SqliteDatabase> {

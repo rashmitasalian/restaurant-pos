@@ -93,6 +93,7 @@ function buildPreview(
     tableLabel: tableLabel || undefined,
     items,
     sentBy,
+    practice: Boolean(meta.practice),
   };
 }
 

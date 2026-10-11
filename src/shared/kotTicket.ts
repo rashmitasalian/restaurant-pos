@@ -28,7 +28,15 @@ export type KotPreviewData = {
   /** Sent items cancelled since the last kitchen ticket. */
   voidItems?: KotPreviewItem[];
   reason?: string;
+  /** Practice slip. Printed before live operations start. */
+  practice?: boolean;
 };
+
+export const PRACTICE_DOCUMENT_BANNER = "PRACTICE — NOT A TAX INVOICE";
+
+function practiceBanner(practice: boolean | undefined) {
+  return practice ? [`CENTER:${PRACTICE_DOCUMENT_BANNER}`] : [];
+}
 
 /** One shared reason stays in the header. Mixed reasons print under each item. */
 export function describeKotVoids(
@@ -143,6 +151,7 @@ export function buildKotLines(
 
   return [
     `BIGBOLD:${hotelName}`,
+    ...practiceBanner(previewData.practice),
     ...(voidItems.length ? [] : ["SUBHEADER:---------KOT---------"]),
     `LEFT:${PAD}KOT No: ${kotNum}`,
     `LEFT:${PAD}Date: ${dateStr}  Time: ${timeStr}`,
@@ -196,6 +205,7 @@ export function buildKotVoidLines(
 
   return [
     `BIGBOLD:${hotelName}`,
+    ...practiceBanner(previewData.practice),
     `LEFT:${PAD}Date: ${dateStr}  Time: ${timeStr}`,
     ...(previewData.sentBy ? [`LEFT:${PAD}Sent by: ${previewData.sentBy}`] : []),
     ...(previewData.orderType === "table"

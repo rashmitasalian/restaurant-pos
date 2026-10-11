@@ -7,6 +7,7 @@ import {
   resolveKitchenPrinterTarget,
 } from "../../src/shared/printerConfig";
 import { printPayload, type PrinterConfig } from "../printing/printService";
+import { admitAsync } from "./operationsAdmission";
 import { posService } from "./posService";
 
 function tableLabelForOrder(order: { tableId?: number | null }) {
@@ -81,6 +82,14 @@ export const kotPrintService = {
     actorUsername: string,
     options: { clientOpId?: string | null; baseUpdatedAt?: number | null } = {},
   ) {
+    return admitAsync(() => this.sendKotForOrderAdmitted(orderId, actorUsername, options));
+  },
+
+  async sendKotForOrderAdmitted(
+    orderId: string,
+    actorUsername: string,
+    options: { clientOpId?: string | null; baseUpdatedAt?: number | null } = {},
+  ) {
     const clientOpId = String(options.clientOpId || "").trim();
     if (clientOpId) {
       const existing = posService.getClientOp(clientOpId);
@@ -137,6 +146,7 @@ export const kotPrintService = {
       platformCode: String(meta.code || meta.orderCode || meta.reference || ""),
       customerName: String(meta.parcelName || meta.customerName || ""),
       customerPhone: String(meta.customerPhone || ""),
+      practice: Boolean(meta.practice) || !posService.isLiveOperations(),
     };
     const lines = buildKitchenUpdateLines(preview, order, order.tableId, branding);
     const sentLines = delta.sentLines;
@@ -171,6 +181,15 @@ export const kotPrintService = {
   },
 
   async voidKotLineAndPrint(
+    orderId: string,
+    input: { lineId: string; finalQty: number; reason: string },
+    actorUsername: string,
+    options: { clientOpId?: string | null; baseUpdatedAt?: number | null } = {},
+  ) {
+    return admitAsync(() => this.voidKotLineAndPrintAdmitted(orderId, input, actorUsername, options));
+  },
+
+  async voidKotLineAndPrintAdmitted(
     orderId: string,
     input: { lineId: string; finalQty: number; reason: string },
     actorUsername: string,

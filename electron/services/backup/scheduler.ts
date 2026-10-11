@@ -1,5 +1,4 @@
 import { getBackupManager } from "./backupManager";
-import { cloudBackupStore } from "./cloudClient";
 import { cleanupStaleTempFiles } from "./paths";
 
 export type BackupSchedulerOptions = {
@@ -8,13 +7,12 @@ export type BackupSchedulerOptions = {
 };
 
 /**
- * Daily automatic backup + startup catch-up + pending cloud upload retries.
+ * Daily automatic local backup and startup catch-up.
  * Never throws into the app lifecycle.
  */
 export class BackupScheduler {
   private timer: NodeJS.Timeout | null = null;
   private running = false;
-  private retryAttempt = 0;
   private readonly intervalMs: number;
   private readonly logger: (
     level: string,
@@ -66,19 +64,6 @@ export class BackupScheduler {
       if (identity.automaticBackup !== false && manager.isBackupOverdue()) {
         this.logger("info", "catch-up or daily backup", { reason });
         await manager.createManagedBackup("system:backup-scheduler");
-      }
-      if (identity.cloudEnabled) {
-        const result = await cloudBackupStore.uploadPendingIfAny(this.logger);
-        if (result.ok) {
-          this.retryAttempt = 0;
-        } else if ((result as any).retryable) {
-          this.retryAttempt += 1;
-          const delay = Math.min(60 * 60 * 1000, 30_000 * 2 ** Math.min(this.retryAttempt, 6));
-          this.logger("info", "retry scheduled", { delayMs: delay });
-          setTimeout(() => {
-            void this.tick("retry");
-          }, delay).unref?.();
-        }
       }
     } catch (error: any) {
       this.logger("error", "scheduler tick failed", {

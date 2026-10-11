@@ -101,7 +101,12 @@ export function buildReceiptLines(
   totals: Partial<GstTotals> & { subtotal?: number; cgst?: number; sgst?: number; total: number },
   gstConfigInput?: Partial<GstConfig> | null,
   brandingInput?: ReceiptBranding | null,
-  options?: { preview?: boolean; tableLabel?: string | null; discountMode?: "percent" | "amount" },
+  options?: {
+    preview?: boolean;
+    tableLabel?: string | null;
+    discountMode?: "percent" | "amount";
+    practice?: boolean;
+  },
 ): string[] {
   const branding = getReceiptBranding(brandingInput);
   const gstConfig = normalizeGstConfig(
@@ -133,6 +138,7 @@ export function buildReceiptLines(
 
   const orderNum = Number(ord?.meta?.orderSeq) || null;
   const invoiceNumber = String(ord?.invoiceNumber || ord?.meta?.invoice?.number || "").trim();
+  const practice = Boolean(options?.practice || ord?.meta?.practice);
   const meta = ord?.meta || {};
   const orderType = String(ord?.orderType || (tableNum ? "table" : "takeaway")).toLowerCase();
   const normalizedOrderTypeLabel = orderType.replace(/[_-]+/g, " ").trim();
@@ -164,6 +170,7 @@ export function buildReceiptLines(
         ]
       : []),
     `BIGBOLD:${branding.hotelName}`,
+    ...(practice ? ["CENTER:PRACTICE — NOT A TAX INVOICE"] : []),
     ...(showGstDetails && gstConfig.legalName && gstConfig.legalName !== branding.hotelName
       ? [`CENTER:${gstConfig.legalName}`]
       : []),

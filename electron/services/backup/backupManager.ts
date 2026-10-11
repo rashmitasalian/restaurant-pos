@@ -9,6 +9,7 @@ import {
   restoreDatabaseFromBackup,
   validateSqliteBackup,
 } from "../../db/sqlite";
+import { guardedDatabaseReplace } from "../liveOperations";
 import { gzipFile, gunzipFile } from "./compression";
 import { encryptFileToBuffer, decryptToFile } from "./encryption";
 import { buildRnBakHeader, checksumEncryptedBody, readRnBakFile, writeRnBakFile } from "./format";
@@ -105,11 +106,23 @@ export class BackupManager {
   getIdentity(): CloudIdentitySettings {
     const stored = (this.settings.getSetting(CLOUD_SETTINGS_KEY) ||
       {}) as Partial<CloudIdentitySettings>;
-    return { ...defaultCloudIdentitySettings(), ...stored };
+    const localOnly = localOnlyIdentity(stored);
+    if (stored.cloudEnabled || stored.pendingUploadPath || stored.pendingUploadBackupId || stored.lastCloudError) {
+      try {
+        this.settings.setSetting(
+          CLOUD_SETTINGS_KEY,
+          localOnly as unknown as Record<string, unknown>,
+        );
+        this.records.markUploadPendingBackupsCompleted?.(null);
+      } catch {
+        // Status can be read while writes are paused. Callers still treat cloud as off.
+      }
+    }
+    return localOnly;
   }
 
   saveIdentity(patch: Partial<CloudIdentitySettings>, actor?: string | null) {
-    const next = { ...this.getIdentity(), ...patch };
+    const next = localOnlyIdentity({ ...this.getIdentity(), ...patch });
     this.settings.setSetting(CLOUD_SETTINGS_KEY, next as unknown as Record<string, unknown>, actor);
     return next;
   }
@@ -128,52 +141,18 @@ export class BackupManager {
 
   getStatus(): BackupStatusView {
     const identity = this.getIdentity();
-    // Heal history rows left as upload_pending after a successful cloud sync.
-    if (identity.cloudEnabled && identity.lastCloudBackupAt && !identity.pendingUploadPath) {
-      this.records.markUploadPendingBackupsCompleted?.(null);
-    }
     const localFiles = localBackupStore.list();
     const lastLocal = identity.lastLocalBackupAt || localFiles[0]?.createdAt || null;
-    const lastCloud = identity.lastCloudBackupAt;
-    let operatorStatus: OperatorBackupStatus = "disabled";
-    let message = "Cloud backup is not enabled.";
-
-    if (!identity.cloudEnabled) {
-      if (lastLocal) {
-        operatorStatus = "local_only";
-        message = "Local backups are available. Enable cloud backup for off-site recovery.";
-      } else {
-        operatorStatus = "disabled";
-        message = "Cloud backup is not enabled.";
-      }
-    } else if (identity.pendingUploadPath || identity.lastCloudError === "pending") {
-      operatorStatus = "cloud_pending";
-      message = "Cloud backup pending";
-    } else if (identity.lastCloudError) {
-      operatorStatus = "cloud_failed";
-      message = "Cloud backup failed";
-    } else if (!lastCloud) {
-      operatorStatus = "cloud_not_completed";
-      message = "Cloud backup not completed yet";
-    } else {
-      operatorStatus = "everything_backed_up";
-      message = "Everything is backed up";
-    }
+    const operatorStatus: OperatorBackupStatus = lastLocal ? "local_only" : "disabled";
+    const message = lastLocal ? "Local backups are available." : "No local backup yet.";
 
     return {
       operatorStatus,
       message,
-      cloudEnabled: identity.cloudEnabled,
+      cloudEnabled: false,
       lastLocalBackupAt: lastLocal,
-      lastCloudBackupAt: lastCloud,
-      cloudBackupCount: this.records.listBackupRecords().filter((row) => {
-        const destination = String(row.destination || "");
-        const status = String(row.status || "");
-        if (destination === "cloud" || destination.startsWith("cloud")) {
-          return status === "verified" || status === "completed";
-        }
-        return Boolean(row.cloud_backup_id) && status === "completed";
-      }).length,
+      lastCloudBackupAt: null,
+      cloudBackupCount: 0,
       localStorageBytes: localBackupStore.totalBytes(),
       automaticBackup: identity.automaticBackup !== false,
       retentionDays: identity.retentionDays,
@@ -254,19 +233,19 @@ export class BackupManager {
         id,
         destination: "local",
         pathOrProvider: targetPath,
-        status: identity.cloudEnabled ? "upload_pending" : "completed",
+        status: "completed",
         checksum,
         sizeBytes,
         actor,
       });
 
-      const cloudUploadPending = Boolean(identity.cloudEnabled);
+      const cloudUploadPending = false;
       this.saveIdentity(
         {
           lastLocalBackupAt: Date.now(),
-          pendingUploadPath: cloudUploadPending ? targetPath : null,
-          pendingUploadBackupId: cloudUploadPending ? id : null,
-          lastCloudError: cloudUploadPending ? "pending" : identity.lastCloudError,
+          pendingUploadPath: null,
+          pendingUploadBackupId: null,
+          lastCloudError: null,
         },
         actor,
       );
@@ -293,6 +272,20 @@ export class BackupManager {
     }
   }
 
+  async verifyBackupArtifact(filePath: string, expectedChecksum: string) {
+    const { header, payload } = readRnBakFile(filePath);
+    const actual = checksumEncryptedBody(payload);
+    if (actual !== header.checksum || actual !== expectedChecksum) {
+      throw new Error("backup-checksum-mismatch");
+    }
+    const sqlitePath = createTempPath("verify-live", ".sqlite");
+    try {
+      await this.materializeSqliteFromRnBak(filePath, sqlitePath);
+    } finally {
+      safeUnlink(sqlitePath);
+    }
+  }
+
   async materializeSqliteFromRnBak(sourcePath: string, targetSqlitePath: string) {
     const { header, payload } = readRnBakFile(sourcePath);
     const key = this.keys.getBackupKey();
@@ -307,7 +300,11 @@ export class BackupManager {
     }
   }
 
-  async restoreManagedBackup(backupIdOrPath: string, actor?: string | null) {
+  async restoreManagedBackup(
+    backupIdOrPath: string,
+    actor?: string | null,
+    options?: { acknowledgePreLive?: boolean },
+  ) {
     ensureBackupDirs();
     const paths = ensureBackupDirs();
     assertBackupDiskSpace(paths.root);
@@ -327,14 +324,23 @@ export class BackupManager {
     const sqlitePath = createTempPath("restore", ".sqlite");
     try {
       await this.materializeSqliteFromRnBak(sourcePath, sqlitePath);
-      // Safety copy of current DB into backups/safety before replace
       const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-      const safetyPath = path.join(paths.safety, `pre-restore-${stamp}.sqlite`);
-      await backupDatabase(safetyPath);
-      validateSqliteBackup(safetyPath);
-      this.logger("info", "safety backup created", { safetyPath });
-
-      const restored = await restoreDatabaseFromBackup(sqlitePath);
+      const replaced = await guardedDatabaseReplace({
+        actor: actor || "system",
+        sourceLabel: sourcePath,
+        materializedSqlitePath: sqlitePath,
+        acknowledgePreLive: Boolean(options?.acknowledgePreLive),
+        createSafetyCopy: async () => {
+          const safetyPath = path.join(paths.safety, `pre-restore-${stamp}.sqlite`);
+          await backupDatabase(safetyPath);
+          validateSqliteBackup(safetyPath);
+          this.logger("info", "safety backup created", { safetyPath });
+          return safetyPath;
+        },
+        replaceDatabase: async () => {
+          await restoreDatabaseFromBackup(sqlitePath);
+        },
+      });
       this.records.insertBackupRecord({
         id: `backup-restore:${randomUUID()}`,
         destination: "local-restore",
@@ -345,7 +351,12 @@ export class BackupManager {
         actor,
       });
       this.logger("info", "restore completed");
-      return { ...restored, safetyBackupPath: safetyPath, needsRelaunch: true };
+      return {
+        ok: true as const,
+        path: getDatabasePath(),
+        safetyBackupPath: replaced.safetyCopyPath,
+        needsRelaunch: true,
+      };
     } finally {
       safeUnlink(sqlitePath);
     }
@@ -363,6 +374,17 @@ export class BackupManager {
   getDatabasePathForTests() {
     return getDatabasePath();
   }
+}
+
+function localOnlyIdentity(stored: Partial<CloudIdentitySettings>): CloudIdentitySettings {
+  return {
+    ...defaultCloudIdentitySettings(),
+    ...stored,
+    cloudEnabled: false,
+    pendingUploadPath: null,
+    pendingUploadBackupId: null,
+    lastCloudError: null,
+  };
 }
 
 let singleton: BackupManager | null = null;

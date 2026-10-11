@@ -98,6 +98,7 @@ import {
   type ReceiptQrMode,
 } from "../Billing/utils/receiptQr";
 import { BackupSettingsSection } from "./BackupSettingsSection";
+import { LiveOperationsSection } from "./LiveOperationsSection";
 import { LicenseSettingsSection } from "./LicenseSettingsSection";
 import {
   addSeatingAreaDraft,
@@ -3297,7 +3298,12 @@ export default function Settings({
         </>
       )}
 
-      {sectionVisible("backup") && <BackupSettingsSection />}
+      {sectionVisible("backup") && (
+        <>
+          <LiveOperationsSection />
+          <BackupSettingsSection />
+        </>
+      )}
 
       {sectionVisible("license") && <LicenseSettingsSection />}
 

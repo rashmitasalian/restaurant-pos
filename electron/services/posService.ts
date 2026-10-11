@@ -3,7 +3,30 @@ import fs from "fs";
 import path from "path";
 import { randomUUID, createHash } from "crypto";
 import type Database from "better-sqlite3";
-import { backupDatabase, getDb, inTransaction, restoreDatabaseFromBackup } from "../db/sqlite";
+import {
+  backupDatabase,
+  getDatabasePath,
+  getDb,
+  inTransaction,
+  restoreDatabaseFromBackup,
+  validateSqliteBackup,
+} from "../db/sqlite";
+import { admitAsync } from "./operationsAdmission";
+import {
+  assertCanAllocateTaxInvoice,
+  assertPracticeAllowsInvoiceRestore,
+  cancelLiveOperations,
+  commitLiveOperations,
+  completeInterruptedRestore,
+  getFiscalYearLabel,
+  getLiveOperationsStatus,
+  guardedDatabaseReplace,
+  isLiveOperations,
+  prepareLiveOperations,
+  repairOperationsSidecar,
+  stampPracticeMeta,
+} from "./liveOperations";
+import { getBackupManager } from "./backup/backupManager";
 import { buildGroceryPurchaseAnalysis, loadRecordedGroceryBills } from "./groceryPurchaseAnalysis";
 import { buildSalesFacts, type SalesBillInput } from "./salesReport";
 import { publishDomainEvent } from "./domainEvents";
@@ -1302,16 +1325,8 @@ function buildGstSnapshot(config: GstConfig) {
   return normalizeGstConfig(config);
 }
 
-function getFiscalYearLabel(timestamp: number) {
-  const date = new Date(timestamp);
-  const year = date.getFullYear();
-  const month = date.getMonth();
-  const startYear = month >= 3 ? year : year - 1;
-  const endYear = startYear + 1;
-  return `${startYear}-${String(endYear).slice(-2)}`;
-}
-
 function nextInvoiceSnapshot(database: Database.Database, issuedAt: number) {
+  assertCanAllocateTaxInvoice(database);
   const row = database
     .prepare("SELECT value_json FROM settings WHERE key = ?")
     .get(INVOICE_CONFIG_KEY) as { value_json?: string } | undefined;
@@ -1347,6 +1362,11 @@ function nextInvoiceSnapshot(database: Database.Database, issuedAt: number) {
     sequence: nextNumber,
     issuedAt,
   };
+}
+
+/** Test hook. Production billing goes through setOrderPaid, which does not call this before go-live. */
+export function allocateTaxInvoice(issuedAt = Date.now()) {
+  return inTransaction((database) => nextInvoiceSnapshot(database, issuedAt));
 }
 
 function nextOrderSeq(database: Database.Database): number {
@@ -4520,7 +4540,7 @@ export const posService = {
     const created = inTransaction((database) => {
       const customerId = resolveActiveCustomerId(database, input.customerId);
       const orderSeq = nextOrderSeq(database);
-      const meta = { ...(input.meta || {}), orderSeq, serviceModeId };
+      const meta = stampPracticeMeta(database, { ...(input.meta || {}), orderSeq, serviceModeId });
       database
         .prepare(
           `INSERT INTO orders (
@@ -5171,7 +5191,7 @@ export const posService = {
           order.status || current.status,
           kotStatus,
           Number(order.discountPercent || 0),
-          stringifyJson({ ...(order.meta || {}), serviceModeId }),
+          stringifyJson(stampPracticeMeta(database, { ...(order.meta || {}), serviceModeId })),
           now(),
           order._id,
         );
@@ -5275,12 +5295,15 @@ export const posService = {
 
       const paymentId = `payment:${randomUUID()}`;
       const receivedAt = now();
-      const invoice = nextInvoiceSnapshot(database, receivedAt);
-      const nextMeta: Record<string, unknown> = {
+      const liveBilling = isLiveOperations(database);
+      const invoice = liveBilling ? nextInvoiceSnapshot(database, receivedAt) : null;
+      const nextMeta: Record<string, unknown> = stampPracticeMeta(database, {
         ...(order.meta || {}),
         gstSnapshot: buildGstSnapshot(gstConfig),
-        invoice,
-      };
+      });
+      if (invoice) {
+        nextMeta.invoice = invoice;
+      }
       database
         .prepare(
           `INSERT INTO payments (
@@ -5306,14 +5329,14 @@ export const posService = {
            SET status = 'paid', invoice_number = ?, paid_at = ?, meta_json = ?, updated_at = ?
            WHERE id = ?`,
         )
-        .run(invoice.number, receivedAt, stringifyJson(nextMeta), receivedAt, orderId);
+        .run(invoice?.number || null, receivedAt, stringifyJson(nextMeta), receivedAt, orderId);
 
       if (preparedPayment.creditPortionPaise > 0 && customerIdForCredit && creditDueDate) {
         createCreditSaleLedgerEntry(database, {
           customerId: customerIdForCredit,
           orderId,
           amountPaise: preparedPayment.creditPortionPaise,
-          invoiceNumber: invoice.number,
+          invoiceNumber: invoice?.number || null,
           description: buildCreditSaleDescription(order.items || []),
           dueDate: creditDueDate,
           actor: safePayment.receivedBy || order.createdBy || null,
@@ -5462,6 +5485,7 @@ export const posService = {
       if (existing) {
         throw new Error("order-already-exists");
       }
+      assertPracticeAllowsInvoiceRestore(database, getOrderInvoiceNumber(order));
       const createdAt = Number(order.createdAt || now());
       const paidAt = getOrderPaidAt(order);
       const modeConfig = this.getSetting(SERVICE_MODE_CONFIG_KEY);
@@ -9532,7 +9556,40 @@ export const posService = {
     return result.changes;
   },
 
+  isLiveOperations() {
+    return isLiveOperations(getDb());
+  },
+
+  getLiveOperationsStatus() {
+    return getLiveOperationsStatus();
+  },
+
+  prepareLiveOperations() {
+    return prepareLiveOperations();
+  },
+
+  cancelLiveOperations() {
+    return cancelLiveOperations();
+  },
+
+  async commitLiveOperations(actor: string, phrase: string) {
+    return commitLiveOperations(actor, phrase, async () => {
+      const created = await getBackupManager().createManagedBackup(actor);
+      await getBackupManager().verifyBackupArtifact(created.path, created.checksum);
+      return { id: created.id };
+    });
+  },
+
+  repairOperationsSidecar() {
+    return repairOperationsSidecar();
+  },
+
+  completeInterruptedRestore() {
+    return completeInterruptedRestore();
+  },
+
   async createLocalBackup(targetPath: string, actor?: string | null) {
+    return admitAsync(async () => {
     fs.mkdirSync(path.dirname(targetPath), { recursive: true });
     await backupDatabase(targetPath);
     const bytes = fs.statSync(targetPath).size;
@@ -9546,10 +9603,37 @@ export const posService = {
       )
       .run(id, targetPath, checksum, bytes, actor || null, now());
     return { ok: true, id, path: targetPath, checksum, sizeBytes: bytes };
+    });
   },
 
-  async restoreLocalBackup(sourcePath: string, actor?: string | null) {
-    const restored = await restoreDatabaseFromBackup(sourcePath);
+  async restoreLocalBackup(
+    sourcePath: string,
+    actor?: string | null,
+    options?: { acknowledgePreLive?: boolean },
+  ) {
+    return admitAsync(async () => {
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const safetyDirectory = path.dirname(getDatabasePath());
+    const replaced = await guardedDatabaseReplace({
+      actor: actor || "system",
+      sourceLabel: sourcePath,
+      materializedSqlitePath: sourcePath,
+      acknowledgePreLive: Boolean(options?.acknowledgePreLive),
+      createSafetyCopy: async () => {
+        const safetyCopyPath = path.join(safetyDirectory, `pre-restore-intent-${stamp}.sqlite`);
+        await backupDatabase(safetyCopyPath);
+        validateSqliteBackup(safetyCopyPath);
+        return safetyCopyPath;
+      },
+      replaceDatabase: async () => {
+        await restoreDatabaseFromBackup(sourcePath);
+      },
+    });
+    const restored = {
+      ok: true as const,
+      path: getDatabasePath(),
+      preRestoreBackupPath: replaced.safetyCopyPath,
+    };
     const id = `backup-restore:${randomUUID()}`;
     const restoredActor =
       actor && getDb().prepare("SELECT 1 FROM users WHERE username = ?").get(actor) ? actor : null;
@@ -9565,6 +9649,7 @@ export const posService = {
       preRestoreBackupPath: restored.preRestoreBackupPath,
     });
     return { ...restored, id };
+    });
   },
 
   listBackups() {

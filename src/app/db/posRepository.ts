@@ -681,6 +681,30 @@ export async function exportRecoveryKeyFile(recoveryKey: string): Promise<any> {
   return api().backupSqlite!.exportRecoveryKey(recoveryKey);
 }
 
+export async function getLiveOperationsStatus(): Promise<any> {
+  return api().operations!.status();
+}
+
+export async function prepareLiveOperations(): Promise<any> {
+  return api().operations!.prepare();
+}
+
+export async function cancelLiveOperations(): Promise<any> {
+  return api().operations!.cancel();
+}
+
+export async function commitLiveOperations(phrase: string): Promise<any> {
+  return api().operations!.commit(phrase);
+}
+
+export async function repairOperationsSidecar(): Promise<any> {
+  return api().operations!.repairSidecar();
+}
+
+export async function completeInterruptedRestore(): Promise<any> {
+  return api().operations!.completeRestore();
+}
+
 export async function relaunchAfterBackupRestore(): Promise<any> {
   return api().backupSqlite!.relaunch();
 }

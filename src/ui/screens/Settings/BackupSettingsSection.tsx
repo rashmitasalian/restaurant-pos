@@ -1,20 +1,12 @@
 import React from "react";
-import { AuthContext } from "../../context/AuthContext";
 import { Button } from "../../components/ui/Button";
 import { ConfirmModal } from "../../components/ui/ConfirmModal";
-import { Input } from "../../components/ui/Input";
-import { TEXT_LIMITS } from "../../../shared/textLimits";
 import { reportClientError } from "../../../app/utils/clientError";
 import {
-  activateCloudBackup,
   createManagedBackup,
-  exportRecoveryKeyFile,
   getBackupHistory,
   getBackupStatus,
-  listCloudBackups,
-  recoverCloudBackup,
   relaunchAfterBackupRestore,
-  restoreCloudBackup,
   restoreManagedBackup,
 } from "../../../app/db/posRepository";
 
@@ -43,21 +35,11 @@ function formatBytes(bytes: number) {
 }
 
 export function BackupSettingsSection() {
-  const auth = React.useContext(AuthContext);
-  const isAdmin = auth?.session?.role === "admin";
   const [status, setStatus] = React.useState<any>(null);
   const [history, setHistory] = React.useState<any[]>([]);
-  const [cloudItems, setCloudItems] = React.useState<any[]>([]);
   const [message, setMessage] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState<string | null>(null);
-  const [recoveryKey, setRecoveryKey] = React.useState<string | null>(null);
-  const [restaurantCodeInput, setRestaurantCodeInput] = React.useState("");
-  const [recoveryKeyInput, setRecoveryKeyInput] = React.useState("");
-  const [confirm, setConfirm] = React.useState<
-    | { kind: "restore-local"; id: string; label: string }
-    | { kind: "restore-cloud"; id: string; label: string }
-    | null
-  >(null);
+  const [confirm, setConfirm] = React.useState<{ id: string; label: string } | null>(null);
   const [showHistory, setShowHistory] = React.useState(false);
 
   const refresh = React.useCallback(async () => {
@@ -68,16 +50,6 @@ export function BackupSettingsSection() {
       setHistory(hist?.records || []);
     } catch {
       setHistory([]);
-    }
-    if (next?.cloudEnabled) {
-      try {
-        const cloud = await listCloudBackups();
-        setCloudItems(cloud?.items || []);
-      } catch {
-        setCloudItems([]);
-      }
-    } else {
-      setCloudItems([]);
     }
   }, []);
 
@@ -94,16 +66,6 @@ export function BackupSettingsSection() {
       const result = await createManagedBackup();
       if (result?.ok === false && result?.reason === "insufficient-disk-space") {
         setMessage(result.message || "Not enough storage space to create a backup.");
-      } else if (result?.cloudUpload && result.cloudUpload.ok === false) {
-        setMessage(
-          reportClientError(
-            "settings.backup.cloud-upload",
-            new Error(String(result.cloudUpload.reason || "upload-failed")),
-            "Local backup created, but cloud upload failed.",
-          ),
-        );
-      } else if (result?.cloudUploadPending) {
-        setMessage("Local backup created. Cloud backup pending.");
       } else {
         setMessage("Backup complete");
       }
@@ -115,46 +77,7 @@ export function BackupSettingsSection() {
     }
   };
 
-  const onEnableCloud = async () => {
-    if (!isAdmin) {
-      setMessage("Only an admin can enable cloud backup.");
-      return;
-    }
-    setBusy("activate");
-    setMessage(null);
-    try {
-      const result = await activateCloudBackup();
-      setRecoveryKey(result.recoveryKey);
-      setMessage("Cloud backup enabled. Save your recovery key.");
-      await refresh();
-    } catch (e: any) {
-      setMessage(reportClientError("settings.backup.activate", e, "Could not enable cloud backup"));
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const onRecoverCloud = async () => {
-    if (!isAdmin) {
-      setMessage("Only an admin can restore from cloud on a new computer.");
-      return;
-    }
-    setBusy("recover");
-    setMessage(null);
-    try {
-      await recoverCloudBackup({
-        restaurantCode: restaurantCodeInput,
-        recoveryKey: recoveryKeyInput,
-      });
-      setMessage("Restaurant recovered. You can now restore a cloud backup.");
-      setRecoveryKeyInput("");
-      await refresh();
-    } catch (e: any) {
-      setMessage(reportClientError("settings.backup.recover", e, "Could not recover restaurant"));
-    } finally {
-      setBusy(null);
-    }
-  };
+  const localHistory = history.filter((row) => !String(row.destination || "").startsWith("cloud"));
 
   const runRestore = async () => {
     if (!confirm) {
@@ -165,11 +88,7 @@ export function BackupSettingsSection() {
     setBusy("restore");
     setMessage(null);
     try {
-      if (current.kind === "restore-local") {
-        await restoreManagedBackup(current.id);
-      } else {
-        await restoreCloudBackup(current.id);
-      }
+      await restoreManagedBackup(current.id);
       setMessage("Restore completed. Restarting…");
       await relaunchAfterBackupRestore();
     } catch (e: any) {
@@ -200,6 +119,10 @@ export function BackupSettingsSection() {
           {status?.message || "Loading backup status…"}
         </div>
 
+        <p style={{ fontSize: 13, color: "var(--pos-tx-sub)", margin: "0 0 12px", lineHeight: 1.5 }}>
+          Backups stay on this computer. This offline POS does not upload them.
+        </p>
+
         <div
           style={{
             display: "grid",
@@ -209,13 +132,10 @@ export function BackupSettingsSection() {
             marginBottom: 16,
           }}
         >
-          <div>Last cloud backup: {formatWhen(status?.lastCloudBackupAt)}</div>
           <div>Last local backup: {formatWhen(status?.lastLocalBackupAt)}</div>
-          <div>Cloud backups: {status?.cloudEnabled ? cloudItems.length : 0} available</div>
           <div>Local storage: {formatBytes(Number(status?.localStorageBytes || 0))}</div>
           <div>Automatic backup: {status?.automaticBackup === false ? "OFF" : "ON"}</div>
           <div>Retention: {status?.retentionDays ?? 14} days</div>
-          {status?.restaurantCode ? <div>Restaurant code: {status.restaurantCode}</div> : null}
         </div>
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
@@ -253,105 +173,20 @@ export function BackupSettingsSection() {
               borderRadius: 8,
               fontSize: 13,
               fontWeight: 600,
-              background: /fail|could not|error|not enough/i.test(message)
-                ? "var(--pos-danger-tint)"
-                : "var(--pos-success-tint)",
-              color: /fail|could not|error|not enough/i.test(message)
-                ? "var(--pos-danger)"
-                : "var(--pos-success)",
+              background:
+                message === "Backup complete" || message.startsWith("Restore completed")
+                  ? "var(--pos-success-tint)"
+                  : "var(--pos-danger-tint)",
+              color:
+                message === "Backup complete" || message.startsWith("Restore completed")
+                  ? "var(--pos-success)"
+                  : "var(--pos-danger)",
             }}
           >
             {message}
           </div>
         ) : null}
       </div>
-
-      {!status?.cloudEnabled ? (
-        <div
-          className="pos-card pos-card-p"
-          style={{ marginBottom: 24 }}
-          data-settings-sec="backup"
-        >
-          <div
-            style={{
-              fontSize: 11,
-              fontWeight: 800,
-              color: "var(--pos-muted,var(--pos-tx-muted))",
-              marginBottom: 12,
-              textTransform: "uppercase",
-              letterSpacing: "0.1em",
-            }}
-          >
-            Cloud Backup
-          </div>
-          <p style={{ fontSize: 13, color: "var(--pos-tx-sub)", marginTop: 0 }}>
-            Protect your restaurant data with automatic encrypted cloud backups when an internet
-            connection is available.
-          </p>
-          {isAdmin ? (
-            <Button
-              type="button"
-              variant="primary"
-              disabled={busy !== null}
-              onClick={() => void onEnableCloud()}
-            >
-              {busy === "activate" ? "Enabling…" : "Enable Cloud Backup"}
-            </Button>
-          ) : (
-            <div style={{ fontSize: 13, color: "var(--pos-tx-muted)" }}>
-              Ask an admin to enable cloud backup.
-            </div>
-          )}
-        </div>
-      ) : null}
-
-      {isAdmin && !status?.cloudEnabled ? (
-        <div
-          className="pos-card pos-card-p"
-          style={{ marginBottom: 24 }}
-          data-settings-sec="backup"
-        >
-          <div
-            style={{
-              fontSize: 11,
-              fontWeight: 800,
-              color: "var(--pos-muted,var(--pos-tx-muted))",
-              marginBottom: 12,
-              textTransform: "uppercase",
-              letterSpacing: "0.1em",
-            }}
-          >
-            Restore from Cloud
-          </div>
-          <p style={{ fontSize: 13, color: "var(--pos-tx-sub)", marginTop: 0 }}>
-            Use this on a replacement computer with your restaurant code and recovery key.
-          </p>
-          <div style={{ display: "grid", gap: 10, maxWidth: 420 }}>
-            <Input
-              label="Restaurant code"
-              value={restaurantCodeInput}
-              onChange={(e) => setRestaurantCodeInput(e.target.value)}
-              placeholder="RN-XXXXX"
-              maxLength={TEXT_LIMITS.restaurantCode}
-            />
-            <Input
-              label="Recovery key"
-              value={recoveryKeyInput}
-              onChange={(e) => setRecoveryKeyInput(e.target.value)}
-              placeholder="XXXX-XXXX-…"
-              maxLength={TEXT_LIMITS.recoveryKey}
-            />
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={busy !== null}
-              onClick={() => void onRecoverCloud()}
-            >
-              {busy === "recover" ? "Recovering…" : "Recover Restaurant"}
-            </Button>
-          </div>
-        </div>
-      ) : null}
 
       {showHistory ? (
         <div
@@ -372,12 +207,12 @@ export function BackupSettingsSection() {
             Backup History
           </div>
           <div style={{ display: "grid", gap: 8 }}>
-            {history.length === 0 && cloudItems.length === 0 ? (
+            {localHistory.length === 0 ? (
               <div style={{ fontSize: 13, color: "var(--pos-tx-muted)" }}>
                 No backup records yet.
               </div>
             ) : null}
-            {history.slice(0, 30).map((row) => (
+            {localHistory.slice(0, 30).map((row) => (
               <div
                 key={row.id}
                 style={{
@@ -391,22 +226,17 @@ export function BackupSettingsSection() {
               >
                 <div>
                   <div style={{ fontWeight: 600 }}>
-                    {String(row.destination || "").startsWith("cloud") ? "Cloud" : "Local"} backup
-                    {row.status === "failed" || row.status === "upload_pending"
-                      ? ` (${row.status})`
-                      : ""}
+                    Local backup{row.status === "failed" ? " (failed)" : ""}
                   </div>
                   <div style={{ color: "var(--pos-tx-muted)" }}>{formatWhen(row.created_at)}</div>
                 </div>
-                {row.destination === "local" &&
-                String(row.path_or_provider || "").endsWith(".rnbak") ? (
+                {String(row.path_or_provider || "").endsWith(".rnbak") && row.status !== "failed" ? (
                   <Button
                     type="button"
                     variant="secondary"
                     disabled={busy !== null}
                     onClick={() =>
                       setConfirm({
-                        kind: "restore-local",
                         id: row.id,
                         label: formatWhen(row.created_at),
                       })
@@ -417,71 +247,9 @@ export function BackupSettingsSection() {
                 ) : null}
               </div>
             ))}
-            {cloudItems.map((item) => (
-              <div
-                key={`cloud-${item.id}`}
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  gap: 12,
-                  fontSize: 13,
-                  borderBottom: "1px solid var(--pos-border,var(--pos-line))",
-                  paddingBottom: 8,
-                }}
-              >
-                <div>
-                  <div style={{ fontWeight: 600 }}>Cloud backup</div>
-                  <div style={{ color: "var(--pos-tx-muted)" }}>{formatWhen(item.createdAt)}</div>
-                </div>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  disabled={busy !== null}
-                  onClick={() =>
-                    setConfirm({
-                      kind: "restore-cloud",
-                      id: item.id,
-                      label: formatWhen(item.createdAt),
-                    })
-                  }
-                >
-                  Restore
-                </Button>
-              </div>
-            ))}
           </div>
         </div>
       ) : null}
-
-      <ConfirmModal
-        open={Boolean(recoveryKey)}
-        title="Cloud Backup Recovery Key"
-        confirmLabel="I've Saved It"
-        cancelLabel="Close"
-        onClose={() => setRecoveryKey(null)}
-        onConfirm={() => setRecoveryKey(null)}
-      >
-        <p>
-          Save this somewhere safe. You will need it if this computer is lost, damaged, or replaced.
-        </p>
-        {status?.restaurantCode ? <p>Restaurant code: {status.restaurantCode}</p> : null}
-        <pre className="ui-confirm-details" style={{ whiteSpace: "pre-wrap" }}>
-          {recoveryKey}
-        </pre>
-        <div style={{ marginTop: 12 }}>
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={() => {
-              if (recoveryKey) {
-                void exportRecoveryKeyFile(recoveryKey).catch(() => undefined);
-              }
-            }}
-          >
-            Download Recovery Key
-          </Button>
-        </div>
-      </ConfirmModal>
 
       <ConfirmModal
         open={Boolean(confirm)}

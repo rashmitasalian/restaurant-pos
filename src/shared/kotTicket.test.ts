@@ -3,6 +3,7 @@ import {
   buildKotLines,
   buildKotVoidLines,
   buildVoidKotItemPrintLines,
+  PRACTICE_DOCUMENT_BANNER,
   resolveKotTableLabel,
 } from "./kotTicket";
 
@@ -15,6 +16,32 @@ describe("resolveKotTableLabel", () => {
 });
 
 describe("buildKotLines", () => {
+  it("marks a practice KOT on the original ticket and a void reprint", () => {
+    const lines = buildKotLines(
+      {
+        kotId: 1,
+        orderType: "table",
+        tableLabel: "F1",
+        practice: true,
+        items: [{ name: "Tea", qty: 1 }],
+      },
+      null,
+      1,
+      { hotelName: "Green Leaf Kitchen" },
+    );
+    const voids = buildKotVoidLines(
+      {
+        orderType: "table",
+        tableLabel: "F1",
+        practice: true,
+        items: [{ name: "Tea", qty: 1 }],
+      },
+      { hotelName: "Green Leaf Kitchen" },
+    );
+    expect(lines).toContain(`CENTER:${PRACTICE_DOCUMENT_BANNER}`);
+    expect(voids).toContain(`CENTER:${PRACTICE_DOCUMENT_BANNER}`);
+  });
+
   it("prints the on-screen table label, not the raw id", () => {
     const lines = buildKotLines(
       {

@@ -277,6 +277,7 @@ function buildKotPreview(
     tableNum,
     tableLabel: tableLabel || undefined,
     sentBy,
+    practice: Boolean(meta.practice),
   };
 }
 

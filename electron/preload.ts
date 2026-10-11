@@ -297,7 +297,8 @@ contextBridge.exposeInMainWorld("pos", {
     status: () => authInvoke("pos:backup:status"),
     create: () => authInvoke("pos:backup:create"),
     history: () => authInvoke("pos:backup:history"),
-    restore: (backupId: string) => authInvoke("pos:backup:restore", backupId),
+    restore: (backupId: string, acknowledgePreLive?: boolean) =>
+      authInvoke("pos:backup:restore", backupId, acknowledgePreLive),
     activateCloud: () => authInvoke("pos:backup:activate-cloud"),
     recoverCloud: (payload: { restaurantCode: string; recoveryKey: string }) =>
       authInvoke("pos:backup:recover-cloud", payload),
@@ -306,6 +307,14 @@ contextBridge.exposeInMainWorld("pos", {
     exportRecoveryKey: (recoveryKey: string) =>
       authInvoke("pos:backup:export-recovery-key", recoveryKey),
     relaunch: () => authInvoke("pos:backup:relaunch"),
+  },
+  operations: {
+    status: () => authInvoke("pos:operations:status"),
+    prepare: () => authInvoke("pos:operations:prepare"),
+    cancel: () => authInvoke("pos:operations:cancel"),
+    commit: (phrase: string) => authInvoke("pos:operations:commit", phrase),
+    repairSidecar: () => authInvoke("pos:operations:repair-sidecar"),
+    completeRestore: () => authInvoke("pos:operations:complete-restore"),
   },
   app: {
     info: () => authInvoke("pos:app:info"),

@@ -232,4 +232,21 @@ describe("receipt QR footer", () => {
       "CUT",
     ]);
   });
+
+  it("marks a practice bill on a reprint", () => {
+    const lines = buildReceiptLines(
+      {
+        items: [{ name: "Tea", qty: 1, rate: 25 }],
+        orderType: "takeaway",
+        meta: { orderSeq: 4, practice: true },
+      },
+      null,
+      0,
+      { itemSubtotal: 25, total: 25, gstEnabled: false },
+      { enabled: false, gstRateBps: 0, priceIncludesTax: false },
+      { hotelName: "Green Leaf Kitchen" },
+    );
+    expect(lines).toContain("CENTER:PRACTICE — NOT A TAX INVOICE");
+    expect(lines.some((line) => line.includes("Invoice No:"))).toBe(false);
+  });
 });

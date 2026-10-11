@@ -20,6 +20,7 @@ import {
 import { onDomainEvent, publishDomainEvent, type DomainEvent } from "../services/domainEvents";
 import { resolveCaptainStaticPath } from "./captainStaticPath";
 import { publicGatewayError } from "./gatewayError";
+import { isAdmissionsClosed, operationsBlockReason } from "../services/operationsAdmission";
 import { pairingAttempts } from "./pairingThrottle";
 
 export const GATEWAY_DEFAULT_PORT = Number(process.env.POS_GATEWAY_PORT || 4747);
@@ -369,6 +370,15 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
   }
 
   try {
+    if (
+      method !== "GET" &&
+      method !== "OPTIONS" &&
+      url.pathname !== "/api/auth/login" &&
+      (isAdmissionsClosed() || operationsBlockReason())
+    ) {
+      throw new Error(operationsBlockReason() || "operations-locked");
+    }
+
     if (method === "GET" && url.pathname === "/api/health") {
       json(res, 200, {
         ok: true,
@@ -627,7 +637,13 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
         ? 401
         : message === "forbidden" || message === "invalid-pairing-code"
           ? 403
-          : message === "client-op-conflict" || message === "order-conflict"
+          : message === "client-op-conflict" ||
+          message === "order-conflict" ||
+          message === "operations-locked" ||
+          message === "sidecar-repair-required" ||
+          message === "sidecar-without-database-marker" ||
+          message === "restore-recovery-required" ||
+          message === "operations-reconcile-failed"
             ? 409
             : message.startsWith("kot-") ||
                 message.startsWith("order-") ||

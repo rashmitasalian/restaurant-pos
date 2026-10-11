@@ -15,9 +15,7 @@ import { sanitizeIpcError } from "../../src/shared/validation";
 import { posService } from "../services/posService";
 import { updateService } from "../services/updateService";
 import { getBackupManager } from "../services/backup/backupManager";
-import { cloudBackupStore } from "../services/backup/cloudClient";
 import { localBackupStore } from "../services/backup/localStore";
-import { createTempPath, safeUnlink } from "../services/backup/paths";
 import {
   createMainSession,
   destroyMainSession,
@@ -1052,17 +1050,7 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
   ipcMain.handle("pos:backup:create", async (event, token?: string | null) => {
     const user = requirePermission(event, token, "system:settings");
     try {
-      const created = await getBackupManager().createManagedBackup(user.username);
-      if (created.cloudUploadPending) {
-        const upload = await cloudBackupStore.uploadPendingIfAny();
-        const uploaded = Boolean(upload?.ok && !upload?.skipped);
-        return {
-          ...created,
-          cloudUploadPending: !uploaded && upload?.ok !== false,
-          cloudUpload: upload,
-        };
-      }
-      return created;
+      return await getBackupManager().createManagedBackup(user.username);
     } catch (error: any) {
       if (String(error?.message || error) === "insufficient-disk-space") {
         return {
@@ -1077,11 +1065,7 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
   });
   ipcMain.handle("pos:backup:history", (event, token?: string | null) => {
     requirePermission(event, token, "system:settings");
-    // Clear stale upload_pending labels once cloud sync has caught up.
-    const identity = getBackupManager().getIdentity();
-    if (identity.cloudEnabled && identity.lastCloudBackupAt && !identity.pendingUploadPath) {
-      posService.markUploadPendingBackupsCompleted();
-    }
+    getBackupManager().getIdentity();
     const records = posService.listBackups();
     const localFiles = localBackupStore.list();
     return {
@@ -1089,53 +1073,82 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
       localFiles,
     };
   });
-  ipcMain.handle("pos:backup:restore", async (event, token: string | null, backupId: string) => {
-    const user = requirePermission(event, token, "system:settings");
-    const restored = await getBackupManager().restoreManagedBackup(backupId, user.username);
-    return restored;
-  });
+  ipcMain.handle(
+    "pos:backup:restore",
+    async (event, token: string | null, backupId: string, acknowledgePreLive?: boolean) => {
+      const user = requirePermission(event, token, "system:settings");
+      const acknowledge = acknowledgePreLive === true && user.role === "admin";
+      if (acknowledgePreLive === true && user.role !== "admin") {
+        throw new Error("admin-required");
+      }
+      const restored = await getBackupManager().restoreManagedBackup(backupId, user.username, {
+        acknowledgePreLive: acknowledge,
+      });
+      return restored;
+    },
+  );
   ipcMain.handle("pos:backup:activate-cloud", async (event, token?: string | null) => {
     const user = requirePermission(event, token, "system:settings");
     if (user.role !== "admin") {
       throw new Error("admin-required");
     }
-    return cloudBackupStore.activateCloud(user.username);
+    throw new Error("cloud-backup-not-supported");
   });
   ipcMain.handle(
     "pos:backup:recover-cloud",
     async (
       event,
       token: string | null,
-      payload: { restaurantCode: string; recoveryKey: string },
+      _payload: { restaurantCode: string; recoveryKey: string },
     ) => {
       const user = requirePermission(event, token, "system:settings");
       if (user.role !== "admin") {
         throw new Error("admin-required");
       }
-      return cloudBackupStore.recoverCloud(
-        payload?.restaurantCode,
-        payload?.recoveryKey,
-        user.username,
-      );
+      throw new Error("cloud-backup-not-supported");
     },
   );
   ipcMain.handle("pos:backup:list-cloud", async (event, token?: string | null) => {
     requirePermission(event, token, "system:settings");
-    return cloudBackupStore.listCloudBackups();
+    throw new Error("cloud-backup-not-supported");
   });
-  ipcMain.handle(
-    "pos:backup:restore-cloud",
-    async (event, token: string | null, backupId: string) => {
-      const user = requirePermission(event, token, "system:settings");
-      const target = createTempPath("cloud-download", ".rnbak");
-      try {
-        await cloudBackupStore.downloadCloudBackup(backupId, target);
-        return getBackupManager().restoreManagedBackup(target, user.username);
-      } finally {
-        safeUnlink(target);
-      }
-    },
-  );
+  ipcMain.handle("pos:backup:restore-cloud", async (event, token: string | null) => {
+    requirePermission(event, token, "system:settings");
+    throw new Error("cloud-backup-not-supported");
+  });
+  function requireAdmin(event: IpcMainInvokeEvent, token?: string | null) {
+    const user = requirePermission(event, token, "system:settings");
+    if (user.role !== "admin") {
+      throw new Error("admin-required");
+    }
+    return user;
+  }
+
+  ipcMain.handle("pos:operations:status", (event, token?: string | null) => {
+    requireAdmin(event, token);
+    return posService.getLiveOperationsStatus();
+  });
+  ipcMain.handle("pos:operations:prepare", (event, token?: string | null) => {
+    requireAdmin(event, token);
+    return posService.prepareLiveOperations();
+  });
+  ipcMain.handle("pos:operations:cancel", (event, token?: string | null) => {
+    requireAdmin(event, token);
+    return posService.cancelLiveOperations();
+  });
+  ipcMain.handle("pos:operations:commit", (event, token: string | null, phrase?: string) => {
+    const user = requireAdmin(event, token);
+    return posService.commitLiveOperations(user.username, String(phrase ?? ""));
+  });
+  ipcMain.handle("pos:operations:repair-sidecar", (event, token?: string | null) => {
+    requireAdmin(event, token);
+    return posService.repairOperationsSidecar();
+  });
+  ipcMain.handle("pos:operations:complete-restore", (event, token?: string | null) => {
+    requireAdmin(event, token);
+    return posService.completeInterruptedRestore();
+  });
+
   ipcMain.handle("pos:backup:relaunch", (event, token?: string | null) => {
     requirePermission(event, token, "system:settings");
     setTimeout(() => {

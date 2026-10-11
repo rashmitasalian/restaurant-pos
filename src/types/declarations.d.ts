@@ -260,13 +260,21 @@ declare global {
         status: () => Promise<any>;
         create: () => Promise<any>;
         history: () => Promise<any>;
-        restore: (backupId: string) => Promise<any>;
+        restore: (backupId: string, acknowledgePreLive?: boolean) => Promise<any>;
         activateCloud: () => Promise<any>;
         recoverCloud: (payload: { restaurantCode: string; recoveryKey: string }) => Promise<any>;
         listCloud: () => Promise<any>;
         restoreCloud: (backupId: string) => Promise<any>;
         exportRecoveryKey: (recoveryKey: string) => Promise<any>;
         relaunch: () => Promise<any>;
+      };
+      operations?: {
+        status: () => Promise<any>;
+        prepare: () => Promise<any>;
+        cancel: () => Promise<any>;
+        commit: (phrase: string) => Promise<any>;
+        repairSidecar: () => Promise<any>;
+        completeRestore: () => Promise<any>;
       };
       app?: {
         info: () => Promise<{
