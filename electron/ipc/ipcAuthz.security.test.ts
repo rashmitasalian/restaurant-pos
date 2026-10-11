@@ -3,7 +3,8 @@ import path from "path";
 
 /**
  * Channels that are reachable before a session exists.
- * Everything else must call requireSession, requirePermission, or requireMainSession.
+ * Everything else must call requireSession, requirePermission, requireMainSession,
+ * or requireAdmin. requireAdmin is the settings-admin wrapper around requirePermission.
  */
 const PUBLIC_CHANNELS = new Set([
   "pos:db:ready",
@@ -47,12 +48,14 @@ describe("IPC authorization coverage", () => {
     for (const relativePath of SOURCE_FILES) {
       const source = fs.readFileSync(path.join(process.cwd(), relativePath), "utf8");
       for (const handler of handlersIn(source)) {
-        const guarded = /require(?:Main)?Session\(|requirePermission\(/.test(handler.body);
+        const guarded = /require(?:Main)?Session\(|requirePermission\(|requireAdmin\(/.test(handler.body);
         if (!guarded && !PUBLIC_CHANNELS.has(handler.channel)) {
           missing.push(`${relativePath} ${handler.channel}`);
         }
       }
     }
     expect(missing).toEqual([]);
+    const posIpc = fs.readFileSync(path.join(process.cwd(), "electron/ipc/posIpc.ts"), "utf8");
+    expect(posIpc).toMatch(/function requireAdmin\([\s\S]*?requirePermission\(/);
   });
 });
