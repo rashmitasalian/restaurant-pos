@@ -5,7 +5,8 @@ Use this checklist before installing the POS in a live restaurant.
 For step-by-step procedures, see:
 
 - `docs/FIRST_TIME_INSTALLATION_RUNBOOK.md` for fresh desktop or restaurant desktop installation (includes **client OS/hardware requirements**).
-- `docs/PRODUCTION_UPDATE_RUNBOOK.md` for code redeploy, production update, and rollback.
+- `docs/PRODUCTION_UPDATE_RUNBOOK.md` for updates from 0.7.0 onward.
+- `docs/UPDATE_0_6_0_TO_0_7_0.md` for the one-time upgrade from unlicensed 0.6.0.
 
 ## Client Machine Gate
 

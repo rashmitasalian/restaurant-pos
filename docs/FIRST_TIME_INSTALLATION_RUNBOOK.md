@@ -5,7 +5,8 @@ Install RestoNiti on a Windows PC that has never run the app.
 Related:
 
 - `docs/PRODUCTION_READINESS.md` — pre-deploy checklist
-- `docs/PRODUCTION_UPDATE_RUNBOOK.md` — later updates (not first install)
+- `docs/PRODUCTION_UPDATE_RUNBOOK.md` — updates from 0.7.0 onward
+- `docs/UPDATE_0_6_0_TO_0_7_0.md` — one-time upgrade from unlicensed 0.6.0
 
 ---
 
@@ -224,7 +225,7 @@ The issuer warns if the restaurant name already has an active license and you di
 
 This is a one-time unlock for that PC, not a renewal. A site that already bills on an older build has no license file yet. Their menu, bills, and users stay in `%APPDATA%\Restaurant POS`. Do not install this build during service unless you can import the license in the same visit. Until the `.rnlc` is imported, that PC cannot open the POS or Captain.
 
-Do not ship the first licensed build to an existing site through the update manifest or the in-app updater. An automatic update would restart them into the activation screen with no license ready, and they could not bill until you respond. Install it on site, or on a phone or remote call where you issue the `.rnlc` straight away. Once the PC is licensed, later updates through the manifest are fine because the license stays in AppData.
+Do not ship the first licensed build to an existing 0.6.0 site through the update manifest or the in-app updater. Follow `docs/UPDATE_0_6_0_TO_0_7_0.md`. An in-app update would restart them into the activation screen with no license ready, and they could not bill until you respond. Install it on site, or on a phone or remote call where you issue the `.rnlc` straight away. Once the PC is on 0.7.0, later updates use `docs/PRODUCTION_UPDATE_RUNBOOK.md` because the license stays in AppData.
 
 1. Install the new setup exe over the current one. Program files change. The existing database does not.
 2. Open RestoNiti with the Windows account they use every day. The activation screen shows the installation code. The database is not opened yet.

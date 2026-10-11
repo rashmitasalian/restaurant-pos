@@ -54,4 +54,5 @@ root CA into the OS/Node trust store or set `NODE_EXTRA_CA_CERTS` locally.
 See:
 
 - `docs/FIRST_TIME_INSTALLATION_RUNBOOK.md` for fresh desktop or restaurant desktop installation.
-- `docs/PRODUCTION_UPDATE_RUNBOOK.md` for code redeploy, production update, and rollback.
+- `docs/UPDATE_0_6_0_TO_0_7_0.md` for the one-time upgrade from unlicensed 0.6.0.
+- `docs/PRODUCTION_UPDATE_RUNBOOK.md` for updates from 0.7.0 onward, including rollback.

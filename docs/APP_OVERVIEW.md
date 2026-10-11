@@ -950,7 +950,8 @@ npm run perf:all          # Seed + app + UI benchmarks
 
 ### Production Runbooks
 - `docs/FIRST_TIME_INSTALLATION_RUNBOOK.md` — Fresh setup on restaurant terminal
-- `docs/PRODUCTION_UPDATE_RUNBOOK.md` — Deploy updates, rollback
+- `docs/UPDATE_0_6_0_TO_0_7_0.md` — One-time upgrade from unlicensed 0.6.0
+- `docs/PRODUCTION_UPDATE_RUNBOOK.md` — Updates from 0.7.0 onward, and rollback
 - `docs/DEPLOYMENT_AND_UPDATE_RUNBOOK.md` — Combined deployment guide
 - `docs/PRODUCTION_READINESS.md` — Pre-launch checklist
 - `docs/ONBOARDING.md` — Developer onboarding and repo map
@@ -1028,4 +1029,4 @@ For deployment, updates, or custom feature requirements, refer to project mainta
 - **Developers**: Start with `docs/ONBOARDING.md` and `docs/design-system.md`
 - **Captain**: See `docs/CAPTAIN_APP.md`
 - **Performance**: See `docs/REPORT_PERFORMANCE_TESTING.md`
-- **Deploy**: See `docs/FIRST_TIME_INSTALLATION_RUNBOOK.md` and `docs/PRODUCTION_UPDATE_RUNBOOK.md`
+- **Deploy**: See `docs/FIRST_TIME_INSTALLATION_RUNBOOK.md`, `docs/UPDATE_0_6_0_TO_0_7_0.md`, and `docs/PRODUCTION_UPDATE_RUNBOOK.md`
