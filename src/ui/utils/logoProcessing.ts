@@ -26,8 +26,9 @@ const ACCEPTED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
 const MAX_UPLOAD_BYTES = 3 * 1024 * 1024;
 const UI_LOGO_MAX_SIZE = 512;
 const SOURCE_MAX_EDGE = 1600;
-const RECEIPT_MAX_WIDTH = 256;
-const RECEIPT_MAX_HEIGHT = 168;
+const RECEIPT_MAX_WIDTH = 576;
+const RECEIPT_MAX_HEIGHT = 480;
+const COVERAGE_INK = 0.32;
 const CROP_PADDING = 4;
 const PAPER_LUMA = 242;
 const INK_LUMA = 210;
@@ -313,6 +314,178 @@ export function scaleRgba(image: RgbaBuffer, width: number, height: number): Rgb
   return { width, height, data };
 }
 
+function bilevelInk(gray: Uint8Array, field: LogoField) {
+  const ink = new Uint8Array(gray.length);
+  if (field.mode === "dark") {
+    const cutoff = field.luma + DARK_MARK_GAP;
+    for (let i = 0; i < gray.length; i += 1) {
+      ink[i] = gray[i] >= cutoff ? 1 : 0;
+    }
+    return ink;
+  }
+  for (let i = 0; i < gray.length; i += 1) {
+    ink[i] = gray[i] < INK_LUMA ? 1 : 0;
+  }
+  return ink;
+}
+
+function fillInkRow(
+  ink: Uint8Array,
+  out: Uint8Array,
+  y: number,
+  sourceWidth: number,
+  sourceHeight: number,
+  width: number,
+  height: number,
+  upscale: boolean,
+) {
+  if (upscale) {
+    const sy = Math.min(sourceHeight - 1, Math.floor(((y + 0.5) * sourceHeight) / height));
+    const row = sy * sourceWidth;
+    for (let x = 0; x < width; x += 1) {
+      const sx = Math.min(sourceWidth - 1, Math.floor(((x + 0.5) * sourceWidth) / width));
+      out[y * width + x] = ink[row + sx];
+    }
+    return;
+  }
+  const y0 = (y * sourceHeight) / height;
+  const y1 = ((y + 1) * sourceHeight) / height;
+  const yStart = Math.floor(y0);
+  const yEnd = Math.min(sourceHeight - 1, Math.ceil(y1) - 1);
+  for (let x = 0; x < width; x += 1) {
+    const x0 = (x * sourceWidth) / width;
+    const x1 = ((x + 1) * sourceWidth) / width;
+    const xStart = Math.floor(x0);
+    const xEnd = Math.min(sourceWidth - 1, Math.ceil(x1) - 1);
+    let covered = 0;
+    let area = 0;
+    for (let sy = yStart; sy <= yEnd; sy += 1) {
+      const rowTop = y0 > sy ? y0 : sy;
+      const rowBottom = y1 < sy + 1 ? y1 : sy + 1;
+      const rowFrac = rowBottom - rowTop;
+      if (rowFrac <= 0) {
+        continue;
+      }
+      const row = sy * sourceWidth;
+      for (let sx = xStart; sx <= xEnd; sx += 1) {
+        const colLeft = x0 > sx ? x0 : sx;
+        const colRight = x1 < sx + 1 ? x1 : sx + 1;
+        const colFrac = colRight - colLeft;
+        if (colFrac <= 0) {
+          continue;
+        }
+        const weight = rowFrac * colFrac;
+        area += weight;
+        if (ink[row + sx]) {
+          covered += weight;
+        }
+      }
+    }
+    out[y * width + x] = area > 0 && covered / area >= COVERAGE_INK ? 1 : 0;
+  }
+}
+
+function scaleInkMask(
+  ink: Uint8Array,
+  sourceWidth: number,
+  sourceHeight: number,
+  width: number,
+  height: number,
+) {
+  const out = new Uint8Array(width * height);
+  if (width === sourceWidth && height === sourceHeight) {
+    out.set(ink);
+    return out;
+  }
+  const upscale = width >= sourceWidth && height >= sourceHeight;
+  for (let y = 0; y < height; y += 1) {
+    fillInkRow(ink, out, y, sourceWidth, sourceHeight, width, height, upscale);
+  }
+  return out;
+}
+
+async function scaleInkMaskCooperative(
+  ink: Uint8Array,
+  sourceWidth: number,
+  sourceHeight: number,
+  width: number,
+  height: number,
+  isCancelled?: () => boolean,
+) {
+  const out = new Uint8Array(width * height);
+  if (width === sourceWidth && height === sourceHeight) {
+    out.set(ink);
+    return out;
+  }
+  const upscale = width >= sourceWidth && height >= sourceHeight;
+  for (let y = 0; y < height; y += 1) {
+    fillInkRow(ink, out, y, sourceWidth, sourceHeight, width, height, upscale);
+    await maybePause(y, isCancelled);
+  }
+  return out;
+}
+
+function rasterFromArtwork(artwork: RgbaBuffer, field: LogoField) {
+  const size = fittedSize(
+    artwork.width,
+    artwork.height,
+    RECEIPT_MAX_WIDTH,
+    RECEIPT_MAX_HEIGHT,
+    true,
+  );
+  const gray = grayscale(artwork);
+  if (shouldDither(gray)) {
+    const scaled = scaleRgba(artwork, size.width, size.height);
+    const scaledGray = grayscale(scaled);
+    return packMono(
+      toInkMask(scaledGray, scaled.width, scaled.height, field),
+      scaled.width,
+      scaled.height,
+    );
+  }
+  return packMono(
+    scaleInkMask(bilevelInk(gray, field), artwork.width, artwork.height, size.width, size.height),
+    size.width,
+    size.height,
+  );
+}
+
+async function rasterFromArtworkCooperative(
+  artwork: RgbaBuffer,
+  field: LogoField,
+  isCancelled?: () => boolean,
+) {
+  const size = fittedSize(
+    artwork.width,
+    artwork.height,
+    RECEIPT_MAX_WIDTH,
+    RECEIPT_MAX_HEIGHT,
+    true,
+  );
+  const gray = grayscale(artwork);
+  if (shouldDither(gray)) {
+    const scaled = await scaleRgbaCooperative(artwork, size.width, size.height, isCancelled);
+    const scaledGray = grayscale(scaled);
+    return packMono(
+      toInkMask(scaledGray, scaled.width, scaled.height, field),
+      scaled.width,
+      scaled.height,
+    );
+  }
+  return packMono(
+    await scaleInkMaskCooperative(
+      bilevelInk(gray, field),
+      artwork.width,
+      artwork.height,
+      size.width,
+      size.height,
+      isCancelled,
+    ),
+    size.width,
+    size.height,
+  );
+}
+
 async function scaleRgbaCooperative(
   image: RgbaBuffer,
   width: number,
@@ -378,10 +551,18 @@ function shouldDither(gray: Uint8Array) {
     return false;
   }
   let occupied = 0;
+  let peak = 0;
   for (let i = 0; i < buckets.length; i += 1) {
+    if (buckets[i] > peak) {
+      peak = buckets[i];
+    }
     if (buckets[i] / ink >= 0.05) {
       occupied += 1;
     }
+  }
+  // A flat brand color is line art. Only smooth photographs are dithered.
+  if (peak / ink >= 0.22) {
+    return false;
   }
   return occupied >= 6;
 }
@@ -486,17 +667,7 @@ export function renderUiLogo(source: RgbaBuffer): RgbaBuffer {
 export function rasterizeRestaurantLogo(source: RgbaBuffer): ReceiptLogoRaster {
   const flattened = compositeOnWhite(source);
   const field = analyzeField(flattened);
-  const artwork = cropArtwork(flattened, field);
-  const size = fittedSize(
-    artwork.width,
-    artwork.height,
-    RECEIPT_MAX_WIDTH,
-    RECEIPT_MAX_HEIGHT,
-    true,
-  );
-  const scaled = scaleRgba(artwork, size.width, size.height);
-  const gray = grayscale(scaled);
-  return packMono(toInkMask(gray, scaled.width, scaled.height, field), scaled.width, scaled.height);
+  return rasterFromArtwork(cropArtwork(flattened, field), field);
 }
 
 async function renderUiLogoCooperative(
@@ -531,16 +702,7 @@ async function rasterizeRestaurantLogoCooperative(
     throw new Error("Logo has no visible artwork");
   }
   const artwork = await cropRgbaCooperative(flattenedAgain, bounds, isCancelled);
-  const size = fittedSize(
-    artwork.width,
-    artwork.height,
-    RECEIPT_MAX_WIDTH,
-    RECEIPT_MAX_HEIGHT,
-    true,
-  );
-  const scaled = await scaleRgbaCooperative(artwork, size.width, size.height, isCancelled);
-  const gray = grayscale(scaled);
-  return packMono(toInkMask(gray, scaled.width, scaled.height, field), scaled.width, scaled.height);
+  return rasterFromArtworkCooperative(artwork, field, isCancelled);
 }
 
 function readFileAsDataUrl(file: File): Promise<string> {

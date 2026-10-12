@@ -132,8 +132,8 @@ describe("restaurant logo raster", () => {
     const raster = rasterizeRestaurantLogo(image);
     expect(raster.width % 8).toBe(0);
     expect(raster.width).toBeGreaterThan(120);
-    expect(raster.width).toBeLessThanOrEqual(256);
-    expect(raster.height).toBeLessThanOrEqual(168);
+    expect(raster.width).toBeLessThanOrEqual(576);
+    expect(raster.height).toBeLessThanOrEqual(480);
     const decoded = decodeInk(raster);
     expect(hasOpenSlit(decoded.rows)).toBe(true);
     expect(decoded.ink / (raster.width * raster.height)).toBeGreaterThan(0.45);

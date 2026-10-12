@@ -20,6 +20,7 @@ import {
 import { onDomainEvent, publishDomainEvent, type DomainEvent } from "../services/domainEvents";
 import { resolveCaptainStaticPath } from "./captainStaticPath";
 import { publicGatewayError } from "./gatewayError";
+import { selectLanIPv4Addresses } from "./lanAddresses";
 import { isAdmissionsClosed, operationsBlockReason } from "../services/operationsAdmission";
 import { pairingAttempts } from "./pairingThrottle";
 
@@ -172,19 +173,7 @@ function rememberOrderClientOp(input: {
 }
 
 export function listPrivateIPv4Addresses(): string[] {
-  const nets = os.networkInterfaces();
-  const addresses: string[] = [];
-  for (const entries of Object.values(nets)) {
-    for (const entry of entries || []) {
-      if (!entry || entry.internal) {
-        continue;
-      }
-      if (entry.family === "IPv4" || (entry.family as string | number) === 4) {
-        addresses.push(entry.address);
-      }
-    }
-  }
-  return addresses;
+  return selectLanIPv4Addresses(os.networkInterfaces());
 }
 
 function captainDistRoot() {
