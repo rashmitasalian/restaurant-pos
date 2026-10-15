@@ -200,6 +200,11 @@ function configureStableUserDataPath() {
 // safeStorage key protecting the license identity) at startup.
 configureStableUserDataPath();
 
+const screenshotUserData = process.env.POS_SCREENSHOT_USER_DATA?.trim();
+if (screenshotUserData) {
+  app.setPath("userData", screenshotUserData);
+}
+
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
   app.quit();
@@ -534,8 +539,11 @@ function startPosDeferred() {
 async function startPosGateway() {
   try {
     logStartupStage("gateway:start");
-    await startLocalGateway();
-    logStartupStage("gateway:ready", getGatewayStatus());
+    const status = await startLocalGateway();
+    logStartupStage("gateway:ready", status);
+    if (!status.running) {
+      writeLogToFile("error", `Local gateway failed to start: ${status.error || "unknown"}`);
+    }
   } catch (gatewayError: any) {
     writeLogToFile(
       "error",

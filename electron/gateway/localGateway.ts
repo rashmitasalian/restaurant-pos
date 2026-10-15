@@ -23,6 +23,7 @@ import { publicGatewayError } from "./gatewayError";
 import { selectLanIPv4Addresses } from "./lanAddresses";
 import { isAdmissionsClosed, operationsBlockReason } from "../services/operationsAdmission";
 import { pairingAttempts } from "./pairingThrottle";
+import { describeGatewayListenFailure, GATEWAY_PORT_ATTEMPTS } from "./gatewayListen";
 
 export const GATEWAY_DEFAULT_PORT = Number(process.env.POS_GATEWAY_PORT || 4747);
 const SSE_HEARTBEAT_MS = 20_000;
@@ -42,6 +43,7 @@ type GatewayState = {
   port: number;
   pairingCode: string;
   startedAt: number | null;
+  lastError: string | null;
   unsubscribeEvents: (() => void) | null;
   sseClients: Set<SseClient>;
   heartbeatTimer: NodeJS.Timeout | null;
@@ -52,6 +54,7 @@ const state: GatewayState = {
   port: GATEWAY_DEFAULT_PORT,
   pairingCode: randomBytes(3).toString("hex"),
   startedAt: null,
+  lastError: null,
   unsubscribeEvents: null,
   sseClients: new Set(),
   heartbeatTimer: null,
@@ -654,15 +657,17 @@ async function onRequest(req: http.IncomingMessage, res: http.ServerResponse) {
 }
 
 export function getGatewayStatus() {
+  const running = Boolean(state.server);
   return {
-    running: Boolean(state.server),
+    running,
     port: state.port,
     pairingCode: state.pairingCode,
     addresses: listPrivateIPv4Addresses(),
     clients: countLanSessions(),
     phones: listLanSessions(),
     startedAt: state.startedAt,
-    urls: listPrivateIPv4Addresses().map((ip) => `http://${ip}:${state.port}`),
+    urls: running ? listPrivateIPv4Addresses().map((ip) => `http://${ip}:${state.port}`) : [],
+    error: running ? null : state.lastError,
   };
 }
 
@@ -672,26 +677,58 @@ export function rotateGatewayPairingCode() {
   return state.pairingCode;
 }
 
-export async function startLocalGateway(port = GATEWAY_DEFAULT_PORT) {
-  if (state.server) {
-    return getGatewayStatus();
-  }
-  state.port = port;
-  await new Promise<void>((resolve, reject) => {
+function bindGateway(port: number) {
+  return new Promise<http.Server>((resolve, reject) => {
     const server = http.createServer((req, res) => {
       void onRequest(req, res);
     });
-    server.once("error", reject);
+    const onError = (error: Error) => {
+      server.close();
+      reject(error);
+    };
+    server.once("error", onError);
     server.listen(port, "0.0.0.0", () => {
+      server.removeListener("error", onError);
+      resolve(server);
+    });
+  });
+}
+
+export async function startLocalGateway(preferredPort = GATEWAY_DEFAULT_PORT) {
+  if (state.server) {
+    return getGatewayStatus();
+  }
+  const fromPort =
+    Number.isInteger(preferredPort) && preferredPort > 0 ? preferredPort : GATEWAY_DEFAULT_PORT;
+  let lastError: unknown = null;
+  let tried = 0;
+  for (let offset = 0; offset < GATEWAY_PORT_ATTEMPTS; offset += 1) {
+    const port = fromPort + offset;
+    tried += 1;
+    try {
+      const server = await bindGateway(port);
       state.server = server;
+      state.port = port;
       state.startedAt = Date.now();
+      state.lastError = null;
       state.unsubscribeEvents = onDomainEvent((event: DomainEvent) => broadcastSse(event));
       startSseHeartbeat();
       publishDomainEvent("gateway-status", getGatewayStatus());
-      resolve();
-    });
-  });
-  return getGatewayStatus();
+      return getGatewayStatus();
+    } catch (error) {
+      lastError = error;
+      const code = (error as NodeJS.ErrnoException)?.code;
+      if (code !== "EADDRINUSE") {
+        break;
+      }
+    }
+  }
+  state.port = fromPort;
+  state.startedAt = null;
+  state.lastError = describeGatewayListenFailure(lastError, fromPort, tried);
+  const status = getGatewayStatus();
+  publishDomainEvent("gateway-status", status);
+  return status;
 }
 
 export async function stopLocalGateway() {
@@ -713,6 +750,7 @@ export async function stopLocalGateway() {
   state.sseClients.clear();
   await new Promise<void>((resolve) => server.close(() => resolve()));
   state.startedAt = null;
+  state.lastError = null;
   publishDomainEvent("gateway-status", getGatewayStatus());
   return getGatewayStatus();
 }

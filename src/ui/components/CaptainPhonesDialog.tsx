@@ -16,6 +16,7 @@ export type GatewayStatus = {
   urls?: string[];
   clients?: number;
   phones?: GatewayPhone[];
+  error?: string | null;
 };
 
 export function CaptainPhonesDialog({

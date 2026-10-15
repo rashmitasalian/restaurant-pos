@@ -120,6 +120,10 @@
   flex-shrink: 0;
 }
 
+.pos-clock-dot.is-offline {
+  background: var(--pos-saffron);
+}
+
 .pos-clock-time {
   font-size: var(--pos-type-13);
   font-weight: 800;

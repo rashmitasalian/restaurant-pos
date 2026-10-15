@@ -131,6 +131,89 @@ function isTableStatusSuccess(status: string | null) {
   );
 }
 
+/** Lets a number be cleared and retyped. The range is applied when the field is left, not on each key. */
+function NumericInput({
+  value,
+  min,
+  max,
+  onCommit,
+  ariaLabel,
+  style,
+}: {
+  value: number;
+  min: number;
+  max: number;
+  onCommit: (next: number) => void;
+  ariaLabel?: string;
+  style?: React.CSSProperties;
+}) {
+  const [text, setText] = React.useState(() => String(value));
+  const editing = React.useRef(false);
+
+  React.useEffect(() => {
+    if (!editing.current) {
+      setText(String(value));
+    }
+  }, [value]);
+
+  const commitText = (raw: string) => {
+    if (!/^\d+$/.test(raw)) {
+      setText(String(value));
+      return;
+    }
+    const next = Math.max(min, Math.min(max, Number(raw)));
+    setText(String(next));
+    if (next !== value) {
+      onCommit(next);
+    }
+  };
+
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      autoComplete="off"
+      draggable
+      className="pos-input"
+      aria-label={ariaLabel}
+      value={text}
+      style={{ cursor: "text", ...style }}
+      onDragStart={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+      }}
+      onFocus={(event) => {
+        editing.current = true;
+        const input = event.currentTarget;
+        requestAnimationFrame(() => input.select());
+      }}
+      onMouseUp={(event) => {
+        event.preventDefault();
+      }}
+      onChange={(event) => {
+        const next = event.target.value.replace(/\D/g, "");
+        setText(next);
+        if (!/^\d+$/.test(next)) {
+          return;
+        }
+        const parsed = Number(next);
+        if (parsed >= min && parsed <= max && parsed !== value) {
+          onCommit(parsed);
+        }
+      }}
+      onBlur={() => {
+        editing.current = false;
+        commitText(text);
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          event.currentTarget.blur();
+        }
+      }}
+    />
+  );
+}
+
 const DEFAULT_ATTENDANCE_SHIFTS: AttendanceShiftConfig[] = [
   { id: "morning", label: "Morning", hours: 8 },
   { id: "evening", label: "Evening", hours: 8 },
@@ -3381,6 +3464,21 @@ export default function Settings({
                 <div
                   key={area.id}
                   draggable
+                  onMouseDown={(event) => {
+                    const target = event.target;
+                    if (
+                      target instanceof Element &&
+                      target.closest("input, select, textarea, button, label")
+                    ) {
+                      event.currentTarget.draggable = false;
+                    }
+                  }}
+                  onMouseUp={(event) => {
+                    event.currentTarget.draggable = true;
+                  }}
+                  onMouseLeave={(event) => {
+                    event.currentTarget.draggable = true;
+                  }}
                   onDragStart={() => setDragAreaId(area.id)}
                   onDragEnd={() => setDragAreaId(null)}
                   onDragOver={(event) => event.preventDefault()}
@@ -3482,27 +3580,15 @@ export default function Settings({
                   >
                     <div>
                       <label className="pos-label">Tables</label>
-                      <input
-                        type="number"
+                      <NumericInput
                         min={0}
                         max={FLOOR_LAYOUT_LIMITS.MAX_AREA_TABLES}
-                        className="pos-input"
+                        ariaLabel={`Tables in ${area.name}`}
                         value={area.tableCount}
-                        onChange={(event) =>
+                        onCommit={(tableCount) =>
                           setSeatingAreas((current) =>
                             current.map((entry) =>
-                              entry.id === area.id
-                                ? {
-                                    ...entry,
-                                    tableCount: Math.max(
-                                      0,
-                                      Math.min(
-                                        FLOOR_LAYOUT_LIMITS.MAX_AREA_TABLES,
-                                        Number(event.target.value) || 0,
-                                      ),
-                                    ),
-                                  }
-                                : entry,
+                              entry.id === area.id ? { ...entry, tableCount } : entry,
                             ),
                           )
                         }
@@ -3562,27 +3648,15 @@ export default function Settings({
                     ) : null}
                     <div>
                       <label className="pos-label">Default seats</label>
-                      <input
-                        type="number"
+                      <NumericInput
                         min={1}
                         max={FLOOR_LAYOUT_LIMITS.MAX_SEATS}
-                        className="pos-input"
+                        ariaLabel={`Default seats for ${area.name}`}
                         value={area.defaultSeats}
-                        onChange={(event) =>
+                        onCommit={(defaultSeats) =>
                           setSeatingAreas((current) =>
                             current.map((entry) =>
-                              entry.id === area.id
-                                ? {
-                                    ...entry,
-                                    defaultSeats: Math.max(
-                                      1,
-                                      Math.min(
-                                        FLOOR_LAYOUT_LIMITS.MAX_SEATS,
-                                        Number(event.target.value) || 1,
-                                      ),
-                                    ),
-                                  }
-                                : entry,
+                              entry.id === area.id ? { ...entry, defaultSeats } : entry,
                             ),
                           )
                         }
@@ -3696,25 +3770,17 @@ export default function Settings({
                                     }
                                     style={{ fontWeight: 700 }}
                                   />
-                                  <input
-                                    type="number"
+                                  <NumericInput
                                     min={1}
                                     max={FLOOR_LAYOUT_LIMITS.MAX_SEATS}
-                                    className="pos-input"
-                                    aria-label={`Seats for planned table ${table.name}`}
+                                    ariaLabel={`Seats for planned table ${table.name}`}
                                     value={displaySeats}
-                                    onChange={(event) =>
+                                    onCommit={(seats) =>
                                       setPreviewOverrides((current) => ({
                                         ...current,
                                         [key]: {
                                           name: displayName,
-                                          seats: Math.max(
-                                            1,
-                                            Math.min(
-                                              FLOOR_LAYOUT_LIMITS.MAX_SEATS,
-                                              Number(event.target.value) || 1,
-                                            ),
-                                          ),
+                                          seats,
                                         },
                                       }))
                                     }
@@ -3852,20 +3918,15 @@ export default function Settings({
                             }
                             style={{ fontWeight: 700 }}
                           />
-                          <input
-                            type="number"
+                          <NumericInput
                             min={1}
                             max={50}
-                            className="pos-input"
-                            aria-label={`Seats for ${table.name || `Table ${table.id}`}`}
+                            ariaLabel={`Seats for ${table.name || `Table ${table.id}`}`}
                             value={tableSeatsDraft[table.id] ?? table.seats ?? 4}
-                            onChange={(event) =>
+                            onCommit={(seats) =>
                               setTableSeatsDraft((current) => ({
                                 ...current,
-                                [table.id]: Math.max(
-                                  1,
-                                  Math.min(50, Number(event.target.value) || 1),
-                                ),
+                                [table.id]: seats,
                               }))
                             }
                             style={{ textAlign: "center", fontWeight: 700 }}

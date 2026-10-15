@@ -263,8 +263,8 @@
   stroke-width: 24;
 }
 .rpt-chart-center {
-  font-size: 11px;
-  fill: var(--pos-tx-sub);
+  font-size: 9px;
+  fill: var(--pos-tx);
   font-weight: 800;
   text-anchor: middle;
 }

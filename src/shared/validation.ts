@@ -137,6 +137,8 @@ export const VALIDATION_MESSAGES: Record<string, string> = {
 };
 
 export const SYSTEM_MESSAGES: Record<string, string> = {
+  "tables-have-open-orders":
+    "A table still has dishes on an open order. Settle that bill before changing the floor.",
   "auth-required": "Your session has expired. Please sign in again.",
   forbidden: "You do not have permission to do that.",
   "password-change-required": "Please change your password before continuing.",

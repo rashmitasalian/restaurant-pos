@@ -3030,6 +3030,100 @@ function ensureDefaultSeatingArea(database: Database.Database) {
     .run(DEFAULT_SEATING_AREA_ID, DEFAULT_SEATING_AREA_NAME, at, at);
 }
 
+/** Tables the next floor plan will rename or deactivate. Ids are positional: slot 1 is table id 1. */
+function tableIdsChangedByFloorPlan(
+  database: Database.Database,
+  finalTables: Array<{ name: string; areaId: string }>,
+) {
+  const existing = database
+    .prepare("SELECT id, name, area_id FROM tables WHERE active = 1")
+    .all() as Array<{ id: number; name: string; area_id: string }>;
+  const byId = new Map(existing.map((row) => [Number(row.id), row]));
+  const affected: number[] = [];
+  for (let index = 0; index < finalTables.length; index += 1) {
+    const current = byId.get(index + 1);
+    const next = finalTables[index];
+    if (!current || !next) {
+      continue;
+    }
+    if (
+      String(current.name) !== String(next.name) ||
+      String(current.area_id) !== String(next.areaId)
+    ) {
+      affected.push(index + 1);
+    }
+  }
+  for (const row of existing) {
+    if (Number(row.id) > finalTables.length) {
+      affected.push(Number(row.id));
+    }
+  }
+  return affected;
+}
+
+/**
+ * A table blocks a floor change only when it still has dishes or a pending kitchen void.
+ * An empty open order looks Available on the floor, so it is cleared instead of blocking.
+ */
+function assertFloorChangeAllowed(
+  database: Database.Database,
+  tableIds: number[],
+  at: number,
+  actor: string | null,
+) {
+  const uniqueIds = [...new Set(tableIds.filter((id) => Number.isInteger(id) && id > 0))];
+  if (!uniqueIds.length) {
+    return;
+  }
+  const statuses = ACTIVE_ORDER_STATUSES.map(() => "?").join(",");
+  const idSlots = uniqueIds.map(() => "?").join(",");
+  const rows = database
+    .prepare(
+      `SELECT o.id AS id, o.table_id AS table_id, o.meta_json AS meta_json,
+              (SELECT COUNT(*) FROM order_lines ol WHERE ol.order_id = o.id) AS item_count
+       FROM orders o
+       WHERE o.table_id IN (${idSlots})
+         AND o.status IN (${statuses})`,
+    )
+    .all(...uniqueIds, ...ACTIVE_ORDER_STATUSES) as Array<{
+    id: string;
+    table_id: number;
+    meta_json: string | null;
+    item_count: number;
+  }>;
+
+  const emptyOrderIds: string[] = [];
+  for (const row of rows) {
+    const occupied =
+      Number(row.item_count || 0) > 0 || pendingVoidQtyFromStoredMeta(row.meta_json) > 0;
+    if (occupied) {
+      throw new Error("tables-have-open-orders");
+    }
+    emptyOrderIds.push(String(row.id));
+  }
+  if (!emptyOrderIds.length) {
+    return;
+  }
+  const cancel = database.prepare(
+    `UPDATE orders
+     SET status = 'cancelled', cancelled_at = ?, cancelled_by = ?, cancellation_reason = ?, updated_at = ?
+     WHERE id = ? AND status IN (${statuses})`,
+  );
+  for (const orderId of emptyOrderIds) {
+    cancel.run(
+      at,
+      actor,
+      "Empty table order cleared while saving the floor",
+      at,
+      orderId,
+      ...ACTIVE_ORDER_STATUSES,
+    );
+    createAuditRow(database, "order.cancelled", "order", orderId, actor, {
+      reason: "empty-table-order-cleared",
+    });
+  }
+}
+
 function getPrimaryActiveSeatingAreaId(database: Database.Database) {
   const row = database
     .prepare(
@@ -3452,21 +3546,15 @@ export const posService = {
         Number.isInteger(configuredDefault) && configuredDefault >= 1 && configuredDefault <= 50
           ? configuredDefault
           : 4;
-      if (safeCount < this.getTables().length) {
-        const statuses = ACTIVE_ORDER_STATUSES.map(() => "?").join(",");
-        const blocked = database
-          .prepare(
-            `SELECT DISTINCT table_id AS id
-             FROM orders
-             WHERE table_id IS NOT NULL
-               AND table_id > ?
-               AND status IN (${statuses})`,
-          )
-          .all(safeCount, ...ACTIVE_ORDER_STATUSES) as Array<{ id: number }>;
-        if (blocked.length) {
-          throw new Error("tables-have-open-orders");
-        }
-      }
+      const shrinking = database
+        .prepare("SELECT id FROM tables WHERE active = 1 AND id > ?")
+        .all(safeCount) as Array<{ id: number }>;
+      assertFloorChangeAllowed(
+        database,
+        shrinking.map((row) => Number(row.id)),
+        at,
+        actor || null,
+      );
       const insert = database.prepare(`
         INSERT INTO tables (id, name, seats, area_id, sort_order, active, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, 1, ?, ?)
@@ -3600,22 +3688,14 @@ export const posService = {
         actor,
       );
 
-      const statuses = ACTIVE_ORDER_STATUSES.map(() => "?").join(",");
       const nextCount = finalTables.length;
-      if (nextCount < this.getTables().length) {
-        const blocked = database
-          .prepare(
-            `SELECT DISTINCT table_id AS id
-             FROM orders
-             WHERE table_id IS NOT NULL
-               AND table_id > ?
-               AND status IN (${statuses})`,
-          )
-          .all(nextCount, ...ACTIVE_ORDER_STATUSES) as Array<{ id: number }>;
-        if (blocked.length) {
-          throw new Error("tables-have-open-orders");
-        }
-      }
+      const at = now();
+      assertFloorChangeAllowed(
+        database,
+        tableIdsChangedByFloorPlan(database, finalTables),
+        at,
+        actor || null,
+      );
 
       const existingSeats = new Map<number, number>();
       const seatRows = database
@@ -3625,7 +3705,6 @@ export const posService = {
         existingSeats.set(Number(row.id), Number(row.seats) || 4);
       }
 
-      const at = now();
       const upsert = database.prepare(`
         INSERT INTO tables (id, name, seats, area_id, sort_order, active, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, 1, ?, ?)

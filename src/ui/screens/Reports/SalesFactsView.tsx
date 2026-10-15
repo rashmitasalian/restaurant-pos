@@ -1,10 +1,104 @@
 import React from "react";
 import type { SalesFactsDto } from "../../../shared/pos";
 import { TEXT_LIMITS } from "../../../shared/textLimits";
+import { CATEGORY_CHART_COLORS } from "../../theme/external-brands";
 import { DataTable } from "../../components/ui/DataTable";
 import { Stat } from "../../components/ui/Stat";
 
 const ITEM_PAGE_SIZE = 25;
+const DONUT_RADIUS = 42;
+const DONUT_CIRCUMFERENCE = 2 * Math.PI * DONUT_RADIUS;
+
+const PAYMENT_COLORS: Record<string, string> = {
+  upi: "#0f766e",
+  cash: "#d97706",
+  card: "#2563eb",
+  online: "#7c3aed",
+  voucher: "#db2777",
+  credit: "#64748b",
+  split: "#0891b2",
+  other: "#64748b",
+};
+
+function compactRupees(value: number) {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+function DonutChart({
+  title,
+  centerValue,
+  centerCaption,
+  segments,
+  formatValue,
+}: {
+  title: string;
+  centerValue: string;
+  centerCaption: string;
+  segments: Array<{ key: string; label: string; value: number; color: string }>;
+  formatValue: (value: number) => string;
+}) {
+  const drawn = segments.filter((segment) => segment.value > 0);
+  const total = drawn.reduce((sum, segment) => sum + segment.value, 0);
+  let offset = 0;
+  const arcs = drawn.map((segment) => {
+    const length = total > 0 ? (segment.value / total) * DONUT_CIRCUMFERENCE : 0;
+    const arc = { ...segment, dash: `${length} ${Math.max(0, DONUT_CIRCUMFERENCE - length)}`, offset: -offset };
+    offset += length;
+    return arc;
+  });
+
+  return (
+    <div className="rpt-card" style={{ padding: 0 }}>
+      <div className="rpt-section-title">{title}</div>
+      {arcs.length === 0 ? (
+        <div className="rpt-empty-state">Nothing in this range</div>
+      ) : (
+        <div className="rpt-chart-wrap">
+          <svg className="rpt-chart-svg" viewBox="0 0 120 120" role="img" aria-label={title}>
+            <circle className="rpt-chart-empty" cx="60" cy="60" r={DONUT_RADIUS} />
+            {arcs.map((arc) => (
+              <circle
+                key={arc.key}
+                className="rpt-chart-segment"
+                cx="60"
+                cy="60"
+                r={DONUT_RADIUS}
+                stroke={arc.color}
+                strokeDasharray={arc.dash}
+                strokeDashoffset={arc.offset}
+                transform="rotate(-90 60 60)"
+              />
+            ))}
+            <text className="rpt-chart-center" x="60" y="58">
+              {centerValue}
+            </text>
+            <text className="rpt-chart-total" x="60" y="74">
+              {centerCaption}
+            </text>
+          </svg>
+          <div>
+            {arcs.map((arc) => {
+              const percent = total > 0 ? Math.round((arc.value / total) * 100) : 0;
+              return (
+                <div key={arc.key} className="rpt-legend-row">
+                  <span className="rpt-legend-swatch" style={{ background: arc.color }} />
+                  <span className="rpt-legend-name">{arc.label}</span>
+                  <span className="rpt-legend-value">
+                    {formatValue(arc.value)} · {percent}%
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function SalesFactsView({
   facts,
@@ -69,9 +163,40 @@ export function SalesFactsView({
         )}
       </div>
 
-      <div className="rpt-card" style={{ padding: 0 }}>
-        <div className="rpt-section-title">Sales by Day</div>
-        {facts.daily.length ? (
+      <div className="rpt-bottom">
+        <DonutChart
+          title="How bills were paid"
+          centerValue={compactRupees(facts.billTotal)}
+          centerCaption="Bill total"
+          formatValue={formatCurrency}
+          segments={[...facts.tenders]
+            .sort((a, b) => b.amount - a.amount || a.label.localeCompare(b.label))
+            .map((row) => ({
+              key: row.method,
+              label: row.label,
+              value: row.amount,
+              color: PAYMENT_COLORS[row.method] || CATEGORY_CHART_COLORS[0],
+            }))}
+        />
+        <DonutChart
+          title="Sales by category"
+          centerValue={compactRupees(facts.netSales)}
+          centerCaption="Net sales"
+          formatValue={formatCurrency}
+          segments={[...facts.categories]
+            .sort((a, b) => b.netSales - a.netSales || a.category.localeCompare(b.category))
+            .map((row, index) => ({
+              key: row.category,
+              label: row.category,
+              value: row.netSales,
+              color: CATEGORY_CHART_COLORS[index % CATEGORY_CHART_COLORS.length],
+            }))}
+        />
+      </div>
+
+      {facts.daily.length > 1 ? (
+        <div className="rpt-card" style={{ padding: 0, marginTop: 16 }}>
+          <div className="rpt-section-title">Sales by Day</div>
           <div className="rpt-day-chart" role="img" aria-label="Net sales by day">
             {facts.daily.map((row) => (
               <div key={row.date} className="rpt-day-col" title={`${row.date}: ${formatCurrency(row.netSales)}`}>
@@ -83,49 +208,21 @@ export function SalesFactsView({
               </div>
             ))}
           </div>
-        ) : (
-          <div className="rpt-empty-state">No days in this range</div>
-        )}
-        <DataTable
-          headers={["Date", "Net Sales", "Bills", "Avg Bill"]}
-          rows={facts.daily.map((row) => [
-            row.date,
-            formatCurrency(row.netSales),
-            String(row.bills),
-            formatCurrency(row.averageBill),
-          ])}
-        />
-      </div>
-
-      <div className="rpt-bottom">
-        <div className="rpt-card" style={{ padding: 0 }}>
-          <div className="rpt-section-title">Payment method — Bill Total</div>
-          <div style={{ padding: "8px 20px 18px", fontSize: 12, color: "var(--pos-tx-muted)" }}>
-            How bills in this period were settled. This is not cash collected.
-          </div>
-          <div style={{ padding: "0 20px 18px" }}>
-            {facts.tenders.length === 0 ? (
-              <div className="rpt-empty-state">No bills in this range</div>
-            ) : (
-              facts.tenders.map((row) => (
-                <div key={row.method} className="rpt-pay-row">
-                  <div className="rpt-pay-meta">
-                    <span style={{ fontSize: 13, fontWeight: 600 }}>{row.label}</span>
-                    <div>
-                      <span style={{ fontSize: 15, fontWeight: 700 }}>{formatCurrency(row.amount)}</span>
-                      <span style={{ fontSize: 11, marginLeft: 7, color: "var(--pos-tx-muted)" }}>{row.percent}%</span>
-                    </div>
-                  </div>
-                  <div className="rpt-pay-bar-bg">
-                    <div className="rpt-pay-bar-fill" style={{ width: `${Math.min(100, row.percent)}%`, background: "var(--pos-teal)" }} />
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
+          <DataTable
+            headers={["Date", "Net Sales", "Bills", "Avg Bill"]}
+            rows={facts.daily.map((row) => [
+              row.date,
+              formatCurrency(row.netSales),
+              String(row.bills),
+              formatCurrency(row.averageBill),
+            ])}
+          />
         </div>
+      ) : null}
+
+      <div className="rpt-bottom" style={{ marginTop: 16 }}>
         <div className="rpt-card" style={{ padding: 0 }}>
-          <div className="rpt-section-title">Service Mode</div>
+          <div className="rpt-section-title">Service mode</div>
           <DataTable
             headers={["Mode", "Bills", "Net Sales", "Avg Bill"]}
             rows={
@@ -141,19 +238,8 @@ export function SalesFactsView({
           />
           {facts.serviceModes.length === 0 && <div className="rpt-empty-state">No bills in this range</div>}
         </div>
-      </div>
-
-      <div className="rpt-product-grid">
         <div className="rpt-card" style={{ padding: 0 }}>
-          <div className="rpt-section-title">Category Sales</div>
-          <DataTable
-            headers={["Category", "Units Sold", "Net Sales"]}
-            rows={facts.categories.map((row) => [row.category, formatUnits(row.units), formatCurrency(row.netSales)])}
-          />
-          {facts.categories.length === 0 && <div className="rpt-empty-state">No category sales for this range</div>}
-        </div>
-        <div className="rpt-card" style={{ padding: 0 }}>
-          <div className="rpt-section-title">Item Sales</div>
+          <div className="rpt-section-title">Item sales</div>
           {facts.items.length > 0 && (
             <div className="rpt-table-toolbar">
               <input

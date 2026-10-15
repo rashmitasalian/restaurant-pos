@@ -90,8 +90,10 @@ function getRendererStartupElapsedMs() {
 }
 
 function GatewayChip() {
+  const perms = useRolePermissions();
   const [status, setStatus] = React.useState<GatewayStatus | null>(null);
   const [open, setOpen] = React.useState(false);
+  const [retrying, setRetrying] = React.useState(false);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -121,8 +123,51 @@ function GatewayChip() {
     };
   }, []);
 
+  const retry = async () => {
+    if (!perms.has("system:settings") || retrying) {
+      return;
+    }
+    setRetrying(true);
+    try {
+      const next = await window.pos?.gateway?.start?.();
+      setStatus(next || null);
+    } catch {
+      try {
+        const next = await window.pos?.gateway?.status?.();
+        setStatus(next || null);
+      } catch {
+        setStatus(null);
+      }
+    } finally {
+      setRetrying(false);
+    }
+  };
+
   if (!status?.running) {
-    return null;
+    if (!status?.error) {
+      return null;
+    }
+    const canRetry = perms.has("system:settings");
+    return (
+      <button
+        type="button"
+        className="pos-clock"
+        title={status.error}
+        style={{ maxWidth: 220, border: 0, cursor: canRetry ? "pointer" : "default", textAlign: "left" }}
+        onClick={canRetry ? retry : undefined}
+        disabled={retrying}
+      >
+        <div className="pos-clock-dot is-offline" aria-hidden="true" />
+        <div>
+          <div className="pos-clock-time" style={{ fontSize: 12 }}>
+            Captain offline
+          </div>
+          <div className="pos-clock-date" style={{ fontSize: 11 }}>
+            {retrying ? "Starting…" : canRetry ? "Try again" : "Needs the owner"}
+          </div>
+        </div>
+      </button>
+    );
   }
   const url = status.urls?.[0] || "";
   return (

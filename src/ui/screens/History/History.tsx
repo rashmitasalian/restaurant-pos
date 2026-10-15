@@ -1527,6 +1527,23 @@ export default function History({ embedded = false }: { embedded?: boolean }) {
                       .join(" · ")}
                   </div>
                 )}
+                {previewFull
+                  ? (() => {
+                      const previewGst = getOrderGstConfig(previewFull, gstConfig);
+                      return previewGst.enabled && previewGst.gstin ? (
+                        <div
+                          style={{
+                            fontSize: 12,
+                            fontWeight: 700,
+                            color: "var(--pos-tx)",
+                            marginTop: 4,
+                          }}
+                        >
+                          GSTIN {previewGst.gstin}
+                        </div>
+                      ) : null;
+                    })()
+                  : null}
               </div>
               <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
                 <Button

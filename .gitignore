@@ -1,5 +1,6 @@
 node_modules
 .user-data/*
+.screenshot-demo/
 data/perf/
 # Ignore common cache, build and temp files
 .cache/
