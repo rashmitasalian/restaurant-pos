@@ -20,6 +20,7 @@ function buildTestPrintPayload(printer: any) {
   const now = new Date().toLocaleString("en-IN");
   return {
     type: isKitchen ? "kot" : "receipt",
+    intent: isKitchen ? "printer-test" : undefined,
     printer: isKitchen ? "kitchen" : "counter",
     data: {
       lines: isKitchen
@@ -170,6 +171,43 @@ contextBridge.exposeInMainWorld("pos", {
     markBillPrinted: (orderId: string) => authInvoke("pos:orders:mark-bill-printed", orderId),
     pay: (orderId: string, payment: any) => authInvoke("pos:orders:pay", orderId, payment),
     cancel: (orderId: string, reason: string) => authInvoke("pos:orders:cancel", orderId, reason),
+    transferTable: (orderId: string, destinationTableId: number, reason: string, baseUpdatedAt: number) =>
+      authInvoke("pos:orders:transfer-table", orderId, destinationTableId, reason, baseUpdatedAt),
+    mergeOrders: (
+      survivorOrderId: string,
+      sourceOrderId: string,
+      reason: string,
+      survivorBaseUpdatedAt: number,
+      sourceBaseUpdatedAt: number,
+    ) =>
+      authInvoke(
+        "pos:orders:merge",
+        survivorOrderId,
+        sourceOrderId,
+        reason,
+        survivorBaseUpdatedAt,
+        sourceBaseUpdatedAt,
+      ),
+    previewSplit: (
+      orderId: string,
+      destinationTableId: number,
+      moves: Array<{ lineId: string; qty: number }>,
+    ) => authInvoke("pos:orders:preview-split", orderId, destinationTableId, moves),
+    splitOrder: (
+      orderId: string,
+      destinationTableId: number,
+      reason: string,
+      baseUpdatedAt: number,
+      moves: Array<{ lineId: string; qty: number }>,
+    ) =>
+      authInvoke(
+        "pos:orders:split",
+        orderId,
+        destinationTableId,
+        reason,
+        baseUpdatedAt,
+        moves,
+      ),
     deleteHistory: (orderIds: string[]) => authInvoke("pos:orders:delete-history", orderIds),
     restoreHistory: (orders: any[]) => authInvoke("pos:orders:restore-history", orders),
   },
@@ -287,7 +325,8 @@ contextBridge.exposeInMainWorld("pos", {
     add: (payload: any) => authInvoke("pos:print-queue:add", payload),
     list: (status?: string) => authInvoke("pos:print-queue:list", status),
     markCompleted: (id: string) => authInvoke("pos:print-queue:mark-completed", id),
-    retry: (id: string) => authInvoke("pos:print-queue:retry", id),
+    retry: (id: string, options?: { confirm?: boolean }) =>
+      authInvoke("pos:print-queue:retry", id, options),
     clearOld: (ageHours: number) => authInvoke("pos:print-queue:clear-old", ageHours),
   },
   backupSqlite: {

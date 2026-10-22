@@ -27,7 +27,10 @@ export type Permission =
   | "order:send-kot"
   | "order:void-item"
   | "order:pay"
-  | "order:cancel";
+  | "order:cancel"
+  | "order:transfer-table"
+  | "order:merge-tables"
+  | "order:split-order";
 
 export const ALL_PERMISSIONS: readonly Permission[] = [
   "page:tables",
@@ -54,6 +57,9 @@ export const ALL_PERMISSIONS: readonly Permission[] = [
   "order:void-item",
   "order:pay",
   "order:cancel",
+  "order:transfer-table",
+  "order:merge-tables",
+  "order:split-order",
 ] as const;
 
 const FLOOR_ORDER_PERMISSIONS: readonly Permission[] = [
@@ -67,6 +73,9 @@ const FLOOR_ORDER_PERMISSIONS: readonly Permission[] = [
   "order:void-item",
   "order:pay",
   "order:cancel",
+  "order:transfer-table",
+  "order:merge-tables",
+  "order:split-order",
 ];
 
 /** Floor + Manage bundles per login role. Captain is phone-only (Local Gateway), not desktop. */
@@ -220,4 +229,7 @@ export const LIVE_ACTIVITY_ACTIONS = [
   "order.paid",
   "order.discount.updated",
   "order.bill.printed",
+  "order.table.transferred",
+  "order.merged",
+  "order.split",
 ] as const;

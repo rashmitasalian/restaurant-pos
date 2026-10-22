@@ -30,6 +30,7 @@ import {
 import { vendorPublicKeyRaw } from "./licensing/publicKey";
 import { closeDb, initializeDatabase } from "./db/sqlite";
 import { posService } from "./services/posService";
+import { printFromDesktop } from "./services/kitchenDispatch";
 import { configureDomainEvents } from "./services/domainEvents";
 import {
   startLocalGateway,
@@ -41,14 +42,8 @@ import { destroyMainSession, getMainSession, refreshMainSession } from "./servic
 import { updateService } from "./services/updateService";
 import { bootstrapBackupManager } from "./services/backup/bootstrap";
 import { startBackupScheduler, stopBackupScheduler } from "./services/backup/scheduler";
-import { printPayload, type PrinterConfig } from "./printing/printService";
 import { listWindowsPrinters } from "./printing/windowsRaw";
-import {
-  DEFAULT_USB_PRINTER_NAME,
-  isSelectablePosPrinter,
-  resolveCounterPrinterTarget,
-  resolveKitchenPrinterTarget,
-} from "../src/shared/printerConfig";
+import { isSelectablePosPrinter } from "../src/shared/printerConfig";
 import { shutdownWindowsRawPrinter, warmUpWindowsRawPrinter } from "./printing/windowsRawWorker";
 import { resolveProductionRendererHtml } from "./rendererPath";
 import {
@@ -628,34 +623,6 @@ app.on("before-quit", () => {
   closeDb();
 });
 
-async function getPrinterConfig(): Promise<PrinterConfig> {
-  try {
-    const cfg = (posService.getSetting("config:printers") as any) || {};
-    const kitchenFallback =
-      process.env.KITCHEN_PRINTER_USB_NAME ||
-      process.env.COUNTER_PRINTER_USB_NAME ||
-      DEFAULT_USB_PRINTER_NAME;
-    const counterFallback =
-      process.env.COUNTER_PRINTER_USB_NAME ||
-      process.env.KITCHEN_PRINTER_USB_NAME ||
-      DEFAULT_USB_PRINTER_NAME;
-    return {
-      kitchenPrinterName: resolveKitchenPrinterTarget(cfg, kitchenFallback),
-      counterPrinterName: resolveCounterPrinterTarget(cfg, counterFallback),
-      printerPort: Number(cfg.printerPort || process.env.PRINTER_PORT || 9100),
-    };
-  } catch (e) {
-    return {
-      kitchenPrinterName: process.env.KITCHEN_PRINTER_USB_NAME || DEFAULT_USB_PRINTER_NAME,
-      counterPrinterName:
-        process.env.COUNTER_PRINTER_USB_NAME ||
-        process.env.KITCHEN_PRINTER_USB_NAME ||
-        DEFAULT_USB_PRINTER_NAME,
-      printerPort: Number(process.env.PRINTER_PORT || 9100),
-    };
-  }
-}
-
 async function listAvailablePrinters(sender: WebContents): Promise<string[]> {
   const names = new Set<string>();
   try {
@@ -693,19 +660,22 @@ ipcMain.handle("printer:list", async (event, token: string | null) => {
 
 // Printer IPC sends ESC/POS bytes through the supported RAW paths in printService.
 ipcMain.handle("printer:print", async (event, token: string | null, payload) => {
-  requireMainSession(event, token);
+  const user = requireMainSession(event, token);
   console.log(
     "[PRINT] printer:print IPC received. payload type:",
     payload?.type,
     "| printer:",
     payload?.printer,
+    "| intent:",
+    payload?.intent || payload?.data?.intent,
   );
 
   try {
-    const cfg = await getPrinterConfig();
-    const result = await printPayload(payload, cfg, { hotelName: HOTEL_NAME });
-    console.log(`[PRINT] RAW ESC/POS path succeeded via ${result.transport}.`);
-    return { ok: true, ...result };
+    const result = await printFromDesktop(payload, user.username);
+    if (result.ok && "transport" in result) {
+      console.log(`[PRINT] RAW ESC/POS path succeeded via ${result.transport}.`);
+    }
+    return result;
   } catch (err: any) {
     console.error("[PRINT] RAW ESC/POS path failed:", err);
     return { ok: false, error: err?.message || String(err) };

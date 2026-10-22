@@ -13,6 +13,7 @@ import type { Permission } from "../../src/shared/permissions";
 import { roleHasPermission, canManageCustomerCredit } from "../../src/shared/permissions";
 import { sanitizeIpcError } from "../../src/shared/validation";
 import { posService } from "../services/posService";
+import { retryStoredPrintJob } from "../services/kitchenDispatch";
 import { updateService } from "../services/updateService";
 import { getBackupManager } from "../services/backup/backupManager";
 import { localBackupStore } from "../services/backup/localStore";
@@ -528,6 +529,72 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
       return posService.cancelOrder(orderId, user.username, reason);
     },
   );
+  ipcMain.handle(
+    "pos:orders:transfer-table",
+    (
+      event,
+      token: string | null,
+      orderId: string,
+      destinationTableId: number,
+      reason: string,
+      baseUpdatedAt: number,
+    ) => {
+      const user = requirePermission(event, token, "order:transfer-table");
+      return posService.transferOrderTable(
+        { orderId, destinationTableId, reason, baseUpdatedAt },
+        user.username,
+      );
+    },
+  );
+  ipcMain.handle(
+    "pos:orders:merge",
+    (
+      event,
+      token: string | null,
+      survivorOrderId: string,
+      sourceOrderId: string,
+      reason: string,
+      survivorBaseUpdatedAt: number,
+      sourceBaseUpdatedAt: number,
+    ) => {
+      const user = requirePermission(event, token, "order:merge-tables");
+      return posService.mergeOrders(
+        { survivorOrderId, sourceOrderId, reason, survivorBaseUpdatedAt, sourceBaseUpdatedAt },
+        user.username,
+      );
+    },
+  );
+  ipcMain.handle(
+    "pos:orders:preview-split",
+    (
+      event,
+      token: string | null,
+      orderId: string,
+      destinationTableId: number,
+      moves: Array<{ lineId: string; qty: number }>,
+    ) => {
+      requirePermission(event, token, "order:split-order");
+      return posService.previewSplitOrder({ orderId, destinationTableId, moves });
+    },
+  );
+  ipcMain.handle(
+    "pos:orders:split",
+    (
+      event,
+      token: string | null,
+      orderId: string,
+      destinationTableId: number,
+      reason: string,
+      baseUpdatedAt: number,
+      moves: Array<{ lineId: string; qty: number }>,
+    ) => {
+      const user = requirePermission(event, token, "order:split-order");
+      return posService.splitOrder(
+        { orderId, destinationTableId, reason, baseUpdatedAt, moves },
+        user.username,
+      );
+    },
+  );
   ipcMain.handle("pos:orders:delete-history", (event, token: string | null, orderIds: string[]) => {
     const user = requirePermission(event, token, "business:history");
     return posService.deleteClosedOrders(orderIds, user.username);
@@ -992,10 +1059,13 @@ export function registerPosIpc(getMainWindow: WindowGetter) {
     requirePermission(event, token, "system:settings");
     return posService.markPrintJobCompleted(id);
   });
-  ipcMain.handle("pos:print-queue:retry", (event, token: string | null, id: string) => {
-    requirePermission(event, token, "system:settings");
-    return posService.retryPrintJob(id);
-  });
+  ipcMain.handle(
+    "pos:print-queue:retry",
+    (event, token: string | null, id: string, options?: { confirm?: boolean }) => {
+      requirePermission(event, token, "system:settings");
+      return retryStoredPrintJob(id, options);
+    },
+  );
   ipcMain.handle("pos:print-queue:clear-old", (event, token: string | null, ageHours: number) => {
     requirePermission(event, token, "system:settings");
     return posService.clearOldPrintJobs(ageHours);

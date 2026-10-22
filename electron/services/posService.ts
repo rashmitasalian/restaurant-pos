@@ -7,6 +7,7 @@ import {
   backupDatabase,
   getDatabasePath,
   getDb,
+  inImmediateTransaction,
   inTransaction,
   restoreDatabaseFromBackup,
   validateSqliteBackup,
@@ -87,11 +88,19 @@ import type {
   VendorDto,
 } from "../../src/shared/pos";
 import { getUnsentKotLines, isKotQueueTicket, kotLineCounts, pendingKotVoidQty, pendingKotVoidsFromMeta, settleKitchenOverlap } from "../../src/shared/kot";
+import {
+  buildTableMergeLines,
+  buildTableSplitLines,
+  buildTableTransferLines,
+  rewriteKotTableHeader,
+} from "../../src/shared/kotTicket";
+import { allocateSplitQuantities, type SplitMove } from "../../src/shared/orderSplit";
 import type { PendingKotVoid } from "../../src/shared/kot";
 import { normalizeKitchenNote } from "../../src/shared/kitchenNote";
 import {
   FLOOR_LAYOUT_LIMITS,
   formatTableLabel,
+  formatTableTileLabel,
   planTablesFromAreas,
   type AreaTablePlan,
   type TableNamingMode,
@@ -154,6 +163,7 @@ import {
 } from "../../src/shared/attendanceSchedule";
 import {
   calculateGstTotalsPaise,
+  getOrderGstConfig,
   isValidGstin,
   normalizeGstConfig,
   normalizeOrderDiscount,
@@ -176,6 +186,8 @@ import {
 } from "../../src/shared/serviceModes";
 import { resolveBusinessTimezone } from "../../src/shared/businessDateRange";
 import { RECOVERY_CODE_COUNT } from "../../src/shared/auth";
+import { printPayload, type PrinterConfig } from "../printing/printService";
+import { withOrderedPrintTurns, withOrderPrintTurn } from "../printing/orderPrintTurn";
 
 const MAX_ATTEMPTS = Number(process.env.VITE_AUTH_MAX_ATTEMPTS || 5);
 const LOCKOUT_MS = Number(process.env.VITE_AUTH_LOCKOUT_MS || 900_000);
@@ -3061,19 +3073,346 @@ function tableIdsChangedByFloorPlan(
   return affected;
 }
 
-/**
- * A table blocks a floor change only when it still has dishes or a pending kitchen void.
- * An empty open order looks Available on the floor, so it is cleared instead of blocking.
- */
-function assertFloorChangeAllowed(
+type ClassifiedTableOrder = {
+  id: string;
+  tableId: number;
+  itemCount: number;
+  occupied: boolean;
+};
+
+let transferFaultForTests: "after-clear" | null = null;
+let restructureFaultForTests: "after-line-move" | "after-zero" | "notice-insert" | "after-split-insert" | null =
+  null;
+let restructureWaitForTests: (() => Promise<void>) | null = null;
+const TABLE_NOTICE_KINDS = new Set(["table-transfer", "table-merge", "table-split"]);
+let ordersChangedPublisherForTests:
+  | ((payload: { orderId: string; action: string }) => void)
+  | null = null;
+
+export function setTableTransferTestHooks(hooks: {
+  fault?: "after-clear" | null;
+  publishOrdersChanged?: ((payload: { orderId: string; action: string }) => void) | null;
+}) {
+  if ("fault" in hooks) {
+    transferFaultForTests = hooks.fault ?? null;
+  }
+  if ("publishOrdersChanged" in hooks) {
+    ordersChangedPublisherForTests = hooks.publishOrdersChanged ?? null;
+  }
+}
+
+export function setOrderRestructureTestHooks(hooks: {
+  fault?: "after-line-move" | "after-zero" | "notice-insert" | "after-split-insert" | null;
+  waitBeforeTransaction?: (() => Promise<void>) | null;
+  publishOrdersChanged?: ((payload: { orderId: string; action: string }) => void) | null;
+}) {
+  if ("fault" in hooks) {
+    restructureFaultForTests = hooks.fault ?? null;
+  }
+  if ("waitBeforeTransaction" in hooks) {
+    restructureWaitForTests = hooks.waitBeforeTransaction ?? null;
+  }
+  if ("publishOrdersChanged" in hooks) {
+    ordersChangedPublisherForTests = hooks.publishOrdersChanged ?? null;
+  }
+}
+
+function assertFreshOrder(order: OrderDto, baseUpdatedAt: number) {
+  if (!Number.isFinite(baseUpdatedAt) || Number(order.updatedAt) !== baseUpdatedAt) {
+    throw new Error("order-conflict");
+  }
+}
+
+function gstSignature(order: OrderDto) {
+  const snap =
+    order.meta && typeof order.meta === "object"
+      ? (order.meta as { gstSnapshot?: unknown }).gstSnapshot
+      : null;
+  if (!snap || typeof snap !== "object") {
+    return "current";
+  }
+  const cfg = normalizeGstConfig(snap as Partial<GstConfig>);
+  return `${cfg.enabled ? 1 : 0}|${cfg.gstRateBps}|${cfg.priceIncludesTax ? 1 : 0}`;
+}
+
+function orderNoticeHotelName() {
+  const branding = (posService.getConfigDoc("config:branding") || {}) as { hotelName?: string };
+  return String(branding.hotelName || process.env.HOTEL_NAME || "Restaurant");
+}
+
+function tableOrderRow(database: Database.Database, orderId: string) {
+  return database
+    .prepare("SELECT order_type, invoice_number FROM orders WHERE id = ?")
+    .get(orderId) as { order_type: string; invoice_number: string | null } | undefined;
+}
+
+function dineInOrderError(database: Database.Database, order: OrderDto, code: string) {
+  const stored = tableOrderRow(database, order._id);
+  const editable = order.status === "open" || order.status === "held" || order.status === "ready";
+  if (
+    !stored ||
+    !editable ||
+    stored.order_type !== "table" ||
+    order.tableId == null ||
+    stored.invoice_number ||
+    order.invoiceNumber ||
+    pendingKotVoidsFromMeta(order.meta).length > 0
+  ) {
+    throw new Error(code);
+  }
+  const blockingPayment = database
+    .prepare(
+      "SELECT 1 AS hit FROM payments WHERE order_id = ? AND status IN ('completed', 'voided', 'refunded') LIMIT 1",
+    )
+    .get(order._id) as { hit: number } | undefined;
+  if (blockingPayment) {
+    throw new Error(code);
+  }
+}
+
+function parsePrintPayload(raw: string) {
+  try {
+    return JSON.parse(raw) as Record<string, any>;
+  } catch {
+    return null;
+  }
+}
+
+function payloadSentLineIds(payload: Record<string, any>): string[] | null {
+  const sentLines = Array.isArray(payload?.data?.sentLines)
+    ? payload.data.sentLines
+    : Array.isArray(payload?.sentLines)
+      ? payload.sentLines
+      : null;
+  if (!sentLines) {
+    return null;
+  }
+  return sentLines
+    .map((line: { id?: unknown }) => String(line?.id || ""))
+    .filter((id: string) => id.length > 0);
+}
+
+function orderHasOpenFoodPrintJob(database: Database.Database, orderId: string) {
+  const rows = database
+    .prepare("SELECT payload_json FROM print_jobs WHERE status IN ('pending', 'failed')")
+    .all() as Array<{ payload_json: string }>;
+  return rows.some((row) => {
+    const payload = parsePrintPayload(row.payload_json);
+    if (!payload) {
+      return false;
+    }
+    const payloadOrderId = String(payload.orderId || payload.data?.orderId || "");
+    if (payloadOrderId !== orderId || TABLE_NOTICE_KINDS.has(String(payload.kind || ""))) {
+      return false;
+    }
+    return true;
+  });
+}
+
+function retargetMergedFoodJobs(
+  database: Database.Database,
+  sourceOrderId: string,
+  survivorOrderId: string,
+  tableLabel: string,
+  movedLineIds: Set<string>,
+) {
+  const rows = database
+    .prepare("SELECT id, payload_json, status FROM print_jobs WHERE status IN ('pending', 'failed')")
+    .all() as Array<{ id: string; payload_json: string; status: string }>;
+  const update = database.prepare("UPDATE print_jobs SET payload_json = ? WHERE id = ?");
+  for (const row of rows) {
+    const payload = parsePrintPayload(row.payload_json);
+    if (!payload) {
+      continue;
+    }
+    const payloadOrderId = String(payload.orderId || payload.data?.orderId || "");
+    if (payloadOrderId !== sourceOrderId) {
+      continue;
+    }
+    if (TABLE_NOTICE_KINDS.has(String(payload.kind || ""))) {
+      throw new Error("print-job-blocks-merge");
+    }
+    const sentIds = payloadSentLineIds(payload);
+    if (!sentIds || sentIds.length === 0 || sentIds.some((id) => !movedLineIds.has(id))) {
+      throw new Error("print-job-blocks-merge");
+    }
+    payload.orderId = survivorOrderId;
+    const nestedLines = Array.isArray(payload?.data?.lines);
+    const lines = nestedLines
+      ? payload.data.lines
+      : Array.isArray(payload.lines)
+        ? payload.lines
+        : null;
+    if (payload.data && typeof payload.data === "object") {
+      payload.data = { ...payload.data, orderId: survivorOrderId };
+    }
+    if (lines) {
+      const nextLines = rewriteKotTableHeader(
+        lines.map((line: unknown) => String(line)),
+        tableLabel,
+      );
+      if (nestedLines) {
+        payload.data = { ...payload.data, lines: nextLines };
+      } else {
+        payload.lines = nextLines;
+      }
+    }
+    update.run(JSON.stringify(payload), row.id);
+  }
+}
+
+function insertTableNoticeJob(
+  database: Database.Database,
+  jobId: string,
+  orderId: string,
+  kind: "table-merge" | "table-split",
+  lines: string[],
+  at: number,
+) {
+  if (restructureFaultForTests === "notice-insert") {
+    throw new Error("notice-insert-fault");
+  }
+  database
+    .prepare(
+      `INSERT INTO print_jobs (
+        id, printer_key, job_type, payload_json, status, attempts, max_attempts, created_at
+      ) VALUES (?, 'kitchen', 'kot', ?, 'pending', 0, 3, ?)`,
+    )
+    .run(
+      jobId,
+      JSON.stringify({
+        kind,
+        type: "kot",
+        printer: "kitchen",
+        orderId,
+        data: { lines, orderId },
+      }),
+      at,
+    );
+}
+
+type SplitLineRow = {
+  order_id: string;
+  menu_item_id: string | null;
+  item_name: string;
+  category_name: string | null;
+  rate_paise: number;
+  tax_rate_bps: number | null;
+  created_at: number;
+  kitchen_note: string | null;
+};
+
+function moneyFromGst(totals: {
+  taxableSubtotalPaise: number;
+  discountTotalPaise: number;
+  taxTotalPaise: number;
+  roundOffPaise: number;
+  totalPaise: number;
+}) {
+  return {
+    subtotal: paiseToRupees(totals.taxableSubtotalPaise),
+    discount: paiseToRupees(totals.discountTotalPaise),
+    tax: paiseToRupees(totals.taxTotalPaise),
+    roundOff: paiseToRupees(totals.roundOffPaise),
+    total: paiseToRupees(totals.totalPaise),
+  };
+}
+
+function quoteSplitSides(
+  database: Database.Database,
+  order: OrderDto,
+  moves: SplitMove[],
+) {
+  const allocation = allocateSplitQuantities(order.items || [], moves);
+  const discount = discountFromOrder(order);
+  if (discount.mode === "amount" && discount.amount !== 0) {
+    throw new Error("discount-amount");
+  }
+  const gst = getOrderGstConfig(order, getGstSettingFromDb(database));
+  const byId = new Map(allocation.map((row) => [row.lineId, row]));
+  const sourceLines = (order.items || []).flatMap((line) => {
+    const row = byId.get(line.id);
+    const qty = row ? row.sourceQty : Number(line.qty);
+    if (qty <= 0) {
+      return [];
+    }
+    return [{ ...line, qty }];
+  });
+  const destinationLines = (order.items || []).flatMap((line) => {
+    const row = byId.get(line.id);
+    if (!row) {
+      return [];
+    }
+    return [{ ...line, qty: row.destinationQty, kotPrintedQty: row.destinationPrinted }];
+  });
+  return {
+    allocation,
+    discount,
+    gst,
+    source: moneyFromGst(calculateGstTotalsPaise(sourceLines, discount, gst)),
+    destination: moneyFromGst(calculateGstTotalsPaise(destinationLines, discount, gst)),
+  };
+}
+
+async function finishCommittedNotice(input: {
+  order: OrderDto;
+  jobId: string | null;
+  lines: string[] | null;
+  orderId: string;
+  action: string;
+  logLabel: string;
+}) {
+  let refresh: "published" | "publish-failed" = "published";
+  try {
+    const payload = { orderId: input.orderId, action: input.action };
+    if (ordersChangedPublisherForTests) {
+      ordersChangedPublisherForTests(payload);
+    } else {
+      publishOrdersChanged(payload);
+    }
+  } catch (error) {
+    console.error(`[TABLE] ${input.logLabel} committed but the floor event was not published`, {
+      orderId: input.orderId,
+      error,
+    });
+    refresh = "publish-failed";
+  }
+  if (!input.jobId || !input.lines) {
+    return {
+      committed: true as const,
+      order: input.order,
+      notice: "not-required" as const,
+      refresh,
+    };
+  }
+  try {
+    await printPayload(
+      {
+        type: "kot",
+        printer: "kitchen",
+        data: { lines: input.lines, orderId: input.orderId },
+      },
+      transferPrinterConfig(),
+      { hotelName: orderNoticeHotelName() },
+    );
+    posService.markPrintJobCompleted(input.jobId);
+    return { committed: true as const, order: input.order, notice: "printed" as const, refresh };
+  } catch (error) {
+    console.error(`[PRINT] ${input.logLabel} notice was not printed`, {
+      orderId: input.orderId,
+      error,
+    });
+    return { committed: true as const, order: input.order, notice: "pending" as const, refresh };
+  }
+}
+
+function classifyActiveTableOrders(
   database: Database.Database,
   tableIds: number[],
-  at: number,
-  actor: string | null,
-) {
+): ClassifiedTableOrder[] {
   const uniqueIds = [...new Set(tableIds.filter((id) => Number.isInteger(id) && id > 0))];
   if (!uniqueIds.length) {
-    return;
+    return [];
   }
   const statuses = ACTIVE_ORDER_STATUSES.map(() => "?").join(",");
   const idSlots = uniqueIds.map(() => "?").join(",");
@@ -3091,25 +3430,33 @@ function assertFloorChangeAllowed(
     meta_json: string | null;
     item_count: number;
   }>;
+  return rows.map((row) => {
+    const itemCount = Number(row.item_count || 0);
+    return {
+      id: String(row.id),
+      tableId: Number(row.table_id),
+      itemCount,
+      occupied: itemCount > 0 || pendingVoidQtyFromStoredMeta(row.meta_json) > 0,
+    };
+  });
+}
 
-  const emptyOrderIds: string[] = [];
-  for (const row of rows) {
-    const occupied =
-      Number(row.item_count || 0) > 0 || pendingVoidQtyFromStoredMeta(row.meta_json) > 0;
-    if (occupied) {
-      throw new Error("tables-have-open-orders");
-    }
-    emptyOrderIds.push(String(row.id));
-  }
-  if (!emptyOrderIds.length) {
+function clearEmptyTableOrders(
+  database: Database.Database,
+  orderIds: string[],
+  at: number,
+  actor: string | null,
+) {
+  if (!orderIds.length) {
     return;
   }
+  const statuses = ACTIVE_ORDER_STATUSES.map(() => "?").join(",");
   const cancel = database.prepare(
     `UPDATE orders
      SET status = 'cancelled', cancelled_at = ?, cancelled_by = ?, cancellation_reason = ?, updated_at = ?
      WHERE id = ? AND status IN (${statuses})`,
   );
-  for (const orderId of emptyOrderIds) {
+  for (const orderId of orderIds) {
     cancel.run(
       at,
       actor,
@@ -3121,6 +3468,115 @@ function assertFloorChangeAllowed(
     createAuditRow(database, "order.cancelled", "order", orderId, actor, {
       reason: "empty-table-order-cleared",
     });
+  }
+}
+
+/**
+ * A table blocks a floor change only when it still has dishes or a pending kitchen void.
+ * An empty open order looks Available on the floor, so it is cleared instead of blocking.
+ * Occupied and empty tables are classified first. A single occupied table clears nothing.
+ */
+function assertFloorChangeAllowed(
+  database: Database.Database,
+  tableIds: number[],
+  at: number,
+  actor: string | null,
+) {
+  const rows = classifyActiveTableOrders(database, tableIds);
+  if (rows.some((row) => row.occupied)) {
+    throw new Error("tables-have-open-orders");
+  }
+  clearEmptyTableOrders(
+    database,
+    rows.map((row) => row.id),
+    at,
+    actor,
+  );
+}
+
+function orderIdsWithOpenPrintJobs(database: Database.Database, orderIds: string[]) {
+  const wanted = new Set(orderIds.filter(Boolean));
+  const found = new Set<string>();
+  if (!wanted.size) {
+    return found;
+  }
+  const rows = database
+    .prepare("SELECT payload_json FROM print_jobs WHERE status IN ('pending', 'failed')")
+    .all() as Array<{ payload_json: string }>;
+  for (const row of rows) {
+    try {
+      const payload = JSON.parse(row.payload_json) as { orderId?: unknown; data?: { orderId?: unknown } };
+      const orderId = String(payload?.orderId || payload?.data?.orderId || "");
+      if (wanted.has(orderId)) {
+        found.add(orderId);
+      }
+    } catch {
+      // A malformed queued job cannot identify an order, so it does not block a table.
+    }
+  }
+  return found;
+}
+
+function rewritePendingFoodKotHeaders(
+  database: Database.Database,
+  orderId: string,
+  tableLabel: string,
+) {
+  const rows = database
+    .prepare("SELECT id, payload_json FROM print_jobs WHERE status IN ('pending', 'failed')")
+    .all() as Array<{ id: string; payload_json: string }>;
+  const update = database.prepare("UPDATE print_jobs SET payload_json = ? WHERE id = ?");
+  for (const row of rows) {
+    let payload: Record<string, any>;
+    try {
+      payload = JSON.parse(row.payload_json) as Record<string, any>;
+    } catch {
+      continue;
+    }
+    const payloadOrderId = String(payload?.orderId || payload?.data?.orderId || "");
+    if (payloadOrderId !== orderId || TABLE_NOTICE_KINDS.has(String(payload?.kind || ""))) {
+      continue;
+    }
+    const nestedLines = Array.isArray(payload?.data?.lines);
+    const lines = nestedLines
+      ? payload.data.lines
+      : Array.isArray(payload?.lines)
+        ? payload.lines
+        : null;
+    const sentLines = Array.isArray(payload?.data?.sentLines)
+      ? payload.data.sentLines
+      : Array.isArray(payload?.sentLines)
+        ? payload.sentLines
+        : null;
+    if (!lines || !sentLines) {
+      continue;
+    }
+    const nextLines = rewriteKotTableHeader(lines.map((line: unknown) => String(line)), tableLabel);
+    if (nestedLines) {
+      payload.data = { ...payload.data, lines: nextLines };
+    } else {
+      payload.lines = nextLines;
+    }
+    update.run(JSON.stringify(payload), row.id);
+  }
+}
+
+function transferPrinterConfig(): PrinterConfig {
+  try {
+    const cfg = (posService.getSetting("config:printers") as Record<string, unknown>) || {};
+    return {
+      kitchenPrinterName: String(
+        cfg.kitchenPrinterName || cfg.kitchenPrinter || process.env.KITCHEN_PRINTER_USB_NAME || "Kitchen",
+      ),
+      counterPrinterName: String(cfg.counterPrinterName || cfg.counterPrinter || "Counter"),
+      printerPort: Number(cfg.printerPort || process.env.PRINTER_PORT || 9100),
+    };
+  } catch {
+    return {
+      kitchenPrinterName: process.env.KITCHEN_PRINTER_USB_NAME || "Kitchen",
+      counterPrinterName: "Counter",
+      printerPort: Number(process.env.PRINTER_PORT || 9100),
+    };
   }
 }
 
@@ -4596,6 +5052,617 @@ export const posService = {
       };
       createAuditRow(database, "menu.imported", "menu", "menu", actor || null, result);
       return result;
+    });
+  },
+
+  async transferOrderTable(
+    input: {
+      orderId: string;
+      destinationTableId: number;
+      reason: string;
+      baseUpdatedAt: number | null | undefined;
+    },
+    actor?: string | null,
+  ) {
+    const orderId = String(input.orderId || "").trim();
+    if (!orderId) {
+      throw new Error("order-not-found");
+    }
+    const destinationId = Math.trunc(Number(input.destinationTableId));
+    const reason = String(input.reason || "").trim();
+    const baseUpdatedAt = Number(input.baseUpdatedAt);
+    return withOrderPrintTurn(orderId, async () => {
+      const committed = inImmediateTransaction((database) => {
+        const order = this.getOrderById(orderId);
+        if (!order) {
+          throw new Error("order-not-found");
+        }
+        if (!Number.isFinite(baseUpdatedAt) || Number(order.updatedAt) !== baseUpdatedAt) {
+          throw new Error("order-conflict");
+        }
+        if (!reason || reason.length > TEXT_LIMITS.reason) {
+          throw new Error("transfer-reason-required");
+        }
+        const stored = database
+          .prepare("SELECT order_type, invoice_number FROM orders WHERE id = ?")
+          .get(orderId) as { order_type: string; invoice_number: string | null };
+        const transferable =
+          order.status === "open" || order.status === "held" || order.status === "ready";
+        if (
+          !transferable ||
+          stored.order_type !== "table" ||
+          order.tableId == null ||
+          stored.invoice_number ||
+          order.invoiceNumber
+        ) {
+          throw new Error("order-not-transferable");
+        }
+        const completedPayment = database
+          .prepare(
+            "SELECT 1 AS hit FROM payments WHERE order_id = ? AND status = 'completed' LIMIT 1",
+          )
+          .get(orderId) as { hit: number } | undefined;
+        if (completedPayment) {
+          throw new Error("order-not-transferable");
+        }
+        if ((order.items || []).length === 0 && pendingKotVoidsFromMeta(order.meta).length === 0) {
+          throw new Error("order-empty");
+        }
+        if (!Number.isInteger(destinationId) || destinationId <= 0) {
+          throw new Error("table-not-found");
+        }
+        if (Number(order.tableId) === destinationId) {
+          throw new Error("same-table");
+        }
+        const destination = database
+          .prepare("SELECT id, name, active FROM tables WHERE id = ?")
+          .get(destinationId) as { id: number; name: string; active: number } | undefined;
+        if (!destination || !Number(destination.active)) {
+          throw new Error("table-not-found");
+        }
+        const source = database
+          .prepare("SELECT id, name FROM tables WHERE id = ?")
+          .get(Number(order.tableId)) as { id: number; name: string } | undefined;
+        const classified = classifyActiveTableOrders(database, [destinationId]);
+        if (classified.some((row) => row.occupied)) {
+          throw new Error("table-occupied");
+        }
+        const emptyIds = classified.filter((row) => !row.occupied).map((row) => row.id);
+        if (orderIdsWithOpenPrintJobs(database, emptyIds).size > 0) {
+          throw new Error("table-print-pending");
+        }
+        const at = now();
+        clearEmptyTableOrders(database, emptyIds, at, actor || null);
+        if (transferFaultForTests === "after-clear") {
+          throw new Error("transfer-fault");
+        }
+        const movedRow = database
+          .prepare("UPDATE orders SET table_id = ?, updated_at = ? WHERE id = ? AND updated_at = ?")
+          .run(destinationId, at, orderId, order.updatedAt);
+        if (!movedRow.changes) {
+          throw new Error("order-conflict");
+        }
+        const toLabel = formatTableTileLabel(destinationId, destination.name);
+        rewritePendingFoodKotHeaders(database, orderId, toLabel);
+        const moved = this.getOrderById(orderId)!;
+        const meta = (moved.meta || {}) as Record<string, unknown>;
+        const orderNumber = meta.orderSeq != null ? meta.orderSeq : moved._id;
+        const auditId = createAuditRow(
+          database,
+          "order.table.transferred",
+          "order",
+          orderId,
+          actor || null,
+          mergeOrderAuditDetail(database, moved, actor || null, {
+            fromTableId: Number(order.tableId),
+            fromTableName: source?.name || formatTableLabel(Number(order.tableId)),
+            toTableId: destinationId,
+            toTableName: destination.name,
+            orderNumber,
+            reason,
+          }),
+        );
+        const foodSent = (moved.items || []).some((item) => Number(item.kotPrintedQty || 0) > 0);
+        let jobId: string | null = null;
+        let lines: string[] | null = null;
+        if (foodSent) {
+          jobId = `print-job:transfer:${auditId}`;
+          lines = buildTableTransferLines({
+            hotelName: String(
+              ((this.getConfigDoc("config:branding") || {}) as { hotelName?: string }).hotelName ||
+                process.env.HOTEL_NAME ||
+                "Restaurant",
+            ),
+            orderNumber: String(orderNumber),
+            fromLabel: formatTableTileLabel(Number(order.tableId), source?.name),
+            toLabel,
+            auditId,
+            practice: Boolean(meta.practice),
+          });
+          database
+            .prepare(
+              `INSERT INTO print_jobs (
+                id, printer_key, job_type, payload_json, status, attempts, max_attempts, created_at
+              ) VALUES (?, 'kitchen', 'kot', ?, 'pending', 0, 3, ?)`,
+            )
+            .run(
+              jobId,
+              stringifyJson({
+                kind: "table-transfer",
+                type: "kot",
+                printer: "kitchen",
+                orderId,
+                data: { lines, orderId },
+              }),
+              at,
+            );
+        }
+        return { order: moved, jobId, lines };
+      });
+
+      let refresh: "published" | "publish-failed" = "published";
+      try {
+        const payload = { orderId, action: "order.table.transferred" };
+        if (ordersChangedPublisherForTests) {
+          ordersChangedPublisherForTests(payload);
+        } else {
+          publishOrdersChanged(payload);
+        }
+      } catch (error) {
+        console.error("[TABLE] order moved but the floor event was not published", {
+          orderId,
+          error,
+        });
+        refresh = "publish-failed";
+      }
+
+      if (!committed.jobId || !committed.lines) {
+        return { order: committed.order, notice: "not-required" as const, refresh };
+      }
+      try {
+        const branding = (this.getConfigDoc("config:branding") || {}) as { hotelName?: string };
+        await printPayload(
+          {
+            type: "kot",
+            printer: "kitchen",
+            data: { lines: committed.lines, orderId },
+          },
+          transferPrinterConfig(),
+          { hotelName: String(branding.hotelName || process.env.HOTEL_NAME || "Restaurant") },
+        );
+        this.markPrintJobCompleted(committed.jobId);
+        return { order: committed.order, notice: "printed" as const, refresh };
+      } catch (error) {
+        console.error("[PRINT] table transfer notice was not printed", { orderId, error });
+        return { order: committed.order, notice: "pending" as const, refresh };
+      }
+    });
+  },
+
+  async mergeOrders(
+    input: {
+      survivorOrderId: string;
+      sourceOrderId: string;
+      reason: string;
+      survivorBaseUpdatedAt: number;
+      sourceBaseUpdatedAt: number;
+    },
+    actor?: string | null,
+  ) {
+    const survivorOrderId = String(input.survivorOrderId || "").trim();
+    const sourceOrderId = String(input.sourceOrderId || "").trim();
+    const reason = String(input.reason || "").trim();
+    const survivorBaseUpdatedAt = Number(input.survivorBaseUpdatedAt);
+    const sourceBaseUpdatedAt = Number(input.sourceBaseUpdatedAt);
+    if (!survivorOrderId || !sourceOrderId) {
+      throw new Error("order-not-found");
+    }
+    if (survivorOrderId === sourceOrderId) {
+      throw new Error("same-order");
+    }
+    return withOrderedPrintTurns([survivorOrderId, sourceOrderId], async () => {
+      if (restructureWaitForTests) {
+        await restructureWaitForTests();
+      }
+      const committed = inImmediateTransaction((database) => {
+        const survivor = this.getOrderById(survivorOrderId);
+        const source = this.getOrderById(sourceOrderId);
+        if (!survivor || !source) {
+          throw new Error("order-not-found");
+        }
+        assertFreshOrder(survivor, survivorBaseUpdatedAt);
+        assertFreshOrder(source, sourceBaseUpdatedAt);
+        if (!reason || reason.length > TEXT_LIMITS.reason) {
+          throw new Error("merge-reason-required");
+        }
+        dineInOrderError(database, survivor, "order-not-mergeable");
+        dineInOrderError(database, source, "order-not-mergeable");
+        if ((source.items || []).length === 0) {
+          throw new Error("order-not-mergeable");
+        }
+        const occupied = classifyActiveTableOrders(database, [Number(source.tableId)]).filter(
+          (row) => row.occupied,
+        );
+        if (occupied.length !== 1 || occupied[0].id !== source._id) {
+          throw new Error("order-not-mergeable");
+        }
+        if ((survivor.customerId || null) !== (source.customerId || null)) {
+          throw new Error("customer-mismatch");
+        }
+        const survivorDiscount = discountFromOrder(survivor);
+        const sourceDiscount = discountFromOrder(source);
+        if (
+          !orderDiscountsEqual(survivorDiscount, sourceDiscount) ||
+          survivorDiscount.percent !== 0 ||
+          survivorDiscount.amount !== 0
+        ) {
+          throw new Error("discount-mismatch");
+        }
+        if (gstSignature(survivor) !== gstSignature(source)) {
+          throw new Error("gst-mismatch");
+        }
+        const sourceLines = (source.items || []).map((line) => ({
+          id: line.id,
+          name: line.name,
+          qty: line.qty,
+          rate: line.rate,
+          kotPrintedQty: Number(line.kotPrintedQty || 0),
+        }));
+        const movedLineIds = new Set(sourceLines.map((line) => line.id));
+        const at = now();
+        const survivorTable = database
+          .prepare("SELECT id, name FROM tables WHERE id = ?")
+          .get(Number(survivor.tableId)) as { id: number; name: string } | undefined;
+        const sourceTable = database
+          .prepare("SELECT id, name FROM tables WHERE id = ?")
+          .get(Number(source.tableId)) as { id: number; name: string } | undefined;
+        const survivorMeta = (survivor.meta || {}) as Record<string, unknown>;
+        const sourceMeta = (source.meta || {}) as Record<string, unknown>;
+        const auditId = createAuditRow(
+          database,
+          "order.merged",
+          "order",
+          survivorOrderId,
+          actor || null,
+          mergeOrderAuditDetail(database, survivor, actor || null, {
+            survivorOrderId,
+            sourceOrderId,
+            survivorOrderNumber: survivorMeta.orderSeq ?? survivor._id,
+            sourceOrderNumber: sourceMeta.orderSeq ?? source._id,
+            fromTableId: Number(source.tableId),
+            fromTableName: sourceTable?.name || formatTableLabel(Number(source.tableId)),
+            toTableId: Number(survivor.tableId),
+            toTableName: survivorTable?.name || formatTableLabel(Number(survivor.tableId)),
+            reason,
+            lines: sourceLines,
+          }),
+        );
+        database
+          .prepare("UPDATE order_lines SET order_id = ?, updated_at = ? WHERE order_id = ?")
+          .run(survivorOrderId, at, sourceOrderId);
+        if (restructureFaultForTests === "after-line-move") {
+          throw new Error("merge-fault");
+        }
+        const moved = this.getOrderById(survivorOrderId)!;
+        updateOrderTotals(
+          database,
+          survivorOrderId,
+          moved.items || [],
+          survivorDiscount,
+          getOrderGstConfig(survivor, getGstSettingFromDb(database)),
+        );
+        const cancelled = database
+          .prepare(
+            `UPDATE orders
+             SET status = 'cancelled', cancelled_at = ?, cancelled_by = ?, cancellation_reason = 'merged-into',
+                 subtotal_paise = 0, tax_total_paise = 0, discount_percent = 0, discount_amount_paise = 0,
+                 discount_total_paise = 0, total_paise = 0, updated_at = ?
+             WHERE id = ? AND updated_at = ?`,
+          )
+          .run(at, actor || null, at, sourceOrderId, source.updatedAt);
+        if (!cancelled.changes) {
+          throw new Error("order-conflict");
+        }
+        if (restructureFaultForTests === "after-zero") {
+          throw new Error("merge-fault");
+        }
+        const toLabel = formatTableTileLabel(Number(survivor.tableId), survivorTable?.name);
+        retargetMergedFoodJobs(database, sourceOrderId, survivorOrderId, toLabel, movedLineIds);
+        const foodSent = sourceLines.some((line) => line.kotPrintedQty > 0);
+        let jobId: string | null = null;
+        let lines: string[] | null = null;
+        if (foodSent) {
+          jobId = `print-job:merge:${auditId}`;
+          lines = buildTableMergeLines({
+            hotelName: orderNoticeHotelName(),
+            survivorOrderNumber: String(survivorMeta.orderSeq ?? survivor._id),
+            sourceOrderNumber: String(sourceMeta.orderSeq ?? source._id),
+            fromLabel: formatTableTileLabel(Number(source.tableId), sourceTable?.name),
+            toLabel,
+            auditId,
+            practice: Boolean(survivorMeta.practice),
+          });
+          insertTableNoticeJob(database, jobId, survivorOrderId, "table-merge", lines, at);
+        }
+        return { order: this.getOrderById(survivorOrderId)!, jobId, lines };
+      });
+      return finishCommittedNotice({
+        order: committed.order,
+        jobId: committed.jobId,
+        lines: committed.lines,
+        orderId: survivorOrderId,
+        action: "order.merged",
+        logLabel: "merge",
+      });
+    });
+  },
+
+  previewSplitOrder(input: {
+    orderId: string;
+    destinationTableId: number;
+    moves: SplitMove[];
+  }) {
+    const orderId = String(input.orderId || "").trim();
+    const destinationId = Math.trunc(Number(input.destinationTableId));
+    const order = this.getOrderById(orderId);
+    if (!order) {
+      throw new Error("order-not-found");
+    }
+    const database = getDb();
+    dineInOrderError(database, order, "order-not-splittable");
+    if (orderHasOpenFoodPrintJob(database, orderId)) {
+      throw new Error("split-print-pending");
+    }
+    if (!Number.isInteger(destinationId) || destinationId <= 0 || destinationId === Number(order.tableId)) {
+      throw new Error(destinationId === Number(order.tableId) ? "same-table" : "table-not-found");
+    }
+    const destination = database
+      .prepare("SELECT id, name, active FROM tables WHERE id = ?")
+      .get(destinationId) as { id: number; name: string; active: number } | undefined;
+    if (!destination || !Number(destination.active)) {
+      throw new Error("table-not-found");
+    }
+    const classified = classifyActiveTableOrders(database, [destinationId]);
+    if (classified.some((row) => row.occupied)) {
+      throw new Error("table-occupied");
+    }
+    if (orderIdsWithOpenPrintJobs(database, classified.map((row) => row.id)).size > 0) {
+      throw new Error("table-print-pending");
+    }
+    const quote = quoteSplitSides(database, order, input.moves || []);
+    const discount = discountFromOrder(order);
+    return {
+      baseUpdatedAt: order.updatedAt,
+      source: quote.source,
+      destination: quote.destination,
+      allocation: quote.allocation,
+      discountNote:
+        discount.mode === "percent" && discount.percent > 0
+          ? "The percent stays the same. The rupee discount changes because each order is smaller."
+          : null,
+    };
+  },
+
+  async splitOrder(
+    input: {
+      orderId: string;
+      destinationTableId: number;
+      reason: string;
+      baseUpdatedAt: number;
+      moves: SplitMove[];
+    },
+    actor?: string | null,
+  ) {
+    const orderId = String(input.orderId || "").trim();
+    const destinationId = Math.trunc(Number(input.destinationTableId));
+    const reason = String(input.reason || "").trim();
+    const baseUpdatedAt = Number(input.baseUpdatedAt);
+    const moves = Array.isArray(input.moves) ? input.moves : [];
+    if (!orderId) {
+      throw new Error("order-not-found");
+    }
+    return withOrderPrintTurn(orderId, async () => {
+      if (restructureWaitForTests) {
+        await restructureWaitForTests();
+      }
+      const committed = inImmediateTransaction((database) => {
+        const source = this.getOrderById(orderId);
+        if (!source) {
+          throw new Error("order-not-found");
+        }
+        assertFreshOrder(source, baseUpdatedAt);
+        if (!reason || reason.length > TEXT_LIMITS.reason) {
+          throw new Error("split-reason-required");
+        }
+        dineInOrderError(database, source, "order-not-splittable");
+        if (orderHasOpenFoodPrintJob(database, orderId)) {
+          throw new Error("split-print-pending");
+        }
+        if (!Number.isInteger(destinationId) || destinationId <= 0) {
+          throw new Error("table-not-found");
+        }
+        if (Number(source.tableId) === destinationId) {
+          throw new Error("same-table");
+        }
+        const destination = database
+          .prepare("SELECT id, name, active FROM tables WHERE id = ?")
+          .get(destinationId) as { id: number; name: string; active: number } | undefined;
+        if (!destination || !Number(destination.active)) {
+          throw new Error("table-not-found");
+        }
+        const classified = classifyActiveTableOrders(database, [destinationId]);
+        if (classified.some((row) => row.occupied)) {
+          throw new Error("table-occupied");
+        }
+        const emptyIds = classified.filter((row) => !row.occupied).map((row) => row.id);
+        if (orderIdsWithOpenPrintJobs(database, emptyIds).size > 0) {
+          throw new Error("table-print-pending");
+        }
+        const quote = quoteSplitSides(database, source, moves);
+        const at = now();
+        clearEmptyTableOrders(database, emptyIds, at, actor || null);
+        const newId = `order:${randomUUID()}`;
+        const orderSeq = nextOrderSeq(database);
+        const sourceMeta = { ...((source.meta || {}) as Record<string, unknown>) };
+        delete sourceMeta.pendingKotVoids;
+        const meta = stampPracticeMeta(database, {
+          ...sourceMeta,
+          orderSeq,
+          serviceModeId: sourceMeta.serviceModeId || "table",
+        });
+        const destinationPrinted = quote.allocation.some((row) => row.destinationPrinted > 0);
+        database
+          .prepare(
+            `INSERT INTO orders (
+              id, order_type, table_id, customer_id, status, kot_status, subtotal_paise,
+              tax_total_paise, discount_percent, discount_mode, discount_amount_paise,
+              discount_total_paise, total_paise, meta_json, created_by, created_at, updated_at
+            ) VALUES (?, 'table', ?, ?, 'open', ?, 0, 0, ?, ?, ?, 0, 0, ?, ?, ?, ?)`,
+          )
+          .run(
+            newId,
+            destinationId,
+            source.customerId || null,
+            destinationPrinted ? "sent" : "pending",
+            quote.discount.percent,
+            quote.discount.mode,
+            rupeesToPaise(quote.discount.amount),
+            stringifyJson(meta),
+            actor || null,
+            at,
+            at,
+          );
+        const insertLine = database.prepare(
+          `INSERT INTO order_lines (
+            id, order_id, menu_item_id, item_name, category_name, quantity, rate_paise, tax_rate_bps,
+            line_total_paise, kot_printed_qty, sort_order, created_at, updated_at, kitchen_note
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        );
+        const updateLine = database.prepare(
+          `UPDATE order_lines
+           SET quantity = ?, kot_printed_qty = ?, line_total_paise = ?, updated_at = ?
+           WHERE id = ? AND order_id = ?`,
+        );
+        const deleteLine = database.prepare("DELETE FROM order_lines WHERE id = ? AND order_id = ?");
+        const lineRows = new Map<string, SplitLineRow>();
+        const auditLines: Array<Record<string, unknown>> = [];
+        let sort = 0;
+        for (const row of quote.allocation) {
+          const current = database.prepare("SELECT * FROM order_lines WHERE id = ?").get(row.lineId) as
+            | SplitLineRow
+            | undefined;
+          if (!current || current.order_id !== orderId) {
+            throw new Error("split-qty");
+          }
+          lineRows.set(row.lineId, current);
+          const newLineId = `line:${randomUUID()}`;
+          insertLine.run(
+            newLineId,
+            newId,
+            current.menu_item_id,
+            current.item_name,
+            current.category_name,
+            row.destinationQty,
+            current.rate_paise,
+            current.tax_rate_bps,
+            Math.round(row.destinationQty * Number(current.rate_paise)),
+            row.destinationPrinted,
+            sort,
+            current.created_at,
+            at,
+            current.kitchen_note,
+          );
+          sort += 1;
+          if (row.sourceQty === 0) {
+            deleteLine.run(row.lineId, orderId);
+          } else {
+            updateLine.run(
+              row.sourceQty,
+              row.sourcePrinted,
+              Math.round(row.sourceQty * Number(current.rate_paise)),
+              at,
+              row.lineId,
+              orderId,
+            );
+          }
+          auditLines.push({
+            lineId: row.lineId,
+            newLineId,
+            name: current.item_name,
+            sourceQty: row.sourceQty,
+            sourcePrinted: row.sourcePrinted,
+            destinationQty: row.destinationQty,
+            destinationPrinted: row.destinationPrinted,
+          });
+        }
+        if (restructureFaultForTests === "after-split-insert") {
+          throw new Error("split-fault");
+        }
+        const sourceTable = database
+          .prepare("SELECT id, name FROM tables WHERE id = ?")
+          .get(Number(source.tableId)) as { id: number; name: string } | undefined;
+        const refreshedSource = this.getOrderById(orderId)!;
+        const created = this.getOrderById(newId)!;
+        const sourceStillSent = (refreshedSource.items || []).some(
+          (line) => Number(line.kotPrintedQty || 0) > 0,
+        );
+        database
+          .prepare("UPDATE orders SET kot_status = ? WHERE id = ?")
+          .run(sourceStillSent ? "sent" : "pending", orderId);
+        updateOrderTotals(database, orderId, refreshedSource.items || [], quote.discount, quote.gst);
+        updateOrderTotals(database, newId, created.items || [], quote.discount, quote.gst);
+        const sourceMetaLive = (source.meta || {}) as Record<string, unknown>;
+        const auditId = createAuditRow(
+          database,
+          "order.split",
+          "order",
+          orderId,
+          actor || null,
+          mergeOrderAuditDetail(database, source, actor || null, {
+            sourceOrderId: orderId,
+            destinationOrderId: newId,
+            sourceOrderNumber: sourceMetaLive.orderSeq ?? source._id,
+            destinationOrderNumber: orderSeq,
+            fromTableId: Number(source.tableId),
+            fromTableName: sourceTable?.name || formatTableLabel(Number(source.tableId)),
+            toTableId: destinationId,
+            toTableName: destination.name,
+            reason,
+            lines: auditLines,
+          }),
+        );
+        const sentMoved = quote.allocation.some((row) => row.destinationPrinted > 0);
+        let jobId: string | null = null;
+        let lines: string[] | null = null;
+        if (sentMoved) {
+          jobId = `print-job:split:${auditId}`;
+          lines = buildTableSplitLines({
+            hotelName: orderNoticeHotelName(),
+            sourceOrderNumber: String(sourceMetaLive.orderSeq ?? source._id),
+            destinationOrderNumber: String(orderSeq),
+            fromLabel: formatTableTileLabel(Number(source.tableId), sourceTable?.name),
+            toLabel: formatTableTileLabel(destinationId, destination.name),
+            auditId,
+            practice: Boolean(sourceMetaLive.practice),
+          });
+          insertTableNoticeJob(database, jobId, newId, "table-split", lines, at);
+        }
+        return {
+          order: this.getOrderById(orderId)!,
+          destination: this.getOrderById(newId)!,
+          jobId,
+          lines,
+        };
+      });
+      const finished = await finishCommittedNotice({
+        order: committed.order,
+        jobId: committed.jobId,
+        lines: committed.lines,
+        orderId,
+        action: "order.split",
+        logLabel: "split",
+      });
+      return { ...finished, destination: committed.destination };
     });
   },
 
@@ -6278,7 +7345,7 @@ export const posService = {
     const cancelCountsByActor: Record<string, number> = {};
     const cancelledSnapshots = cancelled.map((order) => {
       const actor = actorKey(order.cancelledBy || order.createdBy);
-      if (actor) {
+      if (actor && order.cancellationReason !== "merged-into") {
         cancelCountsByActor[actor] = (cancelCountsByActor[actor] || 0) + 1;
       }
       const context = orderTableAuditContext(database, order, order.cancelledBy || order.createdBy);
@@ -6346,7 +7413,7 @@ export const posService = {
       return rateEventFromAudit(database, audit, orderId ? this.getOrderById(orderId) : null);
     });
     return buildReviewItems({
-      cancelledOrders: cancelledSnapshots,
+      cancelledOrders: cancelledSnapshots.filter((order) => order.cancellationReason !== "merged-into"),
       voidEvents,
       discountEvents: Array.from(discountEventsByOrder.values()),
       rateEvents,
@@ -9601,6 +10668,13 @@ export const posService = {
         "UPDATE print_jobs SET status = 'completed', completed_at = ?, error = NULL WHERE id = ?",
       )
       .run(now(), id);
+    return this.getPrintJob(id);
+  },
+
+  replacePrintJobPayload(id: string, content: unknown) {
+    getDb()
+      .prepare("UPDATE print_jobs SET payload_json = ? WHERE id = ?")
+      .run(stringifyJson(content), id);
     return this.getPrintJob(id);
   },
 

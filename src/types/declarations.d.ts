@@ -132,6 +132,31 @@ declare global {
         markBillPrinted: (orderId: string) => Promise<any>;
         pay: (orderId: string, payment: any) => Promise<any>;
         cancel: (orderId: string, reason: string) => Promise<any>;
+        transferTable: (
+          orderId: string,
+          destinationTableId: number,
+          reason: string,
+          baseUpdatedAt: number,
+        ) => Promise<any>;
+        mergeOrders: (
+          survivorOrderId: string,
+          sourceOrderId: string,
+          reason: string,
+          survivorBaseUpdatedAt: number,
+          sourceBaseUpdatedAt: number,
+        ) => Promise<any>;
+        previewSplit: (
+          orderId: string,
+          destinationTableId: number,
+          moves: Array<{ lineId: string; qty: number }>,
+        ) => Promise<any>;
+        splitOrder: (
+          orderId: string,
+          destinationTableId: number,
+          reason: string,
+          baseUpdatedAt: number,
+          moves: Array<{ lineId: string; qty: number }>,
+        ) => Promise<any>;
         deleteHistory: (orderIds: string[]) => Promise<any>;
         restoreHistory: (orders: any[]) => Promise<any[]>;
       };
@@ -250,7 +275,7 @@ declare global {
         add: (payload: any) => Promise<any>;
         list: (status?: string) => Promise<any[]>;
         markCompleted: (id: string) => Promise<any>;
-        retry: (id: string) => Promise<boolean>;
+        retry: (id: string, options?: { confirm?: boolean }) => Promise<any>;
         clearOld: (ageHours: number) => Promise<number>;
       };
       backupSqlite?: {

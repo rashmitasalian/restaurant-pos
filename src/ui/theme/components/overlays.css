@@ -128,6 +128,40 @@
   box-shadow: var(--pos-shadow-overlay);
 }
 
+.ui-menu-item.ui-menu-item-stack {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  white-space: normal;
+}
+
+.ui-menu-item.ui-menu-item-action {
+  align-items: flex-start;
+  gap: 10px;
+  white-space: normal;
+}
+
+.ui-menu-action-icon {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--pos-tx);
+}
+
+.ui-menu-action-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ui-menu-detail {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--pos-tx-sub);
+  line-height: 1.35;
+}
+
 .ui-menu-item {
   display: flex;
   align-items: center;

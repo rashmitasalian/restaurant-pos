@@ -104,9 +104,11 @@ export function CaptainApp() {
 
   const refreshTables = React.useCallback(async (sessionToken: string) => {
     const snapshot = await captainApi.tables(sessionToken);
+    const nextTables = (snapshot.tables || []) as TableRow[];
     setAreas((snapshot.areas || []).filter((a: any) => a.active !== false));
-    setTables(snapshot.tables || []);
+    setTables(nextTables);
     setTablesLoading(false);
+    return nextTables;
   }, []);
 
   const refreshKots = React.useCallback(async (sessionToken: string) => {
@@ -117,6 +119,7 @@ export function CaptainApp() {
 
   const orderIdRef = React.useRef<string | null>(null);
   const orderRef = React.useRef<any>(null);
+  const selectedTableRef = React.useRef<TableRow | null>(null);
   const ensureOrderLock = React.useRef<Promise<any> | null>(null);
   const refreshDueRef = React.useRef(false);
   const refreshInFlightRef = React.useRef(false);
@@ -127,6 +130,10 @@ export function CaptainApp() {
     orderIdRef.current = order?._id || null;
     orderRef.current = order;
   }, [order, order?._id]);
+
+  React.useEffect(() => {
+    selectedTableRef.current = selectedTable;
+  }, [selectedTable]);
 
   const mutationError = React.useCallback(
     (err: any, fallback: string) => waiterError(err, fallback),
@@ -149,6 +156,33 @@ export function CaptainApp() {
     }
   }, []);
 
+  const retargetMovedOrder = React.useCallback(
+    (tables: TableRow[]) => {
+      const current = orderRef.current;
+      const selected = selectedTableRef.current;
+      if (!current?._id || !selected) {
+        return;
+      }
+      const nextId = current.tableId == null ? null : Number(current.tableId);
+      if (nextId == null || !Number.isFinite(nextId) || nextId === Number(selected.id)) {
+        return;
+      }
+      const nextTable = tables.find((table) => Number(table.id) === nextId);
+      if (!nextTable) {
+        selectedTableRef.current = null;
+        setSelectedTable(null);
+        setShowOrderSheet(false);
+        setScreen("floor");
+        showToast("This order moved to a table that is not on the floor.");
+        return;
+      }
+      selectedTableRef.current = nextTable;
+      setSelectedTable(nextTable);
+      showToast(`Order moved to ${formatTableLabel(nextTable.id, nextTable.name)}`);
+    },
+    [showToast],
+  );
+
   const runCoalescedLiveRefresh = React.useCallback(
     async (sessionToken: string) => {
       if (refreshInFlightRef.current) {
@@ -159,15 +193,16 @@ export function CaptainApp() {
       try {
         do {
           refreshDueRef.current = false;
-          await refreshTables(sessionToken);
+          const nextTables = await refreshTables(sessionToken);
           await refreshKots(sessionToken);
           await reloadOpenOrder(sessionToken);
+          retargetMovedOrder(nextTables);
         } while (refreshDueRef.current);
       } finally {
         refreshInFlightRef.current = false;
       }
     },
-    [refreshTables, refreshKots, reloadOpenOrder],
+    [refreshTables, refreshKots, reloadOpenOrder, retargetMovedOrder],
   );
 
   const scheduleLiveRefresh = React.useCallback(

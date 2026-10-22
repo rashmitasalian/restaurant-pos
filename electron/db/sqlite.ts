@@ -193,8 +193,10 @@ export function inImmediateTransaction<T>(fn: (database: SqliteDatabase) => T): 
 async function openDatabase(): Promise<SqliteDatabase> {
   const databasePath = getDatabasePath();
   // Jest and maintenance scripts keep a plaintext file. The installed app does not.
+  // POS_BETTER_SQLITE_ENTRY points at a Node build when the installed binary is Electron's.
   if (process.env.POS_DB_PATH_OVERRIDE?.trim()) {
-    const BetterSqlite3 = require("better-sqlite3");
+    const entry = process.env.POS_BETTER_SQLITE_ENTRY?.trim();
+    const BetterSqlite3 = entry ? require(entry) : require("better-sqlite3");
     return new BetterSqlite3(databasePath);
   }
   const { openPosDatabase } = require("./sqlcipher") as typeof import("./sqlcipher");

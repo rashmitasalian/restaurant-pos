@@ -75,6 +75,10 @@ export function PortalMenu({
     if (!open) {
       return;
     }
+    const first = menuRef.current?.querySelector<HTMLButtonElement>(
+      '[role="menuitem"]:not([disabled])',
+    );
+    first?.focus();
     const onPointerDown = (event: MouseEvent) => {
       const target = event.target as Node;
       if (anchorRef.current?.contains(target) || menuRef.current?.contains(target)) {
@@ -85,7 +89,22 @@ export function PortalMenu({
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         onClose();
+        return;
       }
+      if (event.key !== "ArrowDown" && event.key !== "ArrowUp") {
+        return;
+      }
+      const items = Array.from(
+        menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not([disabled])') ||
+          [],
+      );
+      if (!items.length) {
+        return;
+      }
+      event.preventDefault();
+      const current = items.indexOf(document.activeElement as HTMLButtonElement);
+      const next = event.key === "ArrowDown" ? current + 1 : current - 1;
+      items[(next + items.length) % items.length]?.focus();
     };
     document.addEventListener("mousedown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
@@ -111,16 +130,18 @@ export function PortalMenuItem({
   children,
   onClick,
   disabled,
+  className,
 }: {
   children: React.ReactNode;
   onClick: () => void;
   disabled?: boolean;
+  className?: string;
 }) {
   return (
     <button
       type="button"
       role="menuitem"
-      className="ui-menu-item"
+      className={className ? `ui-menu-item ${className}` : "ui-menu-item"}
       disabled={disabled}
       onClick={onClick}
     >

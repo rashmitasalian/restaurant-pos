@@ -18,6 +18,9 @@ export const ORDER_LIFECYCLE_AUDIT_ACTIONS = [
   "order.status.updated",
   "order.paid",
   "order.cancelled",
+  "order.table.transferred",
+  "order.merged",
+  "order.split",
   "order.deleted",
   "order.restored",
 ] as const;
@@ -76,6 +79,9 @@ export const TIMELINE_ACTION_LABELS: Record<string, string> = {
   "order.status.updated": "Status updated",
   "order.paid": "Payment recorded",
   "order.cancelled": "Order cancelled",
+  "order.table.transferred": "Table transferred",
+  "order.merged": "Tables merged",
+  "order.split": "Order split",
   "order.deleted": "Order deleted",
   "order.restored": "Order restored",
 };
@@ -769,6 +775,17 @@ export function timelineEventDetail(
       ),
       detail.reason ? String(detail.reason) : "",
     ]
+      .filter(Boolean)
+      .join(" · ");
+  }
+  if (
+    event.action === "order.table.transferred" ||
+    event.action === "order.merged" ||
+    event.action === "order.split"
+  ) {
+    const from = detail.fromTableName || detail.fromTableId;
+    const to = detail.toTableName || detail.toTableId;
+    return [from && to ? `${from} → ${to}` : "", detail.reason ? String(detail.reason) : ""]
       .filter(Boolean)
       .join(" · ");
   }

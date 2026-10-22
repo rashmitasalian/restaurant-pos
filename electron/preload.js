@@ -20,6 +20,7 @@ function buildTestPrintPayload(printer) {
   const now = new Date().toLocaleString("en-IN");
   return {
     type: isKitchen ? "kot" : "receipt",
+    intent: isKitchen ? "printer-test" : undefined,
     printer: isKitchen ? "kitchen" : "counter",
     data: {
       lines: isKitchen
@@ -144,6 +145,21 @@ contextBridge.exposeInMainWorld("pos", {
     markBillPrinted: (orderId) => authInvoke("pos:orders:mark-bill-printed", orderId),
     pay: (orderId, payment) => authInvoke("pos:orders:pay", orderId, payment),
     cancel: (orderId, reason) => authInvoke("pos:orders:cancel", orderId, reason),
+    transferTable: (orderId, destinationTableId, reason, baseUpdatedAt) =>
+      authInvoke("pos:orders:transfer-table", orderId, destinationTableId, reason, baseUpdatedAt),
+    mergeOrders: (survivorOrderId, sourceOrderId, reason, survivorBaseUpdatedAt, sourceBaseUpdatedAt) =>
+      authInvoke(
+        "pos:orders:merge",
+        survivorOrderId,
+        sourceOrderId,
+        reason,
+        survivorBaseUpdatedAt,
+        sourceBaseUpdatedAt,
+      ),
+    previewSplit: (orderId, destinationTableId, moves) =>
+      authInvoke("pos:orders:preview-split", orderId, destinationTableId, moves),
+    splitOrder: (orderId, destinationTableId, reason, baseUpdatedAt, moves) =>
+      authInvoke("pos:orders:split", orderId, destinationTableId, reason, baseUpdatedAt, moves),
     deleteHistory: (orderIds) => authInvoke("pos:orders:delete-history", orderIds),
     restoreHistory: (orders) => authInvoke("pos:orders:restore-history", orders),
   },
@@ -259,7 +275,7 @@ contextBridge.exposeInMainWorld("pos", {
     add: (payload) => authInvoke("pos:print-queue:add", payload),
     list: (status) => authInvoke("pos:print-queue:list", status),
     markCompleted: (id) => authInvoke("pos:print-queue:mark-completed", id),
-    retry: (id) => authInvoke("pos:print-queue:retry", id),
+    retry: (id, options) => authInvoke("pos:print-queue:retry", id, options),
     clearOld: (ageHours) => authInvoke("pos:print-queue:clear-old", ageHours),
   },
   backupSqlite: {

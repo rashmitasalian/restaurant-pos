@@ -9,6 +9,9 @@ import {
   getTablesSnapshot,
   setOrderPaid,
   cancelOrder,
+  transferOrderTable,
+  mergeOrders,
+  splitOrder,
   getItems,
   getConfigCategories,
   seedItems,
@@ -38,7 +41,12 @@ import {
   type OrderDiscount,
 } from "../../../shared/gst";
 import { netKitchenDelta, pendingKotVoidsFromMeta } from "../../../shared/kot";
-import { printReceipt, printKOT } from "../../../app/services/printer";
+import {
+  printReceipt,
+  printKOT,
+  kitchenPrintErrorCode,
+  kitchenPrintRecorded,
+} from "../../../app/services/printer";
 import { logger } from "../../../app/utils/logger";
 import { CrashRecovery } from "../../../app/utils/crashRecovery";
 import {
@@ -77,9 +85,15 @@ import {
   type DietFilter,
 } from "../../../shared/menuDiet";
 import { formatKotAge } from "../../../shared/kotAge";
+import { PortalMenu, PortalMenuItem } from "../../components/ui/PortalMenu";
+import { Icon } from "../../components/ui/Icon";
+import { ArrowLeftRight, ChevronDown, GitMerge, Split } from "lucide-react";
 import {
   ConfirmCancelModal,
   KotPreviewModal,
+  TransferTableModal,
+  MergeTableModal,
+  SplitOrderModal,
   KotVoidModal,
   NewTakeawayModal,
   NewDeliveryModal,
@@ -463,6 +477,17 @@ export default function Billing() {
   const [payModalOpen, setPayModalOpen] = React.useState(false);
   const [confirmCancelOpen, setConfirmCancelOpen] = React.useState(false);
   const [kotPreviewOpen, setKotPreviewOpen] = React.useState(false);
+  const [transferOpen, setTransferOpen] = React.useState(false);
+  const [mergeOpen, setMergeOpen] = React.useState(false);
+  const [splitOpen, setSplitOpen] = React.useState(false);
+  const [tableActionsOpen, setTableActionsOpen] = React.useState(false);
+  const [tableActionBusy, setTableActionBusy] = React.useState(false);
+  const [splitBaseUpdatedAt, setSplitBaseUpdatedAt] = React.useState(0);
+  const [mergeBaseUpdatedAt, setMergeBaseUpdatedAt] = React.useState(0);
+  const [transferBaseUpdatedAt, setTransferBaseUpdatedAt] = React.useState(0);
+  const tableActionsRef = React.useRef<HTMLButtonElement>(null);
+  const [transferBusy, setTransferBusy] = React.useState(false);
+  const [printedBillOrderId, setPrintedBillOrderId] = React.useState<string | null>(null);
   const [kotPreviewData, setKotPreviewData] = React.useState<any>(null);
   const [kotPrinting, setKotPrinting] = React.useState(false);
   const [kotVoidRequest, setKotVoidRequest] = React.useState<KotVoidRequest | null>(null);
@@ -1599,24 +1624,47 @@ export default function Billing() {
     try {
       try {
         const lines = buildKitchenUpdateLines(kotPreviewData, order, tableNum, branding);
-        await printKOT({
+        const result = await printKOT({
           lines,
+          intent: "send",
+          builtTableId: tableNum ?? null,
           printer: await resolveKitchenPrinter(),
           orderId: order._id,
           sentLines,
           clearPendingKotVoidIds,
         });
+        if (result?.order) {
+          setOrder(result.order);
+        }
       } catch (e: any) {
         console.warn("KOT print failed", e);
-        try {
-          const updated = await markOrderKotFailed(
-            order._id,
-            reportClientError("billing.kot-print", e, "print-failed"),
+        const code = kitchenPrintErrorCode(e);
+        if (code === "kot-sent-not-recorded" || code === "send-unrecorded-not-saved") {
+          showToast(
+            "The kitchen may already have this ticket. It was not recorded as sent. Check Settings before printing again.",
+            "error",
           );
-          setOrder(updated);
-          window.dispatchEvent(new Event("orders-changed"));
-        } catch (statusError) {
-          console.warn("Failed to mark KOT as failed", statusError);
+          setKotPreviewOpen(false);
+          setKotPreviewData(null);
+          return;
+        }
+        if (code === "table-changed") {
+          showToast("This order moved to another table. Reopen it before sending the kitchen ticket.", "error");
+          setKotPreviewOpen(false);
+          setKotPreviewData(null);
+          return;
+        }
+        if (kitchenPrintRecorded(e) !== "failed") {
+          try {
+            const updated = await markOrderKotFailed(
+              order._id,
+              reportClientError("billing.kot-print", e, "print-failed"),
+            );
+            setOrder(updated);
+            window.dispatchEvent(new Event("orders-changed"));
+          } catch (statusError) {
+            console.warn("Failed to mark KOT as failed", statusError);
+          }
         }
         showToast("KOT could not be sent to the printer. Check the connection.", "error", {
           action: { label: "Retry", onClick: onConfirmPrintKOT },
@@ -1624,30 +1672,7 @@ export default function Billing() {
         return;
       }
 
-      try {
-        const updated = await markOrderKotSent(order._id, sentLines, {
-          clearPendingKotVoidIds,
-        });
-        setOrder(updated);
-        window.dispatchEvent(new Event("orders-changed"));
-      } catch (e: any) {
-        console.warn("KOT printed but status could not be saved", e);
-        try {
-          const refreshed = await getOrderById(order._id);
-          setOrder(applyKotSentLocally(refreshed || order, sentLines));
-        } catch {
-          setOrder(applyKotSentLocally(order, sentLines));
-        }
-        window.dispatchEvent(new Event("orders-changed"));
-        showToast(
-          "KOT printed, but status could not be saved. Please verify before printing again.",
-          "error",
-        );
-        setKotPreviewOpen(false);
-        setKotPreviewData(null);
-        return;
-      }
-
+      window.dispatchEvent(new Event("orders-changed"));
       setKotPreviewOpen(false);
       setKotPreviewData(null);
       showToast("KOT sent to kitchen", "success");
@@ -1735,6 +1760,7 @@ export default function Billing() {
         { preview: true, tableLabel: activeTableLabel || undefined, discountMode },
       );
       await printReceipt({ lines });
+      setPrintedBillOrderId(order._id);
       try {
         await markOrderBillPrinted(order._id);
       } catch (recordError) {
@@ -1752,6 +1778,166 @@ export default function Billing() {
       );
     } finally {
       endBusyAction("printBill");
+    }
+  };
+
+  const handleTransferTable = async (destinationTableId: number, reason: string) => {
+    if (!order || transferBusy) {
+      return;
+    }
+    setTransferBusy(true);
+    try {
+      const result = await transferOrderTable(
+        order._id,
+        destinationTableId,
+        reason,
+        transferBaseUpdatedAt,
+      );
+      const nextTable = Number(result.order?.tableId);
+      setOrder(result.order);
+      if (Number.isFinite(nextTable) && nextTable > 0) {
+        setTableNum(nextTable);
+        window.localStorage.setItem("currentTable", String(nextTable));
+      }
+      window.localStorage.setItem("currentOrderId", result.order?._id || order._id);
+      setKotPreviewOpen(false);
+      setKotPreviewData(null);
+      setTransferOpen(false);
+      window.dispatchEvent(new Event("orders-changed"));
+      if (result.notice === "pending") {
+        showToast("Table moved. The kitchen slip is waiting in Settings.", "error");
+      } else if (result.refresh === "publish-failed") {
+        showToast("Table moved. Reload the floor if another screen still shows the old table.", "error");
+      } else {
+        showToast("Table transferred", "success");
+      }
+    } catch (e: any) {
+      const code = String(e?.message || "");
+      if (code.includes("table-occupied") || code.includes("table-print-pending")) {
+        showToast("This table is no longer available.", "error");
+      } else if (code.includes("order-conflict")) {
+        showToast("This order changed. Review it and try the transfer again.", "error");
+      } else if (code.includes("order-empty")) {
+        showToast("Add an item before transferring this table.", "error");
+      } else if (code.includes("same-table")) {
+        showToast("Choose a different table.", "error");
+      } else if (code.includes("forbidden")) {
+        showToast("You can't transfer tables.", "error");
+      } else {
+        showToast(reportClientError("billing.transfer-table", e, "Could not transfer this table."), "error");
+      }
+    } finally {
+      setTransferBusy(false);
+    }
+  };
+
+  const refreshOpenOrder = async () => {
+    if (!order?._id) {
+      return;
+    }
+    const fresh = await getOrderById(order._id);
+    if (fresh) {
+      setOrder(fresh);
+    }
+    window.dispatchEvent(new Event("orders-changed"));
+  };
+
+  const explainTableActionError = (error: { message?: string }, action: "merge" | "split") => {
+    const code = String(error?.message || "");
+    if (code.includes("table-occupied") || code.includes("table-print-pending")) {
+      return "This table is no longer available.";
+    }
+    if (code.includes("order-conflict")) {
+      return "This order changed. Review it and try again.";
+    }
+    if (code.includes("discount-mismatch")) {
+      return "Clear the discounts on both orders before merging.";
+    }
+    if (code.includes("discount-amount")) {
+      return "Remove the rupee discount before splitting.";
+    }
+    if (code.includes("gst-mismatch")) {
+      return "These orders use different tax settings.";
+    }
+    if (code.includes("customer-mismatch")) {
+      return "These orders are for different customers.";
+    }
+    if (code.includes("print-job-blocks-merge") || code.includes("split-print-pending")) {
+      return "A kitchen ticket is still waiting. Retry it in Settings first.";
+    }
+    if (code.includes("split-entire-order")) {
+      return "Moving the whole order is a transfer.";
+    }
+    if (code.includes("order-not-splittable") || code.includes("order-not-mergeable")) {
+      return action === "merge" ? "These orders can't be merged." : "This order can't be split.";
+    }
+    if (code.includes("forbidden")) {
+      return action === "merge" ? "You can't merge tables." : "You can't split orders.";
+    }
+    return action === "merge" ? "Could not merge these tables." : "Could not split this order.";
+  };
+
+  const handleMergeOrders = async (sourceOrderId: string, sourceBaseUpdatedAt: number, reason: string) => {
+    if (!order || tableActionBusy) {
+      return;
+    }
+    setTableActionBusy(true);
+    try {
+      const result = await mergeOrders(
+        order._id,
+        sourceOrderId,
+        reason,
+        mergeBaseUpdatedAt,
+        sourceBaseUpdatedAt,
+      );
+      setOrder(result.order);
+      setMergeOpen(false);
+      setKotPreviewOpen(false);
+      setKotPreviewData(null);
+      window.dispatchEvent(new Event("orders-changed"));
+      if (result.notice === "pending") {
+        showToast("Tables merged. The kitchen slip is waiting in Settings.", "error");
+      } else if (result.refresh === "publish-failed") {
+        showToast("Tables merged. Reload the floor if another screen still shows the old table.", "error");
+      } else {
+        showToast("Tables merged", "success");
+      }
+    } catch (e: any) {
+      showToast(explainTableActionError(e, "merge"), "error");
+      await refreshOpenOrder();
+    } finally {
+      setTableActionBusy(false);
+    }
+  };
+
+  const handleSplitOrder = async (
+    destinationTableId: number,
+    reason: string,
+    moves: Array<{ lineId: string; qty: number }>,
+  ) => {
+    if (!order || tableActionBusy) {
+      return;
+    }
+    setTableActionBusy(true);
+    try {
+      const result = await splitOrder(order._id, destinationTableId, reason, splitBaseUpdatedAt, moves);
+      setOrder(result.order);
+      setSplitOpen(false);
+      setKotPreviewOpen(false);
+      setKotPreviewData(null);
+      window.dispatchEvent(new Event("orders-changed"));
+      if (result.notice === "pending") {
+        showToast("Order split. The kitchen slip is waiting in Settings.", "error");
+      } else if (result.refresh === "publish-failed") {
+        showToast("Order split. Reload the floor if another screen still shows the old table.", "error");
+      } else {
+        showToast("Order split", "success");
+      }
+    } catch (e: any) {
+      showToast(explainTableActionError(e, "split"), "error");
+      await refreshOpenOrder();
+    } finally {
+      setTableActionBusy(false);
     }
   };
 
@@ -1863,17 +2049,23 @@ export default function Billing() {
         const clearPendingKotVoidIds = delta.clearVoidIds;
         const lines = buildKitchenUpdateLines(preview, paidOrder, snapTableNum, branding);
         const printerTargets = await resolvePrinterTargets();
-        await printKOT({
-          lines,
-          printer: await resolveKitchenPrinter(),
-          orderId: paidOrder._id,
-          sentLines,
-          clearPendingKotVoidIds,
-        });
         try {
-          await markOrderKotSent(paidOrder._id, sentLines, { clearPendingKotVoidIds });
+          await printKOT({
+            lines,
+            intent: "send",
+            builtTableId: snapTableNum ?? null,
+            printer: await resolveKitchenPrinter(),
+            orderId: paidOrder._id,
+            sentLines,
+            clearPendingKotVoidIds,
+          });
         } catch (markError) {
-          logger.error("KOT printed at payment but status could not be saved", markError as Error);
+          const code = kitchenPrintErrorCode(markError);
+          if (code === "kot-sent-not-recorded" || code === "send-unrecorded-not-saved") {
+            logger.error("KOT printed at payment but status could not be saved", markError as Error);
+          } else {
+            throw markError;
+          }
         }
 
         let copiedToCounter = false;
@@ -1883,9 +2075,9 @@ export default function Billing() {
         ) {
           await printKOT({
             lines,
+            intent: "reprint",
             printer: "counter",
             orderId: paidOrder._id,
-            sentLines,
           });
           copiedToCounter = true;
         }
@@ -2199,6 +2391,14 @@ export default function Billing() {
     openPayModal,
   ]);
 
+  const showTableActions = Boolean(
+    order &&
+      tableNum &&
+      !isPaid &&
+      (order.orderType === "table" || activeOrderType === "table") &&
+      (order.status === "open" || order.status === "held" || order.status === "ready"),
+  );
+
   // ── Render ──────────────────────────────────────────────────────────────
   return (
     <>
@@ -2428,13 +2628,15 @@ export default function Billing() {
                 </button>
                 <div>
                   <div className={styles.headerTitle}>
-                    {tableNum
-                      ? activeTableLabel
-                      : order && activeOrderType === "delivery"
-                        ? `${order.meta?.platform || order.meta?.orderSource || "Delivery"}${order.meta?.code ? ` #${order.meta.code}` : ""}`
-                        : order && !activeMode?.requiresTable
-                          ? `${modeOrderLabel(activeMode, order)}${order.meta?.customerName && activeMode?.id !== "takeaway" ? ` - ${order.meta.customerName}` : ""}`
-                          : "Billing"}
+                    <span>
+                      {tableNum
+                        ? activeTableLabel
+                        : order && activeOrderType === "delivery"
+                          ? `${order.meta?.platform || order.meta?.orderSource || "Delivery"}${order.meta?.code ? ` #${order.meta.code}` : ""}`
+                          : order && !activeMode?.requiresTable
+                            ? `${modeOrderLabel(activeMode, order)}${order.meta?.customerName && activeMode?.id !== "takeaway" ? ` - ${order.meta.customerName}` : ""}`
+                            : "Billing"}
+                    </span>
                   </div>
                   {order && (
                     <div className={styles.headerMeta}>
@@ -2461,6 +2663,109 @@ export default function Billing() {
                   )}
                 </div>
               </div>
+              {showTableActions && order ? (
+                <>
+                  <button
+                    ref={tableActionsRef}
+                    type="button"
+                    className={styles.tableActionsBtn}
+                    aria-haspopup="menu"
+                    aria-expanded={tableActionsOpen}
+                    onClick={() => setTableActionsOpen((open) => !open)}
+                  >
+                    <Icon icon={ArrowLeftRight} />
+                    <span>Table actions</span>
+                    <Icon icon={ChevronDown} size="sm" />
+                  </button>
+                  {tableActionsOpen ? (
+                    <PortalMenu
+                      open={tableActionsOpen}
+                      anchorRef={tableActionsRef}
+                      align="right"
+                      onClose={() => setTableActionsOpen(false)}
+                      minWidth={280}
+                    >
+                      <PortalMenuItem
+                        className="ui-menu-item-action"
+                        disabled={
+                          transferBusy ||
+                          tableActionBusy ||
+                          (!hasItems && pendingKotVoids.length === 0)
+                        }
+                        onClick={() => {
+                          setTransferBaseUpdatedAt(Number(order.updatedAt));
+                          setTableActionsOpen(false);
+                          setTransferOpen(true);
+                        }}
+                      >
+                        <Icon icon={ArrowLeftRight} className="ui-menu-action-icon" />
+                        <span className="ui-menu-action-copy">
+                          Transfer to another table
+                          <span className="ui-menu-detail">
+                            {transferBusy || tableActionBusy || (!hasItems && pendingKotVoids.length === 0)
+                              ? "Add an item before transferring this table."
+                              : "Move this order to a free table."}
+                          </span>
+                        </span>
+                      </PortalMenuItem>
+                      <PortalMenuItem
+                        className="ui-menu-item-action"
+                        disabled={
+                          tableActionBusy ||
+                          Number(order.discountPercent || 0) > 0 ||
+                          Number(order.discountAmount || 0) > 0
+                        }
+                        onClick={() => {
+                          setMergeBaseUpdatedAt(Number(order.updatedAt));
+                          setTableActionsOpen(false);
+                          setMergeOpen(true);
+                        }}
+                      >
+                        <Icon icon={GitMerge} className="ui-menu-action-icon" />
+                        <span className="ui-menu-action-copy">
+                          Merge another table
+                          <span className="ui-menu-detail">
+                            {Number(order.discountPercent || 0) > 0 || Number(order.discountAmount || 0) > 0
+                              ? "Clear the discount on this order before merging."
+                              : "Bring another table's items onto this order."}
+                          </span>
+                        </span>
+                      </PortalMenuItem>
+                      <PortalMenuItem
+                        className="ui-menu-item-action"
+                        disabled={
+                          tableActionBusy ||
+                          (order.discountMode === "amount" && Number(order.discountAmount || 0) > 0) ||
+                          (order.items || []).reduce(
+                            (sum: number, item: { qty?: number }) => sum + Number(item.qty || 0),
+                            0,
+                          ) < 2
+                        }
+                        onClick={() => {
+                          setSplitBaseUpdatedAt(Number(order.updatedAt));
+                          setTableActionsOpen(false);
+                          setSplitOpen(true);
+                        }}
+                      >
+                        <Icon icon={Split} className="ui-menu-action-icon" />
+                        <span className="ui-menu-action-copy">
+                          Split order
+                          <span className="ui-menu-detail">
+                            {order.discountMode === "amount" && Number(order.discountAmount || 0) > 0
+                              ? "Remove the rupee discount before splitting."
+                              : (order.items || []).reduce(
+                                    (sum: number, item: { qty?: number }) => sum + Number(item.qty || 0),
+                                    0,
+                                  ) < 2
+                                ? "This order needs at least two units to split."
+                                : "Move some quantities onto a free table."}
+                          </span>
+                        </span>
+                      </PortalMenuItem>
+                    </PortalMenu>
+                  ) : null}
+                </>
+              ) : null}
             </div>
             <div className={styles.ticketBody}>
               {/* Order items + totals */}
@@ -2733,6 +3038,53 @@ export default function Billing() {
         </div>
 
         {/* ── Modals ────────────────────────────────────────────────────── */}
+        {transferOpen && order && tableNum ? (
+          <TransferTableModal
+            currentTableId={tableNum}
+            currentTableLabel={activeTableLabel || `Table ${tableNum}`}
+            foodSent={(order.items || []).some((item: any) => Number(item.kotPrintedQty || 0) > 0)}
+            billPrinted={printedBillOrderId === order._id}
+            processing={transferBusy}
+            onClose={() => {
+              if (!transferBusy) {
+                setTransferOpen(false);
+              }
+            }}
+            onConfirm={handleTransferTable}
+          />
+        ) : null}
+        {mergeOpen && order && tableNum ? (
+          <MergeTableModal
+            currentTableId={tableNum}
+            currentTableLabel={activeTableLabel || `Table ${tableNum}`}
+            processing={tableActionBusy}
+            onClose={() => {
+              if (!tableActionBusy) {
+                setMergeOpen(false);
+              }
+            }}
+            onConfirm={handleMergeOrders}
+          />
+        ) : null}
+        {splitOpen && order && tableNum ? (
+          <SplitOrderModal
+            orderId={order._id}
+            currentTableId={tableNum}
+            currentTableLabel={activeTableLabel || `Table ${tableNum}`}
+            lines={(order.items || []).map((item: { id: string; name: string; qty: number }) => ({
+              id: item.id,
+              name: item.name,
+              qty: Number(item.qty || 0),
+            }))}
+            processing={tableActionBusy}
+            onClose={() => {
+              if (!tableActionBusy) {
+                setSplitOpen(false);
+              }
+            }}
+            onConfirm={handleSplitOrder}
+          />
+        ) : null}
         {confirmCancelOpen && order && (
           <ConfirmCancelModal
             tableNum={tableNum}

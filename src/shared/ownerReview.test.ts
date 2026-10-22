@@ -327,6 +327,13 @@ describe("owner review rules", () => {
     expect(timelineActionLabel("order.kot.void")).toBe("Item voided");
     expect(timelineActionLabel("order.bill.printed")).toBe("Bill printed");
     expect(timelineActionLabel("order.discount.updated")).toBe("Discount applied");
+    expect(timelineActionLabel("order.table.transferred")).toBe("Table transferred");
+    expect(
+      timelineEventDetail({
+        action: "order.table.transferred",
+        detail: { fromTableName: "4", toTableName: "9", reason: "Customer requested" },
+      }),
+    ).toBe("4 → 9 · Customer requested");
   });
 
   it("collapses repeated item-added events and highlights the void", () => {

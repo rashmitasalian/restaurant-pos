@@ -30,7 +30,6 @@ import type {
 } from "../../shared/pos";
 import { DEFAULT_GST_CONFIG, normalizeGstConfig, type GstConfig } from "../../shared/gst";
 import { clipAttendanceQueryRange, todayDateOnly } from "../../shared/validation";
-import { kotSentLinesNeedPrint } from "../../shared/kot";
 import type {
   OrderTimelineEventDto,
   ReviewItemDto,
@@ -311,6 +310,49 @@ export async function nextKotSeq(): Promise<number> {
 
 export async function cancelOrder(orderId: string, reason: string) {
   return api().orders!.cancel(orderId, reason);
+}
+
+export async function transferOrderTable(
+  orderId: string,
+  destinationTableId: number,
+  reason: string,
+  baseUpdatedAt: number,
+) {
+  return api().orders!.transferTable(orderId, destinationTableId, reason, baseUpdatedAt);
+}
+
+export async function mergeOrders(
+  survivorOrderId: string,
+  sourceOrderId: string,
+  reason: string,
+  survivorBaseUpdatedAt: number,
+  sourceBaseUpdatedAt: number,
+) {
+  return api().orders!.mergeOrders(
+    survivorOrderId,
+    sourceOrderId,
+    reason,
+    survivorBaseUpdatedAt,
+    sourceBaseUpdatedAt,
+  );
+}
+
+export async function previewSplitOrder(
+  orderId: string,
+  destinationTableId: number,
+  moves: Array<{ lineId: string; qty: number }>,
+) {
+  return api().orders!.previewSplit(orderId, destinationTableId, moves);
+}
+
+export async function splitOrder(
+  orderId: string,
+  destinationTableId: number,
+  reason: string,
+  baseUpdatedAt: number,
+  moves: Array<{ lineId: string; qty: number }>,
+) {
+  return api().orders!.splitOrder(orderId, destinationTableId, reason, baseUpdatedAt, moves);
 }
 
 export async function listPaidOrders(opts?: PaidOrderQueryDto): Promise<OrderDoc[]> {
@@ -1381,45 +1423,17 @@ export async function listPrintJobs(status?: PrintJobDto["status"]): Promise<Pri
   return api().printQueue!.list(status);
 }
 
-export async function retryPrintJob(jobId: string): Promise<boolean> {
-  const jobs = (await api().printQueue!.list()) as PrintJobDoc[];
-  const job = jobs.find((candidate) => candidate._id === jobId);
-  if (!job) {
-    return false;
-  }
-  const content =
-    typeof job.content === "string"
-      ? { text: job.content, printer: job.printerName }
-      : (job.content as any) || {};
-  if (job.jobType === "kot" && content?.orderId && Array.isArray(content?.sentLines)) {
-    const order = await api().orders!.get(content.orderId);
-    if (!kotSentLinesNeedPrint(order, content.sentLines, content.clearPendingKotVoidIds)) {
-      await api().printQueue!.markCompleted(jobId);
-      return true;
+export async function retryPrintJob(jobId: string, options?: { confirm?: boolean }): Promise<boolean> {
+  const result = await api().printQueue!.retry(jobId, options);
+  if (result && typeof result === "object") {
+    if (result.ok === false) {
+      const error = new Error(String(result.error || "print-failed")) as Error & { code?: string };
+      error.code = String(result.error || "print-failed");
+      throw error;
     }
-  }
-  const result = await api().print?.({
-    type: job.jobType,
-    data: content,
-    printer: content?.printer || job.printerName,
-  });
-  if (result?.ok) {
-    if (job.jobType === "kot" && content?.orderId && Array.isArray(content?.sentLines)) {
-      try {
-        await api().orders!.markKotSent(content.orderId, content.sentLines, {
-          clearPendingKotVoidIds: content.clearPendingKotVoidIds,
-        });
-      } catch (error: any) {
-        const message = String(error?.message || error || "");
-        if (!message.includes("kot-no-unsent-items") && !message.includes("order-closed")) {
-          return api().printQueue!.retry(jobId);
-        }
-      }
-    }
-    await api().printQueue!.markCompleted(jobId);
     return true;
   }
-  return api().printQueue!.retry(jobId);
+  return Boolean(result);
 }
 
 export async function clearOldPrintJobs(ageHours = 24): Promise<number> {

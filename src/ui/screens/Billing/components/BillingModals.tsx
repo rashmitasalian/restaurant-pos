@@ -13,9 +13,78 @@ import {
   CANCEL_REASON_PRESETS,
   resolveCancelReason,
 } from "../../../../shared/cancelReasons";
+import { formatTableLabel } from "../../../../shared/floorLayout";
+import { getTablesSnapshot, previewSplitOrder } from "../../../../app/db/posRepository";
 
 interface FormatCurrency {
   (v: number): string;
+}
+
+type SnapshotTable = {
+  id: number;
+  name?: string;
+  occupied?: boolean;
+  orderId?: string | null;
+  activityAt?: number | null;
+  count?: number;
+};
+
+function useTableSnapshot() {
+  const [tables, setTables] = React.useState<SnapshotTable[] | null>(null);
+  React.useEffect(() => {
+    let cancelled = false;
+    getTablesSnapshot()
+      .then((snapshot) => {
+        if (!cancelled) {
+          setTables(snapshot.tables || []);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setTables([]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return tables;
+}
+
+function TableChoices({
+  name,
+  tables,
+  value,
+  disabled,
+  emptyText,
+  onChange,
+}: {
+  name: string;
+  tables: Array<{ value: string; label: string; disabled?: boolean }>;
+  value: string;
+  disabled?: boolean;
+  emptyText: string;
+  onChange: (value: string) => void;
+}) {
+  if (!tables.length) {
+    return <p className={styles.modalPara}>{emptyText}</p>;
+  }
+  return (
+    <select
+      className={`${styles.modalInput} ${styles.tableSelect}`}
+      aria-label={name}
+      value={value}
+      disabled={disabled}
+      onChange={(event) => onChange(event.target.value)}
+    >
+      <option value="">Select a table</option>
+      {tables.map((table) => (
+        <option key={table.value} value={table.value} disabled={table.disabled}>
+          {table.label}
+        </option>
+      ))}
+    </select>
+  );
 }
 
 function DialogShell({
@@ -32,18 +101,29 @@ function DialogShell({
   style?: React.CSSProperties;
 }) {
   const dialogRef = useFocusTrap<HTMLDivElement>(true, onClose);
+  const items = React.Children.toArray(children);
+  const footerIndex = items.findIndex((child) => {
+    if (!React.isValidElement(child)) {
+      return false;
+    }
+    const className = String((child.props as { className?: string }).className || "");
+    return className.split(/\s+/).includes(styles.modalFooter);
+  });
+  const body = footerIndex >= 0 ? items.filter((_, index) => index !== footerIndex) : items;
+  const footer = footerIndex >= 0 ? items[footerIndex] : null;
   return (
     <div className={styles.modalOverlay}>
       <div
         ref={dialogRef}
-        className={className}
+        className={`${className} ${styles.modalFrame}`}
         role="dialog"
         aria-modal="true"
         aria-label={ariaLabel}
         tabIndex={-1}
         style={style}
       >
-        {children}
+        <div className={styles.modalBody}>{body}</div>
+        {footer}
       </div>
     </div>
   );
@@ -219,8 +299,7 @@ export function ConfirmCancelModal({
         {CANCEL_REASON_PRESETS.map((option) => (
           <label
             key={option}
-            className={styles.kotItem}
-            style={{ cursor: processing ? "default" : "pointer" }}
+            className={`${styles.kotItem} ${styles.tableChoice} ${preset === option ? styles.tableChoiceSelected : ""}`}
           >
             <input
               type="radio"
@@ -229,7 +308,6 @@ export function ConfirmCancelModal({
               checked={preset === option}
               disabled={processing}
               onChange={() => setPreset(option)}
-              style={{ marginRight: 8 }}
             />
             {option}
           </label>
@@ -257,6 +335,439 @@ export function ConfirmCancelModal({
           disabled={processing || !cleanReason}
         >
           {processing ? "Cancelling..." : "Yes, Cancel"}
+        </button>
+      </div>
+    </DialogShell>
+  );
+}
+
+const TRANSFER_REASONS = ["Customer requested", "Table too small", "Guest moved", "Other"];
+
+export function TransferTableModal({
+  currentTableId,
+  currentTableLabel,
+  foodSent,
+  billPrinted,
+  processing = false,
+  onClose,
+  onConfirm,
+}: {
+  currentTableId: number;
+  currentTableLabel: string;
+  foodSent: boolean;
+  billPrinted: boolean;
+  processing?: boolean;
+  onClose: () => void;
+  onConfirm: (destinationTableId: number, reason: string) => void;
+}) {
+  const [preset, setPreset] = React.useState(TRANSFER_REASONS[0]);
+  const [otherText, setOtherText] = React.useState("");
+  const [destinationId, setDestinationId] = React.useState("");
+  const tables = useTableSnapshot();
+  const reason = preset === "Other" ? otherText.trim() : preset;
+  const destination = (tables || []).find((table) => String(table.id) === destinationId);
+  const destinationLabel = destination
+    ? formatTableLabel(destination.id, destination.name)
+    : "the selected table";
+  return (
+    <DialogShell
+      ariaLabel="Transfer table"
+      className={styles.modalDialogLarge}
+      onClose={processing ? undefined : onClose}
+    >
+      <h3 className={styles.modalTitle}>Transfer table?</h3>
+      <p className={styles.modalPara}>
+        Move this order from <strong>{currentTableLabel}</strong> to {destinationLabel}. The same
+        order, items, and prices stay on the new table.
+      </p>
+      {foodSent ? (
+        <p className={styles.modalPara}>
+          The kitchen already has this food. It will get a transfer slip, not a new food order.
+        </p>
+      ) : null}
+      {billPrinted ? (
+        <p className={styles.modalPara}>
+          A bill was already printed. Reprint it after the move. This does not create a new invoice.
+        </p>
+      ) : null}
+      <label className={styles.modalLabel} style={{ marginTop: 14 }}>
+        New table
+      </label>
+      {tables === null ? (
+        <p className={styles.modalPara}>Loading tables...</p>
+      ) : (
+        <TableChoices
+          name="transfer-table"
+          value={destinationId}
+          disabled={processing}
+          emptyText="No other table is available."
+          onChange={setDestinationId}
+          tables={tables
+            .filter((table) => Number(table.id) !== Number(currentTableId))
+            .map((table) => ({
+              value: String(table.id),
+              disabled: Boolean(table.occupied),
+              label: `${formatTableLabel(table.id, table.name)}${table.occupied ? " (in use)" : ""}`,
+            }))}
+        />
+      )}
+      <label className={styles.modalLabel} style={{ marginTop: 14 }}>
+        Reason
+      </label>
+      <div className={styles.kotList} style={{ marginTop: 8 }}>
+        {TRANSFER_REASONS.map((option) => (
+          <label
+            key={option}
+            className={`${styles.kotItem} ${styles.tableChoice} ${preset === option ? styles.tableChoiceSelected : ""}`}
+          >
+            <input
+              type="radio"
+              name="transfer-reason"
+              checked={preset === option}
+              disabled={processing}
+              onChange={() => setPreset(option)}
+            />
+            {option}
+          </label>
+        ))}
+      </div>
+      {preset === "Other" ? (
+        <input
+          value={otherText}
+          onChange={(event) => setOtherText(event.target.value)}
+          placeholder="Describe the reason"
+          maxLength={TEXT_LIMITS.reason}
+          className={styles.modalInput}
+          style={{ marginTop: 10 }}
+          disabled={processing}
+        />
+      ) : null}
+      <p className={styles.modalPara} style={{ marginTop: 12 }}>
+        {destinationId && reason
+          ? `Move to ${destinationLabel}. Reason: ${reason}.`
+          : "Choose a free table and a reason."}
+      </p>
+      <div className={styles.modalFooter}>
+        <button onClick={onClose} className={styles.btn} disabled={processing}>
+          Keep table
+        </button>
+        <button
+          onClick={() => onConfirm(Number(destinationId), reason)}
+          className={styles.btnPrimary}
+          disabled={processing || !destinationId || !reason || Boolean(destination?.occupied)}
+        >
+          {processing ? "Moving..." : "Transfer"}
+        </button>
+      </div>
+    </DialogShell>
+  );
+}
+
+function ReasonChoices({
+  name,
+  preset,
+  otherText,
+  processing,
+  onPreset,
+  onOther,
+}: {
+  name: string;
+  preset: string;
+  otherText: string;
+  processing?: boolean;
+  onPreset: (value: string) => void;
+  onOther: (value: string) => void;
+}) {
+  return (
+    <>
+      <label className={styles.modalLabel} style={{ marginTop: 14 }}>
+        Reason
+      </label>
+      <div className={styles.kotList} style={{ marginTop: 8 }}>
+        {TRANSFER_REASONS.map((option) => (
+          <label
+            key={option}
+            className={`${styles.kotItem} ${styles.tableChoice} ${preset === option ? styles.tableChoiceSelected : ""}`}
+          >
+            <input
+              type="radio"
+              name={name}
+              checked={preset === option}
+              disabled={processing}
+              onChange={() => onPreset(option)}
+            />
+            {option}
+          </label>
+        ))}
+      </div>
+      {preset === "Other" ? (
+        <input
+          value={otherText}
+          onChange={(event) => onOther(event.target.value)}
+          placeholder="Describe the reason"
+          maxLength={TEXT_LIMITS.reason}
+          className={styles.modalInput}
+          style={{ marginTop: 10 }}
+          disabled={processing}
+        />
+      ) : null}
+    </>
+  );
+}
+
+export function MergeTableModal({
+  currentTableId,
+  currentTableLabel,
+  processing = false,
+  onClose,
+  onConfirm,
+}: {
+  currentTableId: number;
+  currentTableLabel: string;
+  processing?: boolean;
+  onClose: () => void;
+  onConfirm: (sourceOrderId: string, sourceBaseUpdatedAt: number, reason: string) => void;
+}) {
+  const [preset, setPreset] = React.useState(TRANSFER_REASONS[0]);
+  const [otherText, setOtherText] = React.useState("");
+  const [sourceId, setSourceId] = React.useState("");
+  const tables = useTableSnapshot();
+  const reason = preset === "Other" ? otherText.trim() : preset;
+  const mergeCandidates = (tables || []).filter(
+    (table) =>
+      Number(table.id) !== Number(currentTableId) &&
+      Boolean(table.orderId) &&
+      (Boolean(table.occupied) || Number(table.count || 0) > 0),
+  );
+  const source = sourceId
+    ? mergeCandidates.find((table) => String(table.orderId) === sourceId)
+    : undefined;
+  const sourceLabel = source ? formatTableLabel(source.id, source.name) : "";
+  return (
+    <DialogShell ariaLabel="Merge another table" className={styles.modalDialogLarge} onClose={processing ? undefined : onClose}>
+      <h3 className={styles.modalTitle}>Merge another table?</h3>
+      <p className={styles.modalPara}>
+        {sourceLabel ? (
+          <>
+            Add the items from <strong>{sourceLabel}</strong> onto <strong>{currentTableLabel}</strong>.
+          </>
+        ) : (
+          <>
+            Add another table's items onto <strong>{currentTableLabel}</strong>.
+          </>
+        )}{" "}
+        That table's order is cancelled. This order keeps its number.
+      </p>
+      <label className={styles.modalLabel} style={{ marginTop: 14 }}>
+        Table to merge
+      </label>
+      {tables === null ? (
+        <p className={styles.modalPara}>Loading tables...</p>
+      ) : (
+        <TableChoices
+          name="merge-table"
+          value={sourceId}
+          disabled={processing}
+          emptyText="No other table has an open order."
+          onChange={setSourceId}
+          tables={mergeCandidates.map((table) => {
+            const count = Number(table.count || 0);
+            return {
+              value: String(table.orderId),
+              label: `${formatTableLabel(table.id, table.name)}${count > 0 ? ` · ${count} item${count === 1 ? "" : "s"}` : ""}`,
+            };
+          })}
+        />
+      )}
+      <ReasonChoices
+        name="merge-reason"
+        preset={preset}
+        otherText={otherText}
+        processing={processing}
+        onPreset={setPreset}
+        onOther={setOtherText}
+      />
+      <p className={styles.modalPara} style={{ marginTop: 12 }}>
+        {source && reason
+          ? `Merge ${sourceLabel} into ${currentTableLabel}. Reason: ${reason}.`
+          : "Choose an occupied table and a reason."}
+      </p>
+      <div className={styles.modalFooter}>
+        <button onClick={onClose} className={styles.btn} disabled={processing}>
+          Keep separate
+        </button>
+        <button
+          onClick={() => onConfirm(String(source?.orderId || ""), Number(source?.activityAt || 0), reason)}
+          className={styles.btnPrimary}
+          disabled={processing || !source?.orderId || !Number(source?.activityAt) || !reason}
+        >
+          {processing ? "Merging..." : "Merge"}
+        </button>
+      </div>
+    </DialogShell>
+  );
+}
+
+export function SplitOrderModal({
+  orderId,
+  currentTableId,
+  currentTableLabel,
+  lines,
+  processing = false,
+  onClose,
+  onConfirm,
+}: {
+  orderId: string;
+  currentTableId: number;
+  currentTableLabel: string;
+  lines: Array<{ id: string; name: string; qty: number }>;
+  processing?: boolean;
+  onClose: () => void;
+  onConfirm: (destinationTableId: number, reason: string, moves: Array<{ lineId: string; qty: number }>) => void;
+}) {
+  const [preset, setPreset] = React.useState(TRANSFER_REASONS[0]);
+  const [otherText, setOtherText] = React.useState("");
+  const [destinationId, setDestinationId] = React.useState("");
+  const [qtyByLine, setQtyByLine] = React.useState<Record<string, string>>({});
+  const tables = useTableSnapshot();
+  const [preview, setPreview] = React.useState<{
+    source: { subtotal: number; discount: number; tax: number; roundOff: number; total: number };
+    destination: { subtotal: number; discount: number; tax: number; roundOff: number; total: number };
+    discountNote: string | null;
+  } | null>(null);
+  const [previewError, setPreviewError] = React.useState("");
+  const reason = preset === "Other" ? otherText.trim() : preset;
+  const moves = lines
+    .map((line) => ({ lineId: line.id, qty: Math.max(0, Math.trunc(Number(qtyByLine[line.id] || 0))) }))
+    .filter((move) => move.qty > 0);
+  const moveKey = JSON.stringify(moves);
+  const destination = (tables || []).find((table) => String(table.id) === destinationId);
+  React.useEffect(() => {
+    if (!destinationId || moveKey === "[]") {
+      setPreview(null);
+      setPreviewError("");
+      return;
+    }
+    let cancelled = false;
+    const requested = JSON.parse(moveKey) as Array<{ lineId: string; qty: number }>;
+    previewSplitOrder(orderId, Number(destinationId), requested)
+      .then((result) => {
+        if (!cancelled) {
+          setPreview(result);
+          setPreviewError("");
+        }
+      })
+      .catch((error: { message?: string }) => {
+        if (!cancelled) {
+          const code = String(error?.message || "");
+          const text =
+            code.includes("table-occupied") || code.includes("table-print-pending")
+              ? "This table is no longer available."
+              : code.includes("discount-amount")
+                ? "Remove the rupee discount before splitting."
+                : code.includes("split-entire-order")
+                  ? "Moving the whole order is a transfer."
+                  : code.includes("split-print-pending")
+                    ? "A kitchen ticket is still waiting. Retry it in Settings first."
+                    : code.includes("split-qty")
+                      ? "Enter a whole number no higher than the quantity on this order."
+                      : code.includes("order-not-splittable")
+                        ? "This order can't be split."
+                        : "This split is not available.";
+          setPreview(null);
+          setPreviewError(text);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [orderId, destinationId, moveKey]);
+  const money = (value: number) => `₹${Number(value || 0).toFixed(2)}`;
+  const side = (label: string, totals: NonNullable<typeof preview>["source"]) => (
+    <p className={styles.modalPara}>
+      {label}: items {money(totals.subtotal)}, discount {money(totals.discount)}, GST {money(totals.tax)},
+      round-off {money(totals.roundOff)}, total {money(totals.total)}.
+    </p>
+  );
+  return (
+    <DialogShell ariaLabel="Split order" className={styles.modalDialogLarge} onClose={processing ? undefined : onClose}>
+      <h3 className={styles.modalTitle}>Split order?</h3>
+      <p className={styles.modalPara}>
+        Move some quantities from <strong>{currentTableLabel}</strong> onto a free table. This order
+        stays here.
+      </p>
+      <div className={styles.splitLines}>
+        {lines.map((line) => (
+          <label key={line.id} className={styles.splitLine}>
+            <span>
+              <span className={styles.splitLineName}>{line.name}</span>
+              <span className={styles.splitLineMeta}>{line.qty} here</span>
+            </span>
+            <input
+              type="text"
+              inputMode="numeric"
+              autoComplete="off"
+              aria-label={`Quantity to move for ${line.name}`}
+              placeholder="0"
+              value={qtyByLine[line.id] ?? ""}
+              disabled={processing}
+              className={`${styles.modalInput} ${styles.splitQty}`}
+              onChange={(event) => {
+                const digits = event.target.value.replace(/\D/g, "");
+                const parsed = digits === "" ? 0 : Math.trunc(Number(digits));
+                const next = digits === "" ? "" : String(Math.min(line.qty, parsed));
+                setQtyByLine((current) => ({ ...current, [line.id]: next }));
+              }}
+            />
+          </label>
+        ))}
+      </div>
+      <label className={styles.modalLabel} style={{ marginTop: 14 }}>
+        New table
+      </label>
+      {tables === null ? (
+        <p className={styles.modalPara}>Loading tables...</p>
+      ) : (
+        <TableChoices
+          name="split-table"
+          value={destinationId}
+          disabled={processing}
+          emptyText="No free table is available."
+          onChange={setDestinationId}
+          tables={tables
+            .filter((table) => Number(table.id) !== Number(currentTableId) && !table.occupied)
+            .map((table) => ({
+              value: String(table.id),
+              label: formatTableLabel(table.id, table.name),
+            }))}
+        />
+      )}
+      <ReasonChoices
+        name="split-reason"
+        preset={preset}
+        otherText={otherText}
+        processing={processing}
+        onPreset={setPreset}
+        onOther={setOtherText}
+      />
+      {preview ? (
+        <>
+          {side("This table", preview.source)}
+          {side("New table", preview.destination)}
+          {preview.discountNote ? <p className={styles.modalPara}>{preview.discountNote}</p> : null}
+        </>
+      ) : null}
+      {previewError ? <p className={styles.modalPara}>{previewError}</p> : null}
+      <div className={styles.modalFooter}>
+        <button onClick={onClose} className={styles.btn} disabled={processing}>
+          Keep together
+        </button>
+        <button
+          onClick={() => onConfirm(Number(destinationId), reason, moves)}
+          className={styles.btnPrimary}
+          disabled={processing || !destinationId || !reason || !preview || Boolean(destination?.occupied)}
+        >
+          {processing ? "Splitting..." : "Split"}
         </button>
       </div>
     </DialogShell>
@@ -369,8 +880,7 @@ export function KotVoidModal({
         {CANCEL_REASON_PRESETS.map((option) => (
           <label
             key={option}
-            className={styles.kotItem}
-            style={{ cursor: processing ? "default" : "pointer" }}
+            className={`${styles.kotItem} ${styles.tableChoice} ${preset === option ? styles.tableChoiceSelected : ""}`}
           >
             <input
               type="radio"
@@ -379,7 +889,6 @@ export function KotVoidModal({
               checked={preset === option}
               disabled={processing}
               onChange={() => setPreset(option)}
-              style={{ marginRight: 8 }}
             />
             {option}
           </label>

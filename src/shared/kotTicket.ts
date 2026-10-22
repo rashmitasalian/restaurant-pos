@@ -250,3 +250,129 @@ export function buildKitchenUpdateLines(
     brandingInput,
   );
 }
+
+/** Replace the first Table No header. Food rows and every other line stay as printed. */
+export function rewriteKotTableHeader(lines: string[], tableLabel: string): string[] {
+  const label = String(tableLabel || "").trim() || "-";
+  let replaced = false;
+  return lines.map((line) => {
+    if (replaced) {
+      return line;
+    }
+    const match = /^(.*\bTable No:\s*).*$/.exec(line);
+    if (!match) {
+      return line;
+    }
+    replaced = true;
+    return `${match[1]}${label}`;
+  });
+}
+
+/** Kitchen notice that an existing ticket moved. No dish rows. */
+export function buildTableTransferLines(input: {
+  hotelName?: string | null;
+  orderNumber: string | number;
+  fromLabel: string;
+  toLabel: string;
+  at?: Date;
+  auditId?: string | null;
+  practice?: boolean;
+}): string[] {
+  const at = input.at || new Date();
+  const pad2 = (n: number) => String(n).padStart(2, "0");
+  const timeStr = `${pad2(at.getDate())}-${pad2(at.getMonth() + 1)}-${at.getFullYear()} ${at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+  return [
+    `BIGBOLD:${hotelNameFrom({ hotelName: input.hotelName })}`,
+    ...practiceBanner(input.practice),
+    "SUBHEADER:TABLE TRANSFER",
+    `LEFT:${PAD}Order #${input.orderNumber}`,
+    `LEFT:${PAD}From: ${input.fromLabel}`,
+    `LEFT:${PAD}To: ${input.toLabel}`,
+    `LEFT:${PAD}Time: ${timeStr}`,
+    ...(input.auditId ? [`LEFT:${PAD}Ref: ${input.auditId}`] : []),
+    "SEP",
+    "CENTER:No new food — redirect existing order",
+    "BLANK",
+    "CUT",
+  ];
+}
+
+function noticeLines(input: {
+  hotelName?: string | null;
+  title: string;
+  rows: string[];
+  at?: Date;
+  auditId?: string | null;
+  practice?: boolean;
+  closing: string;
+}) {
+  const at = input.at || new Date();
+  const pad2 = (n: number) => String(n).padStart(2, "0");
+  const timeStr = `${pad2(at.getDate())}-${pad2(at.getMonth() + 1)}-${at.getFullYear()} ${at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+  return [
+    `BIGBOLD:${hotelNameFrom({ hotelName: input.hotelName })}`,
+    ...practiceBanner(input.practice),
+    `SUBHEADER:${input.title}`,
+    ...input.rows.map((row) => `LEFT:${PAD}${row}`),
+    `LEFT:${PAD}Time: ${timeStr}`,
+    ...(input.auditId ? [`LEFT:${PAD}Ref: ${input.auditId}`] : []),
+    "SEP",
+    `CENTER:${input.closing}`,
+    "BLANK",
+    "CUT",
+  ];
+}
+
+/** Kitchen notice that items joined this table. No dish rows. */
+export function buildTableMergeLines(input: {
+  hotelName?: string | null;
+  survivorOrderNumber: string | number;
+  sourceOrderNumber: string | number;
+  fromLabel: string;
+  toLabel: string;
+  at?: Date;
+  auditId?: string | null;
+  practice?: boolean;
+}): string[] {
+  return noticeLines({
+    hotelName: input.hotelName,
+    title: "TABLE MERGE",
+    rows: [
+      `Order #${input.survivorOrderNumber}`,
+      `From order #${input.sourceOrderNumber}`,
+      `From: ${input.fromLabel}`,
+      `To: ${input.toLabel}`,
+    ],
+    at: input.at,
+    auditId: input.auditId,
+    practice: input.practice,
+    closing: "No new food — items moved onto this order",
+  });
+}
+
+/** Kitchen notice that sent items changed tables. No dish rows. */
+export function buildTableSplitLines(input: {
+  hotelName?: string | null;
+  sourceOrderNumber: string | number;
+  destinationOrderNumber: string | number;
+  fromLabel: string;
+  toLabel: string;
+  at?: Date;
+  auditId?: string | null;
+  practice?: boolean;
+}): string[] {
+  return noticeLines({
+    hotelName: input.hotelName,
+    title: "TABLE SPLIT",
+    rows: [
+      `Order #${input.sourceOrderNumber}`,
+      `New order #${input.destinationOrderNumber}`,
+      `From: ${input.fromLabel}`,
+      `To: ${input.toLabel}`,
+    ],
+    at: input.at,
+    auditId: input.auditId,
+    practice: input.practice,
+    closing: "No new food — sent items changed tables",
+  });
+}

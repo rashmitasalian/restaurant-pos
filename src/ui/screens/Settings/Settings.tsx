@@ -950,15 +950,33 @@ export default function Settings({
     if (!beginAction(`printQueue.retry.${jobId}`)) {
       return;
     }
+    const job = printJobs.find((candidate) => candidate._id === jobId);
+    const content = (job?.content || {}) as { recovery?: string; kind?: string };
+    const needsConfirmation = content.recovery === "send-unrecorded";
+    if (needsConfirmation) {
+      const accepted = window.confirm(
+        "The kitchen may already have this ticket. Print it again?",
+      );
+      if (!accepted) {
+        endAction(`printQueue.retry.${jobId}`);
+        setPrintQueueStatus("Not printed again. The kitchen may already have this ticket.");
+        return;
+      }
+    }
     setRetryingPrintJob(jobId);
     setPrintQueueStatus(null);
     try {
-      const ok = await retryPrintJob(jobId);
+      const ok = await retryPrintJob(jobId, needsConfirmation ? { confirm: true } : undefined);
       await loadPrintQueue();
       setPrintQueueStatus(ok ? "Print job completed" : "Retry failed; job remains in queue");
     } catch (e: any) {
+      const code = String(e?.code || e?.message || "");
       setPrintQueueStatus(
-        reportClientError("settings.print-queue.retry", e, "Could not retry print job"),
+        code === "needs-confirmation"
+          ? "The kitchen may already have this ticket. Confirm before printing it again."
+          : code === "send-unrecorded-not-saved" || code === "kot-sent-not-recorded"
+            ? "The kitchen may already have this ticket. It was not recorded as sent."
+            : reportClientError("settings.print-queue.retry", e, "Could not retry print job"),
       );
     } finally {
       endAction(`printQueue.retry.${jobId}`);
@@ -3045,7 +3063,14 @@ export default function Settings({
                   >
                     <div style={{ minWidth: 0 }}>
                       <div style={{ fontSize: 13, fontWeight: 800, color: "var(--pos-tx)" }}>
-                        {job.jobType.toUpperCase()} to {job.printerName || "default"}
+                        {(job.content as { kind?: string; recovery?: string } | undefined)?.kind ===
+                        "table-transfer"
+                          ? "Table transfer"
+                          : (job.content as { recovery?: string } | undefined)?.recovery ===
+                              "send-unrecorded"
+                            ? "Kitchen ticket (not recorded)"
+                            : job.jobType.toUpperCase()}{" "}
+                        to {job.printerName || "default"}
                       </div>
                       <div style={{ fontSize: 12, color: "var(--pos-tx-sub)", marginTop: 3 }}>
                         {job.status} - attempts {job.retryCount}/{job.maxRetries} -{" "}

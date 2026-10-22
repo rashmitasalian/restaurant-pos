@@ -2,9 +2,11 @@ import {
   buildKitchenUpdateLines,
   buildKotLines,
   buildKotVoidLines,
+  buildTableTransferLines,
   buildVoidKotItemPrintLines,
   PRACTICE_DOCUMENT_BANNER,
   resolveKotTableLabel,
+  rewriteKotTableHeader,
 } from "./kotTicket";
 
 describe("resolveKotTableLabel", () => {
@@ -217,6 +219,29 @@ describe("buildKotVoidLines", () => {
     expect(first.slice(34)).toBe("       3");
     expect(second.slice(34)).toBe("        ");
     expect(`${first.slice(2, 34).trimEnd()} ${second.slice(2, 34).trimEnd()}`).toBe(name);
+  });
+});
+
+describe("table transfer ticket", () => {
+  it("names the move and does not include dish rows", () => {
+    const lines = buildTableTransferLines({
+      hotelName: "Green Leaf Kitchen",
+      orderNumber: 18,
+      fromLabel: "4",
+      toLabel: "9",
+      at: new Date("2026-10-15T12:30:00"),
+      auditId: "audit:1",
+    });
+    expect(lines.join("\n")).toContain("Order #18");
+    expect(lines.join("\n")).toContain("From: 4");
+    expect(lines.join("\n")).toContain("To: 9");
+    expect(lines.join("\n")).toContain("Ref: audit:1");
+    expect(lines.join("\n")).toContain("No new food — redirect existing order");
+    expect(lines.join("\n")).not.toContain("Tea");
+    expect(rewriteKotTableHeader(["LEFT:  Table No: 4", "LEFT:  1 x Tea"], "9")).toEqual([
+      "LEFT:  Table No: 9",
+      "LEFT:  1 x Tea",
+    ]);
   });
 });
 

@@ -11,7 +11,12 @@ import {
 } from "../../../app/db/posRepository";
 import { printKOT } from "../../../app/services/printer";
 import { AuthContext } from "../../context/AuthContext";
-import { isKotQueueTicket, netKitchenDelta, pendingKotVoidsFromMeta } from "../../../shared/kot";
+import {
+  isKotQueueTicket,
+  netKitchenDelta,
+  pendingKotVoidsFromMeta,
+  type PendingKotVoid,
+} from "../../../shared/kot";
 import { formatKotAge, kotAgeTone } from "../../../shared/kotAge";
 import { formatTableTileLabel } from "../../../shared/floorLayout";
 import { validationMessage } from "../../../shared/validation";
@@ -36,7 +41,7 @@ type KOTItem = {
   order: OrderDoc;
   sentItems: KotQueueLine[];
   pendingItems: Array<KotQueueLine & { id: string; sentQty: number }>;
-  pendingVoids: Array<{ id: string; name: string; qty: number; reason: string }>;
+  pendingVoids: PendingKotVoid[];
   time: number;
 };
 
@@ -269,31 +274,42 @@ export default function KOTQueue() {
         : k.pendingItems.map((it) => ({ id: it.id, sentQty: it.sentQty }));
       await printKOT({
         lines,
+        intent: hasKitchenUpdate ? "send" : "reprint",
+        builtTableId: hasKitchenUpdate ? k.table ?? null : undefined,
         printer: await resolveKitchenPrinter(),
         orderId: k.orderId,
-        sentLines,
+        sentLines: hasKitchenUpdate ? sentLines : undefined,
         clearPendingKotVoidIds: hasKitchenUpdate ? clearPendingKotVoidIds : undefined,
       });
       if (hasKitchenUpdate) {
-        await markOrderKotSent(k.orderId, sentLines, {
-          clearPendingKotVoidIds,
-        });
         window.dispatchEvent(new Event("orders-changed"));
         await loadKOTs();
       }
     } catch (e: any) {
       console.error("Reprint failed:", e);
       const hadUpdate = k.pendingItems.length > 0 || k.pendingVoids.length > 0;
-      if (hadUpdate) {
+      const code = String(e?.code || e?.message || "");
+      if (
+        hadUpdate &&
+        e?.kotRecorded !== "failed" &&
+        code !== "kot-sent-not-recorded" &&
+        code !== "send-unrecorded-not-saved" &&
+        code !== "table-changed"
+      ) {
         try {
           await markOrderKotFailed(k.orderId, validationMessage(e, "print-failed"));
         } catch {}
       }
       setOrderErrors((prev) => ({
         ...prev,
-        [k.orderId]: hadUpdate
-          ? "KOT print failed. Check printer connection."
-          : "Reprint failed. Check printer connection.",
+        [k.orderId]:
+          code === "kot-sent-not-recorded" || code === "send-unrecorded-not-saved"
+            ? "The kitchen may already have this ticket. Check Settings before printing again."
+            : code === "table-changed"
+              ? "This order moved to another table. Reopen it before sending the kitchen ticket."
+              : hadUpdate
+                ? "KOT print failed. Check printer connection."
+                : "Reprint failed. Check printer connection.",
       }));
     } finally {
       endOrderAction(actionKey);

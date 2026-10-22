@@ -4,7 +4,6 @@
  */
 
 import { logger } from "../utils/logger";
-import { kotSentLinesNeedPrint } from "../../shared/kot";
 
 export interface PrintJob {
   _id: string;
@@ -86,77 +85,20 @@ export class PrinterOfflineQueue {
     }
   }
 
-  static async retryPrintJob(jobId: string): Promise<boolean> {
+  static async retryPrintJob(jobId: string, options?: { confirm?: boolean }): Promise<boolean> {
     try {
-      const jobs = (await queueApi().list()) as PrintJob[];
-      const job = jobs.find((candidate) => candidate._id === jobId);
-      if (!job) {
-        return false;
-      }
-
-      const content =
-        typeof job.content === "string"
-          ? { text: job.content, printer: job.printerName }
-          : job.content || {};
-      const payload = {
-        type: job.jobType,
-        data: content,
-        printer: (content as any)?.printer || job.printerName,
-      };
-      if (
-        job.jobType === "kot" &&
-        (content as any)?.orderId &&
-        Array.isArray((content as any)?.sentLines)
-      ) {
-        const order = await window.pos?.orders?.get((content as any).orderId);
-        if (
-          !kotSentLinesNeedPrint(
-            order,
-            (content as any).sentLines,
-            (content as any).clearPendingKotVoidIds,
-          )
-        ) {
-          await queueApi().markCompleted(jobId);
-          logger.info("Skipped duplicate KOT retry", { jobId });
-          return true;
+      const result = await queueApi().retry(jobId, options);
+      if (result && typeof result === "object") {
+        if (result.ok === false) {
+          logger.error("Failed to retry print job", new Error(String(result.error || "print-failed")), {
+            jobId,
+          });
+          return false;
         }
-      }
-      // @ts-ignore
-      const result = await window.pos?.print?.(payload);
-      if (result?.ok) {
-        if (
-          job.jobType === "kot" &&
-          (content as any)?.orderId &&
-          Array.isArray((content as any)?.sentLines)
-        ) {
-          try {
-            await window.pos?.orders?.markKotSent(
-              (content as any).orderId,
-              (content as any).sentLines,
-              {
-                clearPendingKotVoidIds: (content as any).clearPendingKotVoidIds,
-              },
-            );
-          } catch (error: any) {
-            const message = String(error?.message || error || "");
-            if (!message.includes("kot-no-unsent-items") && !message.includes("order-closed")) {
-              return queueApi().retry(jobId);
-            }
-          }
-        }
-        await queueApi().markCompleted(jobId);
         logger.info("Print job retry completed", { jobId });
         return true;
       }
-
-      const canRetry = await queueApi().retry(jobId);
-
-      logger.info("Print job retry queued", {
-        jobId,
-        canRetry,
-      });
-
-      return canRetry;
+      return Boolean(result);
     } catch (e) {
       logger.error("Failed to retry print job", e as Error, { jobId });
       return false;

@@ -240,7 +240,11 @@ Shared mapping (`tableKotAppearance` in `src/shared/kot.ts`) drives desktop Tabl
 | **Pending** | Bill-ready (`ready` / `held`) **after** KOT is fully sent — cashier pay signal | Amber (desktop billing) |
 
 Rules:
-- A table is **occupied** only when it has an open order **and** `item_count > 0`. Empty open orders look Available.
+- A table is **occupied** when its active order has items **or** a pending kitchen void. An empty open order with neither looks Available.
+- **Table actions** (desktop Billing ticket header, admin / manager / cashier) groups Transfer, Merge, and Split. KOT, Print Bill, Settle, and Cancel stay in the footer. Floor tiles do not grow extra controls. Captain has none of these actions; when the floor refreshes, an open Captain sheet follows a transferred order's new table or closes if that table is gone.
+- **Transfer** (`order:transfer-table`) moves an open, held, or ready dine-in order onto a free table. It keeps the same order, lines, prices, discount, tax snapshot, and sent quantities. It does not create an invoice or send a new food ticket. If food was already sent, the kitchen gets a transfer slip.
+- **Merge** (`order:merge-tables`) moves another table's lines onto the order open in Billing and cancels the source with reason `merged-into`. The survivor keeps its order number. A kitchen notice is not a new food ticket.
+- **Split** (`order:split-order`) moves selected quantities onto a new order on a free table. The main process allocates quantities and totals. Unsent quantity moves before sent quantity, and sent food is not printed again.
 - Unsent KOT wins over bill-ready Pending.
 - Configured table names (e.g. FF1, G1) display via `formatTableLabel`; otherwise `Table N`.
 
@@ -351,7 +355,7 @@ Detail: `docs/CAPTAIN_APP.md`. Summary:
 | Send KOT | `order:send-kot` |
 | Void / reduce sent qty | `order:void-item` |
 
-**Explicitly not on Captain**: pay, cancel paid orders, Manage, Customers, Reports, Settings.
+**Explicitly not on Captain**: pay, cancel, transfer table, Manage, Customers, Reports, Settings. After another screen moves an open order, the Captain sheet retargets to that table from the refreshed floor, or closes when the destination is not on the floor. Captain does not call open-table for that refresh.
 
 #### Screens
 - **Login**: Restaurant name, last username, password. Connection (Connected / Reconnecting) is separate from pairing (Paired / Needs pairing). A QR from the POS fills the code and hides the field

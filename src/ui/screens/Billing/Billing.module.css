@@ -24,6 +24,33 @@
 .ticketContext {
   padding: 12px 16px;
   border-bottom: 1px solid var(--pos-line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.tableActionsBtn {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 96px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--pos-line-strong);
+  background: var(--pos-surface);
+  color: var(--pos-tx);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.15;
+  cursor: pointer;
+  flex-shrink: 0;
+  font-family: inherit;
+}
+.tableActionsBtn:hover,
+.tableActionsBtn[aria-expanded="true"] {
+  background: var(--pos-surface-sunken);
 }
 .ticketBody {
   flex: 1;
@@ -165,37 +192,52 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 16px;
+  box-sizing: border-box;
+}
+.modalFrame {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - 32px);
+  overflow: hidden;
+  padding: 0;
+  box-sizing: border-box;
+}
+.modalBody {
+  overflow: auto;
+  min-height: 0;
+  padding: 28px 32px 12px;
 }
 .modalDialog {
   background: var(--pos-surface);
   border-radius: var(--pos-r-dialog);
-  padding: 28px 32px;
+  padding: 0;
   width: 380px;
-  max-width: 95vw;
+  max-width: 100%;
   box-shadow: var(--pos-shadow-overlay);
 }
 .modalDialogSmall {
   background: var(--pos-surface);
   border-radius: var(--pos-r-dialog);
-  padding: 28px 32px;
+  padding: 0;
   width: 380px;
-  max-width: 95vw;
+  max-width: 100%;
   box-shadow: var(--pos-shadow-overlay);
 }
 .modalDialogMedium {
   background: var(--pos-surface);
   border-radius: var(--pos-r-dialog);
-  padding: 28px 32px;
+  padding: 0;
   width: 400px;
-  max-width: 95vw;
+  max-width: 100%;
   box-shadow: var(--pos-shadow-overlay);
 }
 .modalDialogLarge {
   background: var(--pos-surface);
   border-radius: var(--pos-r-dialog);
-  padding: 28px 32px;
+  padding: 0;
   width: 420px;
-  max-width: 95vw;
+  max-width: 100%;
   box-shadow: var(--pos-shadow-overlay);
 }
 .modalHeader {
@@ -229,6 +271,18 @@
   font-size: 15px;
   box-sizing: border-box;
 }
+.tableSelect {
+  color: #17202a;
+  background-color: #ffffff;
+  cursor: pointer;
+}
+.tableSelect option {
+  color: #17202a;
+  background-color: #ffffff;
+}
+.tableSelect option:disabled {
+  color: #64748b;
+}
 .modalInput:focus,
 .modalInput:focus-visible,
 .modalInputSmall:focus,
@@ -253,8 +307,43 @@
 .modalFooter {
   display: flex;
   gap: 10px;
-  margin-top: 24px;
+  flex-shrink: 0;
+  margin-top: 0;
   justify-content: flex-end;
+  padding: 12px 32px 20px;
+  border-top: 1px solid var(--pos-line);
+  background: var(--pos-surface);
+}
+.splitLines {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+}
+.splitLine {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+}
+.splitLineName {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--pos-tx);
+}
+.splitLineMeta {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--pos-tx-sub);
+}
+.splitQty {
+  width: 72px;
+  flex-shrink: 0;
+  text-align: right;
 }
 .btn {
   padding: 10px 18px;
@@ -292,8 +381,13 @@
 /* small responsive tweak */
 @media (max-width: 420px) {
   .modalDialog {
-    width: 92vw;
-    padding: 20px;
+    width: 100%;
+  }
+  .modalBody {
+    padding: 20px 20px 12px;
+  }
+  .modalFooter {
+    padding: 12px 20px 16px;
   }
 }
 
@@ -316,6 +410,8 @@
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
+  flex: 1;
 }
 .toggleBtn {
   min-width: 40px;
@@ -1150,6 +1246,25 @@
   border-radius: 8px;
   border: 1px solid var(--pos-surface-sunken);
 }
+.kotItem.tableChoice {
+  justify-content: flex-start;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 6px;
+  color: var(--pos-tx);
+  font-weight: 600;
+  cursor: pointer;
+}
+.kotItem.tableChoice input {
+  margin: 0;
+  flex-shrink: 0;
+}
+.kotItem.tableChoiceSelected {
+  border-color: var(--pos-teal);
+  background: var(--pos-teal-tint);
+}
 .kotHead,
 .kotSection {
   display: flex;
@@ -1818,8 +1933,14 @@
   .modalDialogSmall,
   .modalDialogMedium,
   .modalDialogLarge {
-    width: 95vw;
-    padding: 16px;
+    width: 100%;
+    padding: 0;
+  }
+  .modalBody {
+    padding: 16px 16px 8px;
+  }
+  .modalFooter {
+    padding: 12px 16px 16px;
   }
   .modalTitle {
     font-size: 17px;
