@@ -1,13 +1,16 @@
 {
-  "version": "0.7.1",
+  "version": "0.8.0",
   "installerUrl": "https://github.com/rashmitasalian/restaurant-pos/releases/download/v0.7.1/RestoNiti.Setup.0.7.0.exe",
-  "sha256": "2A0932881D83B465F68EEC1295158890C61A7E2634F0665C82FA816E27909099",
-  "rollbackInstallerUrl": "https://github.com/rashmitasalian/restaurant-pos/releases/download/v0.7.0/RestoNiti.Setup.0.7.0.exe",
-  "rollbackSha256": "1C7D0D2329250BB91612DBF19BE06F068385755E470D9AB44B64A268536692F5",
-  "installerSizeBytes": 144686324,
-  "rollbackInstallerSizeBytes": 144680981,
+  "sha256": "50E214C6B0C7F2FEC00E3EA970711DE88896D1C85762DADCE337C2930F970584",
+  "rollbackInstallerUrl": "https://github.com/rashmitasalian/restaurant-pos/releases/download/v0.7.1/RestoNiti.Setup.0.7.1.exe",
+  "rollbackSha256": "2A0932881D83B465F68EEC1295158890C61A7E2634F0665C82FA816E27909099",
+  "installerSizeBytes": 144698626,
+  "rollbackInstallerSizeBytes": 144686324,
   "notes": [
-    "Demo Mode Updates"
+    "Billing: transfer, merge, and split tables",
+    "Kitchen ticket printing improvements",
+    "Captain app LAN / Wi‑Fi address selection fix",
+    "Safer local daily backups (still offline-only)"
   ],
-  "signature": "d0Fnc7PtFpmJMlJTXsX7UeyW7L/tBSRizmcFcl5x3IvbXAwjZ79B8R+AgvO+Kfiew/bIz54BxpeePiSJ7Ca+Bg=="
+  "signature": "XEke3ut/WJBsWn5Lf6zVPra1hZlFl/fpxri/UxY67iqA0TavNOCB0vNY9pwCS2G0aHiF33BpNClihrcrjQDQBg=="
 }
