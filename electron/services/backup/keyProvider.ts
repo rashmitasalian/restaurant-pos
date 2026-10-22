@@ -98,7 +98,25 @@ export class BackupKeyProvider {
 
   getOrCreateBackupKey(): Buffer {
     if (this.hasBackupKey()) {
-      return this.getBackupKey();
+      try {
+        return this.getBackupKey();
+      } catch {
+        // DPAPI/safeStorage can no longer unwrap this file (Windows profile change,
+        // Local State reset, etc.). Quarantine it and mint a fresh key so new backups
+        // keep working. Existing .rnbak files encrypted with the old key stay unrestorable
+        // without recovery material.
+        const brokenPath = this.backupKeyPath();
+        const quarantinePath = `${brokenPath}.unreadable.${Date.now()}`;
+        try {
+          fs.renameSync(brokenPath, quarantinePath);
+        } catch {
+          try {
+            fs.unlinkSync(brokenPath);
+          } catch {
+            // Fall through and attempt to overwrite below.
+          }
+        }
+      }
     }
     const key = generateBackupKey();
     this.storeBackupKey(key);

@@ -49,4 +49,25 @@ describe("BackupKeyProvider", () => {
       material.verifierHash,
     );
   });
+
+  it("replaces an unreadable backup-key.enc so new backups can continue", () => {
+    const provider = new BackupKeyProvider();
+    provider.ensureDirs();
+    const first = provider.getOrCreateBackupKey();
+    const keyPath = path.join(
+      (require("electron") as { app: { getPath: (name: string) => string } }).app.getPath("userData"),
+      "cloud",
+      "backup-key.enc",
+    );
+    // Corrupt the on-disk blob so decryptString fails / yields a non-32-byte key.
+    fs.writeFileSync(keyPath, Buffer.from("enc:not-a-valid-base64-key"));
+    const replaced = provider.getOrCreateBackupKey();
+    expect(replaced.length).toBe(32);
+    expect(replaced.equals(first)).toBe(false);
+    expect(provider.getBackupKey().equals(replaced)).toBe(true);
+    const quarantined = fs
+      .readdirSync(path.dirname(keyPath))
+      .filter((name) => name.startsWith("backup-key.enc.unreadable."));
+    expect(quarantined.length).toBeGreaterThanOrEqual(1);
+  });
 });
